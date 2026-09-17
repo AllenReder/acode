@@ -1,0 +1,34 @@
+{
+  "name": "@t3tools/monorepo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare": "effect-tsgo patch && vp config --no-agent",
+    "dev": "node scripts/dev-runner.ts dev",
+    "dev:share": "node scripts/dev-runner.ts dev --share",
+    "dev:server": "node scripts/dev-runner.ts dev:server",
+    "dev:web": "node scripts/dev-runner.ts dev:web",
+    "migrate-dev-db": "node apps/server/scripts/migrate-dev-db.ts",
+    "start": "vp run --filter t3 start --base-dir ../../.acode",
+    "build": "vp run --filter @t3tools/web --filter t3 build",
+    "typecheck": "vp run -r --concurrency-limit 2 typecheck",
+    "tc": "vp run -r --concurrency-limit 2 typecheck",
+    "lint": "vp lint --report-unused-disable-directives",
+    "test": "vp run -r test",
+    "fmt": "vp fmt",
+    "fmt:check": "vp fmt --check",
+    "smoke:connection": "node scripts/connection-smoke.ts",
+    "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules scripts/node_modules apps/*/dist packages/*/dist .vite-plus apps/*/.vite-plus packages/*/.vite-plus"
+  },
+  "devDependencies": {
+    "@effect/tsgo": "catalog:",
+    "@types/node": "catalog:",
+    "knip": "6.34.0",
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "engines": {
+    "node": "^24.13.1"
+  },
+  "packageManager": "pnpm@11.10.0"
+}
