@@ -713,8 +713,11 @@ function deriveTurnFolds(input: {
       continue;
     }
 
-    const isLatestInterruptedTurn =
-      input.latestTurn?.turnId === turnId && input.latestTurn.state === "interrupted";
+    const isInterruptedTurn =
+      (input.latestTurn?.turnId === turnId && input.latestTurn.state === "interrupted") ||
+      group.entries.some(
+        (entry) => entry.kind === "work" && entry.entry.sourceActivityKind === "turn.interrupted",
+      );
     // A turn cut short by a steer leaves trailing work entries behind its
     // terminal message — take whichever ended last.
     const lastEntryEnd =
@@ -730,7 +733,7 @@ function deriveTurnFolds(input: {
               lastEntryEnd,
           );
     const duration = elapsedMs !== null ? formatDuration(elapsedMs) : null;
-    const label = isLatestInterruptedTurn
+    const label = isInterruptedTurn
       ? duration
         ? `You stopped after ${duration}`
         : "You stopped this response"

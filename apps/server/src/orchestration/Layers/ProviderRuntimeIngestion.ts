@@ -421,6 +421,23 @@ function taskLinkageActivityFields(payload: Record<string, unknown>): Record<str
   return fields;
 }
 
+function turnInterruptedActivity(
+  event: ProviderRuntimeEvent,
+  maybeSequence: { readonly sequence?: number },
+  reason?: string,
+): OrchestrationThreadActivity {
+  return {
+    id: event.eventId,
+    createdAt: event.createdAt,
+    tone: "info",
+    kind: "turn.interrupted",
+    summary: "Response stopped",
+    payload: reason ? { reason } : {},
+    turnId: toTurnId(event.turnId) ?? null,
+    ...maybeSequence,
+  };
+}
+
 export function runtimeEventToActivities(
   event: ProviderRuntimeEvent,
   taskTitle?: string,
@@ -432,6 +449,18 @@ export function runtimeEventToActivities(
       : {};
   })();
   switch (event.type) {
+    case "turn.completed": {
+      const state = normalizeRuntimeTurnState(event.payload.state);
+      if (state !== "interrupted" && state !== "cancelled") {
+        return [];
+      }
+      return [turnInterruptedActivity(event, maybeSequence, event.payload.stopReason ?? undefined)];
+    }
+
+    case "turn.aborted": {
+      return [turnInterruptedActivity(event, maybeSequence, event.payload.reason)];
+    }
+
     case "request.opened": {
       if (event.payload.requestType === "tool_user_input") {
         return [];

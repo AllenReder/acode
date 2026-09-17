@@ -515,7 +515,57 @@ describe("ProviderRuntimeIngestion", () => {
         streaming: false,
       }),
     ]);
+    expect(thread?.activities).toContainEqual(
+      expect.objectContaining({
+        id: "opencode-aborted",
+        turnId,
+        tone: "info",
+        kind: "turn.interrupted",
+        summary: "Response stopped",
+        payload: { reason: "Interrupted by user." },
+      }),
+    );
   });
+
+  it.each(["interrupted", "cancelled"] as const)(
+    "records a stopped response when a completed turn is %s",
+    async (state) => {
+      const harness = await createHarness();
+      const threadId = asThreadId("thread-1");
+      const turnId = asTurnId(`codex-${state}-turn`);
+      await harness.emitAndDrain([
+        {
+          provider: ProviderDriverKind.make("codex"),
+          threadId,
+          turnId,
+          eventId: asEventId(`codex-${state}-started`),
+          createdAt: "2026-01-01T00:00:01.000Z",
+          type: "turn.started",
+        },
+        {
+          provider: ProviderDriverKind.make("codex"),
+          threadId,
+          turnId,
+          eventId: asEventId(`codex-${state}-completed`),
+          createdAt: "2026-01-01T00:00:02.000Z",
+          type: "turn.completed",
+          payload: { state },
+        },
+      ]);
+
+      const thread = (await harness.readModel()).threads.find((entry) => entry.id === threadId);
+      expect(thread?.activities).toContainEqual(
+        expect.objectContaining({
+          id: `codex-${state}-completed`,
+          turnId,
+          tone: "info",
+          kind: "turn.interrupted",
+          summary: "Response stopped",
+          payload: {},
+        }),
+      );
+    },
+  );
 
   it.each(["turn.completed", "turn.aborted"] as const)(
     "finalizes old buffered text on late %s without stopping the newer turn",
