@@ -1723,10 +1723,14 @@ const make = Effect.gen(function* () {
               return "stopped";
             case "turn.aborted":
               return "interrupted";
-            case "turn.completed":
-              return normalizeRuntimeTurnState(event.payload.state) === "failed"
+            case "turn.completed": {
+              const state = normalizeRuntimeTurnState(event.payload.state);
+              return state === "failed"
                 ? "error"
-                : "ready";
+                : state === "interrupted" || state === "cancelled"
+                  ? "interrupted"
+                  : "ready";
+            }
             case "session.started":
             case "thread.started":
               // Provider thread/session start notifications can arrive during an
@@ -2279,7 +2283,9 @@ const make = Effect.gen(function* () {
         }
       }
 
-      const activities = runtimeEventToActivities(activityEvent, taskTitle);
+      const activities = runtimeEventToActivities(activityEvent, taskTitle).filter(
+        (activity) => activity.kind !== "turn.interrupted" || shouldApplyThreadLifecycle,
+      );
       yield* Effect.forEach(activities, (activity) =>
         providerCommandId(event, "thread-activity-append").pipe(
           Effect.flatMap((commandId) =>

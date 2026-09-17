@@ -554,6 +554,16 @@ describe("ProviderRuntimeIngestion", () => {
       ]);
 
       const thread = (await harness.readModel()).threads.find((entry) => entry.id === threadId);
+      expect(thread?.session).toMatchObject({
+        status: "interrupted",
+        activeTurnId: null,
+        lastError: null,
+      });
+      expect(thread?.latestTurn).toMatchObject({
+        turnId,
+        state: "interrupted",
+        completedAt: "2026-01-01T00:00:02.000Z",
+      });
       expect(thread?.activities).toContainEqual(
         expect.objectContaining({
           id: `codex-${state}-completed`,
@@ -713,6 +723,9 @@ describe("ProviderRuntimeIngestion", () => {
         streaming: true,
       }),
     ]);
+    expect(
+      thread?.activities.filter((activity) => activity.kind === "turn.interrupted"),
+    ).toHaveLength(1);
 
     harness.emit({
       ...base,
