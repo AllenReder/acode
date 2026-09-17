@@ -1,6 +1,15 @@
+/** True when the WebView is running inside the ACode Tauri shell. */
+export const isTauri =
+  typeof window !== "undefined" &&
+  ("__TAURI_INTERNALS__" in window || window.location?.protocol === "tauri:");
+
 /**
- * True when running inside the Electron preload bridge, false in a regular browser.
- * The preload script sets window.desktopBridge via contextBridge before any web-app
- * code executes, so this is reliable at module load time.
+ * True only for the existing Electron desktop runtime. Tauri uses the same
+ * desktop bridge contract for connection/auth seams, but does not claim
+ * Electron-only surfaces such as the embedded browser or custom title bar.
  */
-export const isElectron = typeof window !== "undefined" && window.desktopBridge !== undefined;
+export const isElectron =
+  !isTauri && typeof window !== "undefined" && window.desktopBridge !== undefined;
+
+/** True for either native desktop host. */
+export const isDesktop = isElectron || isTauri;

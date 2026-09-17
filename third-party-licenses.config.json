@@ -154,6 +154,24 @@
   "packageOverrides": [
     {
       "license": "MIT",
+      "name": "@tauri-apps/plugin-dialog",
+      "sourceUrl": "https://github.com/tauri-apps/tauri-plugin-dialog",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "preamble": ["ACode includes the Tauri dialog plugin, distributed under the MIT license."]
+      }
+    },
+    {
+      "license": "MIT",
+      "name": "@tauri-apps/plugin-opener",
+      "sourceUrl": "https://github.com/tauri-apps/tauri-plugin-opener",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "preamble": ["ACode includes the Tauri opener plugin, distributed under the MIT license."]
+      }
+    },
+    {
+      "license": "MIT",
       "name": "@react-grab/cli",
       "sourceUrl": "https://github.com/aidenybai/react-grab/tree/main/packages/cli",
       "generatedNotice": {

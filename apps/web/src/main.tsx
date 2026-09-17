@@ -2,9 +2,10 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { createHashHistory, createBrowserHistory } from "@tanstack/react-router";
 
+import { tauriDesktopBridgeReady } from "./desktop/tauriBridge";
 import "./index.css";
 
-import { isElectron } from "./env";
+import { isDesktop, isElectron } from "./env";
 import { hasCloudPublicConfig } from "./cloud/publicConfig";
 import { getRouter } from "./router";
 import {
@@ -14,8 +15,9 @@ import {
 import { AppRoot } from "./AppRoot";
 import { clearChunkReloadGuard, reloadOnceForChunkLoadError } from "./lib/chunkReloadGuard";
 
-// Electron loads the app from a file-backed shell, so hash history avoids path resolution issues.
-const history = isElectron ? createHashHistory() : createBrowserHistory();
+// Native shells load the app from a file-backed asset protocol, so hash
+// history avoids path resolution issues. Browser dev keeps normal URLs.
+const history = isDesktop ? createHashHistory() : createBrowserHistory();
 
 const router = getRouter(history);
 
@@ -56,10 +58,10 @@ const managedAuthShellModule =
 // managed-auth runtime and the initial route's split chunks, before
 // rendering, so the splash holds until real UI paints instead of dropping to
 // a blank window while chunks download.
-export const startup = Promise.all([
-  managedAuthShellModule?.then((module) => module.default) ?? null,
-  router.load(),
-])
+export const startup = tauriDesktopBridgeReady
+  .then(() =>
+    Promise.all([managedAuthShellModule?.then((module) => module.default) ?? null, router.load()]),
+  )
   .then(([ManagedAuthShell]) => {
     // A route chunk failure still resolves router.load(): the error is parked in
     // the lazy component and surfaces through the route error boundary. Skip the

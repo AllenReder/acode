@@ -63,6 +63,53 @@ such rather than treated as success.
 Cloud/relay configuration is not needed for local development. `.env.example`
 contains the optional public configuration used when testing those features.
 
+## Desktop shell
+
+ACode's desktop target is a small Tauri host around the same T3 Web client.
+The host owns the native window, resource loading, constrained external-link
+opening, and desktop connection bootstrap; agent execution, PTY state,
+provider credentials, and persistence remain in the existing daemon. The
+Monocode React application is not copied into this checkout.
+
+The C02 shell does not start or supervise the daemon. Start one explicitly,
+then start the desktop shell in another terminal. The wrapper uses port offset
+`0` and this checkout's `.acode` directory by default:
+
+```bash
+# Terminal 1: daemon on 13773, with its runtime marker in .acode/userdata
+T3CODE_PORT_OFFSET=0 pnpm dev:server
+
+# Terminal 2: Tauri window plus the Web development server on 5733
+pnpm dev:desktop
+```
+
+The desktop reads the live daemon endpoint from
+`<ACODE_HOME>/userdata/server-runtime.json` (or `dev/server-runtime.json`).
+For a daemon that requires authentication, provide a short-lived bootstrap
+credential or an already-issued bearer token to the desktop process:
+
+```bash
+ACODE_DESKTOP_BOOTSTRAP_TOKEN=<pairing-token> pnpm dev:desktop
+# or
+ACODE_DESKTOP_BEARER_TOKEN=<bearer-token> pnpm dev:desktop
+```
+
+`ACODE_DESKTOP_HTTP_URL` and `ACODE_DESKTOP_WS_URL` may explicitly override
+runtime-marker discovery; the C02 shell accepts loopback endpoints only. The
+desktop build embeds `apps/web/dist`, so it does not require a Web development
+server at runtime:
+
+```bash
+pnpm build:desktop
+ACODE_HOME="$PWD/.acode" ACODE_DESKTOP_BEARER_TOKEN=<bearer-token> \
+  apps/desktop/src-tauri/target/release/bundle/macos/ACode.app/Contents/MacOS/acode-desktop
+```
+
+The generated application identifier is `com.allenreder.acode`. Native
+desktop integration is intentionally limited to the C02 shell; daemon
+supervision, workspaces, sessions, and the Monocode-derived workbench are
+follow-up tickets.
+
 ## Data and external dependencies
 
 The daemon stores its state below `<base-dir>/userdata/` and writes the

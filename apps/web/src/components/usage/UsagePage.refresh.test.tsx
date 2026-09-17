@@ -15,7 +15,7 @@ vi.mock("../../state/presentation", () => ({
 }));
 vi.mock("../../state/server", () => ({ serverEnvironment: { refreshProviders: null } }));
 vi.mock("../../state/use-atom-command", () => ({ useAtomCommand: () => state.refreshProviders }));
-vi.mock("../../env", () => ({ isElectron: false }));
+vi.mock("../../env", () => ({ isDesktop: false, isElectron: false }));
 vi.mock("../../hooks/useSettings", () => ({ usePrimarySettings: () => "24h" }));
 vi.mock("../../state/usage", () => ({
   useUsage: () => ({

@@ -37,7 +37,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("~/localApi", () => ({
   ensureLocalApi: () => ({ persistence: mocks }),
 }));
-vi.mock("~/env", () => ({ isElectron: true }));
+vi.mock("~/env", () => ({ isDesktop: true, isElectron: true }));
 vi.mock("~/state/environments", () => ({
   useEnvironments: () => ({ environments: [{ environmentId }] }),
 }));

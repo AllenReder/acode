@@ -1,0 +1,15 @@
+{
+  "name": "@acode/desktop",
+  "version": "0.0.42",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/run-tauri.mjs dev",
+    "build": "node scripts/run-tauri.mjs build",
+    "tauri": "tauri",
+    "check": "node scripts/run-tauri.mjs info"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

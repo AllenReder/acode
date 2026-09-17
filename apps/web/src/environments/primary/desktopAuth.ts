@@ -9,10 +9,20 @@ export function readDesktopPrimaryBearerToken(): Promise<string | null> {
     return Promise.resolve(null);
   }
 
-  desktopBearerTokenPromise ??= bridge.getLocalEnvironmentBearerToken().catch((error) => {
-    desktopBearerTokenPromise = null;
-    throw error;
-  });
+  desktopBearerTokenPromise ??= bridge
+    .getLocalEnvironmentBearerToken()
+    .then((token) => {
+      // An unauthenticated desktop can later be paired from the auth surface.
+      // Do not permanently cache the empty pre-pairing result.
+      if (token.length === 0) {
+        desktopBearerTokenPromise = null;
+      }
+      return token;
+    })
+    .catch((error) => {
+      desktopBearerTokenPromise = null;
+      throw error;
+    });
   return desktopBearerTokenPromise;
 }
 

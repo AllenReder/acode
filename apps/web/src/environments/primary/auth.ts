@@ -20,6 +20,8 @@ import {
 
 import { PrimaryEnvironmentHttpClient } from "./httpClient";
 import { runPrimaryHttp } from "../../lib/runtime";
+import { exchangeTauriPrimaryCredential } from "../../desktop/tauriBridge";
+import { isTauri } from "../../env";
 
 const PrimaryEnvironmentRequestOperation = Schema.Literals([
   "fetch-session-state",
@@ -245,6 +247,14 @@ async function exchangeBootstrapCredential(credential: string): Promise<AuthBrow
   });
 }
 
+async function exchangePrimaryCredential(credential: string): Promise<void> {
+  if (isTauri) {
+    await exchangeTauriPrimaryCredential(credential);
+  } else {
+    await exchangeBootstrapCredential(credential);
+  }
+}
+
 async function waitForAuthenticatedSessionAfterBootstrap(): Promise<AuthSessionState> {
   const startedAt = Date.now();
 
@@ -322,7 +332,7 @@ async function bootstrapServerAuth(urlCredential: string | null): Promise<Server
   }
 
   try {
-    await exchangeBootstrapCredential(bootstrapCredential);
+    await exchangePrimaryCredential(bootstrapCredential);
     await waitForAuthenticatedSessionAfterBootstrap();
     return { status: "authenticated" };
   } catch (error) {
@@ -343,7 +353,7 @@ export async function submitServerAuthCredential(credential: string): Promise<vo
   }
 
   resolvedAuthenticatedGateState = null;
-  await exchangeBootstrapCredential(trimmedCredential);
+  await exchangePrimaryCredential(trimmedCredential);
   await waitForAuthenticatedSessionAfterBootstrap();
   resolvedAuthenticatedGateState = { status: "authenticated" };
   bootstrapPromise = null;

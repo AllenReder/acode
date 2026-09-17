@@ -3,6 +3,7 @@ import type { ConfirmDialogOptions, ContextMenuItem, LocalApi } from "@t3tools/c
 import { requestConfirmDialog } from "./confirmDialog";
 import { dismissContextMenu, showContextMenuFallback } from "./contextMenuFallback";
 import { readBrowserClientSettings, writeBrowserClientSettings } from "./clientPersistenceStorage";
+import { isElectron } from "./env";
 
 let cachedApi: LocalApi | undefined;
 
@@ -46,7 +47,7 @@ function createBrowserLocalApi(): LocalApi {
         items: readonly ContextMenuItem<T>[],
         position?: { x: number; y: number },
       ): Promise<T | null> => {
-        if (window.desktopBridge) {
+        if (isElectron && window.desktopBridge) {
           return window.desktopBridge.showContextMenu(items, position) as Promise<T | null>;
         }
         return showContextMenuFallback(items, position);
@@ -55,7 +56,7 @@ function createBrowserLocalApi(): LocalApi {
       // interaction, so nothing to do there; the DOM fallback needs an explicit
       // dismiss when the state behind it goes away.
       close: async () => {
-        if (!window.desktopBridge) {
+        if (!isElectron) {
           dismissContextMenu();
         }
       },

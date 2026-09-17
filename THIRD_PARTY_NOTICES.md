@@ -11,6 +11,16 @@ directory relationships so the typed Web/server boundary stays intact.
   `ccf220be205f0e509021dbc8cbda90daa638e20d`
 - Project license: [`LICENSE`](./LICENSE)
 
+## Monocode Tauri shell
+
+- Source: [`hardbeat920/monocode`](https://github.com/hardbeat920/monocode)
+- Adopted reference commit:
+  `25dd57e599e33a1878ce7e45a3187f7863b8d74f`
+- ACode adopts the Tauri window/configuration and native-host boundary from this
+  reference. It does not include Monocode's React application, provider
+  adapters, PTY implementation, or persistence layer.
+- Project license: MIT (the license notice is retained in the source reference).
+
 ## Vendored runtime components
 
 - Ghostty virtual-terminal ABI license:

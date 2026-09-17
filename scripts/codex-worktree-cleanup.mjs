@@ -12,6 +12,7 @@ export const WORKTREE_CLEANUP_TARGETS = [
   ".acode",
   ".generated",
   ".vite-plus",
+  "apps/desktop/src-tauri/target",
   "apps/server/dist",
   "apps/web/dist",
 ];
