@@ -6,6 +6,7 @@ import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hos
 
 import {
   type DeviceServiceState,
+  AgentSessionId,
   AuthAccessTokenType,
   AuthStandardClientScopes,
   AuthEnvironmentBootstrapTokenType,
@@ -40,6 +41,7 @@ import {
   type ServerLifecycleStreamEvent,
   ThreadId,
   TurnId,
+  WorkspaceId,
   UsageLimitSourceId,
   WS_METHODS,
   WsRpcGroup,
@@ -7229,6 +7231,58 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       assert.isAtLeast(response.sequence, 0);
       assert.equal(stat.type, "Directory");
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("returns the durable ACode session from websocket thread creation", () =>
+    Effect.gen(function* () {
+      const threadId = ThreadId.make("thread-session-result");
+      yield* buildAppUnderTest({
+        layers: {
+          orchestrationEngine: {
+            dispatch: () => Effect.succeed({ sequence: 9 }),
+          },
+          projectionSnapshotQuery: {
+            getAcodeAgentSessionByThreadId: () =>
+              Effect.succeed(
+                Option.some({
+                  id: AgentSessionId.make("agent-session:event-1"),
+                  workspaceId: WorkspaceId.make("workspace:project-1"),
+                  threadId,
+                  title: "Session result",
+                  createdAt: "2026-01-01T00:00:00.000Z",
+                  updatedAt: "2026-01-01T00:00:00.000Z",
+                }),
+              ),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const response = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
+            type: "thread.create",
+            commandId: CommandId.make("cmd-session-result"),
+            threadId,
+            projectId: ProjectId.make("project-1"),
+            title: "Session result",
+            modelSelection: {
+              instanceId: ProviderInstanceId.make("codex"),
+              model: "gpt-5-codex",
+            },
+            runtimeMode: "full-access",
+            interactionMode: "default",
+            branch: null,
+            worktreePath: null,
+            createdAt: "2026-01-01T00:00:00.000Z",
+          }),
+        ),
+      );
+
+      assert.equal(response.sequence, 9);
+      assert.equal(response.agentSession?.id, "agent-session:event-1");
+      assert.equal(response.agentSession?.threadId, threadId);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 

@@ -3758,6 +3758,8 @@ pending_approval_requests AS (
     getProjectShells,
     getAcodeProjectByT3ProjectId: acodeProjectRepository.getByT3ProjectId,
     getAcodeWorkspaceById: acodeProjectRepository.getWorkspaceById,
+    getAcodeProjectByThreadId: acodeProjectRepository.getByThreadId,
+    getAcodeAgentSessionByThreadId: acodeProjectRepository.getAgentSessionByThreadId,
     getFirstActiveThreadIdByProjectId,
     getImportedAgentSessionSources,
     getThreadCheckpointContext,
