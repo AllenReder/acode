@@ -1021,12 +1021,17 @@ export const make = (options?: StartupOptions) =>
             Effect.withSpan("server.startup.heartbeat.record"),
             Effect.ignoreCause({ log: true }),
           );
-          if (serverConfig.startupPresentation === "headless") {
+          if (serverConfig.startupPresentation === "headless" && !serverConfig.daemonManaged) {
             const accessInfo = yield* issueHeadlessServeAccessInfo();
             yield* runStartupPhase(
               "headless.output",
               Console.log(formatHeadlessServeOutput(accessInfo)),
             );
+          } else if (serverConfig.startupPresentation === "headless") {
+            // The native desktop launcher owns the bootstrap credential and
+            // hands it to the renderer through the protected credential file.
+            // Do not print a second pairing token into the daemon log.
+            yield* Effect.logDebug("headless startup output suppressed for managed daemon");
           } else {
             const startupBrowserTarget = yield* resolveStartupBrowserTarget;
             if (serverConfig.mode !== "desktop") {

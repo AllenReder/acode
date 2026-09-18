@@ -45,7 +45,13 @@ import {
   failEnvironmentInternal,
 } from "./auth/http.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
+import * as ProjectionSnapshotQuery from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import { browserApiCorsAllowedHeaders, browserApiCorsAllowedMethods } from "./httpCors.ts";
+import {
+  LOCAL_DAEMON_HANDSHAKE_PATH,
+  LOCAL_DAEMON_OWNER,
+  LOCAL_DAEMON_PROTOCOL_VERSION,
+} from "./localDaemonProtocol.ts";
 
 const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -310,6 +316,41 @@ export const serverEnvironmentHttpApiLayer = HttpApiBuilder.group(
         return yield* serverEnvironment.getDescriptor;
       }, traceRelayRequest),
     );
+  }),
+);
+
+/**
+ * A loopback-safe, data-free handshake for the desktop launcher. The launcher
+ * still verifies the persisted pid and then checks this identity; neither a
+ * pid file nor a port probe is sufficient to claim a daemon. Authentication
+ * and all work data remain behind the normal environment auth boundary.
+ */
+export const localDaemonHandshakeRouteLayer = HttpRouter.add(
+  "GET",
+  LOCAL_DAEMON_HANDSHAKE_PATH,
+  Effect.gen(function* () {
+    const config = yield* ServerConfig.ServerConfig;
+    const snapshots = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
+    const activeWork = yield* snapshots.getShellSnapshot().pipe(
+      Effect.map((snapshot) =>
+        snapshot.threads.some(
+          (thread) =>
+            thread.latestTurn?.state === "running" ||
+            thread.backgroundLiveness === "working" ||
+            thread.hasPendingApprovals ||
+            thread.hasPendingUserInput,
+        ),
+      ),
+      Effect.orElseSucceed(() => false),
+    );
+    return HttpServerResponse.jsonUnsafe({
+      protocolVersion: LOCAL_DAEMON_PROTOCOL_VERSION,
+      owner: LOCAL_DAEMON_OWNER,
+      daemonId: config.daemonId ?? null,
+      pid: process.pid,
+      managed: config.daemonManaged === true,
+      activeWork,
+    });
   }),
 );
 

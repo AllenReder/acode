@@ -6,11 +6,18 @@ import * as Schema from "effect/Schema";
 
 import { writeFileStringAtomically } from "./atomicWrite.ts";
 import type * as ServerConfig from "./config.ts";
+import { LOCAL_DAEMON_PROTOCOL_VERSION } from "./localDaemonProtocol.ts";
 import { formatHostForUrl, isWildcardHost } from "./startupAccess.ts";
 
 export const PersistedServerRuntimeState = Schema.Struct({
   version: Schema.Literal(1),
   pid: Schema.Int,
+  /** Present for a desktop-daemon-owned server; absent on manual/legacy runs. */
+  daemonId: Schema.optional(Schema.String),
+  daemonOwner: Schema.optional(Schema.String),
+  daemonWorkingDirectory: Schema.optional(Schema.String),
+  daemonProtocolVersion: Schema.optional(Schema.Int),
+  daemonManaged: Schema.optional(Schema.Boolean),
   host: Schema.optional(Schema.String),
   port: Schema.Int,
   origin: Schema.String,
@@ -54,13 +61,27 @@ const runtimeOriginForConfig = (
 };
 
 export const makePersistedServerRuntimeState = (input: {
-  readonly config: Pick<ServerConfig.ServerConfig["Service"], "host" | "devUrl">;
+  readonly config: Pick<
+    ServerConfig.ServerConfig["Service"],
+    "host" | "devUrl" | "daemonId" | "daemonOwner" | "daemonWorkingDirectory" | "daemonManaged"
+  >;
   readonly port: number;
   readonly serviceManaged?: boolean;
 }): Effect.Effect<PersistedServerRuntimeState> =>
   Effect.map(DateTime.now, (now) => ({
     version: 1,
     pid: process.pid,
+    ...(input.config.daemonId ? { daemonId: input.config.daemonId } : {}),
+    ...(input.config.daemonOwner ? { daemonOwner: input.config.daemonOwner } : {}),
+    ...(input.config.daemonWorkingDirectory
+      ? { daemonWorkingDirectory: input.config.daemonWorkingDirectory }
+      : {}),
+    ...(input.config.daemonManaged
+      ? {
+          daemonProtocolVersion: LOCAL_DAEMON_PROTOCOL_VERSION,
+          daemonManaged: true,
+        }
+      : {}),
     ...(input.config.host ? { host: input.config.host } : {}),
     port: input.port,
     origin: runtimeOriginForConfig(input.config, input.port),

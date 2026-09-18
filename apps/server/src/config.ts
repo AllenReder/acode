@@ -79,6 +79,11 @@ export class ServerConfig extends Context.Service<
     readonly mode: RuntimeMode;
     readonly port: number;
     readonly host: string | undefined;
+    /** Identity supplied by the local desktop daemon launcher, when managed. */
+    readonly daemonId?: string | undefined;
+    readonly daemonOwner?: string | undefined;
+    readonly daemonWorkingDirectory?: string | undefined;
+    readonly daemonManaged?: boolean | undefined;
     readonly cwd: string;
     readonly baseDir: string;
     readonly staticDir: string | undefined;
