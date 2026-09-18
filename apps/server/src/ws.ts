@@ -24,6 +24,7 @@ import {
   type AuthEnvironmentScope,
   AuthSessionId,
   acodeProjectIdForT3Project,
+  workspaceIdForT3Project,
   ClientConnectionMethod,
   ClientDeviceType,
   ClientOs,
@@ -1229,6 +1230,9 @@ const makeWsRpcLayer = (
               const setupResult = yield* projectSetupScriptRunner
                 .runForThread({
                   threadId,
+                  ...(targetProjectId
+                    ? { workspaceId: workspaceIdForT3Project(targetProjectId) }
+                    : {}),
                   ...(targetProjectId ? { projectId: targetProjectId } : {}),
                   ...(targetProjectCwd ? { projectCwd: targetProjectCwd } : {}),
                   worktreePath,
@@ -1666,7 +1670,9 @@ const makeWsRpcLayer = (
                 // process asynchronously, so the removal retries briefly.
                 const closeSetupTerminal = setupTerminalId
                   ? terminalManager.close({
-                      threadId,
+                      ...(targetProjectId
+                        ? { workspaceId: workspaceIdForT3Project(targetProjectId) }
+                        : { threadId }),
                       terminalId: setupTerminalId,
                       deleteHistory: true,
                     })
@@ -1913,17 +1919,6 @@ const makeWsRpcLayer = (
                     ),
                   );
                 }
-
-                // Archive removes the thread from view, so its user-opened
-                // terminal panes close with it.
-                yield* terminalManager.close({ threadId: archiveCommand.threadId }).pipe(
-                  Effect.catch((error) =>
-                    Effect.logWarning("failed to close thread terminals after archive", {
-                      threadId: archiveCommand.threadId,
-                      error: error.message,
-                    }),
-                  ),
-                );
               }
               return yield* enrichOrchestrationDispatchResult({
                 command: normalizedCommand,

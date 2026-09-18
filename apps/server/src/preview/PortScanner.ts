@@ -55,12 +55,14 @@ export class PortDiscovery extends Context.Service<
     ) => Effect.Effect<void, never, Scope.Scope>;
     readonly retain: Effect.Effect<void, never, Scope.Scope>;
     readonly registerTerminalProcesses: (input: {
-      readonly threadId: string;
+      readonly workspaceId?: string;
+      readonly threadId?: string;
       readonly terminalId: string;
       readonly processIds: ReadonlyArray<number>;
     }) => Effect.Effect<void>;
     readonly unregisterTerminal: (input: {
-      readonly threadId: string;
+      readonly workspaceId?: string;
+      readonly threadId?: string;
       readonly terminalId: string;
     }) => Effect.Effect<void>;
   }
@@ -98,7 +100,8 @@ interface ScannerState {
 }
 
 interface TerminalProcessOwner {
-  readonly threadId: ThreadId;
+  readonly workspaceId?: string;
+  readonly threadId?: ThreadId;
   readonly terminalId: string;
 }
 
@@ -120,9 +123,24 @@ interface WebProbeSnapshot {
 }
 
 const terminalOwnerKey = (owner: {
-  readonly threadId: string;
+  readonly workspaceId?: string;
+  readonly threadId?: string;
   readonly terminalId: string;
-}): string => `${owner.threadId}\u0000${owner.terminalId}`;
+}): string => `${owner.workspaceId ?? owner.threadId ?? "unknown"}\u0000${owner.terminalId}`;
+
+const terminalOwnerWire = (owner: TerminalProcessOwner) =>
+  owner.workspaceId !== undefined
+    ? { workspaceId: owner.workspaceId, terminalId: owner.terminalId }
+    : { threadId: owner.threadId!, terminalId: owner.terminalId };
+
+const terminalWireIdentity = (terminal: unknown): string | null => {
+  if (terminal === null || typeof terminal !== "object") return null;
+  const value = terminal as Record<string, unknown>;
+  if (typeof value.terminalId !== "string") return null;
+  return typeof value.workspaceId === "string"
+    ? `workspace:${value.workspaceId}:${value.terminalId}`
+    : `thread:${String(value.threadId)}:${value.terminalId}`;
+};
 
 const parseConfiguredUrl = (raw: string): URL | null => {
   try {
@@ -216,7 +234,13 @@ const parseLsofOutput = (
         url,
         processName,
         pid,
-        terminal: pid === null ? null : (terminalByProcessId.get(pid) ?? null),
+        terminal:
+          pid === null
+            ? null
+            : (() => {
+                const owner = terminalByProcessId.get(pid);
+                return owner === undefined ? null : terminalOwnerWire(owner);
+              })(),
       });
     }
   }
@@ -259,7 +283,13 @@ const parseWindowsListenerOutput = (
       url: `http://localhost:${port}`,
       processName: processNameRaw?.trim() || null,
       pid: normalizedPid,
-      terminal: normalizedPid === null ? null : (terminalByProcessId.get(normalizedPid) ?? null),
+      terminal:
+        normalizedPid === null
+          ? null
+          : (() => {
+              const owner = terminalByProcessId.get(normalizedPid);
+              return owner === undefined ? null : terminalOwnerWire(owner);
+            })(),
     });
   }
   return [...seen.values()].toSorted((left, right) => left.port - right.port);
@@ -280,8 +310,7 @@ const serversEqual = (
       a.url !== b.url ||
       a.processName !== b.processName ||
       a.pid !== b.pid ||
-      a.terminal?.threadId !== b.terminal?.threadId ||
-      a.terminal?.terminalId !== b.terminal?.terminalId
+      terminalWireIdentity(a.terminal) !== terminalWireIdentity(b.terminal)
     ) {
       return false;
     }
@@ -625,7 +654,9 @@ export const make = Effect.gen(function* PortDiscoveryMake() {
   const registerTerminalProcesses: PortDiscovery["Service"]["registerTerminalProcesses"] =
     Effect.fn("PortDiscovery.registerTerminalProcesses")(function* (input) {
       const owner = {
-        threadId: ThreadId.make(input.threadId),
+        ...(input.workspaceId !== undefined
+          ? { workspaceId: input.workspaceId }
+          : { threadId: ThreadId.make(input.threadId ?? "unknown") }),
         terminalId: input.terminalId,
       };
       const processIds = new Set(

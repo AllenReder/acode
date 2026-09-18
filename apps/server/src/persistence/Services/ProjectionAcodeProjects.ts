@@ -107,6 +107,10 @@ export interface ProjectionAcodeProjectRepositoryShape {
   readonly getByT3ProjectId: (
     t3ProjectId: ProjectId,
   ) => Effect.Effect<Option.Option<AcodeProjectShell>, ProjectionRepositoryError>;
+  /** Read the ACode Workspace owning a stable WorkspaceId. */
+  readonly getWorkspaceById: (
+    workspaceId: WorkspaceId,
+  ) => Effect.Effect<Option.Option<AcodeWorkspaceShell>, ProjectionRepositoryError>;
   /** Read the owning ACode tree even after a session leaves the active shell. */
   readonly getByThreadId: (
     threadId: ThreadId,

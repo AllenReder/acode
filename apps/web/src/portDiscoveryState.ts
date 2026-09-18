@@ -80,7 +80,12 @@ export function useThreadDiscoveredPorts(input: {
   return useMemo(
     () =>
       input.threadId
-        ? ports.filter((port) => port.terminal?.threadId === input.threadId)
+        ? ports.filter(
+            (port) =>
+              port.terminal !== null &&
+              "threadId" in port.terminal &&
+              port.terminal.threadId === input.threadId,
+          )
         : EMPTY_PORTS,
     [input.threadId, ports],
   );

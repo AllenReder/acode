@@ -3,8 +3,10 @@
 Issue #5 keeps the donor terminal chain intact: the server owns the real PTY
 and bounded history, the typed WebSocket contracts expose lifecycle operations,
 and the web client renders the stream with Ghostty's virtual-terminal ABI.
-There is one terminal identity per `(threadId, terminalId)` pair. `terminalId`
-is always chosen by the client; `term-1` is only the conventional first id.
+There is one terminal identity per `(workspaceId, terminalId)` pair. The
+`terminalId` is always chosen by the client; `term-1` is only the conventional
+first id. The old `(threadId, terminalId)` shape remains a decode-compatible
+adapter for donor/setup clients and is not the ACode ownership path.
 
 ## Public operations
 
@@ -13,11 +15,14 @@ The matching contracts are in `packages/contracts/src/terminal.ts` and
 `packages/contracts/src/rpc.ts`.
 
 - `open` starts a terminal lazily or returns the existing session for the same
-  pair. A PTY startup failure is represented by an `error` snapshot and event;
+  Workspace pair. Workspace-owned opens resolve `cwd` from the persisted
+  Workspace on the daemon; callers cannot redirect them by sending another cwd.
+  A PTY startup failure is represented by an `error` snapshot and event;
   the event message includes the shells that were attempted.
-- `attach` opens or reuses the session and streams an initial snapshot followed
-  by live output, exit, error, clear, restart, and activity events. Detaching
-  removes only the client listener; it does not kill the PTY.
+- `attach` attaches an existing Workspace session and streams an initial
+  snapshot followed by live output, exit, error, clear, restart, and activity
+  events. It does not create a missing Workspace session. Detaching removes
+  only the client listener; it does not kill the PTY.
 - `write` sends input bytes to the running PTY. `resize` forwards settled
   columns and rows to the PTY. The shell can observe the new size through
   `stty`/its native console API.
@@ -41,15 +46,19 @@ drawer also suppresses its fit/resize effects while hidden, so a hidden view
 does not continuously send meaningless resize RPCs. Re-showing the drawer fits
 once and reports the settled grid.
 
-## Ownership handoff
+## Workspace ownership
 
-For this ticket, `threadId` is the existing donor/provider thread identity. It
-is not an ACode `Workspace` or `Session`, and this ticket does not invent a
-hidden Agent session to host a terminal. The future ownership adapter must map
-an ACode terminal Session to the same `(threadId, terminalId)` lifecycle
-without creating a second terminal state store. Closing a View, Pane, or Tab
-must remain distinct from calling `close`; thread deletion is the existing
-server-side cleanup boundary.
+The ACode path maps a Terminal Session to the persisted Workspace and keeps
+the PTY state in the single `TerminalManager`. The terminal summary exposes
+`kind: "terminal"`, `workspaceId`, and a monotonically increasing `generation`.
+The daemon persists the Session index beside terminal history. On daemon
+restart, a former live generation is reported as `exited`; reopening starts a
+new generation rather than pretending the old shell was recovered. Closing an
+Agent or its View does not close a Workspace terminal.
+
+Closing a View, Pane, or Tab remains distinct from calling `close`; `close` is
+reserved for explicit terminal termination. The Sidebar can create a terminal
+directly under a Workspace, including when it has no Agent Sessions.
 
 ## Validation
 

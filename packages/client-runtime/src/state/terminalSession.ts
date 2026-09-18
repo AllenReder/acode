@@ -5,6 +5,7 @@ import type {
   TerminalSessionSnapshot,
   TerminalSummary,
   ThreadId,
+  WorkspaceId,
 } from "@t3tools/contracts";
 import {
   appendOutput,
@@ -46,7 +47,8 @@ export interface TerminalBufferState {
 
 export interface KnownTerminalSessionTarget {
   readonly environmentId: EnvironmentId;
-  readonly threadId: ThreadId;
+  readonly workspaceId?: WorkspaceId;
+  readonly threadId?: ThreadId;
   readonly terminalId: string;
 }
 
@@ -195,19 +197,24 @@ export function applyTerminalMetadataStreamEvent(
   current: ReadonlyArray<TerminalSummary>,
   event: TerminalMetadataStreamEvent,
 ): ReadonlyArray<TerminalSummary> {
+  const sameOwner = (
+    left: Pick<TerminalSummary, "workspaceId" | "threadId">,
+    right: Pick<TerminalSummary, "workspaceId" | "threadId">,
+  ) =>
+    left.workspaceId !== undefined || right.workspaceId !== undefined
+      ? left.workspaceId === right.workspaceId
+      : left.threadId === right.threadId;
   if (event.type === "snapshot") {
     return event.terminals;
   }
   if (event.type === "remove") {
     return current.filter(
-      (terminal) =>
-        terminal.threadId !== event.threadId || terminal.terminalId !== event.terminalId,
+      (terminal) => !sameOwner(terminal, event) || terminal.terminalId !== event.terminalId,
     );
   }
   const next = current.filter(
     (terminal) =>
-      terminal.threadId !== event.terminal.threadId ||
-      terminal.terminalId !== event.terminal.terminalId,
+      !sameOwner(terminal, event.terminal) || terminal.terminalId !== event.terminal.terminalId,
   );
   return [...next, event.terminal];
 }

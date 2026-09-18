@@ -68,6 +68,29 @@ describe("TerminalOpenInput", () => {
     ).toBe(true);
   });
 
+  it("accepts a Workspace-owned open without a client-supplied cwd", () => {
+    expect(
+      decodes(TerminalOpenInput, {
+        workspaceId: "workspace-1",
+        terminalId: DEFAULT_TERMINAL_ID,
+      }),
+    ).toBe(true);
+  });
+
+  it("requires exactly one terminal owner", () => {
+    expect(
+      decodes(TerminalOpenInput, { terminalId: DEFAULT_TERMINAL_ID, cwd: "/tmp/project" }),
+    ).toBe(false);
+    expect(
+      decodes(TerminalOpenInput, {
+        workspaceId: "workspace-1",
+        threadId: "thread-1",
+        terminalId: DEFAULT_TERMINAL_ID,
+        cwd: "/tmp/project",
+      }),
+    ).toBe(false);
+  });
+
   it("accepts ultrawide terminal dimensions from xterm fit", () => {
     expect(
       decodes(TerminalOpenInput, {
@@ -163,6 +186,30 @@ describe("TerminalAttachInput", () => {
     });
 
     expect(parsed.restartIfNotRunning).toBe(true);
+  });
+});
+
+describe("TerminalSessionSnapshot", () => {
+  it("represents a terminal Session without a fake thread owner", () => {
+    const parsed = decodeSync(TerminalSessionSnapshot, {
+      workspaceId: "workspace-1",
+      terminalId: DEFAULT_TERMINAL_ID,
+      kind: "terminal",
+      sessionId: DEFAULT_TERMINAL_ID,
+      cwd: "/tmp/project",
+      worktreePath: null,
+      status: "running",
+      pid: 42,
+      history: "hello\n",
+      exitCode: null,
+      exitSignal: null,
+      label: "Terminal",
+      updatedAt: "2026-09-18T00:00:00.000Z",
+      generation: 2,
+    });
+    expect(parsed.workspaceId).toBe("workspace-1");
+    expect(parsed.threadId).toBeUndefined();
+    expect(parsed.generation).toBe(2);
   });
 });
 

@@ -342,6 +342,17 @@ const makeRepository = Effect.gen(function* () {
         ),
         Effect.mapError(toPersistenceSqlError("ProjectionAcodeProjectRepository.getByT3ProjectId")),
       ),
+    getWorkspaceById: (workspaceId) =>
+      Effect.all([getRows(undefined), getActiveSessionRows({})]).pipe(
+        Effect.map(([rows, sessions]) =>
+          Option.fromNullishOr(
+            mapProjectionAcodeProjectRows(rows, sessions)
+              .flatMap((project) => project.workspaces)
+              .find((workspace) => workspace.id === workspaceId),
+          ),
+        ),
+        Effect.mapError(toPersistenceSqlError("ProjectionAcodeProjectRepository.getWorkspaceById")),
+      ),
     getByThreadId: (threadId) =>
       Effect.gen(function* () {
         const rows = yield* getRowsForThread({ threadId });
