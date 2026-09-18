@@ -113,6 +113,23 @@ const EnvServerConfig = Config.all({
   ),
   port: Config.port("T3CODE_PORT").pipe(Config.option, Config.map(Option.getOrUndefined)),
   host: Config.string("T3CODE_HOST").pipe(Config.option, Config.map(Option.getOrUndefined)),
+  daemonId: Config.string("T3CODE_DAEMON_ID").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  daemonOwner: Config.string("T3CODE_DAEMON_OWNER").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  daemonWorkingDirectory: Config.string("T3CODE_DAEMON_WORKING_DIR").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
+  daemonManaged: Config.boolean("T3CODE_DAEMON_MANAGED").pipe(Config.withDefault(false)),
+  desktopBootstrapToken: Config.string("T3CODE_DESKTOP_BOOTSTRAP_TOKEN").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
   t3Home: Config.string("T3CODE_HOME").pipe(Config.option, Config.map(Option.getOrUndefined)),
   devUrl: Config.url("VITE_DEV_SERVER_URL").pipe(Config.option, Config.map(Option.getOrUndefined)),
   devAllowedOrigins: Config.string("T3CODE_DEV_ALLOWED_ORIGINS").pipe(
@@ -331,7 +348,7 @@ export const resolveServerConfig = (
       ),
       () => mode === "desktop",
     );
-    const desktopBootstrapToken = bootstrap?.desktopBootstrapToken;
+    const desktopBootstrapToken = bootstrap?.desktopBootstrapToken ?? env.desktopBootstrapToken;
     const desktopTelemetryFd = bootstrap?.desktopTelemetryFd;
     const desktopTelemetryControlFd = bootstrap?.desktopTelemetryControlFd;
     const resourceMonitorPath = bootstrap?.resourceMonitorPath;
@@ -404,6 +421,12 @@ export const resolveServerConfig = (
       ...derivedPaths,
       serverTracePath,
       host,
+      ...(env.daemonId === undefined ? {} : { daemonId: env.daemonId }),
+      ...(env.daemonOwner === undefined ? {} : { daemonOwner: env.daemonOwner }),
+      ...(env.daemonWorkingDirectory === undefined
+        ? {}
+        : { daemonWorkingDirectory: env.daemonWorkingDirectory }),
+      ...(env.daemonManaged ? { daemonManaged: true } : {}),
       staticDir,
       devUrl,
       ...(devAuthToken === undefined ? {} : { devAuthToken }),

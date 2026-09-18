@@ -6,8 +6,21 @@ const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(desktopRoot, "../..");
 const inheritedHome = process.env.ACODE_HOME?.trim() || process.env.T3CODE_HOME?.trim();
 const developmentHome = inheritedHome || resolve(repositoryRoot, ".acode");
+const cliArgs = process.argv.slice(2);
+const hasExplicitConfig = cliArgs.some((argument) => argument === "--config" || argument === "-c");
+const tauriArgs =
+  cliArgs[0] === "dev" && !hasExplicitConfig
+    ? [
+        "exec",
+        "tauri",
+        "dev",
+        "--config",
+        resolve(desktopRoot, "src-tauri/tauri.dev.conf.json"),
+        ...cliArgs.slice(1),
+      ]
+    : ["exec", "tauri", ...cliArgs];
 
-const child = spawn("pnpm", ["exec", "tauri", ...process.argv.slice(2)], {
+const child = spawn("pnpm", tauriArgs, {
   cwd: desktopRoot,
   env: {
     ...process.env,

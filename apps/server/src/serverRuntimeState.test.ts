@@ -81,6 +81,34 @@ describe("serverRuntimeState", () => {
     }),
   );
 
+  it.effect("persists local daemon identity only for daemon-managed servers", () =>
+    Effect.gen(function* () {
+      const managed = yield* ServerRuntimeState.makePersistedServerRuntimeState({
+        config: {
+          host: "127.0.0.1",
+          devUrl: undefined,
+          daemonId: "daemon-test",
+          daemonOwner: "acode-local-daemon",
+          daemonWorkingDirectory: "/worktree with spaces",
+          daemonManaged: true,
+        },
+        port: 13_773,
+      });
+      const manual = yield* ServerRuntimeState.makePersistedServerRuntimeState({
+        config: { host: "127.0.0.1", devUrl: undefined },
+        port: 13_773,
+      });
+
+      assert.equal(managed.daemonId, "daemon-test");
+      assert.equal(managed.daemonOwner, "acode-local-daemon");
+      assert.equal(managed.daemonWorkingDirectory, "/worktree with spaces");
+      assert.equal(managed.daemonProtocolVersion, 1);
+      assert.isTrue(managed.daemonManaged);
+      assert.isFalse("daemonId" in manual);
+      assert.isFalse("daemonManaged" in manual);
+    }),
+  );
+
   it.effect("treats a missing runtime state file as absent", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

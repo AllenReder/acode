@@ -83,16 +83,20 @@ opening, and desktop connection bootstrap; agent execution, PTY state,
 provider credentials, and persistence remain in the existing daemon. The
 Monocode React application is not copied into this checkout.
 
-The C02 shell does not start or supervise the daemon. Start one explicitly,
-then start the desktop shell in another terminal. The wrapper uses port offset
-`0` and this checkout's `.acode` directory by default:
+The desktop shell asks the local daemon launcher to attach to or start the
+daemon for this checkout. The daemon is detached from the window lifecycle, so
+closing the desktop shell leaves work running. The wrapper uses port offset `0`
+and this checkout's `.acode` directory by default:
 
 ```bash
-# Terminal 1: daemon on 13773, with its runtime marker in .acode/userdata
-T3CODE_PORT_OFFSET=0 pnpm dev:server
-
-# Terminal 2: Tauri window plus the Web development server on 5733
+# Tauri window, Web development server on 5733, and the local daemon launcher
 pnpm dev:desktop
+```
+
+The explicit CLI stop is separate from closing the window:
+
+```bash
+pnpm --dir apps/server exec node src/bin.ts daemon stop --base-dir "$PWD/.acode" --confirm
 ```
 
 The desktop reads the live daemon endpoint from
@@ -117,10 +121,10 @@ ACODE_HOME="$PWD/.acode" ACODE_DESKTOP_BEARER_TOKEN=<bearer-token> \
   apps/desktop/src-tauri/target/release/bundle/macos/ACode.app/Contents/MacOS/acode-desktop
 ```
 
-The generated application identifier is `com.allenreder.acode`. Native
-desktop integration is intentionally limited to the C02 shell; daemon
-supervision, workspaces, sessions, and the Monocode-derived workbench are
-follow-up tickets.
+The generated release application identifier is `com.allenreder.acode`; the
+development shell uses the separate `com.allenreder.acode.dev` identity. Native
+desktop integration currently covers local daemon discovery and supervision;
+workspaces, sessions, and the Monocode-derived workbench are follow-up tickets.
 
 ## Data and external dependencies
 

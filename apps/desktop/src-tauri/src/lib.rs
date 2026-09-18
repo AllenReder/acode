@@ -1,12 +1,15 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use tauri::plugin::{Builder as PluginBuilder, TauriPlugin};
 use tauri::{Runtime, Url};
 
 const PRIMARY_LOCAL_ENVIRONMENT_ID: &str = "primary";
 const DEFAULT_ENVIRONMENT_LABEL: &str = "ACode local daemon";
+const LOCAL_DAEMON_PROTOCOL_VERSION: u8 = 1;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -14,6 +17,17 @@ struct PersistedServerRuntimeState {
     version: u8,
     pid: i64,
     origin: String,
+    #[serde(default)]
+    daemon_id: Option<String>,
+    #[serde(default)]
+    daemon_protocol_version: Option<u8>,
+    #[serde(default)]
+    daemon_managed: bool,
+}
+
+struct PersistedRuntime {
+    state: PersistedServerRuntimeState,
+    path: PathBuf,
 }
 
 #[derive(Debug, Serialize)]
@@ -114,7 +128,7 @@ fn is_process_alive(pid: i64) -> bool {
     }
 }
 
-fn read_runtime_state() -> Result<Option<PersistedServerRuntimeState>, String> {
+fn read_runtime_state() -> Result<Option<PersistedRuntime>, String> {
     for path in runtime_state_candidates() {
         let contents = match fs::read_to_string(&path) {
             Ok(contents) => contents,
@@ -134,11 +148,144 @@ fn read_runtime_state() -> Result<Option<PersistedServerRuntimeState>, String> {
             ));
         }
         if is_process_alive(state.pid) {
-            return Ok(Some(state));
+            return Ok(Some(PersistedRuntime { state, path }));
         }
     }
 
     Ok(None)
+}
+
+fn local_daemon_base_dir() -> PathBuf {
+    if let Some(base) = read_non_empty_env(&["ACODE_HOME", "T3CODE_HOME"]) {
+        return PathBuf::from(base);
+    }
+
+    if let Ok(mut current) = env::current_dir() {
+        for _ in 0..=3 {
+            let candidate = current.join(".acode");
+            if candidate.exists() {
+                return candidate;
+            }
+            if !current.pop() {
+                break;
+            }
+        }
+    }
+
+    read_non_empty_env(&["HOME", "USERPROFILE"])
+        .map(|home| PathBuf::from(home).join(".acode"))
+        .unwrap_or_else(|| PathBuf::from(".acode"))
+}
+
+fn daemon_entry_candidates() -> Vec<PathBuf> {
+    let manifest_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repository_root = manifest_root.join("../../..");
+    let mut candidates = vec![
+        repository_root.join("apps/server/src/bin.ts"),
+        repository_root.join("apps/server/dist/bin.mjs"),
+    ];
+
+    if let Ok(executable) = env::current_exe() {
+        if let Some(parent) = executable.parent() {
+            candidates.push(parent.join("resources/t3"));
+            candidates.push(parent.join("resources/server/bin.mjs"));
+        }
+    }
+    candidates
+}
+
+struct DaemonInvocation {
+    command: String,
+    entry_args: Vec<String>,
+    current_dir: Option<PathBuf>,
+}
+
+fn resolve_daemon_invocation() -> Result<DaemonInvocation, String> {
+    if let Some(command) = read_non_empty_env(&["ACODE_DAEMON_COMMAND", "T3CODE_DAEMON_COMMAND"]) {
+        return Ok(DaemonInvocation {
+            command,
+            entry_args: Vec::new(),
+            current_dir: None,
+        });
+    }
+
+    if let Some(entry) = read_non_empty_env(&["ACODE_DAEMON_ENTRY", "T3CODE_DAEMON_ENTRY"]) {
+        return Ok(DaemonInvocation {
+            command: read_non_empty_env(&["ACODE_NODE_COMMAND"]).unwrap_or_else(|| "node".into()),
+            entry_args: vec![entry],
+            current_dir: None,
+        });
+    }
+
+    for candidate in daemon_entry_candidates() {
+        if !candidate.is_file() {
+            continue;
+        }
+        if candidate
+            .extension()
+            .and_then(|extension| extension.to_str())
+            == Some("mjs")
+        {
+            return Ok(DaemonInvocation {
+                command: read_non_empty_env(&["ACODE_NODE_COMMAND"])
+                    .unwrap_or_else(|| "node".into()),
+                entry_args: vec![candidate.to_string_lossy().into_owned()],
+                current_dir: candidate.parent().map(Path::to_path_buf),
+            });
+        }
+        return Ok(DaemonInvocation {
+            command: read_non_empty_env(&["ACODE_NODE_COMMAND"]).unwrap_or_else(|| "node".into()),
+            entry_args: vec![candidate.to_string_lossy().into_owned()],
+            current_dir: candidate
+                .parent()
+                .and_then(Path::parent)
+                .and_then(Path::parent)
+                .and_then(Path::parent)
+                .map(Path::to_path_buf),
+        });
+    }
+
+    Err("The ACode local daemon launcher is unavailable. Configure ACODE_DAEMON_COMMAND or ACODE_DAEMON_ENTRY.".into())
+}
+
+fn invoke_local_daemon(action: &str, base_dir: &Path, confirm: bool) -> Result<Value, String> {
+    let invocation = resolve_daemon_invocation()?;
+    let mut args = invocation.entry_args;
+    args.extend([
+        "daemon".into(),
+        action.into(),
+        "--json".into(),
+        "--base-dir".into(),
+        base_dir.to_string_lossy().into_owned(),
+    ]);
+    if confirm {
+        args.push("--confirm".into());
+    }
+
+    let mut command = Command::new(invocation.command);
+    command.args(args);
+    if let Some(current_dir) = invocation.current_dir {
+        command.current_dir(current_dir);
+    }
+    let output = command
+        .output()
+        .map_err(|_| "Could not start the ACode local daemon launcher.".to_owned())?;
+    if !output.status.success() {
+        return Err("The ACode local daemon launcher failed.".to_owned());
+    }
+
+    let value: Value = serde_json::from_slice(&output.stdout)
+        .map_err(|_| "The ACode local daemon launcher returned an invalid response.".to_owned())?;
+    if value.get("ok").and_then(Value::as_bool) == Some(false) {
+        return Err(value
+            .get("error")
+            .and_then(Value::as_object)
+            .and_then(|error| error.get("message"))
+            .and_then(Value::as_str)
+            .unwrap_or("The ACode local daemon launcher rejected the request.")
+            .to_owned());
+    }
+    Ok(value)
 }
 
 fn normalize_local_origin(raw: &str, expected_schemes: &[&str]) -> Result<String, String> {
@@ -189,12 +336,12 @@ fn http_origin_from_websocket(ws_origin: &str) -> Result<String, String> {
 }
 
 fn resolve_daemon_origins(
-    runtime: Option<&PersistedServerRuntimeState>,
+    runtime: Option<&PersistedRuntime>,
 ) -> Result<Option<(String, String)>, String> {
     let explicit_http = read_non_empty_env(&["ACODE_DESKTOP_HTTP_URL", "T3CODE_DESKTOP_HTTP_URL"]);
     let explicit_ws = read_non_empty_env(&["ACODE_DESKTOP_WS_URL", "T3CODE_DESKTOP_WS_URL"]);
 
-    let http_raw = explicit_http.or_else(|| runtime.map(|state| state.origin.clone()));
+    let http_raw = explicit_http.or_else(|| runtime.map(|runtime| runtime.state.origin.clone()));
     let ws_raw = explicit_ws;
     if http_raw.is_none() && ws_raw.is_none() {
         return Ok(None);
@@ -218,6 +365,52 @@ fn resolve_daemon_origins(
     Ok(Some((http_origin, ws_origin)))
 }
 
+fn read_local_bootstrap_token(
+    runtime: Option<&PersistedRuntime>,
+) -> Result<Option<String>, String> {
+    if let Some(token) = read_non_empty_env(&[
+        "ACODE_DESKTOP_BOOTSTRAP_TOKEN",
+        "T3CODE_DESKTOP_BOOTSTRAP_TOKEN",
+    ]) {
+        return Ok(Some(token));
+    }
+    let Some(runtime) = runtime else {
+        return Ok(None);
+    };
+    let Some(state_dir) = runtime.path.parent() else {
+        return Ok(None);
+    };
+    let credential_path = state_dir.join("secrets/desktop-bootstrap.token");
+    match fs::read_to_string(&credential_path) {
+        Ok(contents) => {
+            let token = contents.trim().to_owned();
+            Ok((!token.is_empty()).then_some(token))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!(
+            "Unable to read the local daemon credential at {}: {error}",
+            credential_path.display()
+        )),
+    }
+}
+
+fn require_managed_runtime(runtime: Option<&PersistedRuntime>) -> Result<(), String> {
+    let Some(runtime) = runtime else {
+        return Err("The local daemon did not publish a runtime descriptor.".to_owned());
+    };
+    let state = &runtime.state;
+    if !state.daemon_managed
+        || state.daemon_id.as_deref().unwrap_or_default().is_empty()
+        || state.daemon_protocol_version != Some(LOCAL_DAEMON_PROTOCOL_VERSION)
+    {
+        return Err(
+            "The local runtime descriptor is not an ACode-managed daemon; refusing to connect."
+                .to_owned(),
+        );
+    }
+    Ok(())
+}
+
 fn client_platform() -> String {
     #[cfg(target_os = "macos")]
     return "darwin".to_owned();
@@ -231,15 +424,26 @@ fn client_platform() -> String {
 
 #[tauri::command]
 fn read_desktop_runtime_config() -> Result<DesktopRuntimeConfig, String> {
+    let explicit_endpoint = read_non_empty_env(&[
+        "ACODE_DESKTOP_HTTP_URL",
+        "T3CODE_DESKTOP_HTTP_URL",
+        "ACODE_DESKTOP_WS_URL",
+        "T3CODE_DESKTOP_WS_URL",
+    ])
+    .is_some();
+    let base_dir = local_daemon_base_dir();
+    if !explicit_endpoint {
+        invoke_local_daemon("start", &base_dir, false)?;
+    }
     let runtime = read_runtime_state()?;
+    if !explicit_endpoint {
+        require_managed_runtime(runtime.as_ref())?;
+    }
     let origins = resolve_daemon_origins(runtime.as_ref())?;
     let bearer_token =
         read_non_empty_env(&["ACODE_DESKTOP_BEARER_TOKEN", "T3CODE_DESKTOP_BEARER_TOKEN"]);
     let bootstrap_token = if bearer_token.is_none() {
-        read_non_empty_env(&[
-            "ACODE_DESKTOP_BOOTSTRAP_TOKEN",
-            "T3CODE_DESKTOP_BOOTSTRAP_TOKEN",
-        ])
+        read_local_bootstrap_token(runtime.as_ref())?
     } else {
         None
     };
@@ -262,6 +466,11 @@ fn read_desktop_runtime_config() -> Result<DesktopRuntimeConfig, String> {
         bearer_token,
         client_platform: client_platform(),
     })
+}
+
+#[tauri::command]
+fn stop_desktop_daemon(confirm: bool) -> Result<Value, String> {
+    invoke_local_daemon("stop", &local_daemon_base_dir(), confirm)
 }
 
 fn allow_app_navigation(url: &Url) -> bool {
@@ -290,7 +499,10 @@ pub fn run() {
         .plugin(navigation_guard())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![read_desktop_runtime_config])
+        .invoke_handler(tauri::generate_handler![
+            read_desktop_runtime_config,
+            stop_desktop_daemon
+        ])
         .run(tauri::generate_context!())
         .expect("error while running ACode desktop");
 }
