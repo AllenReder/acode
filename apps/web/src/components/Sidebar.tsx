@@ -23,6 +23,7 @@ import {
 } from "@t3tools/client-runtime/state/thread-settled";
 import { resolveSettledThreadTimestamp } from "@t3tools/client-runtime/state/thread-sort";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
+import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
 import {
   parseScopedThreadKey,
   scopeProjectRef,
@@ -31,7 +32,9 @@ import {
 } from "@t3tools/client-runtime/environment";
 import {
   resolveEnvironmentMachineKind,
+  type EnvironmentId,
   type EnvironmentMachineKind,
+  type ProjectId,
   type ProjectIconOverride,
   type ScopedThreadRef,
   type ThreadId,
@@ -126,6 +129,7 @@ import { useNowMinute } from "../hooks/useNowMinute";
 import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
 import {
   readThreadShell,
+  useAcodeProjects,
   useAllEnvironmentProjectSnapshotsReady,
   useProjects,
   useThreadShells,
@@ -2126,8 +2130,126 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
   );
 });
 
+type SidebarWorkspaceRef = {
+  readonly environmentId: EnvironmentId;
+  readonly t3ProjectId: ProjectId;
+};
+
+function SidebarWorkspaceVcsStatus(props: {
+  readonly environmentId: EnvironmentId;
+  readonly workspaceRoot: string;
+}) {
+  const statusQuery = useEnvironmentQuery(
+    vcsEnvironment.status({
+      environmentId: props.environmentId,
+      input: { cwd: props.workspaceRoot },
+    }),
+  );
+  const status = statusQuery.data;
+  if (status === null || status === undefined || !status.isRepo) return null;
+
+  const refLabel = status.refName ?? "detached";
+  const commitLabel = status.headCommit?.slice(0, 7);
+  return (
+    <span
+      className="ms-auto shrink-0 max-w-[9rem] truncate text-[10px] opacity-60"
+      aria-label={commitLabel === undefined ? refLabel : `${refLabel} at ${commitLabel}`}
+    >
+      {commitLabel === undefined ? refLabel : `${refLabel} · ${commitLabel}`}
+    </span>
+  );
+}
+
+function SidebarWorkspaceTree(props: {
+  readonly projects: ReadonlyArray<EnvironmentAcodeProject>;
+  readonly selectedWorkspace: SidebarWorkspaceRef | null;
+  readonly onSelectWorkspace: (workspace: SidebarWorkspaceRef) => void;
+}) {
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+
+  if (props.projects.length === 0) return null;
+
+  const toggleProject = (projectId: string) => {
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
+  };
+
+  return (
+    <div className="mb-1 flex flex-col gap-px" role="tree" aria-label="Projects and workspaces">
+      {props.projects.map((project) => {
+        const isCollapsed = collapsed.has(`${project.environmentId}:${project.id}`);
+        return (
+          <div
+            key={`${project.environmentId}:${project.id}`}
+            role="treeitem"
+            aria-expanded={!isCollapsed}
+          >
+            <button
+              type="button"
+              className="flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs font-medium text-sidebar-foreground hover:bg-sidebar-row-hover"
+              aria-label={`${isCollapsed ? "Expand" : "Collapse"} project ${project.title}`}
+              onClick={() => toggleProject(`${project.environmentId}:${project.id}`)}
+            >
+              <ChevronDownIcon
+                className={cn(
+                  "size-3.5 shrink-0 transition-transform",
+                  isCollapsed && "-rotate-90",
+                )}
+              />
+              <FolderIcon className="size-3.5 shrink-0 text-sidebar-muted-foreground" />
+              <span className="min-w-0 truncate">{project.title}</span>
+            </button>
+            {!isCollapsed ? (
+              <div className="ms-4 flex flex-col gap-px border-s border-sidebar-border ps-1.5">
+                {project.workspaces.map((workspace) => {
+                  const selected =
+                    props.selectedWorkspace?.environmentId === project.environmentId &&
+                    props.selectedWorkspace.t3ProjectId === workspace.t3ProjectId;
+                  return (
+                    <button
+                      key={`${project.environmentId}:${workspace.id}`}
+                      type="button"
+                      role="treeitem"
+                      aria-current={selected ? "page" : undefined}
+                      className={cn(
+                        "flex min-h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+                        selected && "bg-sidebar-row-active text-sidebar-foreground",
+                      )}
+                      onClick={() =>
+                        props.onSelectWorkspace({
+                          environmentId: project.environmentId,
+                          t3ProjectId: workspace.t3ProjectId,
+                        })
+                      }
+                    >
+                      <GitBranchIcon className="size-3 shrink-0" />
+                      <span className="min-w-0 truncate">{workspace.title}</span>
+                      <span className="shrink-0 text-[10px] uppercase opacity-60">
+                        {workspace.role}
+                      </span>
+                      <SidebarWorkspaceVcsStatus
+                        environmentId={project.environmentId}
+                        workspaceRoot={workspace.workspaceRoot}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function Sidebar() {
   const projects = useProjects();
+  const acodeProjects = useAcodeProjects();
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const threads = useThreadShells();
   const router = useRouter();
@@ -2210,6 +2332,7 @@ export default function Sidebar() {
     },
   });
   const newThreadContext = useHandleNewThread();
+  const handleNewThread = newThreadContext.handleNewThread;
   const openAddProjectCommandPalette = useCallback(
     () => openCommandPalette({ open: "add-project" }),
     [],
@@ -2406,6 +2529,42 @@ export default function Sidebar() {
         ? null
         : (projectGroups.find((project) => project.projectKey === projectScopeKey) ?? null),
     [projectGroups, projectScopeKey],
+  );
+  const [selectedWorkspaceOverride, setSelectedWorkspaceOverride] =
+    useState<SidebarWorkspaceRef | null>(null);
+  const selectedWorkspaceFromRoute = useMemo<SidebarWorkspaceRef | null>(() => {
+    if (routeThreadRef === null) return null;
+    const thread = threads.find(
+      (candidate) =>
+        candidate.environmentId === routeThreadRef.environmentId &&
+        candidate.id === routeThreadRef.threadId,
+    );
+    return thread === undefined
+      ? null
+      : {
+          environmentId: routeThreadRef.environmentId,
+          t3ProjectId: thread.projectId,
+        };
+  }, [routeThreadRef, threads]);
+  const selectedWorkspace = selectedWorkspaceFromRoute ?? selectedWorkspaceOverride;
+  const selectWorkspace = useCallback(
+    (workspace: SidebarWorkspaceRef) => {
+      setSelectedWorkspaceOverride(workspace);
+      const thread = threads.find(
+        (candidate) =>
+          candidate.environmentId === workspace.environmentId &&
+          candidate.projectId === workspace.t3ProjectId,
+      );
+      if (thread !== undefined) {
+        void router.navigate({
+          to: "/$environmentId/$threadId",
+          params: buildThreadRouteParams(scopeThreadRef(thread.environmentId, thread.id)),
+        });
+        return;
+      }
+      void handleNewThread(scopeProjectRef(workspace.environmentId, workspace.t3ProjectId));
+    },
+    [handleNewThread, router, threads],
   );
   const scopedProjectKeys = useMemo(
     () =>
@@ -4531,6 +4690,13 @@ export default function Sidebar() {
           </SidebarGroup>
         }
       >
+        <SidebarGroup className="px-[calc(var(--sidebar-content-inset)+1px)] pb-1 pt-1">
+          <SidebarWorkspaceTree
+            projects={acodeProjects}
+            selectedWorkspace={selectedWorkspace}
+            onSelectWorkspace={selectWorkspace}
+          />
+        </SidebarGroup>
         <SidebarGroup className="ps-[calc(var(--sidebar-content-inset)+1px)] pe-[var(--sidebar-content-inset)] pb-1 pt-0 flex-1">
           {isSearchingThreads ? (
             threadSearchResults.length > 0 ? (

@@ -20,12 +20,27 @@ export function applyShellStreamEvent(
       const projects = snapshot.projects.some((p) => p.id === event.project.id)
         ? Arr.map(snapshot.projects, (p) => (p.id === event.project.id ? event.project : p))
         : Arr.append(snapshot.projects, event.project);
-      return { ...snapshot, projects, snapshotSequence: event.sequence };
+      const acodeProjects =
+        event.acodeProject === undefined
+          ? snapshot.acodeProjects
+          : (snapshot.acodeProjects ?? []).some((project) => project.id === event.acodeProject?.id)
+            ? Arr.map(snapshot.acodeProjects ?? [], (project) =>
+                project.id === event.acodeProject?.id ? event.acodeProject : project,
+              )
+            : Arr.append(snapshot.acodeProjects ?? [], event.acodeProject);
+      return { ...snapshot, projects, acodeProjects, snapshotSequence: event.sequence };
     }
     case "project-removed":
       return {
         ...snapshot,
         projects: Arr.filter(snapshot.projects, (p) => p.id !== event.projectId),
+        acodeProjects:
+          event.acodeProjectId === undefined
+            ? snapshot.acodeProjects
+            : Arr.filter(
+                snapshot.acodeProjects ?? [],
+                (project) => project.id !== event.acodeProjectId,
+              ),
         snapshotSequence: event.sequence,
       };
     case "thread-upserted": {

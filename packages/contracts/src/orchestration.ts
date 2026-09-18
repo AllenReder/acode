@@ -7,6 +7,7 @@ import { OrchestrationMessageContext } from "./composerContext.ts";
 import { ProviderOptionSelections } from "./model.ts";
 import { RepositoryIdentity, ThreadEnvMode } from "./environment.ts";
 import {
+  AcodeProjectId,
   ApprovalRequestId,
   CheckpointRef,
   ClientSurface,
@@ -31,6 +32,7 @@ import {
   PullRequestReviewDecision,
   PullRequestState,
 } from "./pullRequest.ts";
+import { AcodeProjectShell } from "./workspace.ts";
 
 export const ORCHESTRATION_WS_METHODS = {
   dispatchCommand: "orchestration.dispatchCommand",
@@ -913,6 +915,8 @@ export const OrchestrationShellSnapshot = Schema.Struct({
   snapshotSequence: NonNegativeInt,
   projects: Schema.Array(OrchestrationProjectShell),
   threads: Schema.Array(OrchestrationThreadShell),
+  /** ACode navigation tree; optional for compatibility with pre-C06 servers. */
+  acodeProjects: Schema.optional(Schema.Array(AcodeProjectShell)),
   updatedAt: IsoDateTime,
 });
 export type OrchestrationShellSnapshot = typeof OrchestrationShellSnapshot.Type;
@@ -922,11 +926,14 @@ export const OrchestrationShellStreamEvent = Schema.Union([
     kind: Schema.Literal("project-upserted"),
     sequence: NonNegativeInt,
     project: OrchestrationProjectShell,
+    /** The ACode tree row affected by this T3 project event. */
+    acodeProject: Schema.optional(AcodeProjectShell),
   }),
   Schema.Struct({
     kind: Schema.Literal("project-removed"),
     sequence: NonNegativeInt,
     projectId: ProjectId,
+    acodeProjectId: Schema.optional(AcodeProjectId),
   }),
   Schema.Struct({
     kind: Schema.Literal("thread-upserted"),

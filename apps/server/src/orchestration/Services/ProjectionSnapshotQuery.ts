@@ -179,6 +179,14 @@ export interface ProjectionSnapshotQueryShape {
     projectIds?: ReadonlyArray<ProjectId>,
   ) => Effect.Effect<ReadonlyArray<OrchestrationProjectShell>, ProjectionRepositoryError>;
 
+  /** Read the ACode navigation Project containing one T3 project mapping. */
+  readonly getAcodeProjectByT3ProjectId?: (
+    projectId: ProjectId,
+  ) => Effect.Effect<
+    Option.Option<import("@t3tools/contracts").AcodeProjectShell>,
+    ProjectionRepositoryError
+  >;
+
   /**
    * Read the earliest active thread for a project.
    */

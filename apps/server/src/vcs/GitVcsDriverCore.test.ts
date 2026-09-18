@@ -1293,6 +1293,7 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
 
         assert.equal(status.isRepo, true);
         assert.equal(status.branch, initialBranch);
+        assert.match(status.headCommit ?? "", /^[a-f0-9]{40}$/);
         assert.equal(status.hasWorkingTreeChanges, true);
         assert.include(
           status.workingTree.files.map((file) => file.path),

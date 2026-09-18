@@ -73,6 +73,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-curs
       Effect.gen(function* () {
         const projectionPipeline = yield* OrchestrationProjectionPipeline;
         const eventStore = yield* OrchestrationEventStore;
+        const sql = yield* SqlClient.SqlClient;
         const projectionState = yield* ProjectionStateRepository;
         const counter = makeSqlStatementCounter();
         const createdAt = "2026-01-01T00:00:00.000Z";
@@ -98,7 +99,35 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-curs
         });
 
         yield* projectionPipeline.projectEvent(event).pipe(Effect.withTracer(counter.tracer));
-        assert.strictEqual(counter.count(), 2);
+        assert.strictEqual(counter.count(), 4);
+        assert.deepEqual(
+          yield* sql<{
+            readonly acodeProjectId: string;
+            readonly workspaceId: string;
+            readonly t3ProjectId: string;
+            readonly workspaceRoot: string;
+            readonly role: string;
+          }>`
+            SELECT
+              projects.acode_project_id AS "acodeProjectId",
+              workspaces.workspace_id AS "workspaceId",
+              workspaces.t3_project_id AS "t3ProjectId",
+              workspaces.workspace_root AS "workspaceRoot",
+              workspaces.role
+            FROM projection_acode_projects AS projects
+            INNER JOIN projection_acode_workspaces AS workspaces
+              ON workspaces.acode_project_id = projects.acode_project_id
+          `,
+          [
+            {
+              acodeProjectId: "acode-project:project-cursor-batch",
+              workspaceId: "workspace:project-cursor-batch",
+              t3ProjectId: "project-cursor-batch",
+              workspaceRoot: "/tmp/project-cursor-batch",
+              role: "main",
+            },
+          ],
+        );
         assert.deepEqual(
           yield* projectionState.listAll(),
           Object.values(ORCHESTRATION_PROJECTOR_NAMES)

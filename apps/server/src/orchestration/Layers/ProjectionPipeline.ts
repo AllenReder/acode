@@ -24,6 +24,7 @@ import {
 import { toPersistenceSqlError, type ProjectionRepositoryError } from "../../persistence/Errors.ts";
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
 import { ProjectionPendingApprovalRepository } from "../../persistence/Services/ProjectionPendingApprovals.ts";
+import { ProjectionAcodeProjectRepository } from "../../persistence/Services/ProjectionAcodeProjects.ts";
 import { ProjectionProjectRepository } from "../../persistence/Services/ProjectionProjects.ts";
 import { ProjectionStateRepository } from "../../persistence/Services/ProjectionState.ts";
 import { ProjectionThreadActivityRepository } from "../../persistence/Services/ProjectionThreadActivities.ts";
@@ -44,6 +45,7 @@ import {
 } from "../../persistence/Services/ProjectionTurns.ts";
 import { ProjectionThreadRepository } from "../../persistence/Services/ProjectionThreads.ts";
 import { ProjectionPendingApprovalRepositoryLive } from "../../persistence/Layers/ProjectionPendingApprovals.ts";
+import { ProjectionAcodeProjectRepositoryLive } from "../../persistence/Layers/ProjectionAcodeProjects.ts";
 import { ProjectionProjectRepositoryLive } from "../../persistence/Layers/ProjectionProjects.ts";
 import { ProjectionStateRepositoryLive } from "../../persistence/Layers/ProjectionState.ts";
 import { ProjectionThreadActivityRepositoryLive } from "../../persistence/Layers/ProjectionThreadActivities.ts";
@@ -481,6 +483,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     const sql = yield* SqlClient.SqlClient;
     const eventStore = yield* OrchestrationEventStore;
     const projectionStateRepository = yield* ProjectionStateRepository;
+    const projectionAcodeProjectRepository = yield* ProjectionAcodeProjectRepository;
     const projectionProjectRepository = yield* ProjectionProjectRepository;
     const projectionThreadRepository = yield* ProjectionThreadRepository;
     const projectionThreadMessageRepository = yield* ProjectionThreadMessageRepository;
@@ -515,6 +518,13 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             updatedAt: event.payload.updatedAt,
             deletedAt: null,
           });
+          yield* projectionAcodeProjectRepository.upsertForT3Project({
+            t3ProjectId: event.payload.projectId,
+            title: event.payload.title,
+            workspaceRoot: event.payload.workspaceRoot,
+            createdAt: event.payload.createdAt,
+            updatedAt: event.payload.updatedAt,
+          });
           return;
 
         case "project.meta-updated": {
@@ -546,6 +556,13 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...(event.payload.scripts !== undefined ? { scripts: event.payload.scripts } : {}),
             updatedAt: event.payload.updatedAt,
           });
+          yield* projectionAcodeProjectRepository.upsertForT3Project({
+            t3ProjectId: event.payload.projectId,
+            title: event.payload.title ?? existingRow.value.title,
+            workspaceRoot: event.payload.workspaceRoot ?? existingRow.value.workspaceRoot,
+            createdAt: existingRow.value.createdAt,
+            updatedAt: event.payload.updatedAt,
+          });
           return;
         }
 
@@ -561,6 +578,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             deletedAt: event.payload.deletedAt,
             updatedAt: event.payload.deletedAt,
           });
+          yield* projectionAcodeProjectRepository.removeForT3Project(event.payload.projectId);
           return;
         }
 
@@ -2182,6 +2200,7 @@ export const OrchestrationProjectionPipelineLive = Layer.effect(
   OrchestrationProjectionPipeline,
   makeOrchestrationProjectionPipeline(),
 ).pipe(
+  Layer.provideMerge(ProjectionAcodeProjectRepositoryLive),
   Layer.provideMerge(ProjectionProjectRepositoryLive),
   Layer.provideMerge(ProjectionThreadRepositoryLive),
   Layer.provideMerge(ProjectionThreadMessageRepositoryLive),
