@@ -1,9 +1,12 @@
 import * as Schema from "effect/Schema";
 
 import {
+  AgentSessionId,
   AcodeProjectId,
+  EventId,
   IsoDateTime,
   ProjectId,
+  ThreadId,
   TrimmedNonEmptyString,
   WorkspaceId,
 } from "./baseSchemas.ts";
@@ -11,6 +14,17 @@ import {
 /** The first registered checkout role. Worktree roles are added by C07. */
 export const WorkspaceRole = Schema.Literal("main");
 export type WorkspaceRole = typeof WorkspaceRole.Type;
+
+/** The durable ACode identity and T3 conversation binding shown in a Workspace. */
+export const AcodeAgentSessionShell = Schema.Struct({
+  id: AgentSessionId,
+  workspaceId: WorkspaceId,
+  threadId: ThreadId,
+  title: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+export type AcodeAgentSessionShell = typeof AcodeAgentSessionShell.Type;
 
 /** A stable checkout owned by one ACode Project. */
 export const AcodeWorkspaceShell = Schema.Struct({
@@ -21,6 +35,8 @@ export const AcodeWorkspaceShell = Schema.Struct({
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
   role: WorkspaceRole,
+  /** Durable sessions only; the transcript and execution state remain on the T3 thread shell. */
+  sessions: Schema.optional(Schema.Array(AcodeAgentSessionShell)),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
@@ -46,4 +62,9 @@ export function acodeProjectIdForT3Project(projectId: ProjectId): AcodeProjectId
 
 export function workspaceIdForT3Project(projectId: ProjectId): WorkspaceId {
   return WorkspaceId.make(`workspace:${projectId}`);
+}
+
+/** Stable ACode identity derived from the creation event, not the thread id. */
+export function agentSessionIdForThreadCreatedEvent(eventId: EventId): AgentSessionId {
+  return AgentSessionId.make(`agent-session:${eventId}`);
 }

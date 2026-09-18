@@ -33,6 +33,7 @@ import {
   ThreadCreatedPayload,
   ThreadTurnDiff,
   ThreadTurnStartRequestedPayload,
+  DispatchResult,
   SnapShotAccessibility,
   isProviderSendTurnSupportedImageMimeType,
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
@@ -70,6 +71,7 @@ const decodeOrchestrationCommand = Schema.decodeUnknownEffect(OrchestrationComma
 const decodeOrchestrationEvent = Schema.decodeUnknownEffect(OrchestrationEvent);
 const decodeThreadMetaUpdatedPayload = Schema.decodeUnknownEffect(ThreadMetaUpdatedPayload);
 const decodeDispatchCommandError = Schema.decodeUnknownEffect(OrchestrationDispatchCommandError);
+const decodeDispatchResult = Schema.decodeUnknownEffect(DispatchResult);
 const decodeSnapShotAccessibility = Schema.decodeUnknownEffect(SnapShotAccessibility);
 
 it.effect("decodes a dispatch error after its bootstrap thread was deleted", () =>
@@ -81,6 +83,25 @@ it.effect("decodes a dispatch error after its bootstrap thread was deleted", () 
     });
 
     assert.strictEqual(error.bootstrapThreadDisposition, "deleted");
+  }),
+);
+
+it.effect("decodes a thread creation result with its durable ACode session", () =>
+  Effect.gen(function* () {
+    const result = yield* decodeDispatchResult({
+      sequence: 7,
+      agentSession: {
+        id: "agent-session:event-1",
+        workspaceId: "workspace:project-1",
+        threadId: "thread-1",
+        title: "Session",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
+
+    assert.strictEqual(result.agentSession?.id, "agent-session:event-1");
+    assert.strictEqual(result.agentSession?.threadId, "thread-1");
   }),
 );
 

@@ -32,7 +32,7 @@ import {
   PullRequestReviewDecision,
   PullRequestState,
 } from "./pullRequest.ts";
-import { AcodeProjectShell } from "./workspace.ts";
+import { AcodeAgentSessionShell, AcodeProjectShell } from "./workspace.ts";
 
 export const ORCHESTRATION_WS_METHODS = {
   dispatchCommand: "orchestration.dispatchCommand",
@@ -939,11 +939,15 @@ export const OrchestrationShellStreamEvent = Schema.Union([
     kind: Schema.Literal("thread-upserted"),
     sequence: NonNegativeInt,
     thread: OrchestrationThreadShell,
+    /** The ACode Workspace.sessions row affected by this thread event. */
+    acodeProject: Schema.optional(AcodeProjectShell),
   }),
   Schema.Struct({
     kind: Schema.Literal("thread-removed"),
     sequence: NonNegativeInt,
     threadId: ThreadId,
+    /** The owning ACode tree after the session leaves the active thread list. */
+    acodeProject: Schema.optional(AcodeProjectShell),
   }),
 ]);
 export type OrchestrationShellStreamEvent = typeof OrchestrationShellStreamEvent.Type;
@@ -2211,6 +2215,10 @@ export type ProjectionPendingApprovalDecision = typeof ProjectionPendingApproval
 
 export const DispatchResult = Schema.Struct({
   sequence: NonNegativeInt,
+  /** Present when a thread.create command also materialized an ACode Session. */
+  agentSession: Schema.optional(AcodeAgentSessionShell),
+  /** Explicit binding failure when the T3 project has no ACode Workspace mapping. */
+  agentSessionError: Schema.optional(Schema.Literal("workspace-unbound")),
 });
 export type DispatchResult = typeof DispatchResult.Type;
 

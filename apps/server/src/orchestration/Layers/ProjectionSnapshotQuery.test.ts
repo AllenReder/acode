@@ -3563,6 +3563,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery ACode workspace tree", (it) => 
               title: "Registered repo",
               workspaceRoot: "/tmp/acode-register",
               role: "main",
+              sessions: [],
               createdAt: "2026-09-18T00:00:00Z",
               updatedAt: "2026-09-18T00:00:00Z",
             },

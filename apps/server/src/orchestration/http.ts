@@ -8,6 +8,7 @@ import * as Option from "effect/Option";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 
 import { projectThreadDetailSnapshot } from "./ActivityPayloadProjection.ts";
+import { enrichOrchestrationDispatchResult } from "./AgentSessionResult.ts";
 import { cleanupFailedUploadedAttachments, normalizeDispatchCommand } from "./Normalizer.ts";
 import {
   annotateEnvironmentRequest,
@@ -118,7 +119,11 @@ export const orchestrationHttpApiLayer = HttpApiBuilder.group(
             projectCloneTracker,
             normalizedCommand,
           );
-          return result;
+          return yield* enrichOrchestrationDispatchResult({
+            command: normalizedCommand,
+            result,
+            readAcodeAgentSessionByThreadId: projectionSnapshotQuery.getAcodeAgentSessionByThreadId,
+          });
         }),
       );
   }),

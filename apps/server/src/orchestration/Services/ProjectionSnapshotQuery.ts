@@ -186,6 +186,19 @@ export interface ProjectionSnapshotQueryShape {
     Option.Option<import("@t3tools/contracts").AcodeProjectShell>,
     ProjectionRepositoryError
   >;
+  /** Read the owning ACode tree for a session that just left the active shell. */
+  readonly getAcodeProjectByThreadId?: (
+    threadId: ThreadId,
+  ) => Effect.Effect<
+    Option.Option<import("@t3tools/contracts").AcodeProjectShell>,
+    ProjectionRepositoryError
+  >;
+  readonly getAcodeAgentSessionByThreadId?: (
+    threadId: ThreadId,
+  ) => Effect.Effect<
+    Option.Option<import("@t3tools/contracts").AcodeAgentSessionShell>,
+    ProjectionRepositoryError
+  >;
 
   /**
    * Read the earliest active thread for a project.
