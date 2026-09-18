@@ -1,4 +1,10 @@
-import { acodeProjectIdForT3Project, ProjectId, workspaceIdForT3Project } from "@t3tools/contracts";
+import {
+  acodeProjectIdForT3Project,
+  ProjectId,
+  ThreadId,
+  workspaceIdForT3Project,
+  WorkspaceId,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -6,18 +12,31 @@ import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 
-import { toPersistenceSqlError } from "../Errors.ts";
+import { PersistenceSqlError, toPersistenceSqlError } from "../Errors.ts";
 import {
   mapProjectionAcodeProjectRows,
   ProjectionAcodeProjectRepository,
+  ProjectionAcodeAgentSessionRow,
   ProjectionAcodeProjectRow,
   type ProjectionAcodeProjectRepositoryShape,
 } from "../Services/ProjectionAcodeProjects.ts";
 
 const T3ProjectIdInput = Schema.Struct({ t3ProjectId: ProjectId });
+const ThreadIdInput = Schema.Struct({ threadId: ThreadId });
 
 const makeRepository = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+
+  const getWorkspaceForT3Project = SqlSchema.findOneOption({
+    Request: T3ProjectIdInput,
+    Result: Schema.Struct({ workspaceId: WorkspaceId }),
+    execute: ({ t3ProjectId }) => sql`
+      SELECT workspace_id AS "workspaceId"
+      FROM projection_acode_workspaces
+      WHERE t3_project_id = ${t3ProjectId}
+      LIMIT 1
+    `,
+  });
 
   const upsert: ProjectionAcodeProjectRepositoryShape["upsertForT3Project"] = (input) =>
     Effect.gen(function* () {
@@ -61,6 +80,103 @@ const makeRepository = Effect.gen(function* () {
         }),
       );
     }).pipe(Effect.mapError(toPersistenceSqlError("ProjectionAcodeProjectRepository.upsert")));
+
+  const upsertAgentSession: ProjectionAcodeProjectRepositoryShape["upsertAgentSession"] = (input) =>
+    Effect.gen(function* () {
+      const workspace = yield* getWorkspaceForT3Project({
+        t3ProjectId: input.t3ProjectId,
+      });
+      if (Option.isNone(workspace)) {
+        return yield* new PersistenceSqlError({
+          operation: "ProjectionAcodeProjectRepository.upsertAgentSession",
+          detail: `No ACode Workspace is bound to T3 project '${input.t3ProjectId}'.`,
+        });
+      }
+      yield* sql`
+        INSERT INTO projection_acode_agent_sessions (
+          agent_session_id,
+          workspace_id,
+          t3_project_id,
+          thread_id,
+          title,
+          created_at,
+          updated_at,
+          archived_at,
+          deleted_at
+        ) VALUES (
+          ${input.agentSessionId},
+          ${workspace.value.workspaceId},
+          ${input.t3ProjectId},
+          ${input.threadId},
+          ${input.title},
+          ${input.createdAt},
+          ${input.updatedAt},
+          NULL,
+          NULL
+        )
+        ON CONFLICT (thread_id)
+        DO UPDATE SET
+          agent_session_id = excluded.agent_session_id,
+          workspace_id = excluded.workspace_id,
+          t3_project_id = excluded.t3_project_id,
+          title = excluded.title,
+          updated_at = excluded.updated_at,
+          archived_at = NULL,
+          deleted_at = NULL
+      `;
+    }).pipe(
+      Effect.mapError((error) =>
+        Schema.is(PersistenceSqlError)(error)
+          ? error
+          : toPersistenceSqlError("ProjectionAcodeProjectRepository.upsertAgentSession")(error),
+      ),
+    );
+
+  const updateAgentSession: ProjectionAcodeProjectRepositoryShape["updateAgentSession"] = (input) =>
+    sql`
+      UPDATE projection_acode_agent_sessions
+      SET
+        title = COALESCE(${input.title ?? null}, title),
+        updated_at = ${input.updatedAt}
+      WHERE thread_id = ${input.threadId}
+    `.pipe(
+      Effect.mapError(toPersistenceSqlError("ProjectionAcodeProjectRepository.updateAgentSession")),
+    );
+
+  const archiveAgentSession: ProjectionAcodeProjectRepositoryShape["archiveAgentSession"] = (
+    input,
+  ) =>
+    sql`
+      UPDATE projection_acode_agent_sessions
+      SET archived_at = ${input.archivedAt}, updated_at = ${input.updatedAt}
+      WHERE thread_id = ${input.threadId}
+    `.pipe(
+      Effect.mapError(
+        toPersistenceSqlError("ProjectionAcodeProjectRepository.archiveAgentSession"),
+      ),
+    );
+
+  const unarchiveAgentSession: ProjectionAcodeProjectRepositoryShape["unarchiveAgentSession"] = (
+    input,
+  ) =>
+    sql`
+      UPDATE projection_acode_agent_sessions
+      SET archived_at = NULL, deleted_at = NULL, updated_at = ${input.updatedAt}
+      WHERE thread_id = ${input.threadId}
+    `.pipe(
+      Effect.mapError(
+        toPersistenceSqlError("ProjectionAcodeProjectRepository.unarchiveAgentSession"),
+      ),
+    );
+
+  const deleteAgentSession: ProjectionAcodeProjectRepositoryShape["deleteAgentSession"] = (input) =>
+    sql`
+      UPDATE projection_acode_agent_sessions
+      SET deleted_at = ${input.deletedAt}, updated_at = ${input.deletedAt}
+      WHERE thread_id = ${input.threadId}
+    `.pipe(
+      Effect.mapError(toPersistenceSqlError("ProjectionAcodeProjectRepository.deleteAgentSession")),
+    );
 
   const getRows = SqlSchema.findAll({
     Request: Schema.Void,
@@ -110,11 +226,83 @@ const makeRepository = Effect.gen(function* () {
     `,
   });
 
+  const getActiveSessionRows = SqlSchema.findAll({
+    Request: Schema.Struct({ t3ProjectId: Schema.optional(ProjectId) }),
+    Result: ProjectionAcodeAgentSessionRow,
+    execute: ({ t3ProjectId }) => sql`
+      SELECT
+        sessions.agent_session_id AS "agentSessionId",
+        sessions.workspace_id AS "workspaceId",
+        sessions.t3_project_id AS "t3ProjectId",
+        sessions.thread_id AS "threadId",
+        sessions.title,
+        sessions.created_at AS "createdAt",
+        sessions.updated_at AS "updatedAt",
+        sessions.archived_at AS "archivedAt",
+        sessions.deleted_at AS "deletedAt"
+      FROM projection_acode_agent_sessions AS sessions
+      WHERE sessions.archived_at IS NULL
+        AND sessions.deleted_at IS NULL
+        AND (${t3ProjectId ?? null} IS NULL OR sessions.t3_project_id = ${t3ProjectId ?? null})
+      ORDER BY sessions.created_at ASC, sessions.agent_session_id ASC
+    `,
+  });
+
+  const getRowsForThread = SqlSchema.findAll({
+    Request: ThreadIdInput,
+    Result: ProjectionAcodeProjectRow,
+    execute: ({ threadId }) => sql`
+      SELECT
+        projects.acode_project_id AS "acodeProjectId",
+        projects.title AS "projectTitle",
+        projects.created_at AS "projectCreatedAt",
+        projects.updated_at AS "projectUpdatedAt",
+        workspaces.workspace_id AS "workspaceId",
+        workspaces.t3_project_id AS "t3ProjectId",
+        workspaces.title AS "workspaceTitle",
+        workspaces.workspace_root AS "workspaceRoot",
+        workspaces.role AS "workspaceRole",
+        workspaces.created_at AS "workspaceCreatedAt",
+        workspaces.updated_at AS "workspaceUpdatedAt"
+      FROM projection_acode_agent_sessions AS sessions
+      INNER JOIN projection_acode_workspaces AS workspaces
+        ON workspaces.workspace_id = sessions.workspace_id
+      INNER JOIN projection_acode_projects AS projects
+        ON projects.acode_project_id = workspaces.acode_project_id
+      WHERE sessions.thread_id = ${threadId}
+      LIMIT 1
+    `,
+  });
+
+  const getSessionRowForThread = SqlSchema.findOneOption({
+    Request: ThreadIdInput,
+    Result: ProjectionAcodeAgentSessionRow,
+    execute: ({ threadId }) => sql`
+      SELECT
+        agent_session_id AS "agentSessionId",
+        workspace_id AS "workspaceId",
+        t3_project_id AS "t3ProjectId",
+        thread_id AS "threadId",
+        title,
+        created_at AS "createdAt",
+        updated_at AS "updatedAt",
+        archived_at AS "archivedAt",
+        deleted_at AS "deletedAt"
+      FROM projection_acode_agent_sessions
+      WHERE thread_id = ${threadId}
+      LIMIT 1
+    `,
+  });
+
   const remove: ProjectionAcodeProjectRepositoryShape["removeForT3Project"] = (t3ProjectId) =>
     Effect.gen(function* () {
       const projectId = acodeProjectIdForT3Project(t3ProjectId);
       yield* sql.withTransaction(
         Effect.gen(function* () {
+          yield* sql`
+          DELETE FROM projection_acode_agent_sessions
+          WHERE t3_project_id = ${t3ProjectId}
+        `;
           yield* sql`
           DELETE FROM projection_acode_workspaces
           WHERE t3_project_id = ${t3ProjectId}
@@ -133,16 +321,53 @@ const makeRepository = Effect.gen(function* () {
 
   return {
     upsertForT3Project: upsert,
+    upsertAgentSession,
+    updateAgentSession,
+    archiveAgentSession,
+    unarchiveAgentSession,
+    deleteAgentSession,
     removeForT3Project: remove,
     listTree: () =>
-      getRows(undefined).pipe(
-        Effect.map((rows) => mapProjectionAcodeProjectRows(rows)),
+      Effect.all([getRows(undefined), getActiveSessionRows({})]).pipe(
+        Effect.map(([rows, sessions]) => mapProjectionAcodeProjectRows(rows, sessions)),
         Effect.mapError(toPersistenceSqlError("ProjectionAcodeProjectRepository.listTree")),
       ),
     getByT3ProjectId: (t3ProjectId) =>
-      getRowsForT3Project({ t3ProjectId }).pipe(
-        Effect.map((rows) => Option.fromNullishOr(mapProjectionAcodeProjectRows(rows)[0])),
+      Effect.all([
+        getRowsForT3Project({ t3ProjectId }),
+        getActiveSessionRows({ t3ProjectId }),
+      ]).pipe(
+        Effect.map(([rows, sessions]) =>
+          Option.fromNullishOr(mapProjectionAcodeProjectRows(rows, sessions)[0]),
+        ),
         Effect.mapError(toPersistenceSqlError("ProjectionAcodeProjectRepository.getByT3ProjectId")),
+      ),
+    getByThreadId: (threadId) =>
+      Effect.gen(function* () {
+        const rows = yield* getRowsForThread({ threadId });
+        if (rows.length === 0) return Option.none();
+        const sessions = yield* getActiveSessionRows({
+          t3ProjectId: rows[0]!.t3ProjectId,
+        });
+        return Option.fromNullishOr(mapProjectionAcodeProjectRows(rows, sessions)[0]);
+      }).pipe(
+        Effect.mapError(toPersistenceSqlError("ProjectionAcodeProjectRepository.getByThreadId")),
+      ),
+    getAgentSessionByThreadId: (threadId) =>
+      getSessionRowForThread({ threadId }).pipe(
+        Effect.map(
+          Option.map((row) => ({
+            id: row.agentSessionId,
+            workspaceId: row.workspaceId,
+            threadId: row.threadId,
+            title: row.title,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+          })),
+        ),
+        Effect.mapError(
+          toPersistenceSqlError("ProjectionAcodeProjectRepository.getAgentSessionByThreadId"),
+        ),
       ),
   } satisfies ProjectionAcodeProjectRepositoryShape;
 });

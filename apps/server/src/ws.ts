@@ -94,6 +94,7 @@ import {
   projectActivityEvent,
   projectThreadDetailSnapshot,
 } from "./orchestration/ActivityPayloadProjection.ts";
+import { enrichOrchestrationDispatchResult } from "./orchestration/AgentSessionResult.ts";
 import { makeThreadLiveEventCoalescer } from "./orchestration/ThreadLiveEventCoalescer.ts";
 import { makeLiveStreamBudget, type RetainedLiveItem } from "./orchestration/LiveStreamBudget.ts";
 import {
@@ -860,13 +861,7 @@ const makeWsRpcLayer = (
             );
           case "thread.deleted":
           case "thread.archived":
-            return Effect.succeed(
-              Option.some({
-                kind: "thread-removed" as const,
-                sequence: event.sequence,
-                threadId: ThreadId.make(event.aggregateId),
-              }),
-            );
+            return threadUpsertOrRemove(ThreadId.make(event.aggregateId), event.sequence);
           case "thread.unarchived":
             return threadUpsertOrRemove(ThreadId.make(event.aggregateId), event.sequence);
           default:
@@ -898,6 +893,10 @@ const makeWsRpcLayer = (
             }),
           ),
           Effect.orElseSucceed(() => Option.none()),
+          // Older test seams and pre-C08 service implementations expose the
+          // optional ACode lookup as an unimplemented defect. A shell update
+          // must remain usable without that enrichment.
+          Effect.catchCause(() => Effect.succeed(Option.none())),
         );
 
       const projectUpsertOrRemove = (
@@ -961,23 +960,44 @@ const makeWsRpcLayer = (
           threadId,
           projectionSnapshotQuery.getThreadShellById(threadId),
         ).pipe(
-          Effect.map(
-            Option.flatMap((thread) =>
-              Option.match(thread, {
-                onNone: () =>
-                  Option.some<OrchestrationShellStreamEvent>({
-                    kind: "thread-removed" as const,
-                    sequence,
-                    threadId,
-                  }),
-                onSome: (nextThread) =>
-                  Option.some<OrchestrationShellStreamEvent>({
-                    kind: "thread-upserted" as const,
-                    sequence,
-                    thread: nextThread,
-                  }),
-              }),
-            ),
+          Effect.map(Option.flatten),
+          Effect.flatMap((thread) =>
+            Option.match(thread, {
+              onNone: () =>
+                retryShellProjectionRead(
+                  "thread",
+                  threadId,
+                  projectionSnapshotQuery.getAcodeProjectByThreadId?.(threadId) ??
+                    Effect.succeed(Option.none()),
+                ).pipe(
+                  Effect.map(Option.flatten),
+                  Effect.map((acodeProject) =>
+                    Option.some<OrchestrationShellStreamEvent>({
+                      kind: "thread-removed" as const,
+                      sequence,
+                      threadId,
+                      ...(Option.isSome(acodeProject) ? { acodeProject: acodeProject.value } : {}),
+                    }),
+                  ),
+                ),
+              onSome: (nextThread) =>
+                retryShellProjectionRead(
+                  "thread",
+                  threadId,
+                  projectionSnapshotQuery.getAcodeProjectByT3ProjectId?.(nextThread.projectId) ??
+                    Effect.succeed(Option.none()),
+                ).pipe(
+                  Effect.map(Option.flatten),
+                  Effect.map((acodeProject) =>
+                    Option.some<OrchestrationShellStreamEvent>({
+                      kind: "thread-upserted" as const,
+                      sequence,
+                      thread: nextThread,
+                      ...(Option.isSome(acodeProject) ? { acodeProject: acodeProject.value } : {}),
+                    }),
+                  ),
+                ),
+            }),
           ),
         );
 
@@ -1905,7 +1925,12 @@ const makeWsRpcLayer = (
                   ),
                 );
               }
-              return result;
+              return yield* enrichOrchestrationDispatchResult({
+                command: normalizedCommand,
+                result,
+                readAcodeAgentSessionByThreadId:
+                  projectionSnapshotQuery.getAcodeAgentSessionByThreadId,
+              });
             }).pipe(
               Effect.mapError((cause) =>
                 isOrchestrationDispatchCommandError(cause)

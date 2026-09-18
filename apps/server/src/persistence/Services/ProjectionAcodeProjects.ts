@@ -1,8 +1,11 @@
 import {
+  AcodeAgentSessionShell,
   AcodeProjectId,
   AcodeProjectShell,
   AcodeWorkspaceShell,
+  AgentSessionId,
   ProjectId,
+  ThreadId,
   WorkspaceId,
   WorkspaceRole,
   IsoDateTime,
@@ -29,6 +32,19 @@ export const ProjectionAcodeProjectRow = Schema.Struct({
 });
 export type ProjectionAcodeProjectRow = typeof ProjectionAcodeProjectRow.Type;
 
+export const ProjectionAcodeAgentSessionRow = Schema.Struct({
+  agentSessionId: AgentSessionId,
+  workspaceId: WorkspaceId,
+  t3ProjectId: ProjectId,
+  threadId: ThreadId,
+  title: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+  archivedAt: Schema.NullOr(IsoDateTime),
+  deletedAt: Schema.NullOr(IsoDateTime),
+});
+export type ProjectionAcodeAgentSessionRow = typeof ProjectionAcodeAgentSessionRow.Type;
+
 export interface UpsertProjectionAcodeProjectInput {
   readonly t3ProjectId: ProjectId;
   readonly title: string;
@@ -37,11 +53,47 @@ export interface UpsertProjectionAcodeProjectInput {
   readonly updatedAt: string;
 }
 
+export interface UpsertProjectionAcodeAgentSessionInput {
+  readonly agentSessionId: AgentSessionId;
+  readonly t3ProjectId: ProjectId;
+  readonly threadId: ThreadId;
+  readonly title: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface UpdateProjectionAcodeAgentSessionInput {
+  readonly threadId: ThreadId;
+  readonly title?: string;
+  readonly updatedAt: string;
+}
+
 export interface ProjectionAcodeProjectRepositoryShape {
   /** Upsert the ACode Project and its main Workspace mapping for a T3 project. */
   readonly upsertForT3Project: (
     input: UpsertProjectionAcodeProjectInput,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
+  /** Create or restore the stable ACode session bound to a T3 thread. */
+  readonly upsertAgentSession: (
+    input: UpsertProjectionAcodeAgentSessionInput,
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
+  /** Update session metadata without changing its ACode identity or binding. */
+  readonly updateAgentSession: (
+    input: UpdateProjectionAcodeAgentSessionInput,
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
+  readonly archiveAgentSession: (input: {
+    readonly threadId: ThreadId;
+    readonly archivedAt: string;
+    readonly updatedAt: string;
+  }) => Effect.Effect<void, ProjectionRepositoryError>;
+  readonly unarchiveAgentSession: (input: {
+    readonly threadId: ThreadId;
+    readonly updatedAt: string;
+  }) => Effect.Effect<void, ProjectionRepositoryError>;
+  readonly deleteAgentSession: (input: {
+    readonly threadId: ThreadId;
+    readonly deletedAt: string;
+  }) => Effect.Effect<void, ProjectionRepositoryError>;
   /** Remove the ACode mapping when its backing T3 project is deleted. */
   readonly removeForT3Project: (
     t3ProjectId: ProjectId,
@@ -55,6 +107,14 @@ export interface ProjectionAcodeProjectRepositoryShape {
   readonly getByT3ProjectId: (
     t3ProjectId: ProjectId,
   ) => Effect.Effect<Option.Option<AcodeProjectShell>, ProjectionRepositoryError>;
+  /** Read the owning ACode tree even after a session leaves the active shell. */
+  readonly getByThreadId: (
+    threadId: ThreadId,
+  ) => Effect.Effect<Option.Option<AcodeProjectShell>, ProjectionRepositoryError>;
+  /** Read a durable session binding regardless of active/archive shell state. */
+  readonly getAgentSessionByThreadId: (
+    threadId: ThreadId,
+  ) => Effect.Effect<Option.Option<AcodeAgentSessionShell>, ProjectionRepositoryError>;
 }
 
 export class ProjectionAcodeProjectRepository extends Context.Service<
@@ -64,19 +124,48 @@ export class ProjectionAcodeProjectRepository extends Context.Service<
 
 export function mapProjectionAcodeProjectRows(
   rows: ReadonlyArray<ProjectionAcodeProjectRow>,
+  sessionRows: ReadonlyArray<ProjectionAcodeAgentSessionRow> = [],
 ): ReadonlyArray<AcodeProjectShell> {
-  const projects = new Map<AcodeProjectId, AcodeProjectShell>();
+  const sessionsByWorkspace = new Map<WorkspaceId, ReadonlyArray<AcodeAgentSessionShell>>();
+  for (const row of sessionRows) {
+    if (row.archivedAt !== null || row.deletedAt !== null) continue;
+    const session: AcodeAgentSessionShell = {
+      id: row.agentSessionId,
+      workspaceId: row.workspaceId,
+      threadId: row.threadId,
+      title: row.title,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+    sessionsByWorkspace.set(row.workspaceId, [
+      ...(sessionsByWorkspace.get(row.workspaceId) ?? []),
+      session,
+    ]);
+  }
+
+  const workspaces = new Map<WorkspaceId, AcodeWorkspaceShell>();
   for (const row of rows) {
-    const workspace: AcodeWorkspaceShell = {
+    workspaces.set(row.workspaceId, {
       id: row.workspaceId,
       projectId: row.acodeProjectId,
       t3ProjectId: row.t3ProjectId,
       title: row.workspaceTitle,
       workspaceRoot: row.workspaceRoot,
       role: row.workspaceRole,
+      sessions: sessionsByWorkspace.get(row.workspaceId) ?? [],
       createdAt: row.workspaceCreatedAt,
       updatedAt: row.workspaceUpdatedAt,
-    };
+    });
+  }
+
+  const projects = new Map<AcodeProjectId, AcodeProjectShell>();
+  for (const row of rows) {
+    const workspace = workspaces.get(row.workspaceId);
+    if (workspace === undefined) continue;
+    const latestSessionUpdatedAt = (workspace.sessions ?? []).reduce(
+      (latest, session) => (session.updatedAt > latest ? session.updatedAt : latest),
+      row.projectUpdatedAt,
+    );
     const existing = projects.get(row.acodeProjectId);
     if (existing === undefined) {
       projects.set(row.acodeProjectId, {
@@ -84,16 +173,23 @@ export function mapProjectionAcodeProjectRows(
         title: row.projectTitle,
         workspaces: [workspace],
         createdAt: row.projectCreatedAt,
-        updatedAt: row.projectUpdatedAt,
+        updatedAt:
+          row.projectUpdatedAt > latestSessionUpdatedAt
+            ? row.projectUpdatedAt
+            : latestSessionUpdatedAt,
       });
       continue;
     }
     projects.set(row.acodeProjectId, {
       ...existing,
       title: row.projectTitle,
-      workspaces: [...existing.workspaces, workspace],
+      workspaces: existing.workspaces.some((candidate) => candidate.id === workspace.id)
+        ? existing.workspaces.map((candidate) =>
+            candidate.id === workspace.id ? workspace : candidate,
+          )
+        : [...existing.workspaces, workspace],
       updatedAt:
-        existing.updatedAt > row.projectUpdatedAt ? existing.updatedAt : row.projectUpdatedAt,
+        existing.updatedAt > latestSessionUpdatedAt ? existing.updatedAt : latestSessionUpdatedAt,
     });
   }
   return [...projects.values()];

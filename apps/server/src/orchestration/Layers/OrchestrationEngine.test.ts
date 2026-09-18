@@ -131,6 +131,137 @@ const hasMetricSnapshot = (
   );
 
 describe("OrchestrationEngine", () => {
+  it("persists one ACode session per T3 thread under its owning workspace", async () => {
+    const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-acode-sessions-"));
+    const databasePath = NodePath.join(directory, "state.sqlite");
+    const first = await createOrchestrationSystem(databasePath);
+    const modelSelection = { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" };
+
+    try {
+      for (const [projectId, workspaceRoot, threadId] of [
+        ["session-project-a", "/tmp/acode-session-a", "session-thread-a"],
+        ["session-project-b", "/tmp/acode-session-b", "session-thread-b"],
+      ] as const) {
+        await first.run(
+          first.engine.dispatch({
+            type: "project.create",
+            commandId: CommandId.make(`${projectId}-create`),
+            projectId: ProjectId.make(projectId),
+            title: projectId,
+            workspaceRoot,
+            createdAt: now(),
+          }),
+        );
+        await first.run(
+          first.engine.dispatch({
+            type: "thread.create",
+            commandId: CommandId.make(`${threadId}-create`),
+            threadId: ThreadId.make(threadId),
+            projectId: ProjectId.make(projectId),
+            title: `${projectId} session`,
+            modelSelection,
+            runtimeMode: "full-access",
+            interactionMode: "default",
+            branch: null,
+            worktreePath: null,
+            createdAt: now(),
+          }),
+        );
+      }
+
+      // Replaying the exact creation command returns its durable receipt and
+      // does not create a second ACode session row.
+      await first.run(
+        first.engine.dispatch({
+          type: "thread.create",
+          commandId: CommandId.make("session-thread-a-create"),
+          threadId: ThreadId.make("session-thread-a"),
+          projectId: ProjectId.make("session-project-a"),
+          title: "session-project-a session",
+          modelSelection,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          createdAt: now(),
+        }),
+      );
+
+      const firstShell = await first.shell();
+      const firstSessions = (firstShell.acodeProjects ?? []).flatMap((project) =>
+        project.workspaces.flatMap((workspace) => workspace.sessions ?? []),
+      );
+      const sessionA = firstSessions.find((session) => session.threadId === "session-thread-a");
+      const sessionB = firstSessions.find((session) => session.threadId === "session-thread-b");
+      expect(firstSessions).toHaveLength(2);
+      expect(sessionA).toMatchObject({
+        workspaceId: "workspace:session-project-a",
+        title: "session-project-a session",
+        createdAt: now(),
+        updatedAt: now(),
+      });
+      expect(sessionB).toMatchObject({
+        workspaceId: "workspace:session-project-b",
+        title: "session-project-b session",
+        createdAt: now(),
+        updatedAt: now(),
+      });
+      expect(sessionA?.id).not.toBe(sessionB?.id);
+      expect(sessionA?.id).not.toContain("session-thread-a");
+      expect(sessionB?.id).not.toContain("session-thread-b");
+
+      await first.run(
+        first.engine.dispatch({
+          type: "thread.archive",
+          commandId: CommandId.make("session-thread-a-archive"),
+          threadId: ThreadId.make("session-thread-a"),
+        }),
+      );
+      const archivedShell = await first.shell();
+      expect(
+        archivedShell.acodeProjects?.find(
+          (project) => project.id === "acode-project:session-project-a",
+        )?.workspaces[0]?.sessions,
+      ).toEqual([]);
+
+      await first.run(
+        first.engine.dispatch({
+          type: "thread.unarchive",
+          commandId: CommandId.make("session-thread-a-unarchive"),
+          threadId: ThreadId.make("session-thread-a"),
+        }),
+      );
+      const unarchivedShell = await first.shell();
+      expect(
+        unarchivedShell.acodeProjects?.find(
+          (project) => project.id === "acode-project:session-project-a",
+        )?.workspaces[0]?.sessions?.[0]?.id,
+      ).toBe(sessionA?.id);
+      first.dispose();
+
+      const reopened = await createOrchestrationSystem(databasePath);
+      try {
+        const reopenedSessions = reopened
+          .shell()
+          .then((shell) =>
+            (shell.acodeProjects ?? []).flatMap((project) =>
+              project.workspaces.flatMap((workspace) => workspace.sessions ?? []),
+            ),
+          );
+        await expect(reopenedSessions).resolves.toMatchObject([
+          { id: sessionA?.id, threadId: "session-thread-a" },
+          { id: sessionB?.id, threadId: "session-thread-b" },
+        ]);
+      } finally {
+        reopened.dispose();
+      }
+    } finally {
+      // The system is disposed above before the restart; this keeps the test
+      // safe if a setup assertion fails before that point.
+      first.dispose();
+    }
+  });
+
   it("registers a directory into a stable ACode tree across daemon restart", async () => {
     const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-acode-project-"));
     const databasePath = NodePath.join(directory, "state.sqlite");

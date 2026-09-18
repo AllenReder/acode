@@ -2162,8 +2162,14 @@ function SidebarWorkspaceVcsStatus(props: {
 
 function SidebarWorkspaceTree(props: {
   readonly projects: ReadonlyArray<EnvironmentAcodeProject>;
+  readonly threads: ReadonlyArray<EnvironmentThreadShell>;
   readonly selectedWorkspace: SidebarWorkspaceRef | null;
   readonly onSelectWorkspace: (workspace: SidebarWorkspaceRef) => void;
+  readonly onSelectSession: (input: {
+    readonly environmentId: EnvironmentId;
+    readonly t3ProjectId: ProjectId;
+    readonly threadId: ThreadId;
+  }) => void;
 }) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
 
@@ -2206,36 +2212,83 @@ function SidebarWorkspaceTree(props: {
             {!isCollapsed ? (
               <div className="ms-4 flex flex-col gap-px border-s border-sidebar-border ps-1.5">
                 {project.workspaces.map((workspace) => {
+                  const sessions = workspace.sessions ?? [];
                   const selected =
                     props.selectedWorkspace?.environmentId === project.environmentId &&
                     props.selectedWorkspace.t3ProjectId === workspace.t3ProjectId;
                   return (
-                    <button
+                    <div
                       key={`${project.environmentId}:${workspace.id}`}
-                      type="button"
-                      role="treeitem"
-                      aria-current={selected ? "page" : undefined}
-                      className={cn(
-                        "flex min-h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
-                        selected && "bg-sidebar-row-active text-sidebar-foreground",
-                      )}
-                      onClick={() =>
-                        props.onSelectWorkspace({
-                          environmentId: project.environmentId,
-                          t3ProjectId: workspace.t3ProjectId,
-                        })
-                      }
+                      className="flex flex-col gap-px"
                     >
-                      <GitBranchIcon className="size-3 shrink-0" />
-                      <span className="min-w-0 truncate">{workspace.title}</span>
-                      <span className="shrink-0 text-[10px] uppercase opacity-60">
-                        {workspace.role}
-                      </span>
-                      <SidebarWorkspaceVcsStatus
-                        environmentId={project.environmentId}
-                        workspaceRoot={workspace.workspaceRoot}
-                      />
-                    </button>
+                      <button
+                        type="button"
+                        role="treeitem"
+                        aria-current={selected ? "page" : undefined}
+                        className={cn(
+                          "flex min-h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+                          selected && "bg-sidebar-row-active text-sidebar-foreground",
+                        )}
+                        onClick={() =>
+                          props.onSelectWorkspace({
+                            environmentId: project.environmentId,
+                            t3ProjectId: workspace.t3ProjectId,
+                          })
+                        }
+                      >
+                        <GitBranchIcon className="size-3 shrink-0" />
+                        <span className="min-w-0 truncate">{workspace.title}</span>
+                        <span className="shrink-0 text-[10px] uppercase opacity-60">
+                          {workspace.role}
+                        </span>
+                        <SidebarWorkspaceVcsStatus
+                          environmentId={project.environmentId}
+                          workspaceRoot={workspace.workspaceRoot}
+                        />
+                      </button>
+                      {sessions.map((session) => {
+                        const thread = props.threads.find(
+                          (candidate) =>
+                            candidate.environmentId === project.environmentId &&
+                            candidate.id === session.threadId,
+                        );
+                        const sessionSelected =
+                          thread !== undefined &&
+                          props.selectedWorkspace?.environmentId === project.environmentId &&
+                          props.selectedWorkspace.t3ProjectId === workspace.t3ProjectId &&
+                          thread.id === session.threadId;
+                        const executionStatus =
+                          thread === undefined
+                            ? "unavailable"
+                            : (thread.session?.status ?? "not-started");
+                        return (
+                          <button
+                            key={`${project.environmentId}:${session.id}`}
+                            type="button"
+                            role="treeitem"
+                            aria-current={sessionSelected ? "page" : undefined}
+                            aria-label={`${session.title} (${executionStatus})`}
+                            className={cn(
+                              "ms-4 flex min-h-6 w-[calc(100%-1rem)] items-center gap-1.5 rounded-md border-s-2 border-sidebar-border px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+                              sessionSelected && "bg-sidebar-row-active text-sidebar-foreground",
+                            )}
+                            onClick={() =>
+                              props.onSelectSession({
+                                environmentId: project.environmentId,
+                                t3ProjectId: workspace.t3ProjectId,
+                                threadId: session.threadId,
+                              })
+                            }
+                          >
+                            <CircleDashedIcon className="size-3 shrink-0" />
+                            <span className="min-w-0 flex-1 truncate">{session.title}</span>
+                            <span className="shrink-0 text-[10px] opacity-60">
+                              {executionStatus}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   );
                 })}
               </div>
@@ -2562,9 +2615,25 @@ export default function Sidebar() {
         });
         return;
       }
-      void handleNewThread(scopeProjectRef(workspace.environmentId, workspace.t3ProjectId));
     },
-    [handleNewThread, router, threads],
+    [router, threads],
+  );
+  const selectSession = useCallback(
+    (session: {
+      readonly environmentId: EnvironmentId;
+      readonly t3ProjectId: ProjectId;
+      readonly threadId: ThreadId;
+    }) => {
+      setSelectedWorkspaceOverride({
+        environmentId: session.environmentId,
+        t3ProjectId: session.t3ProjectId,
+      });
+      void router.navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(scopeThreadRef(session.environmentId, session.threadId)),
+      });
+    },
+    [router],
   );
   const scopedProjectKeys = useMemo(
     () =>
@@ -4693,8 +4762,10 @@ export default function Sidebar() {
         <SidebarGroup className="px-[calc(var(--sidebar-content-inset)+1px)] pb-1 pt-1">
           <SidebarWorkspaceTree
             projects={acodeProjects}
+            threads={threads}
             selectedWorkspace={selectedWorkspace}
             onSelectWorkspace={selectWorkspace}
+            onSelectSession={selectSession}
           />
         </SidebarGroup>
         <SidebarGroup className="ps-[calc(var(--sidebar-content-inset)+1px)] pe-[var(--sidebar-content-inset)] pb-1 pt-0 flex-1">

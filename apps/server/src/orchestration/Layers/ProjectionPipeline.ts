@@ -1,5 +1,6 @@
 import {
   ApprovalRequestId,
+  agentSessionIdForThreadCreatedEvent,
   isImportedAgentSessionMessageId,
   UserInputAttachmentAnswerPayload,
   type ChatAttachment,
@@ -20,8 +21,13 @@ import {
   legacyThreadPullRequestKey,
   threadPullRequestKeysEqual,
 } from "@t3tools/shared/threadPullRequests";
+import * as Cause from "effect/Cause";
 
-import { toPersistenceSqlError, type ProjectionRepositoryError } from "../../persistence/Errors.ts";
+import {
+  PersistenceSqlError,
+  toPersistenceSqlError,
+  type ProjectionRepositoryError,
+} from "../../persistence/Errors.ts";
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
 import { ProjectionPendingApprovalRepository } from "../../persistence/Services/ProjectionPendingApprovals.ts";
 import { ProjectionAcodeProjectRepository } from "../../persistence/Services/ProjectionAcodeProjects.ts";
@@ -581,6 +587,67 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           yield* projectionAcodeProjectRepository.removeForT3Project(event.payload.projectId);
           return;
         }
+
+        case "thread.created":
+          yield* projectionAcodeProjectRepository
+            .upsertAgentSession({
+              agentSessionId: agentSessionIdForThreadCreatedEvent(event.eventId),
+              t3ProjectId: event.payload.projectId,
+              threadId: event.payload.threadId,
+              title: event.payload.title,
+              createdAt: event.payload.createdAt,
+              updatedAt: event.payload.updatedAt,
+            })
+            .pipe(
+              Effect.catchCause((cause) => {
+                const error = Cause.squash(cause);
+                if (
+                  Schema.is(PersistenceSqlError)(error) &&
+                  error.operation === "ProjectionAcodeProjectRepository.upsertAgentSession" &&
+                  error.detail?.startsWith("No ACode Workspace is bound")
+                ) {
+                  return Effect.logWarning(
+                    "ACode session projection is awaiting Workspace binding",
+                    {
+                      threadId: event.payload.threadId,
+                      t3ProjectId: event.payload.projectId,
+                    },
+                  ).pipe(Effect.asVoid);
+                }
+                return Effect.failCause(cause);
+              }),
+            );
+          return;
+
+        case "thread.meta-updated":
+          yield* projectionAcodeProjectRepository.updateAgentSession({
+            threadId: event.payload.threadId,
+            ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+
+        case "thread.archived":
+          yield* projectionAcodeProjectRepository.archiveAgentSession({
+            threadId: event.payload.threadId,
+            archivedAt: event.payload.archivedAt,
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+
+        case "thread.unarchived":
+          yield* projectionAcodeProjectRepository.unarchiveAgentSession({
+            threadId: event.payload.threadId,
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+
+        case "thread.deleted":
+          yield* projectionAcodeProjectRepository.deleteAgentSession({
+            threadId: event.payload.threadId,
+            deletedAt: event.payload.deletedAt,
+          });
+          return;
 
         default:
           return;

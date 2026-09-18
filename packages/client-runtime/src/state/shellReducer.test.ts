@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   AcodeProjectId,
+  AgentSessionId,
   ProjectId,
   ProviderInstanceId,
   ThreadId,
@@ -202,6 +203,58 @@ describe("applyShellStreamEvent", () => {
 
       expect(next.threads).toHaveLength(1);
       expect(next.threads[0]?.title).toBe("Updated Thread");
+    });
+
+    it("updates the owning ACode workspace session with the thread", () => {
+      const acodeProject = {
+        id: AcodeProjectId.make("acode-project:project-1"),
+        title: "Test Project",
+        workspaces: [
+          {
+            id: WorkspaceId.make("workspace:project-1"),
+            projectId: AcodeProjectId.make("acode-project:project-1"),
+            t3ProjectId: ProjectId.make("project-1"),
+            title: "Test Project",
+            workspaceRoot: "/workspace/test",
+            role: "main" as const,
+            sessions: [],
+            createdAt: "2026-04-01T00:00:00.000Z",
+            updatedAt: "2026-04-01T00:00:00.000Z",
+          },
+        ],
+        createdAt: "2026-04-01T00:00:00.000Z",
+        updatedAt: "2026-04-01T00:00:00.000Z",
+      };
+      const updatedAcodeProject = {
+        ...acodeProject,
+        workspaces: [
+          {
+            ...acodeProject.workspaces[0]!,
+            sessions: [
+              {
+                id: AgentSessionId.make("agent-session:thread-1"),
+                workspaceId: WorkspaceId.make("workspace:project-1"),
+                threadId: ThreadId.make("thread-1"),
+                title: "Test Thread",
+                createdAt: "2026-04-01T00:00:00.000Z",
+                updatedAt: "2026-04-01T00:00:00.000Z",
+              },
+            ],
+          },
+        ],
+      };
+      const next = applyShellStreamEvent(
+        { ...baseSnapshot, acodeProjects: [acodeProject] },
+        {
+          kind: "thread-upserted",
+          sequence: 5,
+          thread: stubThread,
+          acodeProject: updatedAcodeProject,
+        },
+      );
+
+      expect(next.acodeProjects?.[0]?.workspaces[0]?.sessions).toHaveLength(1);
+      expect(next.acodeProjects?.[0]?.workspaces[0]?.sessions?.[0]?.threadId).toBe("thread-1");
     });
   });
 

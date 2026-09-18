@@ -1,5 +1,20 @@
 import * as Arr from "effect/Array";
-import type { OrchestrationShellSnapshot, OrchestrationShellStreamEvent } from "@t3tools/contracts";
+import type {
+  AcodeProjectShell,
+  OrchestrationShellSnapshot,
+  OrchestrationShellStreamEvent,
+} from "@t3tools/contracts";
+
+function applyAcodeProjectUpdate(
+  projects: OrchestrationShellSnapshot["acodeProjects"],
+  nextProject: AcodeProjectShell | undefined,
+) {
+  if (nextProject === undefined) return projects;
+  const current = projects ?? [];
+  return current.some((project) => project.id === nextProject.id)
+    ? Arr.map(current, (project) => (project.id === nextProject.id ? nextProject : project))
+    : Arr.append(current, nextProject);
+}
 
 /**
  * Reduce a single shell stream event into an existing snapshot, returning a new
@@ -20,14 +35,7 @@ export function applyShellStreamEvent(
       const projects = snapshot.projects.some((p) => p.id === event.project.id)
         ? Arr.map(snapshot.projects, (p) => (p.id === event.project.id ? event.project : p))
         : Arr.append(snapshot.projects, event.project);
-      const acodeProjects =
-        event.acodeProject === undefined
-          ? snapshot.acodeProjects
-          : (snapshot.acodeProjects ?? []).some((project) => project.id === event.acodeProject?.id)
-            ? Arr.map(snapshot.acodeProjects ?? [], (project) =>
-                project.id === event.acodeProject?.id ? event.acodeProject : project,
-              )
-            : Arr.append(snapshot.acodeProjects ?? [], event.acodeProject);
+      const acodeProjects = applyAcodeProjectUpdate(snapshot.acodeProjects, event.acodeProject);
       return { ...snapshot, projects, acodeProjects, snapshotSequence: event.sequence };
     }
     case "project-removed":
@@ -47,12 +55,14 @@ export function applyShellStreamEvent(
       const threads = snapshot.threads.some((t) => t.id === event.thread.id)
         ? Arr.map(snapshot.threads, (t) => (t.id === event.thread.id ? event.thread : t))
         : Arr.append(snapshot.threads, event.thread);
-      return { ...snapshot, threads, snapshotSequence: event.sequence };
+      const acodeProjects = applyAcodeProjectUpdate(snapshot.acodeProjects, event.acodeProject);
+      return { ...snapshot, threads, acodeProjects, snapshotSequence: event.sequence };
     }
     case "thread-removed":
       return {
         ...snapshot,
         threads: Arr.filter(snapshot.threads, (t) => t.id !== event.threadId),
+        acodeProjects: applyAcodeProjectUpdate(snapshot.acodeProjects, event.acodeProject),
         snapshotSequence: event.sequence,
       };
     default:
