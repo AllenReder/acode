@@ -2121,6 +2121,131 @@ describe("deriveMessagesTimelineRows", () => {
     );
   });
 
+  it("keeps the stopped label when an interrupted command completes after a later turn", () => {
+    const interruptedTurnId = "turn-1" as never;
+    const rows = deriveMessagesTimelineRows({
+      timelineEntries: [
+        {
+          id: "user-entry-1",
+          kind: "message",
+          createdAt: "2026-01-01T00:00:00Z",
+          message: {
+            id: "user-1" as never,
+            role: "user",
+            text: "Run a long command",
+            turnId: null,
+            createdAt: "2026-01-01T00:00:00Z",
+            updatedAt: "2026-01-01T00:00:00Z",
+            streaming: false,
+          },
+        },
+        {
+          id: "assistant-entry-1",
+          kind: "message",
+          createdAt: "2026-01-01T00:00:05Z",
+          message: {
+            id: "assistant-1" as never,
+            role: "assistant",
+            text: "Starting it now.",
+            turnId: interruptedTurnId,
+            createdAt: "2026-01-01T00:00:05Z",
+            updatedAt: "2026-01-01T00:00:05Z",
+            streaming: false,
+          },
+        },
+        {
+          id: "tool-started-entry",
+          kind: "work",
+          createdAt: "2026-01-01T00:00:13Z",
+          entry: {
+            id: "tool-started",
+            createdAt: "2026-01-01T00:00:13Z",
+            turnId: interruptedTurnId,
+            label: "Running sleep 120",
+            tone: "tool",
+            toolCallId: "sleep-command",
+            toolLifecycleStatus: "inProgress",
+            sourceActivityKind: "tool.started",
+          },
+        },
+        {
+          id: "interrupted-entry",
+          kind: "work",
+          createdAt: "2026-01-01T00:00:47Z",
+          entry: {
+            id: "interrupted",
+            createdAt: "2026-01-01T00:00:47Z",
+            turnId: interruptedTurnId,
+            label: "Response stopped",
+            tone: "info",
+            sourceActivityKind: "turn.interrupted",
+          },
+        },
+        {
+          id: "user-entry-2",
+          kind: "message",
+          createdAt: "2026-01-01T00:01:00Z",
+          message: {
+            id: "user-2" as never,
+            role: "user",
+            text: "Continue",
+            turnId: null,
+            createdAt: "2026-01-01T00:01:00Z",
+            updatedAt: "2026-01-01T00:01:00Z",
+            streaming: false,
+          },
+        },
+        {
+          id: "assistant-entry-2",
+          kind: "message",
+          createdAt: "2026-01-01T00:01:05Z",
+          message: {
+            id: "assistant-2" as never,
+            role: "assistant",
+            text: "Continued.",
+            turnId: "turn-2" as never,
+            createdAt: "2026-01-01T00:01:05Z",
+            updatedAt: "2026-01-01T00:01:05Z",
+            streaming: false,
+          },
+        },
+        {
+          id: "tool-completed-entry",
+          kind: "work",
+          createdAt: "2026-01-01T00:02:13Z",
+          entry: {
+            id: "tool-completed",
+            createdAt: "2026-01-01T00:02:13Z",
+            turnId: interruptedTurnId,
+            label: "Ran sleep 120",
+            tone: "tool",
+            toolCallId: "sleep-command",
+            toolLifecycleStatus: "completed",
+            sourceActivityKind: "tool.completed",
+          },
+        },
+      ],
+      latestTurn: {
+        turnId: "turn-2" as never,
+        state: "completed",
+        startedAt: "2026-01-01T00:01:00Z",
+        completedAt: "2026-01-01T00:01:05Z",
+      },
+      isWorking: false,
+      activeTurnStartedAt: null,
+      turnDiffSummaries: [],
+      supportsConversationRollback: false,
+    });
+
+    expect(rows).toContainEqual(
+      expect.objectContaining({
+        kind: "turn-fold",
+        turnId: interruptedTurnId,
+        label: "You stopped after 47s",
+      }),
+    );
+  });
+
   it("keeps the previous turn folded while a newly sent message awaits its turn", () => {
     // Right after send, isWorking is true but latestTurn still points at the
     // previous, settled turn — it must stay folded through that window.

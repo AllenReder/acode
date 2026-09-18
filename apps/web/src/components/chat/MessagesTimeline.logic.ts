@@ -670,6 +670,12 @@ function deriveTurnFolds(input: {
     const terminalEntryIndex = group.terminalEntry
       ? group.entries.findIndex((entry) => entry.id === group.terminalEntry?.id)
       : group.entries.length;
+    const interruptedEntry = group.entries.find(
+      (entry) => entry.kind === "work" && entry.entry.sourceActivityKind === "turn.interrupted",
+    );
+    const isInterruptedTurn =
+      (input.latestTurn?.turnId === turnId && input.latestTurn.state === "interrupted") ||
+      interruptedEntry !== undefined;
     for (const [index, entry] of group.entries.entries()) {
       if (entry.id === group.terminalEntry?.id) {
         continue;
@@ -680,7 +686,12 @@ function deriveTurnFolds(input: {
         group.entries.length === terminalEntryIndex + 2 &&
         entry.kind === "work" &&
         !workEntryDisplayIndicatesToolFailure(entry.entry);
-      if (!isCompaction && index > terminalEntryIndex && !isSingleTrailingActivity) {
+      if (
+        !isInterruptedTurn &&
+        !isCompaction &&
+        index > terminalEntryIndex &&
+        !isSingleTrailingActivity
+      ) {
         continue;
       }
       // User input and subagent batches stay visible after their turn settles.
@@ -713,15 +724,12 @@ function deriveTurnFolds(input: {
       continue;
     }
 
-    const isInterruptedTurn =
-      (input.latestTurn?.turnId === turnId && input.latestTurn.state === "interrupted") ||
-      group.entries.some(
-        (entry) => entry.kind === "work" && entry.entry.sourceActivityKind === "turn.interrupted",
-      );
     // A turn cut short by a steer leaves trailing work entries behind its
-    // terminal message — take whichever ended last.
+    // terminal message — take whichever ended last. Once an explicit stop is
+    // persisted, later provider activity cannot extend the stopped duration.
     const lastEntryEnd =
-      lastEntry.kind === "message" ? lastEntry.message.updatedAt : lastEntry.createdAt;
+      interruptedEntry?.createdAt ??
+      (lastEntry.kind === "message" ? lastEntry.message.updatedAt : lastEntry.createdAt);
     const elapsedMs =
       input.latestTurn?.turnId === turnId &&
       input.latestTurn.startedAt &&

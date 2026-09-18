@@ -19,6 +19,7 @@ import {
 } from "@t3tools/contracts";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import { normalizeModelSlug } from "@t3tools/shared/model";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
@@ -64,6 +65,105 @@ const RECOVERABLE_THREAD_RESUME_ERROR_SNIPPETS = [
   "does not exist",
   "no rollout found",
 ];
+
+interface CodexProcessTableEntry {
+  readonly pid: number;
+  readonly ppid: number;
+  readonly pgid: number;
+  readonly command: string;
+}
+
+interface ActiveCodexCommandExecution {
+  readonly processId: string;
+  readonly processGroupIds: ReadonlySet<number>;
+  readonly turnId: TurnId;
+}
+
+function parseCodexProcessTable(stdout: string): ReadonlyArray<CodexProcessTableEntry> {
+  return stdout.split(/\r?\n/g).flatMap((line) => {
+    const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+)$/.exec(line);
+    if (!match) return [];
+    const pid = Number(match[1]);
+    const ppid = Number(match[2]);
+    const pgid = Number(match[3]);
+    return Number.isInteger(pid) && Number.isInteger(ppid) && Number.isInteger(pgid)
+      ? [{ pid, ppid, pgid, command: (match[4] ?? "").trim() }]
+      : [];
+  });
+}
+
+const readCodexProcessTable = Effect.fn("readCodexProcessTable")(function* (
+  spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
+  platform: NodeJS.Platform,
+) {
+  if (platform === "win32") return [];
+  return yield* Effect.scoped(
+    Effect.gen(function* () {
+      const processTable = yield* spawner.spawn(
+        ChildProcess.make("/bin/ps", ["-eo", "pid=,ppid=,pgid=,comm="], {
+          extendEnv: true,
+        }),
+      );
+      const stdout = yield* processTable.stdout.pipe(
+        Stream.decodeText(),
+        Stream.runFold(
+          () => "",
+          (output, chunk) => output + chunk,
+        ),
+      );
+      const exitCode = yield* processTable.exitCode;
+      return Number(exitCode) === 0 ? parseCodexProcessTable(stdout) : [];
+    }),
+  );
+});
+
+function codexDescendantPids(
+  processes: ReadonlyArray<CodexProcessTableEntry>,
+  rootPid: number,
+): ReadonlySet<number> {
+  const childrenByParent = new Map<number, number[]>();
+  for (const process of processes) {
+    const children = childrenByParent.get(process.ppid) ?? [];
+    children.push(process.pid);
+    childrenByParent.set(process.ppid, children);
+  }
+  const descendants = new Set<number>();
+  const pending = [rootPid];
+  while (pending.length > 0) {
+    const parentPid = pending.pop();
+    if (parentPid === undefined) continue;
+    for (const pid of childrenByParent.get(parentPid) ?? []) {
+      if (descendants.has(pid)) continue;
+      descendants.add(pid);
+      pending.push(pid);
+    }
+  }
+  return descendants;
+}
+
+function commandMentionsExecutable(command: string, executable: string): boolean {
+  const name = executable.split(/[\\/]/g).at(-1) ?? "";
+  return name.length > 0 && command.split(/[^A-Za-z0-9_.+-]+/g).includes(name);
+}
+
+const findCodexCommandProcessGroups = Effect.fn("findCodexCommandProcessGroups")(function* (
+  spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
+  platform: NodeJS.Platform,
+  appServerPid: number,
+  command: string,
+) {
+  const processes = yield* readCodexProcessTable(spawner, platform);
+  const descendants = codexDescendantPids(processes, appServerPid);
+  return new Set(
+    processes.flatMap((process) =>
+      descendants.has(process.pid) &&
+      process.pid === process.pgid &&
+      commandMentionsExecutable(command, process.command)
+        ? [process.pgid]
+        : [],
+    ),
+  );
+});
 
 export function hasConfiguredMcpServer(appServerArgs: ReadonlyArray<string> | undefined): boolean {
   return appServerArgs?.some((argument) => argument.includes("mcp_servers.")) === true;
@@ -1292,6 +1392,7 @@ export const makeCodexSessionRuntime = (
 > =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const hostPlatform = yield* HostProcessPlatform;
     const runtimeScope = yield* Scope.Scope;
     const crypto = yield* Crypto.Crypto;
     const events = yield* Queue.unbounded<ProviderEvent>();
@@ -1303,6 +1404,10 @@ export const makeCodexSessionRuntime = (
     const collabChildMetadataRef = yield* Ref.make(new Map<string, CollabChildMetadataState>());
     /** Child provider-thread id → its currently running provider turn id. */
     const collabChildLiveTurnsRef = yield* Ref.make(new Map<string, string>());
+    /** Command item id → provider process identities and owning turn. */
+    const activeCommandExecutionsRef = yield* Ref.make(
+      new Map<string, ActiveCodexCommandExecution>(),
+    );
     const suppressMemoryConsolidationNotification = makeMemoryConsolidationNotificationFilter();
     const closedRef = yield* Ref.make(false);
 
@@ -1863,6 +1968,36 @@ export const makeCodexSessionRuntime = (
 
         const payload = notification.params;
         const route = readRouteFields(notification);
+        if (
+          (notification.method === "item/started" || notification.method === "item/completed") &&
+          notification.params.item.type === "commandExecution"
+        ) {
+          const item = notification.params.item;
+          const processId = item.processId;
+          if (notification.method === "item/started" && processId) {
+            const processGroupIds = yield* findCodexCommandProcessGroups(
+              spawner,
+              hostPlatform,
+              Number(child.pid),
+              item.command,
+            ).pipe(Effect.orElseSucceed(() => new Set<number>()));
+            yield* Ref.update(activeCommandExecutionsRef, (current) => {
+              const next = new Map(current);
+              next.set(item.id, {
+                processId,
+                processGroupIds,
+                turnId: TurnId.make(notification.params.turnId),
+              });
+              return next;
+            });
+          } else if (notification.method === "item/completed") {
+            yield* Ref.update(activeCommandExecutionsRef, (current) => {
+              const next = new Map(current);
+              next.delete(item.id);
+              return next;
+            });
+          }
+        }
         const collabReceiverTurns = yield* Ref.get(collabReceiverTurnsRef);
         const childParentTurnId = (() => {
           const providerConversationId = readNotificationThreadId(notification);
@@ -2495,6 +2630,45 @@ export const makeCodexSessionRuntime = (
         Effect.gen(function* () {
           const providerThreadId = yield* readProviderThreadId;
           const session = yield* Ref.get(sessionRef);
+          const effectiveTurnId = turnId ?? session.activeTurnId;
+          // Codex currently settles turn/interrupt before every active
+          // command process exits. Terminate the connection-scoped command
+          // sessions explicitly so Stop ends real work, not only turn state.
+          const activeCommandExecutions = yield* Ref.get(activeCommandExecutionsRef);
+          const commandsToStop = Array.from(activeCommandExecutions.values()).filter(
+            (command) => effectiveTurnId === undefined || command.turnId === effectiveTurnId,
+          );
+          yield* Effect.forEach(
+            commandsToStop,
+            ({ processId }) =>
+              client
+                .request("command/exec/terminate", { processId })
+                .pipe(Effect.timeoutOption("1 second"), Effect.ignore),
+            { concurrency: 8, discard: true },
+          );
+          if (hostPlatform !== "win32") {
+            const processGroupIds = new Set(
+              commandsToStop.flatMap((command) => Array.from(command.processGroupIds)),
+            );
+            const signalOwnedProcessGroups = (signal: NodeJS.Signals) =>
+              Effect.gen(function* () {
+                const descendants = codexDescendantPids(
+                  yield* readCodexProcessTable(spawner, hostPlatform),
+                  Number(child.pid),
+                );
+                yield* Effect.forEach(
+                  processGroupIds,
+                  (processGroupId) =>
+                    descendants.has(processGroupId)
+                      ? Effect.try(() => process.kill(-processGroupId, signal)).pipe(Effect.ignore)
+                      : Effect.void,
+                  { discard: true },
+                );
+              }).pipe(Effect.ignore);
+            yield* signalOwnedProcessGroups("SIGTERM");
+            yield* Effect.sleep("100 millis");
+            yield* signalOwnedProcessGroups("SIGKILL");
+          }
           // Stop-everything: children are full threads with their own turns;
           // interrupting only the parent leaves the fleet running. Interrupt
           // each live child turn first, best-effort per child, BOUNDED: the
@@ -2515,7 +2689,6 @@ export const makeCodexSessionRuntime = (
                 .pipe(Effect.timeoutOption("3 seconds"), Effect.ignore),
             { concurrency: 8, discard: true },
           ).pipe(Effect.timeoutOption("10 seconds"), Effect.ignore);
-          const effectiveTurnId = turnId ?? session.activeTurnId;
           if (!effectiveTurnId) {
             return;
           }

@@ -8,6 +8,7 @@ import * as NodeFS from "node:fs";
 import * as NodeReadline from "node:readline";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
+import * as NodeChildProcess from "node:child_process";
 
 const here = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));
 const fixture = JSON.parse(
@@ -18,6 +19,11 @@ const script = JSON.parse(NodeFS.readFileSync(process.env.T3_CODEX_COLLAB_SCRIPT
 const write = (message) => process.stdout.write(`${JSON.stringify(message)}\n`);
 let turnStartCount = 0;
 let activeTurn;
+let activeCommand;
+
+process.on("exit", () => {
+  activeCommand?.kill("SIGKILL");
+});
 
 const rl = NodeReadline.createInterface({ input: process.stdin });
 rl.on("line", (line) => {
@@ -133,6 +139,42 @@ rl.on("line", (line) => {
         params: { threadId: rootThreadId, turn },
       });
     }
+    if (script.commandExecution) {
+      const processId = script.commandExecution.processId;
+      activeCommand = NodeChildProcess.spawn(
+        process.execPath,
+        ["-e", "setInterval(() => {}, 1000)"],
+        // oxlint-disable-next-line t3code/no-global-process-runtime -- standalone mock peer has no Effect runtime.
+        { detached: process.platform !== "win32", stdio: "ignore" },
+      );
+      activeCommand.once("spawn", () => {
+        write({
+          jsonrpc: "2.0",
+          method: "item/started",
+          params: {
+            threadId: rootThreadId,
+            turnId: turn.id,
+            startedAtMs: Date.now(),
+            item: {
+              type: "commandExecution",
+              id: "active-command",
+              command: `${process.execPath} -e 'setInterval(() => {}, 1000)'`,
+              commandActions: [],
+              cwd: process.cwd(),
+              processId,
+              status: "inProgress",
+            },
+          },
+        });
+      });
+      activeCommand.once("exit", (exitCode, signal) => {
+        NodeFS.appendFileSync(
+          `${process.env.T3_CODEX_COLLAB_SCRIPT}.command-exits`,
+          `${JSON.stringify({ processId, exitCode, signal })}\n`,
+        );
+        activeCommand = undefined;
+      });
+    }
     for (const notification of script.notifications) {
       write({ jsonrpc: "2.0", method: notification.method, params: notification.params });
     }
@@ -182,6 +224,21 @@ rl.on("line", (line) => {
       // Never respond: simulates a wedged child whose RPC neither resolves
       // nor rejects. The runtime's bounded deadline must move on.
       return;
+    }
+    write({ id, result: {} });
+    return;
+  }
+  if (method === "command/exec/terminate") {
+    NodeFS.appendFileSync(
+      `${process.env.T3_CODEX_COLLAB_SCRIPT}.terminations`,
+      `${JSON.stringify({ processId: message.params?.processId })}\n`,
+    );
+    if (
+      !script.commandExecution?.ignoreTerminate &&
+      activeCommand &&
+      message.params?.processId === script.commandExecution?.processId
+    ) {
+      activeCommand.kill("SIGTERM");
     }
     write({ id, result: {} });
     return;
