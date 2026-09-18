@@ -474,6 +474,24 @@ it.layer(
     }),
   );
 
+  it.effect("fails workspace open distinctly when no workspace resolver is wired", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager();
+
+      const error = yield* Effect.flip(
+        manager.open({ workspaceId: "workspace-no-resolver", terminalId: "term-1" }),
+      );
+
+      // Must not be confused with TerminalWorkspaceNotFoundError: the
+      // workspace may exist — this manager cannot resolve any workspace.
+      expect(error).toMatchObject({
+        _tag: "TerminalWorkspaceResolutionUnavailableError",
+        workspaceId: "workspace-no-resolver",
+      });
+      expect(ptyAdapter.spawnInputs).toHaveLength(0);
+    }),
+  );
+
   it.effect("keeps two Workspace terminal sessions independent", () =>
     Effect.gen(function* () {
       const { manager, ptyAdapter } = yield* createManager(5, {

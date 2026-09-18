@@ -180,6 +180,7 @@ import {
   shouldNavigateAfterThreadPark,
   shouldRecedeSidebarThread,
   resolveWorkingStartedAt,
+  nextWorkspaceTerminalId,
   sidebarListItemId,
   sidebarMarkerId,
   sortLogicalProjectsForSidebar,
@@ -2169,7 +2170,7 @@ function SidebarWorkspaceTerminalRows(props: {
   readonly workspaceId: WorkspaceId;
   readonly workspaceRoot: string;
 }) {
-  const openTerminal = useAtomCommand(terminalEnvironment.open, { reportFailure: false });
+  const openTerminal = useAtomCommand(terminalEnvironment.open, "terminal open");
   const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
   const sessions = useKnownTerminalSessions({
     environmentId: props.environmentId,
@@ -2177,14 +2178,30 @@ function SidebarWorkspaceTerminalRows(props: {
     workspaceId: props.workspaceId,
   });
   const createTerminal = () => {
-    const ids = new Set(sessions.map((session) => session.target.terminalId));
-    let index = 1;
-    while (ids.has(`term-${index}`)) index += 1;
+    const terminalId = nextWorkspaceTerminalId(
+      sessions.map((session) => session.target.terminalId),
+    );
     void openTerminal({
       environmentId: props.environmentId,
-      input: { workspaceId: props.workspaceId, terminalId: `term-${index}` },
+      input: { workspaceId: props.workspaceId, terminalId },
+    }).then((result) => {
+      // Only surface the terminal once the daemon actually created it;
+      // previously the failure was swallowed and the UI looked dead.
+      if (result._tag === "Failure") {
+        if (!isAtomCommandInterrupted(result)) {
+          const error = squashAtomCommandFailure(result);
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Unable to create terminal",
+              description: error instanceof Error ? error.message : "An error occurred.",
+            }),
+          );
+        }
+        return;
+      }
+      setActiveTerminalId(terminalId);
     });
-    setActiveTerminalId(`term-${index}`);
   };
   return (
     <div className="ms-4 flex flex-col gap-px border-s ps-1.5">

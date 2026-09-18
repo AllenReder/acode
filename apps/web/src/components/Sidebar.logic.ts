@@ -1251,3 +1251,15 @@ export function sortScopedProjectsForSidebar<
       left.id.localeCompare(right.id),
   );
 }
+
+/**
+ * Picks the next `term-N` id for a workspace terminal, skipping ids already
+ * present in the metadata snapshot. Server-side open is idempotent per id, so
+ * collisions would silently attach to the existing terminal instead.
+ */
+export function nextWorkspaceTerminalId(existingIds: ReadonlyArray<string>): string {
+  const ids = new Set(existingIds);
+  let index = 1;
+  while (ids.has(`term-${index}`)) index += 1;
+  return `term-${index}`;
+}

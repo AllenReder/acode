@@ -21,6 +21,7 @@ import {
   TerminalResizeError,
   TerminalSessionLookupError,
   TerminalWorkspaceNotFoundError,
+  TerminalWorkspaceResolutionUnavailableError,
   TerminalWriteError,
   type TerminalAttachInput,
   type TerminalAttachStreamEvent,
@@ -91,6 +92,7 @@ export {
   TerminalResizeError,
   TerminalSessionLookupError,
   TerminalWorkspaceNotFoundError,
+  TerminalWorkspaceResolutionUnavailableError,
   TerminalWriteError,
 };
 
@@ -1532,6 +1534,11 @@ export const make = Effect.fn("TerminalManager.make")(function* () {
   const workspaceResolver = Option.isSome(projectionQuery)
     ? projectionQuery.value.getAcodeWorkspaceById
     : undefined;
+  if (workspaceResolver === undefined) {
+    yield* Effect.logWarning(
+      "TerminalManager built without workspace-root resolution: workspace-owned terminal open/attach/restart will fail with TerminalWorkspaceResolutionUnavailableError. ProjectionSnapshotQuery is absent from the layer context or lacks getAcodeWorkspaceById.",
+    );
+  }
   return yield* makeWithOptions({
     logsDir: terminalLogsDir,
     ptyAdapter,
@@ -1583,7 +1590,10 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     Input extends TerminalOpenInput | TerminalAttachInput | TerminalRestartInput,
   >(
     input: Input,
-  ): Effect.Effect<Input & { readonly cwd: string }, TerminalWorkspaceNotFoundError> =>
+  ): Effect.Effect<
+    Input & { readonly cwd: string },
+    TerminalWorkspaceNotFoundError | TerminalWorkspaceResolutionUnavailableError
+  > =>
     Effect.gen(function* () {
       if (input.workspaceId !== undefined) {
         const resolver = options.resolveWorkspaceRoot;
@@ -1591,7 +1601,10 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
           if (input.cwd !== undefined) {
             return input as Input & { readonly cwd: string };
           }
-          return yield* new TerminalWorkspaceNotFoundError({
+          // Distinct from "workspace not found": the manager was built without
+          // workspace-root resolution, so NO workspace can ever resolve. The
+          // construction-time warning in `make` explains why.
+          return yield* new TerminalWorkspaceResolutionUnavailableError({
             workspaceId: WorkspaceId.make(input.workspaceId),
           });
         }
@@ -1614,6 +1627,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
   ): Effect.Effect<
     Input & { readonly cwd: string },
     | TerminalWorkspaceNotFoundError
+    | TerminalWorkspaceResolutionUnavailableError
     | TerminalProviderInstanceNotFoundError
     | TerminalProviderEnvironmentError
   > =>
