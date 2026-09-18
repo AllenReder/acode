@@ -994,6 +994,7 @@ export const make = Effect.gen(function* () {
     const hostingProvider = details.isRepo
       ? yield* resolveHostingProvider(cwd, details.branch)
       : null;
+    const headCommit = "headCommit" in details ? details.headCommit : undefined;
 
     return {
       isRepo: details.isRepo,
@@ -1001,7 +1002,7 @@ export const make = Effect.gen(function* () {
       hasPrimaryRemote: details.hasOriginRemote,
       isDefaultRef: details.isDefaultBranch,
       refName: details.branch,
-      ...(details.headCommit === undefined ? {} : { headCommit: details.headCommit }),
+      ...(headCommit === undefined ? {} : { headCommit }),
       hasWorkingTreeChanges: details.hasWorkingTreeChanges,
       workingTree: details.workingTree,
     } satisfies VcsStatusLocalResult;

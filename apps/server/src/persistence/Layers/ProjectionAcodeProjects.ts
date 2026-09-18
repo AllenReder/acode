@@ -144,6 +144,17 @@ const makeRepository = Effect.gen(function* () {
         Effect.map((rows) => Option.fromNullishOr(mapProjectionAcodeProjectRows(rows)[0])),
         Effect.mapError(toPersistenceSqlError("ProjectionAcodeProjectRepository.getByT3ProjectId")),
       ),
+    getWorkspaceById: (workspaceId) =>
+      getRows(undefined).pipe(
+        Effect.map((rows) =>
+          Option.fromNullishOr(
+            mapProjectionAcodeProjectRows(rows)
+              .flatMap((project) => project.workspaces)
+              .find((workspace) => workspace.id === workspaceId),
+          ),
+        ),
+        Effect.mapError(toPersistenceSqlError("ProjectionAcodeProjectRepository.getWorkspaceById")),
+      ),
   } satisfies ProjectionAcodeProjectRepositoryShape;
 });
 

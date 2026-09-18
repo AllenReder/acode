@@ -55,6 +55,8 @@ export type ProjectSetupScriptRunnerResult =
 
 export interface ProjectSetupScriptRunnerInput {
   readonly threadId: string;
+  /** Workspace owner for setup terminals created by the ACode path. */
+  readonly workspaceId?: string;
   readonly projectId?: string;
   readonly projectCwd?: string;
   readonly worktreePath: string;
@@ -206,7 +208,8 @@ export const make = Effect.gen(function* () {
    * subscription is torn down once the sentinel, an exit, or a close arrives.
    */
   const observeTerminalCompletion = (input: {
-    readonly threadId: string;
+    readonly workspaceId?: string;
+    readonly threadId?: string;
     readonly terminalId: string;
     /** Per-run sentinel, so only this run's wrapper can settle completion. */
     readonly sentinel: string;
@@ -253,7 +256,11 @@ export const make = Effect.gen(function* () {
         });
 
       const unsubscribe = yield* terminalManager.subscribe((event) => {
-        if (event.threadId !== input.threadId || event.terminalId !== input.terminalId) {
+        const ownerMatches =
+          input.workspaceId !== undefined
+            ? event.workspaceId === input.workspaceId
+            : event.threadId === input.threadId;
+        if (!ownerMatches || event.terminalId !== input.terminalId) {
           return Effect.void;
         }
         if (event.type === "output") {
@@ -360,10 +367,13 @@ export const make = Effect.gen(function* () {
             completionSentinel(completionToken),
           )
         : script.command;
+    const terminalOwner = input.workspaceId
+      ? { workspaceId: input.workspaceId }
+      : { threadId: input.threadId };
 
     yield* terminalManager
       .open({
-        threadId: input.threadId,
+        ...terminalOwner,
         terminalId,
         cwd,
         worktreePath: input.worktreePath,
@@ -384,7 +394,7 @@ export const make = Effect.gen(function* () {
     const observed =
       observe && completionToken
         ? yield* observeTerminalCompletion({
-            threadId: input.threadId,
+            ...terminalOwner,
             terminalId,
             sentinel: completionSentinel(completionToken),
             sentinelPattern: completionSentinelPattern(completionToken),
@@ -395,7 +405,7 @@ export const make = Effect.gen(function* () {
 
     yield* terminalManager
       .write({
-        threadId: input.threadId,
+        ...terminalOwner,
         terminalId,
         data: `${commandLine}\r`,
       })

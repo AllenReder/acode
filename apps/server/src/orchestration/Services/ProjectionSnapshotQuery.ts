@@ -26,6 +26,7 @@ import type {
   OrchestrationThreadShell,
   ProjectId,
   ThreadId,
+  WorkspaceId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import type * as Option from "effect/Option";
@@ -184,6 +185,13 @@ export interface ProjectionSnapshotQueryShape {
     projectId: ProjectId,
   ) => Effect.Effect<
     Option.Option<import("@t3tools/contracts").AcodeProjectShell>,
+    ProjectionRepositoryError
+  >;
+  /** Read the ACode Workspace used to resolve Workspace-owned terminal cwd. */
+  readonly getAcodeWorkspaceById?: (
+    workspaceId: WorkspaceId,
+  ) => Effect.Effect<
+    Option.Option<import("@t3tools/contracts").AcodeWorkspaceShell>,
     ProjectionRepositoryError
   >;
 

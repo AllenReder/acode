@@ -214,6 +214,7 @@ const multiTerminalHistoryLogPath = (
   );
 
 interface CreateManagerOptions {
+  logsDir?: string;
   shellResolver?: () => string;
   env?: NodeJS.ProcessEnv;
   subprocessInspector?: (terminalPid: number) => Effect.Effect<{
@@ -233,6 +234,9 @@ interface CreateManagerOptions {
   resolveProviderInstanceEnvironment?: Parameters<
     typeof TerminalManager.makeWithOptions
   >[0]["resolveProviderInstanceEnvironment"];
+  resolveWorkspaceRoot?: Parameters<
+    typeof TerminalManager.makeWithOptions
+  >[0]["resolveWorkspaceRoot"];
 }
 
 interface ManagerFixture {
@@ -255,7 +259,7 @@ const createManager = (
     Effect.gen(function* () {
       const { join } = yield* Path.Path;
       const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3code-terminal-" });
-      const logsDir = join(baseDir, "userdata", "logs", "terminals");
+      const logsDir = options.logsDir ?? join(baseDir, "userdata", "logs", "terminals");
       const ptyAdapter = options.ptyAdapter ?? new FakePtyAdapter();
 
       const manager = yield* TerminalManager.makeWithOptions({
@@ -280,6 +284,9 @@ const createManager = (
           : {}),
         ...(options.resolveProviderInstanceEnvironment !== undefined
           ? { resolveProviderInstanceEnvironment: options.resolveProviderInstanceEnvironment }
+          : {}),
+        ...(options.resolveWorkspaceRoot !== undefined
+          ? { resolveWorkspaceRoot: options.resolveWorkspaceRoot }
           : {}),
       });
       const eventsRef = yield* Ref.make<ReadonlyArray<TerminalEvent>>([]);
@@ -419,6 +426,119 @@ it.layer(
       assert.equal(second.threadId, "thread-1");
       assert.equal(third.threadId, "thread-1");
       expect(ptyAdapter.spawnInputs).toHaveLength(1);
+    }),
+  );
+
+  it.effect("creates a terminal for a Workspace without an Agent owner", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager(5, {
+        resolveWorkspaceRoot: () => Effect.succeed(process.cwd()),
+      });
+
+      const opened = yield* manager.open({
+        workspaceId: "workspace-zero-agent",
+        terminalId: "term-1",
+      });
+
+      expect(opened.workspaceId).toBe("workspace-zero-agent");
+      expect(opened.threadId).toBeUndefined();
+      expect(opened.kind).toBe("terminal");
+      expect(opened.generation).toBe(1);
+      expect(opened.cwd).toBe(process.cwd());
+      expect(ptyAdapter.spawnInputs).toHaveLength(1);
+      expect(ptyAdapter.spawnInputs[0]?.cwd).toBe(process.cwd());
+    }),
+  );
+
+  it.effect("attaches Workspace terminals without creating a second PTY", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager(5, {
+        resolveWorkspaceRoot: () => Effect.succeed(process.cwd()),
+      });
+      yield* manager.open({ workspaceId: "workspace-attach", terminalId: "term-1" });
+
+      const events = yield* Ref.make<ReadonlyArray<TerminalAttachStreamEvent>>([]);
+      const unsubscribe = yield* manager.attachStream(
+        { workspaceId: "workspace-attach", terminalId: "term-1", cols: 100, rows: 24 },
+        (event) => Ref.update(events, (current) => [...current, event]),
+      );
+      yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+
+      const snapshot = (yield* Ref.get(events)).find((event) => event.type === "snapshot");
+      expect(snapshot?.type).toBe("snapshot");
+      if (snapshot?.type === "snapshot") {
+        expect(snapshot.snapshot.workspaceId).toBe("workspace-attach");
+        expect(snapshot.snapshot.generation).toBe(1);
+      }
+      expect(ptyAdapter.spawnInputs).toHaveLength(1);
+    }),
+  );
+
+  it.effect("keeps two Workspace terminal sessions independent", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager(5, {
+        resolveWorkspaceRoot: () => Effect.succeed(process.cwd()),
+      });
+      yield* manager.open({ workspaceId: "workspace-a", terminalId: "term-1" });
+      yield* manager.open({ workspaceId: "workspace-b", terminalId: "term-1" });
+
+      const first = ptyAdapter.processes[0];
+      const second = ptyAdapter.processes[1];
+      expect(first).toBeDefined();
+      expect(second).toBeDefined();
+      if (!first || !second) return;
+
+      yield* manager.write({ workspaceId: "workspace-a", terminalId: "term-1", data: "a" });
+      yield* manager.write({ workspaceId: "workspace-b", terminalId: "term-1", data: "b" });
+      expect(first.writes).toEqual(["a"]);
+      expect(second.writes).toEqual(["b"]);
+
+      yield* manager.close({ workspaceId: "workspace-a", terminalId: "term-1" });
+      expect(second.killed).toBe(false);
+    }),
+  );
+
+  it.effect("persists Workspace identity and marks an old PTY exited after daemon restart", () =>
+    Effect.gen(function* () {
+      const first = yield* createManager(5, {
+        resolveWorkspaceRoot: () => Effect.succeed(process.cwd()),
+      });
+      yield* first.manager.open({ workspaceId: "workspace-restart", terminalId: "term-1" });
+      const ptyProcess = first.ptyAdapter.processes[0];
+      expect(ptyProcess).toBeDefined();
+      if (!ptyProcess) return;
+      ptyProcess.emitExit({ exitCode: 0, signal: 0 });
+      yield* waitFor(
+        Effect.map(first.getEvents, (events) => events.some((event) => event.type === "exited")),
+      );
+      yield* Effect.sleep("25 millis");
+
+      const second = yield* createManager(5, {
+        logsDir: first.logsDir,
+        resolveWorkspaceRoot: () => Effect.succeed(process.cwd()),
+      });
+      const attached = yield* Ref.make<ReadonlyArray<TerminalAttachStreamEvent>>([]);
+      const unsubscribe = yield* second.manager.attachStream(
+        { workspaceId: "workspace-restart", terminalId: "term-1" },
+        (event) => Ref.update(attached, (current) => [...current, event]),
+      );
+      yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+      const snapshot = (yield* Ref.get(attached)).find((event) => event.type === "snapshot");
+      expect(snapshot?.type).toBe("snapshot");
+      if (snapshot?.type === "snapshot") {
+        expect(snapshot.snapshot.status).toBe("exited");
+        expect(snapshot.snapshot.generation).toBe(1);
+        expect(snapshot.snapshot.workspaceId).toBe("workspace-restart");
+      }
+      expect(second.ptyAdapter.spawnInputs).toHaveLength(0);
+
+      const restarted = yield* second.manager.open({
+        workspaceId: "workspace-restart",
+        terminalId: "term-1",
+      });
+      expect(restarted.status).toBe("running");
+      expect(restarted.generation).toBe(2);
+      expect(second.ptyAdapter.spawnInputs).toHaveLength(1);
     }),
   );
 

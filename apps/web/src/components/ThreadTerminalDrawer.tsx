@@ -20,10 +20,12 @@ import {
 } from "lucide-react";
 import {
   type ContextMenuItem,
+  type EnvironmentId,
   type ProviderInstanceId,
   type ResolvedKeybindingsConfig,
   type ScopedThreadRef,
   type ThreadId,
+  type WorkspaceId,
 } from "@t3tools/contracts";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import * as Schema from "effect/Schema";
@@ -308,8 +310,10 @@ export function shouldHandleTerminalExit(
 
 interface TerminalViewportProps {
   advancedTypography: boolean;
-  threadRef: ScopedThreadRef;
-  threadId: ThreadId;
+  environmentId?: EnvironmentId;
+  threadRef?: ScopedThreadRef;
+  threadId?: ThreadId;
+  workspaceId?: WorkspaceId;
   terminalId: string;
   terminalLabel: string;
   cwd: string;
@@ -334,8 +338,10 @@ interface TerminalLaunchLocation {
 
 export function TerminalViewport({
   advancedTypography,
+  environmentId: inputEnvironmentId,
   threadRef,
   threadId,
+  workspaceId,
   terminalId,
   terminalLabel,
   cwd,
@@ -354,7 +360,7 @@ export function TerminalViewport({
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<GhosttyTerminalSurface | null>(null);
   const visibleRef = useRef(visible);
-  const environmentId = threadRef.environmentId;
+  const environmentId = inputEnvironmentId ?? threadRef!.environmentId;
   const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
   const openInPreferredEditor = useOpenInPreferredEditor(
     environmentId,
@@ -404,7 +410,7 @@ export function TerminalViewport({
   const terminalSession = useAttachedTerminalSession({
     environmentId,
     terminal: {
-      threadId,
+      ...(workspaceId ? { workspaceId } : { threadId: threadId! }),
       terminalId,
       cwd,
       ...(worktreePath !== undefined ? { worktreePath } : {}),
@@ -415,13 +421,22 @@ export function TerminalViewport({
   const writeTerminal = useEffectEvent((data: string) =>
     runTerminalWrite({
       environmentId,
-      input: { threadId, terminalId, data },
+      input: {
+        ...(workspaceId ? { workspaceId } : { threadId: threadId! }),
+        terminalId,
+        data,
+      },
     }),
   );
   const resizeTerminal = useEffectEvent((cols: number, rows: number) =>
     runTerminalResize({
       environmentId,
-      input: { threadId, terminalId, cols, rows },
+      input: {
+        ...(workspaceId ? { workspaceId } : { threadId: threadId! }),
+        terminalId,
+        cols,
+        rows,
+      },
     }),
   );
   const terminalOutput = terminalSession.output;
@@ -797,13 +812,16 @@ export function TerminalViewport({
               );
             });
           };
-          void openTerminalLinkInPreview({
-            url: text,
-            threadRef,
-            openPreview,
-            fallbackToBrowser,
-            forceBrowser: event.metaKey || event.ctrlKey,
-          }).catch((error: unknown) => {
+          const linkAction = threadRef
+            ? openTerminalLinkInPreview({
+                url: text,
+                threadRef,
+                openPreview,
+                fallbackToBrowser,
+                forceBrowser: event.metaKey || event.ctrlKey,
+              })
+            : Promise.resolve().then(fallbackToBrowser);
+          void linkAction.catch((error: unknown) => {
             toastManager.add(
               stackedThreadToast({
                 type: "error",
@@ -976,7 +994,7 @@ export function TerminalViewport({
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [drawerHeight, environmentId, resizeEpoch, terminalId, threadId]);
+  }, [drawerHeight, environmentId, resizeEpoch, terminalId, threadId, workspaceId]);
   return (
     <div
       ref={containerRef}
@@ -986,10 +1004,74 @@ export function TerminalViewport({
   );
 }
 
+/** Minimal Workspace-owned host used before the full Pane/View workbench lands. */
+export function WorkspaceTerminalSurface(props: {
+  readonly environmentId: EnvironmentId;
+  readonly workspaceId: WorkspaceId;
+  readonly terminalId: string;
+  readonly cwd: string;
+  readonly onClose: () => void;
+}) {
+  const closeTerminal = useAtomCommand(terminalEnvironment.close, { reportFailure: false });
+  return (
+    <div className="fixed inset-8 z-50 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
+      <div className="flex h-8 shrink-0 items-center justify-between border-b border-border px-3 text-xs text-muted-foreground">
+        <span>Terminal · {props.terminalId}</span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            className="rounded px-2 py-0.5 hover:bg-muted hover:text-foreground"
+            aria-label="Hide terminal view"
+            onClick={props.onClose}
+          >
+            ×
+          </button>
+          <button
+            type="button"
+            className="rounded px-2 py-0.5 hover:bg-destructive/15 hover:text-destructive"
+            aria-label="Terminate terminal session"
+            onClick={() => {
+              void closeTerminal({
+                environmentId: props.environmentId,
+                input: {
+                  workspaceId: props.workspaceId,
+                  terminalId: props.terminalId,
+                  deleteHistory: true,
+                },
+              });
+              props.onClose();
+            }}
+          >
+            Stop
+          </button>
+        </div>
+      </div>
+      <div className="min-h-0 flex-1">
+        <TerminalViewport
+          advancedTypography={false}
+          environmentId={props.environmentId}
+          workspaceId={props.workspaceId}
+          terminalId={props.terminalId}
+          terminalLabel="Terminal"
+          cwd={props.cwd}
+          onSessionExited={() => undefined}
+          focusRequestId={0}
+          autoFocus
+          visible
+          resizeEpoch={0}
+          drawerHeight={0}
+          keybindings={[]}
+        />
+      </div>
+    </div>
+  );
+}
+
 interface ThreadTerminalDrawerProps {
   mode?: "drawer" | "panel";
   threadRef: ScopedThreadRef;
   threadId: ThreadId;
+  workspaceId?: WorkspaceId;
   cwd: string;
   worktreePath?: string | null;
   runtimeEnv?: Record<string, string>;
@@ -1051,6 +1133,7 @@ export default function ThreadTerminalDrawer({
   mode = "drawer",
   threadRef,
   threadId,
+  workspaceId,
   cwd,
   worktreePath,
   runtimeEnv,
@@ -1531,6 +1614,7 @@ export default function ThreadTerminalDrawer({
                           advancedTypography={advancedTypography}
                           threadRef={threadRef}
                           threadId={threadId}
+                          {...(workspaceId !== undefined ? { workspaceId } : {})}
                           terminalId={terminalId}
                           terminalLabel={terminalLabelById.get(terminalId) ?? "Terminal"}
                           cwd={terminalLaunchLocation.cwd}
@@ -1540,7 +1624,9 @@ export default function ThreadTerminalDrawer({
                           {...(terminalLaunchLocation.runtimeEnv
                             ? { runtimeEnv: terminalLaunchLocation.runtimeEnv }
                             : {})}
-                          onSessionExited={() => onCloseTerminal(terminalId)}
+                          onSessionExited={() => {
+                            if (workspaceId === undefined) onCloseTerminal(terminalId);
+                          }}
                           onAddTerminalContext={onAddTerminalContext}
                           focusRequestId={focusRequestId}
                           autoFocus={terminalId === resolvedActiveTerminalId}
@@ -1561,6 +1647,7 @@ export default function ThreadTerminalDrawer({
                   key={resolvedActiveTerminalId}
                   threadRef={threadRef}
                   threadId={threadId}
+                  {...(workspaceId !== undefined ? { workspaceId } : {})}
                   terminalId={resolvedActiveTerminalId}
                   terminalLabel={terminalLabelById.get(resolvedActiveTerminalId) ?? "Terminal"}
                   cwd={activeTerminalLaunchLocation.cwd}
@@ -1570,7 +1657,9 @@ export default function ThreadTerminalDrawer({
                   {...(activeTerminalLaunchLocation.runtimeEnv
                     ? { runtimeEnv: activeTerminalLaunchLocation.runtimeEnv }
                     : {})}
-                  onSessionExited={() => onCloseTerminal(resolvedActiveTerminalId)}
+                  onSessionExited={() => {
+                    if (workspaceId === undefined) onCloseTerminal(resolvedActiveTerminalId);
+                  }}
                   onAddTerminalContext={onAddTerminalContext}
                   focusRequestId={focusRequestId}
                   autoFocus

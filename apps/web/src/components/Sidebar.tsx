@@ -38,6 +38,7 @@ import {
   type ProjectIconOverride,
   type ScopedThreadRef,
   type ThreadId,
+  type WorkspaceId,
 } from "@t3tools/contracts";
 import type { TimestampFormat } from "@t3tools/contracts/settings";
 import {
@@ -119,6 +120,7 @@ import {
   useThreadSelectionStore,
 } from "../threadSelectionStore";
 import { useThreadActions } from "../hooks/useThreadActions";
+import { useKnownTerminalSessions } from "../state/terminalSessions";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { startNewThreadFromContext } from "../lib/chatThreadActions";
@@ -137,6 +139,8 @@ import {
 import { environmentServerConfigsAtom, primaryServerKeybindingsAtom } from "../state/server";
 import { vcsEnvironment } from "../state/vcs";
 import { threadEnvironment } from "../state/threads";
+import { terminalEnvironment } from "../state/terminal";
+import { WorkspaceTerminalSurface } from "./ThreadTerminalDrawer";
 import { useEnvironmentQuery } from "../state/query";
 import { useAtomCommand } from "../state/use-atom-command";
 import {
@@ -2160,6 +2164,78 @@ function SidebarWorkspaceVcsStatus(props: {
   );
 }
 
+function SidebarWorkspaceTerminalRows(props: {
+  readonly environmentId: EnvironmentId;
+  readonly workspaceId: WorkspaceId;
+  readonly workspaceRoot: string;
+}) {
+  const openTerminal = useAtomCommand(terminalEnvironment.open, { reportFailure: false });
+  const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
+  const sessions = useKnownTerminalSessions({
+    environmentId: props.environmentId,
+    threadId: null,
+    workspaceId: props.workspaceId,
+  });
+  const createTerminal = () => {
+    const ids = new Set(sessions.map((session) => session.target.terminalId));
+    let index = 1;
+    while (ids.has(`term-${index}`)) index += 1;
+    void openTerminal({
+      environmentId: props.environmentId,
+      input: { workspaceId: props.workspaceId, terminalId: `term-${index}` },
+    });
+    setActiveTerminalId(`term-${index}`);
+  };
+  return (
+    <div className="ms-4 flex flex-col gap-px border-s ps-1.5">
+      {sessions.map((session) => {
+        const summary = session.state.summary;
+        return (
+          <button
+            type="button"
+            key={`${props.environmentId}:${props.workspaceId}:${session.target.terminalId}`}
+            role="treeitem"
+            className="flex min-h-6 w-full items-center gap-1.5 rounded-md px-2 text-left text-[11px] text-sidebar-muted-foreground"
+            title={summary?.cwd ?? "Workspace terminal"}
+            onClick={() => setActiveTerminalId(session.target.terminalId)}
+          >
+            <TerminalIcon className="size-3 shrink-0" />
+            <span className="min-w-0 truncate">{summary?.label ?? "Terminal"}</span>
+            <span className="ms-auto shrink-0 text-[10px] uppercase opacity-60">
+              {summary?.status ?? session.state.status}
+            </span>
+          </button>
+        );
+      })}
+      <button
+        type="button"
+        className="flex min-h-6 w-full items-center gap-1.5 rounded-md px-2 text-left text-[11px] text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+        onClick={createTerminal}
+        aria-label="Create terminal session"
+      >
+        <PlusIcon className="size-3 shrink-0" />
+        <span>New terminal</span>
+      </button>
+      {activeTerminalId !== null
+        ? (() => {
+            const active = sessions.find(
+              (session) => session.target.terminalId === activeTerminalId,
+            );
+            return active === undefined ? null : (
+              <WorkspaceTerminalSurface
+                environmentId={props.environmentId}
+                workspaceId={props.workspaceId}
+                terminalId={activeTerminalId}
+                cwd={active.state.summary?.cwd ?? props.workspaceRoot}
+                onClose={() => setActiveTerminalId(null)}
+              />
+            );
+          })()
+        : null}
+    </div>
+  );
+}
+
 function SidebarWorkspaceTree(props: {
   readonly projects: ReadonlyArray<EnvironmentAcodeProject>;
   readonly selectedWorkspace: SidebarWorkspaceRef | null;
@@ -2210,32 +2286,38 @@ function SidebarWorkspaceTree(props: {
                     props.selectedWorkspace?.environmentId === project.environmentId &&
                     props.selectedWorkspace.t3ProjectId === workspace.t3ProjectId;
                   return (
-                    <button
-                      key={`${project.environmentId}:${workspace.id}`}
-                      type="button"
-                      role="treeitem"
-                      aria-current={selected ? "page" : undefined}
-                      className={cn(
-                        "flex min-h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
-                        selected && "bg-sidebar-row-active text-sidebar-foreground",
-                      )}
-                      onClick={() =>
-                        props.onSelectWorkspace({
-                          environmentId: project.environmentId,
-                          t3ProjectId: workspace.t3ProjectId,
-                        })
-                      }
-                    >
-                      <GitBranchIcon className="size-3 shrink-0" />
-                      <span className="min-w-0 truncate">{workspace.title}</span>
-                      <span className="shrink-0 text-[10px] uppercase opacity-60">
-                        {workspace.role}
-                      </span>
-                      <SidebarWorkspaceVcsStatus
+                    <div key={`${project.environmentId}:${workspace.id}`} className="contents">
+                      <button
+                        type="button"
+                        role="treeitem"
+                        aria-current={selected ? "page" : undefined}
+                        className={cn(
+                          "flex min-h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+                          selected && "bg-sidebar-row-active text-sidebar-foreground",
+                        )}
+                        onClick={() =>
+                          props.onSelectWorkspace({
+                            environmentId: project.environmentId,
+                            t3ProjectId: workspace.t3ProjectId,
+                          })
+                        }
+                      >
+                        <GitBranchIcon className="size-3 shrink-0" />
+                        <span className="min-w-0 truncate">{workspace.title}</span>
+                        <span className="shrink-0 text-[10px] uppercase opacity-60">
+                          {workspace.role}
+                        </span>
+                        <SidebarWorkspaceVcsStatus
+                          environmentId={project.environmentId}
+                          workspaceRoot={workspace.workspaceRoot}
+                        />
+                      </button>
+                      <SidebarWorkspaceTerminalRows
                         environmentId={project.environmentId}
+                        workspaceId={workspace.id}
                         workspaceRoot={workspace.workspaceRoot}
                       />
-                    </button>
+                    </div>
                   );
                 })}
               </div>

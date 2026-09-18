@@ -162,7 +162,7 @@ describe("selectKnownTerminalSessions", () => {
     });
     for (const item of source) {
       expect(
-        selectKnownTerminalSessions(metadata, environmentA, ThreadId.make(item.threadId)),
+        selectKnownTerminalSessions(metadata, environmentA, ThreadId.make(item.threadId ?? "")),
       ).toHaveLength(1);
     }
     expect(selectKnownTerminalSessions(metadata, environmentA, null)).toHaveLength(source.length);

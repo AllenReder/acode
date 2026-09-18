@@ -308,10 +308,16 @@ export const DiscoveredLocalServer = Schema.Struct({
   processName: Schema.NullOr(TrimmedNonEmptyString),
   pid: Schema.NullOr(Schema.Int.check(Schema.isGreaterThan(0))),
   terminal: Schema.NullOr(
-    Schema.Struct({
-      threadId: ThreadId,
-      terminalId: TrimmedNonEmptyString,
-    }),
+    Schema.Union([
+      Schema.Struct({
+        threadId: ThreadId,
+        terminalId: TrimmedNonEmptyString,
+      }),
+      Schema.Struct({
+        workspaceId: TrimmedNonEmptyString,
+        terminalId: TrimmedNonEmptyString,
+      }),
+    ]),
   ),
 });
 export type DiscoveredLocalServer = typeof DiscoveredLocalServer.Type;
