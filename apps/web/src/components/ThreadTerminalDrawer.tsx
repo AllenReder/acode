@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { createPortal } from "react-dom";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -1013,7 +1014,10 @@ export function WorkspaceTerminalSurface(props: {
   readonly onClose: () => void;
 }) {
   const closeTerminal = useAtomCommand(terminalEnvironment.close, { reportFailure: false });
-  return (
+  // Portal out of the Sidebar subtree: the sidebar's scroll fade uses CSS
+  // masks, which trap `position: fixed` descendants and would pin this
+  // overlay inside the sidebar instead of the viewport.
+  return createPortal(
     <div className="fixed inset-8 z-50 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
       <div className="flex h-8 shrink-0 items-center justify-between border-b border-border px-3 text-xs text-muted-foreground">
         <span>Terminal · {props.terminalId}</span>
@@ -1063,7 +1067,8 @@ export function WorkspaceTerminalSurface(props: {
           keybindings={[]}
         />
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
