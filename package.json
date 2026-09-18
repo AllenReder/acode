@@ -20,6 +20,7 @@
     "fmt": "vp fmt",
     "fmt:check": "vp fmt --check",
     "smoke:connection": "node scripts/connection-smoke.ts",
+    "smoke:terminal": "pnpm --filter t3 smoke:terminal",
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules scripts/node_modules apps/*/dist packages/*/dist .vite-plus apps/*/.vite-plus packages/*/.vite-plus"
   },
   "devDependencies": {

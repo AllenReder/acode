@@ -1749,6 +1749,31 @@ it.layer(
     }),
   );
 
+  it.effect("reports every attempted shell when terminal startup cannot succeed", () =>
+    Effect.gen(function* () {
+      const platform = yield* HostProcessPlatform;
+      const missingShell =
+        platform === "win32" ? "C:\\definitely\\missing-shell.exe" : "/definitely/missing-shell";
+      const ptyAdapter = new FakePtyAdapter();
+      const { manager, getEvents } = yield* createManager(5, {
+        ptyAdapter,
+        shellResolver: () => missingShell,
+      });
+      ptyAdapter.spawnFailures.push(
+        ...Array.from({ length: 32 }, () => new Error("shell executable not found")),
+      );
+
+      const snapshot = yield* manager.open(openInput());
+      const errorEvent = (yield* getEvents).find((event) => event.type === "error");
+
+      expect(snapshot.status).toBe("error");
+      expect(errorEvent).toMatchObject({
+        type: "error",
+        message: expect.stringContaining("Tried shells:"),
+      });
+    }),
+  );
+
   it.effect("prefers PowerShell over ComSpec for Windows terminals", () =>
     Effect.gen(function* () {
       const { manager, ptyAdapter } = yield* createManager(5, {
