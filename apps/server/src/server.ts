@@ -491,8 +491,14 @@ const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
   ),
   Layer.provideMerge(GitLayerLive),
   Layer.provideMerge(VcsLayerLive),
+  // TerminalManager.make reads ProjectionSnapshotQuery via serviceOption to
+  // wire workspace-root resolution. Layers earlier in this pipe are built
+  // with the outputs of later entries, so the terminal layer must precede
+  // ProviderRuntimeLayerLive — otherwise the resolver is silently absent and
+  // every workspace-owned terminal open fails.
+  Layer.provideMerge(TerminalLayerLive),
   Layer.provideMerge(ProviderRuntimeLayerLive),
-  Layer.provideMerge(Layer.mergeAll(TerminalLayerLive, PreviewLayerLive, DeviceLayerLive)),
+  Layer.provideMerge(Layer.mergeAll(PreviewLayerLive, DeviceLayerLive)),
   Layer.provideMerge(PersistenceLayerLive),
   // Both read a user-owned file out of the state directory and stream changes
   // to clients; neither depends on the other.
