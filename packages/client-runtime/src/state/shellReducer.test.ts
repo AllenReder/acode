@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import {
+  AcodeProjectId,
+  ProjectId,
+  ProviderInstanceId,
+  ThreadId,
+  WorkspaceId,
+} from "@t3tools/contracts";
 import type { OrchestrationShellSnapshot, OrchestrationShellStreamEvent } from "@t3tools/contracts";
 
 import { applyShellStreamEvent } from "./shellReducer.ts";
@@ -101,6 +107,36 @@ describe("applyShellStreamEvent", () => {
       expect(next.projects[0]?.title).toBe("Updated Title");
       expect(next.snapshotSequence).toBe(2);
     });
+
+    it("updates the ACode Project tree together with its T3 mapping", () => {
+      const acodeProject = {
+        id: AcodeProjectId.make("acode-project:project-1"),
+        title: "Test Project",
+        workspaces: [
+          {
+            id: WorkspaceId.make("workspace:project-1"),
+            projectId: AcodeProjectId.make("acode-project:project-1"),
+            t3ProjectId: ProjectId.make("project-1"),
+            title: "Test Project",
+            workspaceRoot: "/workspace/test",
+            role: "main" as const,
+            createdAt: "2026-04-01T00:00:00.000Z",
+            updatedAt: "2026-04-01T00:00:00.000Z",
+          },
+        ],
+        createdAt: "2026-04-01T00:00:00.000Z",
+        updatedAt: "2026-04-01T00:00:00.000Z",
+      };
+      const next = applyShellStreamEvent(baseSnapshot, {
+        kind: "project-upserted",
+        sequence: 2,
+        project: stubProject,
+        acodeProject,
+      });
+
+      expect(next.acodeProjects).toEqual([acodeProject]);
+      expect(next.snapshotSequence).toBe(2);
+    });
   });
 
   describe("project-removed", () => {
@@ -108,17 +144,28 @@ describe("applyShellStreamEvent", () => {
       const snapshotWithProject: OrchestrationShellSnapshot = {
         ...baseSnapshot,
         projects: [stubProject],
+        acodeProjects: [
+          {
+            id: AcodeProjectId.make("acode-project:project-1"),
+            title: "Test Project",
+            workspaces: [],
+            createdAt: "2026-04-01T00:00:00.000Z",
+            updatedAt: "2026-04-01T00:00:00.000Z",
+          },
+        ],
       };
 
       const event: OrchestrationShellStreamEvent = {
         kind: "project-removed",
         sequence: 3,
         projectId: ProjectId.make("project-1"),
+        acodeProjectId: AcodeProjectId.make("acode-project:project-1"),
       };
 
       const next = applyShellStreamEvent(snapshotWithProject, event);
 
       expect(next.projects).toHaveLength(0);
+      expect(next.acodeProjects).toHaveLength(0);
       expect(next.snapshotSequence).toBe(3);
     });
   });

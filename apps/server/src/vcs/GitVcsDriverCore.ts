@@ -1769,6 +1769,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     const statusStdout = statusResult.stdout;
 
     let refName: string | null = null;
+    let headCommit: string | null = null;
     let upstreamRef: string | null = null;
     let aheadCount = 0;
     let behindCount = 0;
@@ -1780,6 +1781,11 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       if (line.startsWith("# branch.head ")) {
         const value = line.slice("# branch.head ".length).trim();
         refName = value.startsWith("(") ? null : value;
+        continue;
+      }
+      if (line.startsWith("# branch.oid ")) {
+        const value = line.slice("# branch.oid ".length).trim();
+        headCommit = value.length > 0 && !value.startsWith("(") ? value : null;
         continue;
       }
       if (line.startsWith("# branch.upstream ")) {
@@ -1849,6 +1855,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       hasOriginRemote: hasPrimaryRemote,
       isDefaultBranch,
       branch: refName,
+      headCommit,
       upstreamRef,
       hasWorkingTreeChanges,
       workingTree: {

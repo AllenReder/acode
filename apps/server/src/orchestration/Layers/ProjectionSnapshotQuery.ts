@@ -53,6 +53,8 @@ import {
   type ProjectionRepositoryError,
 } from "../../persistence/Errors.ts";
 import { ProjectionCheckpoint } from "../../persistence/Services/ProjectionCheckpoints.ts";
+import { ProjectionAcodeProjectRepository } from "../../persistence/Services/ProjectionAcodeProjects.ts";
+import { ProjectionAcodeProjectRepositoryLive } from "../../persistence/Layers/ProjectionAcodeProjects.ts";
 import { ThreadBackgroundLivenessService } from "../ThreadBackgroundLiveness.ts";
 import { ThreadPlanProgressService } from "../ThreadPlanProgress.ts";
 import { ProjectionProject } from "../../persistence/Services/ProjectionProjects.ts";
@@ -488,6 +490,7 @@ function toPersistenceSqlOrDecodeError(sqlOperation: string, decodeOperation: st
 const makeProjectionSnapshotQuery = Effect.gen(function* () {
   const threadBackgroundLiveness = yield* ThreadBackgroundLivenessService;
   const threadPlanProgress = yield* ThreadPlanProgressService;
+  const acodeProjectRepository = yield* ProjectionAcodeProjectRepository;
   const sql = yield* SqlClient.SqlClient;
   const repositoryIdentityResolver = yield* RepositoryIdentityResolver.RepositoryIdentityResolver;
   const repositoryIdentityResolutionConcurrency = 4;
@@ -2626,11 +2629,20 @@ pending_approval_requests AS (
               ),
             ),
           ),
+          acodeProjectRepository.listTree(),
         ]),
       )
       .pipe(
         Effect.flatMap(
-          ([projectRows, threadRows, sessionRows, pullRequestRows, latestTurnRows, stateRows]) =>
+          ([
+            projectRows,
+            threadRows,
+            sessionRows,
+            pullRequestRows,
+            latestTurnRows,
+            stateRows,
+            acodeProjects,
+          ]) =>
             Effect.gen(function* () {
               let updatedAt: string | null = null;
               for (const row of projectRows) {
@@ -2653,6 +2665,12 @@ pending_approval_requests AS (
               }
               for (const row of stateRows) {
                 updatedAt = maxIso(updatedAt, row.updatedAt);
+              }
+              for (const project of acodeProjects) {
+                updatedAt = maxIso(updatedAt, project.updatedAt);
+                for (const workspace of project.workspaces) {
+                  updatedAt = maxIso(updatedAt, workspace.updatedAt);
+                }
               }
 
               const repositoryIdentities =
@@ -2717,6 +2735,7 @@ pending_approval_requests AS (
                       } satisfies OrchestrationThreadShell)
                     : Result.failVoid,
                 ),
+                acodeProjects,
                 updatedAt: updatedAt ?? "1970-01-01T00:00:00.000Z",
               };
 
@@ -3737,6 +3756,7 @@ pending_approval_requests AS (
     getActiveProjectByWorkspaceRoot,
     getProjectShellById,
     getProjectShells,
+    getAcodeProjectByT3ProjectId: acodeProjectRepository.getByT3ProjectId,
     getFirstActiveThreadIdByProjectId,
     getImportedAgentSessionSources,
     getThreadCheckpointContext,
@@ -3752,4 +3772,4 @@ pending_approval_requests AS (
 export const OrchestrationProjectionSnapshotQueryLive = Layer.effect(
   ProjectionSnapshotQuery,
   makeProjectionSnapshotQuery,
-);
+).pipe(Layer.provideMerge(ProjectionAcodeProjectRepositoryLive));

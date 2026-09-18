@@ -1,5 +1,6 @@
 import {
   type AgentSessionImportSource,
+  AcodeProjectId,
   ChatAttachment,
   ComposerContextId,
   CheckpointRef,
@@ -12,6 +13,7 @@ import {
   TurnId,
   ProviderInstanceId,
   OrchestrationMessageContext,
+  WorkspaceId,
 } from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -3511,6 +3513,64 @@ projectionSnapshotLayer("ProjectionSnapshotQuery activities by kind", (it) => {
         [["setup-live", "worktree-setup", { phase: "running" }]],
       );
       assert.deepEqual(yield* query.listActivitiesByKind("nope"), []);
+    }),
+  );
+});
+
+projectionSnapshotLayer("ProjectionSnapshotQuery ACode workspace tree", (it) => {
+  it.effect("exposes a registered project with its stable main workspace", () =>
+    Effect.gen(function* () {
+      const query = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        INSERT INTO projection_projects (
+          project_id, title, workspace_root, scripts_json, created_at, updated_at
+        ) VALUES (
+          'project-register', 'Registered repo', '/tmp/acode-register', '[]',
+          '2026-09-18T00:00:00Z', '2026-09-18T00:00:00Z'
+        )
+      `;
+      yield* sql`
+        INSERT INTO projection_acode_projects (
+          acode_project_id, title, created_at, updated_at
+        ) VALUES (
+          'acode-project:project-register', 'Registered repo',
+          '2026-09-18T00:00:00Z', '2026-09-18T00:00:00Z'
+        )
+      `;
+      yield* sql`
+        INSERT INTO projection_acode_workspaces (
+          workspace_id, acode_project_id, t3_project_id, title, workspace_root,
+          role, created_at, updated_at
+        ) VALUES (
+          'workspace:project-register', 'acode-project:project-register',
+          'project-register', 'Registered repo', '/tmp/acode-register', 'main',
+          '2026-09-18T00:00:00Z', '2026-09-18T00:00:00Z'
+        )
+      `;
+
+      const snapshot = yield* query.getShellSnapshot();
+
+      assert.deepEqual(snapshot.acodeProjects, [
+        {
+          id: AcodeProjectId.make("acode-project:project-register"),
+          title: "Registered repo",
+          workspaces: [
+            {
+              id: WorkspaceId.make("workspace:project-register"),
+              projectId: AcodeProjectId.make("acode-project:project-register"),
+              t3ProjectId: ProjectId.make("project-register"),
+              title: "Registered repo",
+              workspaceRoot: "/tmp/acode-register",
+              role: "main",
+              createdAt: "2026-09-18T00:00:00Z",
+              updatedAt: "2026-09-18T00:00:00Z",
+            },
+          ],
+          createdAt: "2026-09-18T00:00:00Z",
+          updatedAt: "2026-09-18T00:00:00Z",
+        },
+      ]);
     }),
   );
 });

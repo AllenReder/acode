@@ -109,6 +109,12 @@ export const ThreadId = makeEntityId("ThreadId");
 export type ThreadId = typeof ThreadId.Type;
 export const ProjectId = makeEntityId("ProjectId");
 export type ProjectId = typeof ProjectId.Type;
+/** Identity of an ACode navigation Project, distinct from a T3 orchestration project. */
+export const AcodeProjectId = makeEntityId("AcodeProjectId");
+export type AcodeProjectId = typeof AcodeProjectId.Type;
+/** Identity of an ACode Workspace, independent of branch, commit, or HEAD state. */
+export const WorkspaceId = makeEntityId("WorkspaceId");
+export type WorkspaceId = typeof WorkspaceId.Type;
 export const EnvironmentId = makeEntityId("EnvironmentId");
 export type EnvironmentId = typeof EnvironmentId.Type;
 export const CommandId = makeEntityId("CommandId");

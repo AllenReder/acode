@@ -107,6 +107,7 @@ async function createOrchestrationSystem(
   return {
     engine,
     readModel: () => runtime.runPromise(snapshotQuery.getSnapshot()),
+    shell: () => runtime.runPromise(snapshotQuery.getShellSnapshot()),
     readThread: (threadId: ThreadId) =>
       runtime.runPromise(snapshotQuery.getThreadDetailById(threadId)),
     run: <A, E>(effect: Effect.Effect<A, E>) => runtime.runPromise(effect),
@@ -130,6 +131,81 @@ const hasMetricSnapshot = (
   );
 
 describe("OrchestrationEngine", () => {
+  it("registers a directory into a stable ACode tree across daemon restart", async () => {
+    const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-acode-project-"));
+    const databasePath = NodePath.join(directory, "state.sqlite");
+    const projectId = ProjectId.make("registration-project");
+    const workspaceRoot = "/tmp/acode-registration-workspace";
+    const command = {
+      type: "project.create" as const,
+      commandId: CommandId.make("registration-project-create"),
+      projectId,
+      title: "Registration project",
+      workspaceRoot,
+      createdAt: now(),
+    };
+
+    const first = await createOrchestrationSystem(databasePath);
+    const firstResult = await first.run(first.engine.dispatch(command));
+    expect(firstResult.sequence).toBeGreaterThan(0);
+    const firstShell = await first.shell();
+    expect(firstShell.acodeProjects).toMatchObject([
+      {
+        id: "acode-project:registration-project",
+        workspaces: [
+          {
+            id: "workspace:registration-project",
+            t3ProjectId: "registration-project",
+            workspaceRoot,
+            role: "main",
+          },
+        ],
+      },
+    ]);
+    first.dispose();
+
+    const reopened = await createOrchestrationSystem(databasePath);
+    const reopenedShell = await reopened.shell();
+    expect(reopenedShell.acodeProjects).toEqual(firstShell.acodeProjects);
+
+    const duplicate = await reopened.run(
+      reopened.engine
+        .dispatch({
+          ...command,
+          commandId: CommandId.make("registration-project-duplicate"),
+          projectId: ProjectId.make("registration-project-duplicate"),
+        })
+        .pipe(Effect.flip),
+    );
+    expect(duplicate.message).toContain("already exists for workspace root");
+    reopened.dispose();
+  });
+
+  it("keeps identical local project ids and paths in separate daemon stores", async () => {
+    const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-acode-daemons-"));
+    const command = {
+      type: "project.create" as const,
+      commandId: CommandId.make("same-local-registration"),
+      projectId: ProjectId.make("same-local-project"),
+      title: "Same local project",
+      workspaceRoot: "/tmp/same-path-on-two-daemons",
+      createdAt: now(),
+    };
+    const first = await createOrchestrationSystem(NodePath.join(directory, "first.sqlite"));
+    const second = await createOrchestrationSystem(NodePath.join(directory, "second.sqlite"));
+    try {
+      await first.run(first.engine.dispatch(command));
+      await second.run(second.engine.dispatch(command));
+
+      const [firstShell, secondShell] = await Promise.all([first.shell(), second.shell()]);
+      expect(firstShell.acodeProjects).toEqual(secondShell.acodeProjects);
+      expect(firstShell.acodeProjects).not.toBe(secondShell.acodeProjects);
+    } finally {
+      first.dispose();
+      second.dispose();
+    }
+  });
+
   it.each(["running", "stopped"] as const)(
     "sends async answers with a %s session and rejects old duplicate replies",
     async (status) => {

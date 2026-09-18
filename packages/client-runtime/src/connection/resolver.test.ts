@@ -81,6 +81,7 @@ const makeDependencies = Effect.fn("TestConnectionResolver.makeDependencies")((o
   readonly primaryBearerToken?: string;
   readonly prepareSsh?: ClientCapabilities.SshEnvironmentGateway["Service"]["prepare"];
   readonly descriptorProtocolVersion?: number | null | undefined;
+  readonly descriptorEnvironmentId?: EnvironmentId;
 }) => {
   const profiles = new Map(
     (options?.profiles ?? []).map((profile) => [profile.connectionId, profile]),
@@ -149,7 +150,7 @@ const makeDependencies = Effect.fn("TestConnectionResolver.makeDependencies")((o
     remoteHttpClientLayer((() =>
       Promise.resolve(
         Response.json({
-          environmentId: ENVIRONMENT_ID,
+          environmentId: options?.descriptorEnvironmentId ?? ENVIRONMENT_ID,
           label: "Compatible environment",
           platform: { os: "linux", arch: "x64" },
           serverVersion: "0.0.0-test",
@@ -187,6 +188,74 @@ const makeDependencies = Effect.fn("TestConnectionResolver.makeDependencies")((o
 });
 
 describe("ConnectionResolver", () => {
+  it.effect("blocks an endpoint whose daemon identity changed", () =>
+    Effect.gen(function* () {
+      const brokerLayer = yield* makeDependencies({
+        descriptorEnvironmentId: EnvironmentId.make("environment-replaced"),
+      });
+      const broker = yield* ConnectionResolver.ConnectionResolver.pipe(Effect.provide(brokerLayer));
+      const target = new PrimaryConnectionTarget({
+        environmentId: ENVIRONMENT_ID,
+        label: "Saved primary",
+        httpBaseUrl: "http://changed-address.example.test",
+        wsBaseUrl: "ws://changed-address.example.test",
+      });
+
+      const error = yield* Effect.flip(broker.prepare(catalogEntry(target)));
+
+      expect(error).toMatchObject({ reason: "configuration" });
+      expect(error.message).toContain("does not match");
+    }),
+  );
+
+  it.effect("accepts an address change when the daemon identity stays stable", () =>
+    Effect.gen(function* () {
+      const authorizedUrls = yield* Ref.make<ReadonlyArray<string>>([]);
+      const credential = new BearerConnectionCredential({ token: "saved-token" });
+      const brokerLayer = yield* makeDependencies({
+        credentials: [["saved-address", credential]],
+        authorizeBearer: (input) =>
+          Ref.update(authorizedUrls, (urls) => [...urls, input.httpBaseUrl]).pipe(
+            Effect.as({
+              environmentId: ENVIRONMENT_ID,
+              label: "Saved bearer",
+              httpBaseUrl: input.httpBaseUrl,
+              socketUrl: "wss://authorized.example.test/ws",
+              httpAuthorization: { _tag: "Bearer" as const, token: input.bearerToken },
+            }),
+          ),
+      });
+      const broker = yield* ConnectionResolver.ConnectionResolver.pipe(Effect.provide(brokerLayer));
+      const firstTarget = new BearerConnectionTarget({
+        environmentId: ENVIRONMENT_ID,
+        label: "Saved bearer",
+        connectionId: "saved-address",
+      });
+      const firstProfile = new BearerConnectionProfile({
+        connectionId: "saved-address",
+        environmentId: ENVIRONMENT_ID,
+        label: "Saved bearer",
+        httpBaseUrl: "https://old-address.example.test",
+        wsBaseUrl: "wss://old-address.example.test",
+      });
+      const secondProfile = new BearerConnectionProfile({
+        ...firstProfile,
+        httpBaseUrl: "https://new-address.example.test",
+        wsBaseUrl: "wss://new-address.example.test",
+      });
+
+      const first = yield* broker.prepare(catalogEntry(firstTarget, Option.some(firstProfile)));
+      const second = yield* broker.prepare(catalogEntry(firstTarget, Option.some(secondProfile)));
+
+      expect(first.environmentId).toBe(ENVIRONMENT_ID);
+      expect(second.environmentId).toBe(ENVIRONMENT_ID);
+      expect(yield* Ref.get(authorizedUrls)).toEqual([
+        firstProfile.httpBaseUrl,
+        secondProfile.httpBaseUrl,
+      ]);
+    }),
+  );
+
   it.effect("blocks an incompatible host during discovery before opening orchestration RPC", () =>
     Effect.gen(function* () {
       const brokerLayer = yield* makeDependencies({

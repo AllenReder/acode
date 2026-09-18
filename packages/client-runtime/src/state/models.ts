@@ -1,10 +1,15 @@
 import type {
+  AcodeProjectShell,
   EnvironmentId,
   OrchestrationMessage,
   OrchestrationProjectShell,
   OrchestrationThread,
   OrchestrationThreadShell,
 } from "@t3tools/contracts";
+
+export interface EnvironmentAcodeProject extends AcodeProjectShell {
+  readonly environmentId: EnvironmentId;
+}
 
 export interface EnvironmentProject extends OrchestrationProjectShell {
   readonly environmentId: EnvironmentId;

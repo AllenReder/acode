@@ -23,6 +23,7 @@ import {
   type AuthAccessStreamEvent,
   type AuthEnvironmentScope,
   AuthSessionId,
+  acodeProjectIdForT3Project,
   ClientConnectionMethod,
   ClientDeviceType,
   ClientOs,
@@ -854,6 +855,7 @@ const makeWsRpcLayer = (
                 kind: "project-removed" as const,
                 sequence: event.sequence,
                 projectId: ProjectId.make(event.aggregateId),
+                acodeProjectId: acodeProjectIdForT3Project(ProjectId.make(event.aggregateId)),
               }),
             );
           case "thread.deleted":
@@ -907,23 +909,36 @@ const makeWsRpcLayer = (
           projectId,
           projectionSnapshotQuery.getProjectShellById(projectId),
         ).pipe(
-          Effect.map(
-            Option.flatMap((project) =>
-              Option.match(project, {
-                onNone: () =>
+          Effect.map(Option.flatten),
+          Effect.flatMap((project) =>
+            Option.match(project, {
+              onNone: () =>
+                Effect.succeed(
                   Option.some<OrchestrationShellStreamEvent>({
                     kind: "project-removed" as const,
                     sequence,
                     projectId,
+                    acodeProjectId: acodeProjectIdForT3Project(projectId),
                   }),
-                onSome: (nextProject) =>
-                  Option.some<OrchestrationShellStreamEvent>({
-                    kind: "project-upserted" as const,
-                    sequence,
-                    project: nextProject,
-                  }),
-              }),
-            ),
+                ),
+              onSome: (nextProject) =>
+                retryShellProjectionRead(
+                  "project",
+                  projectId,
+                  projectionSnapshotQuery.getAcodeProjectByT3ProjectId?.(projectId) ??
+                    Effect.succeed(Option.none()),
+                ).pipe(
+                  Effect.map(Option.flatten),
+                  Effect.map((acodeProject) =>
+                    Option.some<OrchestrationShellStreamEvent>({
+                      kind: "project-upserted" as const,
+                      sequence,
+                      project: nextProject,
+                      ...(Option.isSome(acodeProject) ? { acodeProject: acodeProject.value } : {}),
+                    }),
+                  ),
+                ),
+            }),
           ),
         );
 
