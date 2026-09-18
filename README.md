@@ -60,6 +60,18 @@ and removes it after the run. Provider/auth status is read from the daemon's
 capability catalog; an unavailable or unauthenticated provider is reported as
 such rather than treated as success.
 
+To exercise the real `node-pty` terminal path on the current host, including
+ANSI/alternate-screen output, Unicode, resize, detach/attach history, shell
+exit status, and invalid working-directory errors:
+
+```bash
+pnpm smoke:terminal
+```
+
+The command reports the host OS and shell used for the validation. See
+[`docs/agents/terminal-runtime.md`](./docs/agents/terminal-runtime.md) for the
+terminal ownership boundary and related regression commands.
+
 Cloud/relay configuration is not needed for local development. `.env.example`
 contains the optional public configuration used when testing those features.
 
