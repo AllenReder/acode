@@ -349,6 +349,23 @@ export class TerminalWorkspaceNotFoundError extends Schema.TaggedError<TerminalW
   }
 }
 
+/**
+ * The daemon has no workspace-root resolver wired, so workspace-owned
+ * terminals cannot be opened at all. Distinct from
+ * `TerminalWorkspaceNotFoundError`: the workspace may exist — the daemon
+ * itself is degraded.
+ */
+export class TerminalWorkspaceResolutionUnavailableError extends Schema.TaggedError<TerminalWorkspaceResolutionUnavailableError>()(
+  "TerminalWorkspaceResolutionUnavailableError",
+  {
+    workspaceId: TrimmedNonEmptyStringSchema,
+  },
+) {
+  override get message() {
+    return `Terminal workspace resolution is unavailable for workspace: ${this.workspaceId}`;
+  }
+}
+
 export class TerminalSessionLookupError extends Schema.TaggedError<TerminalSessionLookupError>()(
   "TerminalSessionLookupError",
   {
@@ -450,6 +467,7 @@ export const TerminalError = Schema.Union([
   TerminalCwdError,
   TerminalHistoryError,
   TerminalWorkspaceNotFoundError,
+  TerminalWorkspaceResolutionUnavailableError,
   TerminalSessionLookupError,
   TerminalProviderInstanceNotFoundError,
   TerminalProviderEnvironmentError,
