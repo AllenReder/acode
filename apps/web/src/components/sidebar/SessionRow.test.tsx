@@ -1,6 +1,6 @@
-const showContextMenuMock = vi.fn<
-  (items: unknown, position?: { x: number; y: number }) => Promise<unknown>
->().mockResolvedValue(null);
+const showContextMenuMock = vi
+  .fn<(items: unknown, position?: { x: number; y: number }) => Promise<unknown>>()
+  .mockResolvedValue(null);
 
 vi.mock("../../localApi", () => ({
   readLocalApi: () => ({
@@ -188,11 +188,11 @@ it("opens capability-gated menu on right-click without navigating", async () => 
   );
 
   // Layout should not have changed — no pane opened simply by right-clicking
-  expect(getActiveTab(useWorkbenchStore.getState()).panes.get(
-    getActiveTab(useWorkbenchStore.getState()).focusedPaneId,
-  )?.target).toEqual({ kind: "welcome" });
-
-  
+  expect(
+    getActiveTab(useWorkbenchStore.getState()).panes.get(
+      getActiveTab(useWorkbenchStore.getState()).focusedPaneId,
+    )?.target,
+  ).toEqual({ kind: "welcome" });
 });
 
 it("supports keyboard context-menu invocation via ContextMenu and Shift+F10", async () => {
@@ -238,6 +238,4 @@ it("supports keyboard context-menu invocation via ContextMenu and Shift+F10", as
     });
   });
   expect(showContextMenuMock).toHaveBeenCalledWith(expect.any(Array), { x: 100, y: 90 });
-
-  
 });

@@ -124,7 +124,13 @@ export const TerminalCloseInput = Schema.Struct({
 }).check(terminalOwnerFilter);
 export type TerminalCloseInput = typeof TerminalCloseInput.Type;
 
-export const TerminalSessionStatus = Schema.Literals(["starting", "running", "exited", "error", "closed"]);
+export const TerminalSessionStatus = Schema.Literals([
+  "starting",
+  "running",
+  "exited",
+  "error",
+  "closed",
+]);
 export type TerminalSessionStatus = typeof TerminalSessionStatus.Type;
 
 export const TerminalSessionSnapshot = Schema.Struct({

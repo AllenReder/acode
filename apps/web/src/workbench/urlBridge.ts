@@ -1,7 +1,6 @@
 import {
   activeAgentSessionsIn,
   agentSessionRefForShell,
-  agentSessionsIn,
   type AgentSessionId,
   type EnvironmentId,
   type ThreadId,

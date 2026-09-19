@@ -95,10 +95,9 @@ export function agentSessionsIn(workspace: {
   readonly sessions?: ReadonlyArray<AcodeSessionShell> | undefined;
   readonly historySessions?: ReadonlyArray<AcodeSessionShell> | undefined;
 }): ReadonlyArray<AcodeAgentSessionShell> {
-  return [
-    ...(workspace.sessions ?? []),
-    ...(workspace.historySessions ?? []),
-  ].filter(isAcodeAgentSessionShell);
+  return [...(workspace.sessions ?? []), ...(workspace.historySessions ?? [])].filter(
+    isAcodeAgentSessionShell,
+  );
 }
 
 export function activeAgentSessionsIn(workspace: {

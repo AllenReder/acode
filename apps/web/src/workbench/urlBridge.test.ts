@@ -104,7 +104,8 @@ describe("urlParamsToTarget", () => {
       },
     ];
     expect(urlParamsToTarget(ENV, THREAD, projects)).toBeNull();
-  });  it("ignores closed / history sessions so URL hydration does not revive closed views", () => {
+  });
+  it("ignores closed / history sessions so URL hydration does not revive closed views", () => {
     const baseProject = project([{ id: WS, sessions: [] }]);
     const workspace = baseProject.workspaces[0]!;
     const projects: ReadonlyArray<EnvironmentAcodeProject> = [

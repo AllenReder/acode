@@ -2234,9 +2234,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
 
     const diskRecords = yield* readPersistedSessionIndex;
     const record = diskRecords.find(
-      (r) =>
-        (r.workspaceId ?? r.threadId ?? r.ownerId) === threadId &&
-        r.terminalId === terminalId,
+      (r) => (r.workspaceId ?? r.threadId ?? r.ownerId) === threadId && r.terminalId === terminalId,
     );
     if (!record || record.workspaceId === undefined) return Option.none();
 
@@ -2253,9 +2251,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       cwd: record.cwd,
       worktreePath: record.worktreePath,
       status:
-        record.status === "running" || record.status === "starting"
-          ? "exited"
-          : record.status,
+        record.status === "running" || record.status === "starting" ? "exited" : record.status,
       pid: null,
       history,
       pendingHistoryControlSequence: "",
@@ -3141,7 +3137,12 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
             const targetCols = input.cols ?? session.cols;
             const targetRows = input.rows ?? session.rows;
 
-            if (session.status !== "closed" && !session.process && input.cwd && input.restartIfNotRunning === true) {
+            if (
+              session.status !== "closed" &&
+              !session.process &&
+              input.cwd &&
+              input.restartIfNotRunning === true
+            ) {
               const resolvedInput = yield* resolveLaunchInputEnvironment({
                 ...input,
                 terminalId,
@@ -3172,9 +3173,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       const state = yield* readManagerState;
       const memorySummaries = [...state.sessions.values()].map(summary);
       const memoryKeys = new Set(
-        memorySummaries.map((s) =>
-          toSessionKey(s.workspaceId ?? s.threadId ?? "", s.terminalId),
-        ),
+        memorySummaries.map((s) => toSessionKey(s.workspaceId ?? s.threadId ?? "", s.terminalId)),
       );
       const deletedKeys = state.deletedSessionKeys ?? new Set<string>();
 
@@ -3318,7 +3317,9 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
           }
           return {
             type: "remove" as const,
-            ...(event.workspaceId ? { workspaceId: event.workspaceId } : { threadId: event.threadId }),
+            ...(event.workspaceId
+              ? { workspaceId: event.workspaceId }
+              : { threadId: event.threadId }),
             terminalId: event.terminalId,
           };
         }),

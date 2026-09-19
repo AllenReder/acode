@@ -31,7 +31,11 @@ export function useSessionCommands(target: SessionTarget) {
 
   const { copyToClipboard } = useCopyToClipboard<{ identity: string }>({
     onCopy: ({ identity }) => {
-      toastManager.add({ type: "success", title: "Session identity copied", description: identity });
+      toastManager.add({
+        type: "success",
+        title: "Session identity copied",
+        description: identity,
+      });
     },
     onError: (error) => {
       toastManager.add(
@@ -84,7 +88,10 @@ export function useSessionCommands(target: SessionTarget) {
             stackedThreadToast({
               type: "error",
               title: "Failed to stop agent session",
-              description: squashAtomCommandFailure(stopResult) instanceof Error ? (squashAtomCommandFailure(stopResult) as Error).message : "An error occurred.",
+              description:
+                squashAtomCommandFailure(stopResult) instanceof Error
+                  ? (squashAtomCommandFailure(stopResult) as Error).message
+                  : "An error occurred.",
             }),
           );
           return;
@@ -99,7 +106,10 @@ export function useSessionCommands(target: SessionTarget) {
           stackedThreadToast({
             type: "error",
             title: "Failed to close agent session",
-            description: squashAtomCommandFailure(archiveResult) instanceof Error ? (squashAtomCommandFailure(archiveResult) as Error).message : "An error occurred.",
+            description:
+              squashAtomCommandFailure(archiveResult) instanceof Error
+                ? (squashAtomCommandFailure(archiveResult) as Error).message
+                : "An error occurred.",
           }),
         );
         return;
@@ -118,7 +128,10 @@ export function useSessionCommands(target: SessionTarget) {
           stackedThreadToast({
             type: "error",
             title: "Failed to close terminal session",
-            description: squashAtomCommandFailure(result) instanceof Error ? (squashAtomCommandFailure(result) as Error).message : "An error occurred.",
+            description:
+              squashAtomCommandFailure(result) instanceof Error
+                ? (squashAtomCommandFailure(result) as Error).message
+                : "An error occurred.",
           }),
         );
         return;
@@ -130,7 +143,11 @@ export function useSessionCommands(target: SessionTarget) {
 
   const handleDeleteSession = useCallback(
     async (sessionTitle?: string) => {
-      const title = sessionTitle ?? (target.kind === "agentSession" ? agentSession?.title ?? "Agent Session" : "Terminal Session");
+      const title =
+        sessionTitle ??
+        (target.kind === "agentSession"
+          ? (agentSession?.title ?? "Agent Session")
+          : "Terminal Session");
       const localApi = readLocalApi();
       if (localApi) {
         const confirmed = await settlePromise(() =>
@@ -164,7 +181,10 @@ export function useSessionCommands(target: SessionTarget) {
             stackedThreadToast({
               type: "error",
               title: "Failed to delete agent session",
-              description: squashAtomCommandFailure(deleteResult) instanceof Error ? (squashAtomCommandFailure(deleteResult) as Error).message : "An error occurred.",
+              description:
+                squashAtomCommandFailure(deleteResult) instanceof Error
+                  ? (squashAtomCommandFailure(deleteResult) as Error).message
+                  : "An error occurred.",
             }),
           );
           return;
@@ -183,7 +203,10 @@ export function useSessionCommands(target: SessionTarget) {
             stackedThreadToast({
               type: "error",
               title: "Failed to delete terminal session",
-              description: squashAtomCommandFailure(result) instanceof Error ? (squashAtomCommandFailure(result) as Error).message : "An error occurred.",
+              description:
+                squashAtomCommandFailure(result) instanceof Error
+                  ? (squashAtomCommandFailure(result) as Error).message
+                  : "An error occurred.",
             }),
           );
           return;
@@ -192,7 +215,15 @@ export function useSessionCommands(target: SessionTarget) {
         toastManager.add({ type: "success", title: "Terminal session deleted" });
       }
     },
-    [agentSession?.threadId, agentSession?.title, closeTerminal, deleteThread, stopThreadSession, store, target],
+    [
+      agentSession?.threadId,
+      agentSession?.title,
+      closeTerminal,
+      deleteThread,
+      stopThreadSession,
+      store,
+      target,
+    ],
   );
 
   const copySessionIdentity = useCallback(() => {
