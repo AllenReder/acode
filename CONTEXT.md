@@ -7,8 +7,9 @@ state and are displayed as Panes in Tabs.
 ## Language
 
 **Project**:
-A selected root path registered in acode. The outermost grouping in the left
-sidebar; it owns no working state of its own.
+A registered logical project root in acode. It is the canonical top-level
+domain identity in the Sidebar; external project records are integration
+references and do not replace the ACode Project identity.
 _Avoid_: Repo, Repository, Folder (as UI labels)
 
 **Workspace**:
@@ -20,25 +21,46 @@ _Avoid_: Session, Checkout. Not paseo's Workspace, which is a `cwd` that
 happens to carry a branch.
 
 **Session**:
-A persistent unit of work belonging to one Workspace: initially an agent
-session or a terminal session. A Session has an ACode identity independent of
-the runtime process or provider-native session currently backing it. It may be
-active, stopped, resumable, or closed according to its kind and provider
-capabilities. Sessions are listed at the third level of the left sidebar.
+A persistent unit of work belonging to exactly one Workspace. Agent sessions
+and terminal sessions are the current Session kinds; each has an ACode identity
+independent of the runtime process or provider-native session currently backing
+it. A Session may be active, stopped, resumable, or closed according to its
+kind and provider capabilities, and Sessions are listed at the third level of
+the left sidebar. A Session is not itself the content shown in the main area.
 _Avoid_: Task, Job, Run. Not paseo's per-client connection, and not the
 provider's own session log.
 
 **View**:
 A client-owned presentation bound to a Workspace or Session: for example an
 agent conversation, terminal, file browser, git status, or content contributed
-by a plugin. A View has no independent work lifecycle; opening, moving, copying,
-or closing a View does not create or terminate the underlying Session or
-Workspace work.
+by a plugin. A View is the content shown in the main area; the Sidebar exposes
+navigation references to the underlying Project, Workspace, and Session. A View
+has no independent work lifecycle; opening, moving, copying, or closing a View
+does not create or terminate the underlying Session or Workspace work.
 _Avoid_: Panel, Surface, Tool, Widget
+
+**Workbench**:
+The client-owned organizer of Tabs and their View instances. It accepts
+navigation requests from the Sidebar and manages presentation focus and
+layout, but it does not own the lifecycle of Projects, Workspaces, or Sessions.
+_Avoid_: Shell, Session manager, Navigator
+
+**Session View**:
+A View whose target is an Agent session or Terminal session and which presents
+that Session's current work. A Session View may be opened in multiple Tabs, but
+the same Session has at most one Session View in any one Tab.
+_Avoid_: Session, Runtime panel
+
+**Workspace View**:
+A View whose target is a Project or Workspace concern rather than a persistent
+Session, such as files, Git state, or plugin-provided workspace content. It
+does not require the daemon to hold a long-lived Session.
+_Avoid_: Session, Workspace panel
 
 **View definition**:
 The registered kind of a View, with its identity and renderer. A definition
-describes what can be opened; it is not one opened occurrence.
+describes what can be opened and may be supplied by acode or a plugin; it is
+not one opened occurrence.
 _Avoid_: Panel registration, View instance
 
 **View instance**:
@@ -56,18 +78,33 @@ _Avoid_: cwd, absolute path, repository path
 **View data source**:
 The typed source of snapshots and updates consumed by a View. It hides whether
 the data came from a client plugin, runtime RPC, or another implementation
-detail.
+detail. A View uses typed capabilities for commands; it does not own the
+lifecycle of the data it presents.
 _Avoid_: DaemonApi, wire message, local filesystem
 
+**View capability**:
+A bounded, typed operation that a View or plugin may request for its target,
+such as opening, renaming, stopping, or deleting a Session. A capability
+grants an operation, not ownership of the target's lifecycle.
+_Avoid_: Global store access, daemon handle, unrestricted command
+
+**Welcome View**:
+The ordinary initial View shown when a Workbench has no opened Session. It may
+offer actions such as adding a Project, selecting a Workspace, or creating a
+Session, but it does not represent or own a Session.
+_Avoid_: Empty pane, Start session
+
 **Tab**:
-A user-created working area that arranges Panes. A Tab belongs to no Project
-and no Workspace: its Panes may display Views from any Workspace of any
-Project.
+A working area, created by the user or supplied as the default initial area,
+that arranges Panes. A Tab belongs to no Project and no Workspace: its Panes
+may display Views from any Workspace of any Project.
 _Avoid_: Workspace, Group, Deck, Page. A Tab is not paseo's Tab, which is a
 view inside one Workspace.
 
 **Pane**:
-The smallest functional window in a Tab, holding exactly one View.
+The smallest functional window in a Tab, holding exactly one View instance.
+Panes and Tabs are layout concepts; a Pane is never an empty or standalone
+Session state.
 _Avoid_: Panel, Widget, Window, Split
 
 **Pane content**:
@@ -88,8 +125,10 @@ user overrides and locks it manually.
 _Avoid_: Workspace name, Window title
 
 **History**:
-The complete, Workspace-grouped index of `closed` Sessions that remain
-resumable when supported after their active runtime process is released.
+The complete, Workspace-grouped index of `closed` Agent and Terminal Sessions
+that remain resumable when supported after their active runtime process is
+released. History is an ACode concept; provider or T3 archival states are only
+integration details.
 _Avoid_: Archive, Deleted sessions
 
 **BSP layout**:
@@ -114,6 +153,12 @@ A Session representing one agent conversation: one provider, one model
 selection, one Workspace, and one transcript. Its ACode identity is distinct
 from any provider-native runtime or thread identifier.
 _Avoid_: Agent, Task, Job, Run
+
+**Terminal session**:
+A Session representing one Workspace-owned terminal work context, including its
+terminal history and resumable state when supported. Its ACode identity is
+independent of the current PTY process and terminal emulator instance.
+_Avoid_: Terminal, Terminal pane, PTY
 
 **Provider**:
 An agent runtime integration such as Codex, Claude Code, or OpenCode that can
@@ -151,12 +196,23 @@ _Avoid_: Terminal text, Preformatted output, Agent timeline
 - A Workspace belongs to exactly one Project.
 - Workspace identity is independent of Git branch, commit, or HEAD state.
 - A Session belongs to exactly one Workspace.
+- The current Session kinds are Agent session and Terminal session; other
+  main-area content is a View, not a Session.
 - Session identity is independent of its runtime process and provider-native
   session identity.
-- Closing a View, Pane, or Tab does not by itself terminate a Session.
+- Closing a View, Pane, or Tab does not by itself stop or delete a Session;
+  Session lifecycle actions are explicit.
+- A Workbench may contain multiple Tabs, and each Tab owns its own Pane and
+  Session View uniqueness rules.
+- A Workbench with no opened Session shows a Welcome View rather than an empty
+  Pane.
 - A Tab belongs to no Project or Workspace and may display Views from multiple
   Workspaces or Projects.
-- A Pane displays exactly one View.
+- A Pane displays exactly one View instance and is never empty.
+- A Session may have multiple Session View instances across Tabs, but its
+  Session View may appear at most once in any one Tab.
+- Closing one Session View only detaches that View; closing a Session removes
+  every Session View for it from every Tab while preserving its History entry.
 - A View may present a Session or Workspace without owning its work lifecycle.
 - Multiple Views may reference the same Session.
 - Runtime and provider implementation details must not define ACode domain
