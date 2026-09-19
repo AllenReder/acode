@@ -11,9 +11,22 @@ import {
   WorkspaceId,
 } from "./baseSchemas.ts";
 
-/** The first registered checkout role. Worktree roles are added by C07. */
-export const WorkspaceRole = Schema.Literal("main");
+/**
+ * Where the checkout sits in the Project's repository. "main" is the
+ * registered root checkout; "worktree" is an associated or ACode-created
+ * linked worktree. Display state (branch, commit, detached HEAD) never feeds
+ * this value.
+ */
+export const WorkspaceRole = Schema.Literals(["main", "worktree"]);
 export type WorkspaceRole = typeof WorkspaceRole.Type;
+
+/**
+ * How a "worktree" Workspace came to exist. ACode only deletes directories it
+ * created, so the delete-directory action is gated on "acode-created".
+ * Absent on "main" Workspaces and on shells from servers predating the field.
+ */
+export const WorkspaceOrigin = Schema.Literals(["associated", "acode-created"]);
+export type WorkspaceOrigin = typeof WorkspaceOrigin.Type;
 
 /** The durable ACode identity and T3 conversation binding shown in a Workspace. */
 export const AcodeAgentSessionShell = Schema.Struct({
@@ -35,6 +48,8 @@ export const AcodeWorkspaceShell = Schema.Struct({
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
   role: WorkspaceRole,
+  /** Only set for "worktree" Workspaces; absent on "main". */
+  origin: Schema.optional(WorkspaceOrigin),
   /** Durable sessions only; the transcript and execution state remain on the T3 thread shell. */
   sessions: Schema.optional(Schema.Array(AcodeAgentSessionShell)),
   createdAt: IsoDateTime,
@@ -67,4 +82,113 @@ export function workspaceIdForT3Project(projectId: ProjectId): WorkspaceId {
 /** Stable ACode identity derived from the creation event, not the thread id. */
 export function agentSessionIdForThreadCreatedEvent(eventId: EventId): AgentSessionId {
   return AgentSessionId.make(`agent-session:${eventId}`);
+}
+
+// --- Workspace management RPC (acodeWorkspace.*) ---
+
+/** Attach an existing on-disk checkout as a sibling Workspace of the Project. */
+export const AcodeWorkspaceAssociateInput = Schema.Struct({
+  projectId: AcodeProjectId,
+  /** Directory of the checkout to associate. Subdirectories resolve to the checkout root. */
+  path: TrimmedNonEmptyString,
+  title: Schema.optional(TrimmedNonEmptyString),
+});
+export type AcodeWorkspaceAssociateInput = typeof AcodeWorkspaceAssociateInput.Type;
+
+export const AcodeWorkspaceAssociateResult = Schema.Struct({
+  workspace: AcodeWorkspaceShell,
+  /** True when the checkout was already registered under this Project and nothing changed. */
+  reused: Schema.Boolean,
+});
+export type AcodeWorkspaceAssociateResult = typeof AcodeWorkspaceAssociateResult.Type;
+
+/** Create a Git worktree from the Project's repository and register it as a Workspace. */
+export const AcodeWorkspaceCreateWorktreeInput = Schema.Struct({
+  projectId: AcodeProjectId,
+  /** Create and check out this new branch. Omit to detach at `baseRef`. */
+  newBranch: Schema.optional(TrimmedNonEmptyString),
+  /** Branch, tag, or commit the worktree starts from. Defaults to HEAD. */
+  baseRef: Schema.optional(TrimmedNonEmptyString),
+  /** Explicit destination directory. Defaults to the daemon-managed worktrees directory. */
+  path: Schema.optional(TrimmedNonEmptyString),
+  title: Schema.optional(TrimmedNonEmptyString),
+});
+export type AcodeWorkspaceCreateWorktreeInput = typeof AcodeWorkspaceCreateWorktreeInput.Type;
+
+export const AcodeWorkspaceCreateWorktreeResult = Schema.Struct({
+  workspace: AcodeWorkspaceShell,
+  worktreePath: TrimmedNonEmptyString,
+  /**
+   * False when the directory already held a completed worktree of the same
+   * repository, so a retried request registers it instead of failing.
+   */
+  worktreeCreated: Schema.Boolean,
+});
+export type AcodeWorkspaceCreateWorktreeResult = typeof AcodeWorkspaceCreateWorktreeResult.Type;
+
+export const AcodeWorkspaceRemoveInput = Schema.Struct({
+  workspaceId: WorkspaceId,
+  /**
+   * Also delete the directory from disk. Only honored for "worktree"
+   * Workspaces with origin "acode-created"; the main checkout is never
+   * deleted through this action.
+   */
+  deleteDirectory: Schema.optional(Schema.Boolean),
+});
+export type AcodeWorkspaceRemoveInput = typeof AcodeWorkspaceRemoveInput.Type;
+
+export const AcodeWorkspaceRemoveResult = Schema.Struct({
+  /** False when the Workspace was already unregistered; removal is idempotent. */
+  removed: Schema.Boolean,
+  deletedDirectory: Schema.Boolean,
+  /** Present when registration was removed but the requested directory cleanup was not. */
+  warning: Schema.optional(TrimmedNonEmptyString),
+});
+export type AcodeWorkspaceRemoveResult = typeof AcodeWorkspaceRemoveResult.Type;
+
+export const AcodeWorkspaceErrorReason = Schema.Literals([
+  /** The target ACode Project does not exist (or has no checkout to anchor on). */
+  "project-not-found",
+  /** The associate path does not exist or is not a directory. */
+  "path-not-found",
+  /** The associate path is not inside a Git working tree. */
+  "not-a-repository",
+  /** The checkout belongs to a different repository than the Project. */
+  "different-repository",
+  /** The checkout is already registered under another Project. */
+  "already-registered",
+  /** The target path exists, is reserved, or nests inside a registered checkout. */
+  "path-conflict",
+  /** The requested new branch name is invalid or already exists. */
+  "branch-exists",
+  /** The base ref does not resolve to a commit. */
+  "invalid-ref",
+  /** Directory deletion was requested for the main checkout. */
+  "main-checkout-protected",
+  /** Directory deletion was requested for a checkout ACode did not create. */
+  "not-acode-created",
+  /** Directory deletion was refused because the worktree has uncommitted or untracked files. */
+  "dirty-worktree",
+  /** Registration removal was refused because the Workspace still owns Sessions. */
+  "workspace-not-empty",
+  /** The underlying Git operation failed; the directory state is unchanged. */
+  "git-failed",
+  /** The worktree was created on disk but Workspace registration failed. The directory was kept. */
+  "registration-failed",
+]);
+export type AcodeWorkspaceErrorReason = typeof AcodeWorkspaceErrorReason.Type;
+
+export class AcodeWorkspaceError extends Schema.TaggedError<AcodeWorkspaceError>()(
+  "AcodeWorkspaceError",
+  {
+    reason: AcodeWorkspaceErrorReason,
+    detail: Schema.String,
+    /** The on-disk path involved, when one exists (e.g. the kept worktree after a registration failure). */
+    path: Schema.optional(Schema.String),
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {
+  override get message(): string {
+    return this.detail;
+  }
 }

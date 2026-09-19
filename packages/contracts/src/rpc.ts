@@ -53,6 +53,15 @@ import {
   WorktreeSetupSubscribeInput,
 } from "./worktreeSetup.ts";
 import {
+  AcodeWorkspaceAssociateInput,
+  AcodeWorkspaceAssociateResult,
+  AcodeWorkspaceCreateWorktreeInput,
+  AcodeWorkspaceCreateWorktreeResult,
+  AcodeWorkspaceError,
+  AcodeWorkspaceRemoveInput,
+  AcodeWorkspaceRemoveResult,
+} from "./workspace.ts";
+import {
   GitActionProgressEvent,
   VcsSwitchRefInput,
   VcsSwitchRefResult,
@@ -318,6 +327,11 @@ export const WS_METHODS = {
   gitRunStackedAction: "git.runStackedAction",
   gitResolvePullRequest: "git.resolvePullRequest",
   gitPreparePullRequestThread: "git.preparePullRequestThread",
+
+  // ACode Workspace methods
+  acodeWorkspaceAssociate: "acodeWorkspace.associate",
+  acodeWorkspaceCreateWorktree: "acodeWorkspace.createWorktree",
+  acodeWorkspaceRemove: "acodeWorkspace.remove",
 
   // Review methods
   reviewGetDiffPreview: "review.getDiffPreview",
@@ -1057,6 +1071,24 @@ const WsVcsInitRpc = Rpc.make(WS_METHODS.vcsInit, {
   error: Schema.Union([VcsError, EnvironmentAuthorizationError]),
 });
 
+const WsAcodeWorkspaceAssociateRpc = Rpc.make(WS_METHODS.acodeWorkspaceAssociate, {
+  payload: AcodeWorkspaceAssociateInput,
+  success: AcodeWorkspaceAssociateResult,
+  error: Schema.Union([AcodeWorkspaceError, EnvironmentAuthorizationError]),
+});
+
+const WsAcodeWorkspaceCreateWorktreeRpc = Rpc.make(WS_METHODS.acodeWorkspaceCreateWorktree, {
+  payload: AcodeWorkspaceCreateWorktreeInput,
+  success: AcodeWorkspaceCreateWorktreeResult,
+  error: Schema.Union([AcodeWorkspaceError, EnvironmentAuthorizationError]),
+});
+
+const WsAcodeWorkspaceRemoveRpc = Rpc.make(WS_METHODS.acodeWorkspaceRemove, {
+  payload: AcodeWorkspaceRemoveInput,
+  success: AcodeWorkspaceRemoveResult,
+  error: Schema.Union([AcodeWorkspaceError, EnvironmentAuthorizationError]),
+});
+
 /**
  * Ephemeral live diff preview for compact/mobile surfaces.
  * Not the persisted T3 Review model. Future review sessions should use
@@ -1499,3 +1531,22 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationSubscribeShellRpc,
   WsOrchestrationSubscribeThreadRpc,
 );
+
+/**
+ * ACode Workspace management methods live in their own group on purpose: the
+ * server's handler layer type inference (`toLayer` over `HandlersServices`)
+ * collapses to `any` once a single group crosses ~140 members, so the base
+ * group stays put and this group gets its own handler layer.
+ */
+export const WsAcodeWorkspaceRpcGroup = RpcGroup.make(
+  WsAcodeWorkspaceAssociateRpc,
+  WsAcodeWorkspaceCreateWorktreeRpc,
+  WsAcodeWorkspaceRemoveRpc,
+);
+
+/**
+ * The complete WebSocket surface. Runtime routing (`RpcServer.make`) and
+ * clients (`RpcClient.make`) must see every method, so they use this merged
+ * group; only server handler construction uses the part groups.
+ */
+export const WsRpcGroupAll = WsRpcGroup.merge(WsAcodeWorkspaceRpcGroup);

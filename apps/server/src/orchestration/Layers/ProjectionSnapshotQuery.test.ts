@@ -3574,4 +3574,40 @@ projectionSnapshotLayer("ProjectionSnapshotQuery ACode workspace tree", (it) => 
       ]);
     }),
   );
+
+  it.effect("returns the complete ACode Project when a sibling Workspace changes", () =>
+    Effect.gen(function* () {
+      const query = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        INSERT INTO projection_acode_projects (
+          acode_project_id, title, created_at, updated_at
+        ) VALUES (
+          'acode-project:siblings', 'Repository',
+          '2026-09-18T00:00:00Z', '2026-09-18T00:00:00Z'
+        )
+      `;
+      yield* sql`
+        INSERT INTO projection_acode_workspaces (
+          workspace_id, acode_project_id, t3_project_id, title, workspace_root,
+          role, created_at, updated_at
+        ) VALUES
+          ('workspace:siblings-main', 'acode-project:siblings', 'siblings-main',
+            'Main', '/tmp/siblings-main', 'main', '2026-09-18T00:00:00Z', '2026-09-18T00:00:00Z'),
+          ('workspace:siblings-feature', 'acode-project:siblings', 'siblings-feature',
+            'Feature', '/tmp/siblings-feature', 'worktree', '2026-09-18T00:00:01Z', '2026-09-18T00:00:01Z')
+      `;
+
+      const project = yield* query.getAcodeProjectByT3ProjectId?.(
+        ProjectId.make("siblings-feature"),
+      );
+      assert.isTrue(Option.isSome(project));
+      if (Option.isSome(project)) {
+        assert.deepEqual(
+          project.value.workspaces.map((workspace) => workspace.workspaceRoot),
+          ["/tmp/siblings-main", "/tmp/siblings-feature"],
+        );
+      }
+    }),
+  );
 });

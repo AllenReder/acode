@@ -7,6 +7,7 @@ import {
   ProjectId,
   ThreadId,
   WorkspaceId,
+  WorkspaceOrigin,
   WorkspaceRole,
   IsoDateTime,
   TrimmedNonEmptyString,
@@ -27,6 +28,7 @@ export const ProjectionAcodeProjectRow = Schema.Struct({
   workspaceTitle: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
   workspaceRole: WorkspaceRole,
+  workspaceOrigin: Schema.NullOr(WorkspaceOrigin),
   workspaceCreatedAt: IsoDateTime,
   workspaceUpdatedAt: IsoDateTime,
 });
@@ -51,6 +53,16 @@ export interface UpsertProjectionAcodeProjectInput {
   readonly workspaceRoot: string;
   readonly createdAt: string;
   readonly updatedAt: string;
+  /**
+   * Attach the Workspace to this existing ACode Project instead of deriving a
+   * fresh `acode-project:<t3ProjectId>` Project. Set by the workspace
+   * management flows; absent for legacy project registration.
+   */
+  readonly acodeProjectId?: AcodeProjectId;
+  /** Defaults to "main" when the Workspace is not attached to another Project. */
+  readonly role?: WorkspaceRole;
+  /** Only meaningful for attached "worktree" Workspaces; persisted as NULL otherwise. */
+  readonly origin?: WorkspaceOrigin;
 }
 
 export interface UpsertProjectionAcodeAgentSessionInput {
@@ -103,6 +115,10 @@ export interface ProjectionAcodeProjectRepositoryShape {
     ReadonlyArray<AcodeProjectShell>,
     ProjectionRepositoryError
   >;
+  /** Read one ACode Project with its Workspaces by its stable identity. */
+  readonly getProjectById: (
+    acodeProjectId: AcodeProjectId,
+  ) => Effect.Effect<Option.Option<AcodeProjectShell>, ProjectionRepositoryError>;
   /** Read the tree row containing one T3 project for shell stream updates. */
   readonly getByT3ProjectId: (
     t3ProjectId: ProjectId,
@@ -156,6 +172,7 @@ export function mapProjectionAcodeProjectRows(
       title: row.workspaceTitle,
       workspaceRoot: row.workspaceRoot,
       role: row.workspaceRole,
+      ...(row.workspaceOrigin !== null ? { origin: row.workspaceOrigin } : {}),
       sessions: sessionsByWorkspace.get(row.workspaceId) ?? [],
       createdAt: row.workspaceCreatedAt,
       updatedAt: row.workspaceUpdatedAt,
