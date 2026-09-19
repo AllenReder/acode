@@ -38,46 +38,53 @@ function PaneNode({ snapshot, node, focusedPaneId }: PaneNodeProps) {
     return <Pane snapshot={snapshot} paneId={node.id} focused={node.id === focusedPaneId} />;
   }
 
-  const items: ReactNode[] = [];
+  // Split node: use absolute positioning so each child gets an explicit
+  // (left, top, width, height) from the layout leaves. Flex math fights
+  // the sash width — when child wrappers sum to 100% the sash (default
+  // flex-shrink: 1) collapses to 0px. Absolute positioning avoids that.
+  const children: ReactNode[] = [];
+  const sashes: ReactNode[] = [];
+  let offset = 0;
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i];
     if (child === undefined) continue;
     const size = node.sizes[i] ?? 0;
+    const childStyle =
+      node.dir === "right"
+        ? { left: `${offset * 100}%`, top: 0, width: `${size * 100}%`, height: "100%" }
+        : { top: `${offset * 100}%`, left: 0, height: `${size * 100}%`, width: "100%" };
+    children.push(
+      <div
+        key={child.type === "leaf" ? `leaf-${child.id}` : `split-${child.id}`}
+        className="absolute flex min-h-0 min-w-0 flex-col overflow-hidden"
+        style={childStyle}
+      >
+        <PaneNode snapshot={snapshot} node={child} focusedPaneId={focusedPaneId} />
+      </div>,
+    );
     if (i > 0) {
-      items.push(
+      const sashStyle =
+        node.dir === "right"
+          ? { left: `calc(${offset * 100}% - 2px)`, top: 0, width: "4px", height: "100%" }
+          : { top: `calc(${offset * 100}% - 2px)`, left: 0, height: "4px", width: "100%" };
+      sashes.push(
         <SashHandle
           key={`sash-${node.id}-${i - 1}`}
           splitId={node.id}
           index={i - 1}
           dir={node.dir}
           sizes={node.sizes}
+          style={sashStyle}
         />,
       );
     }
-    // Each child gets a fixed flex-basis matching the layout's `sizes[i]`,
-    // so dragging the sash (which calls `setSplitRatio`) actually changes
-    // the rendered widths/heights. Using `flex-1` alone would ignore the
-    // size array and split panes evenly.
-    items.push(
-      <div
-        key={child.type === "leaf" ? `leaf-${child.id}` : `split-${child.id}`}
-        className="flex min-h-0 min-w-0 flex-col overflow-hidden"
-        style={{ flexBasis: `${size * 100}%`, flexGrow: 0, flexShrink: 0 }}
-      >
-        <PaneNode snapshot={snapshot} node={child} focusedPaneId={focusedPaneId} />
-      </div>,
-    );
+    offset += size;
   }
 
   return (
-    <div
-      className={
-        node.dir === "right"
-          ? "flex h-full min-h-0 min-w-0 flex-1 flex-row"
-          : "flex h-full min-h-0 min-w-0 flex-1 flex-col"
-      }
-    >
-      {items}
+    <div className="relative h-full min-h-0 min-w-0 flex-1">
+      {children}
+      {sashes}
     </div>
   );
 }
@@ -195,9 +202,10 @@ interface SashHandleProps {
   readonly index: number;
   readonly dir: SplitDir;
   readonly sizes: ReadonlyArray<number>;
+  readonly style: React.CSSProperties;
 }
 
-function SashHandle({ splitId, index, dir, sizes }: SashHandleProps) {
+function SashHandle({ splitId, index, dir, sizes, style }: SashHandleProps) {
   const setSplitRatio = useWorkbenchStore((s) => s.setSplitRatio);
   // Drag bookkeeping. We capture the parent split container's rect on
   // mousedown — the sash itself is only 1px wide/tall, so its own rect
@@ -265,9 +273,10 @@ function SashHandle({ splitId, index, dir, sizes }: SashHandleProps) {
       onMouseLeave={() => setHover(false)}
       onMouseDown={onMouseDown}
       className={
-        (dir === "right" ? "w-1 cursor-col-resize " : "h-1 cursor-row-resize ") +
+        (dir === "right" ? "cursor-col-resize " : "cursor-row-resize ") +
         (hover ? "bg-foreground/40" : "bg-foreground/15")
       }
+      style={style}
       data-sash-id={splitId}
       data-sash-index={index}
     />
