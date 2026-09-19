@@ -39,6 +39,7 @@ import {
   type ScopedThreadRef,
   type ThreadId,
   type WorkspaceId,
+  workspaceIdForT3Project,
 } from "@t3tools/contracts";
 import type { TimestampFormat } from "@t3tools/contracts/settings";
 import {
@@ -136,6 +137,7 @@ import {
   useProjects,
   useThreadShells,
 } from "../state/entities";
+import { useWorkbenchStore } from "../workbench/workbenchStore";
 import { environmentServerConfigsAtom, primaryServerKeybindingsAtom } from "../state/server";
 import { vcsEnvironment } from "../state/vcs";
 import { workspaceEnvironment } from "../state/projects";
@@ -2405,6 +2407,7 @@ function SidebarWorkspaceTree(props: {
     readonly environmentId: EnvironmentId;
     readonly t3ProjectId: ProjectId;
     readonly threadId: ThreadId;
+    readonly altSplit?: boolean;
   }) => void;
 }) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
@@ -2515,11 +2518,12 @@ function SidebarWorkspaceTree(props: {
                               "ms-4 flex min-h-6 w-[calc(100%-1rem)] items-center gap-1.5 rounded-md border-s-2 border-sidebar-border px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
                               sessionSelected && "bg-sidebar-row-active text-sidebar-foreground",
                             )}
-                            onClick={() =>
+                            onClick={(event) =>
                               props.onSelectSession({
                                 environmentId: project.environmentId,
                                 t3ProjectId: workspace.t3ProjectId,
                                 threadId: session.threadId,
+                                altSplit: event.altKey,
                               })
                             }
                           >
@@ -2861,22 +2865,66 @@ export default function Sidebar() {
     },
     [router, threads],
   );
+  const splitFocusedAgentSession = useCallback(
+    (threadRef: ScopedThreadRef) => {
+      // Resolve thread → project → ACode Workspace → Agent Session. The
+      // Workspace shell is the durable authority (D3); if the chain is not
+      // hydrated yet we drop the click rather than splitting into a
+      // half-formed Pane.
+      const projectId = threads
+        .filter((thread) => thread.environmentId === threadRef.environmentId)
+        .find((thread) => thread.id === threadRef.threadId)?.projectId;
+      if (projectId === undefined) return;
+      for (const project of acodeProjects) {
+        if (project.environmentId !== threadRef.environmentId) continue;
+        const workspace = project.workspaces.find(
+          (candidate) => candidate.id === workspaceIdForT3Project(projectId),
+        );
+        if (workspace === undefined) continue;
+        const session = workspace.sessions?.find(
+          (candidate) => candidate.threadId === threadRef.threadId,
+        );
+        if (session === undefined) continue;
+        useWorkbenchStore.getState().splitFocused(
+          {
+            kind: "agentSession",
+            environmentId: threadRef.environmentId,
+            workspaceId: workspace.id,
+            agentSessionId: session.id,
+          },
+          "right",
+        );
+        return;
+      }
+    },
+    [acodeProjects, threads],
+  );
+
   const selectSession = useCallback(
     (session: {
       readonly environmentId: EnvironmentId;
       readonly t3ProjectId: ProjectId;
       readonly threadId: ThreadId;
+      readonly altSplit?: boolean;
     }) => {
       setSelectedWorkspaceOverride({
         environmentId: session.environmentId,
         t3ProjectId: session.t3ProjectId,
       });
+      const threadRef = scopeThreadRef(session.environmentId, session.threadId);
+      if (session.altSplit === true) {
+        // alt-click on the ACode Session row → split the focused Pane.
+        // Mirrors the alt-click semantics on the T3 thread rows below, so
+        // both Sidebar surfaces obey the same Q4 contract.
+        splitFocusedAgentSession(threadRef);
+        return;
+      }
       void router.navigate({
         to: "/$environmentId/$threadId",
-        params: buildThreadRouteParams(scopeThreadRef(session.environmentId, session.threadId)),
+        params: buildThreadRouteParams(threadRef),
       });
     },
-    [router],
+    [router, splitFocusedAgentSession],
   );
   const scopedProjectKeys = useMemo(
     () =>
@@ -3459,12 +3507,26 @@ export default function Sidebar() {
         rangeSelectTo(threadKey, orderedThreadKeysRef.current);
         return;
       }
+      if (event.altKey) {
+        // Alt-click (option-click on macOS) splits the focused Pane in the
+        // workbench so the user can keep their current view side-by-side.
+        // The URL stays put — the new Pane binds directly to the Session
+        // without navigating the focused one (per C10's split semantics).
+        event.preventDefault();
+        splitFocusedAgentSession(threadRef);
+        return;
+      }
       if (isTrailingDoubleClick(event.detail)) {
         return;
       }
       navigateToThread(threadRef);
     },
-    [navigateToThread, rangeSelectTo, toggleThreadSelection],
+    [
+      navigateToThread,
+      rangeSelectTo,
+      splitFocusedAgentSession,
+      toggleThreadSelection,
+    ],
   );
 
   // A settle per thread at a time: double clicks and repeated menu picks

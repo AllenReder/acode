@@ -9,7 +9,13 @@ import {
   mergeEnvironmentThread,
 } from "@t3tools/client-runtime/state/threads";
 import type { ScopedProjectRef, ScopedThreadRef, ServerConfig } from "@t3tools/contracts";
-import type { EnvironmentId } from "@t3tools/contracts";
+import type {
+  AcodeAgentSessionShell,
+  AcodeWorkspaceShell,
+  AgentSessionId,
+  EnvironmentId,
+  WorkspaceId,
+} from "@t3tools/contracts";
 import { Atom } from "effect/unstable/reactivity";
 import { useMemo } from "react";
 import { appAtomRegistry } from "../rpc/atomRegistry";
@@ -156,6 +162,41 @@ export function readProject(ref: ScopedProjectRef): EnvironmentProject | null {
 
 export function readProjects(): ReadonlyArray<EnvironmentProject> {
   return appAtomRegistry.get(environmentProjects.projectsAtom);
+}
+
+/**
+ * Look up an ACode Workspace shell by (environmentId, workspaceId).
+ * Returns null while the workspace snapshot is not yet hydrated or when the
+ * id is unknown. Used by the workbench to resolve an Agent Session's owning
+ * Workspace (and through it, the matching AcodeAgentSessionShell).
+ */
+export function useAcodeWorkspace(
+  environmentId: EnvironmentId | null,
+  workspaceId: WorkspaceId | null,
+): AcodeWorkspaceShell | null {
+  const projects = useAcodeProjects();
+  if (environmentId === null || workspaceId === null) return null;
+  for (const project of projects) {
+    if (project.environmentId !== environmentId) continue;
+    const workspace = project.workspaces.find((candidate) => candidate.id === workspaceId);
+    if (workspace !== undefined) return workspace;
+  }
+  return null;
+}
+
+/**
+ * Look up an ACode Agent Session shell by (workspaceId, agentSessionId).
+ * The workspace shell is the durable authority for the Agent Session's
+ * thread id — see D3. Returns null when the workspace or session is unknown.
+ */
+export function useAcodeAgentSessionShell(
+  environmentId: EnvironmentId | null,
+  workspaceId: WorkspaceId | null,
+  agentSessionId: AgentSessionId | null,
+): AcodeAgentSessionShell | null {
+  const workspace = useAcodeWorkspace(environmentId, workspaceId);
+  if (workspace === null || agentSessionId === null) return null;
+  return workspace.sessions?.find((session) => session.id === agentSessionId) ?? null;
 }
 
 /** Resolves when the project event reaches the live client store. */
