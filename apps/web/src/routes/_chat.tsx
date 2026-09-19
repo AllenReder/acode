@@ -4,6 +4,7 @@ import { useEffect, useMemo } from "react";
 
 import { isCommandPaletteOpen } from "../commandPaletteBus";
 import { ThreadRouteView } from "../components/ThreadRouteView";
+import { Workbench } from "../workbench/Workbench";
 import { resolveThreadRouteTarget } from "../threadRoutes";
 import { useClientSettings, useLegacySidebarEnabled } from "../hooks/useSettings";
 import { openCommandPalette } from "../commandPaletteBus";
@@ -186,7 +187,17 @@ function ChatRouteLayout() {
   return (
     <>
       <ChatRouteGlobalShortcuts />
-      {threadTarget ? <ThreadRouteView target={threadTarget} /> : <Outlet />}
+      {threadTarget === null ? (
+        <Outlet />
+      ) : threadTarget.kind === "server" ? (
+        // The workbench replaces the temporary T3 outer navigation. Server
+        // thread URLs now route through Workbench (which dispatches the
+        // Agent View) — drafts keep their legacy ThreadRouteView to preserve
+        // the existing draft UX until they promote to a server thread.
+        <Workbench />
+      ) : (
+        <ThreadRouteView target={threadTarget} />
+      )}
     </>
   );
 }
