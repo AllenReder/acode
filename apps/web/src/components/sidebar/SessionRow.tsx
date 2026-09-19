@@ -1,4 +1,5 @@
 import type { ComponentProps } from "react";
+import { cn } from "../../lib/utils";
 import { getActiveTab } from "../../workbench/workbenchState";
 import { useWorkbenchStore } from "../../workbench/workbenchStore";
 import { targetsEqual, type ViewTarget } from "../../workbench/viewRegistry";
@@ -24,7 +25,12 @@ export function SessionRow({
       {...props}
       type="button"
       role="treeitem"
-      className={`${className ?? ""}${selected ? " bg-sidebar-row-active text-sidebar-foreground" : ""}`}
+      aria-level={3}
+      className={cn(
+        "flex min-h-6 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+        selected && "bg-sidebar-row-active text-sidebar-foreground",
+        className,
+      )}
       aria-current={selected ? "page" : undefined}
       aria-description="Open Session (Alt/Option: split right; Alt/Option+Shift: split down)"
       onClick={(event) => {

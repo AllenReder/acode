@@ -2170,21 +2170,22 @@ function SidebarWorkspaceVcsStatus(props: {
   );
 }
 
-function SidebarWorkspaceTerminalRows(props: {
+function SidebarWorkspaceSessions(props: {
   readonly environmentId: EnvironmentId;
-  readonly workspaceId: WorkspaceId;
+  readonly workspace: EnvironmentAcodeProject["workspaces"][number];
+  readonly threads: ReadonlyArray<EnvironmentThreadShell>;
 }) {
   const openTerminal = useAtomCommand(terminalEnvironment.open, "terminal open");
-  const sessions = useKnownTerminalSessions({
+  const terminalSessions = useKnownTerminalSessions({
     environmentId: props.environmentId,
     threadId: null,
-    workspaceId: props.workspaceId,
+    workspaceId: props.workspace.id,
   });
   const createTerminal = () => {
     const terminalId = nextWorkspaceTerminalId();
     void openTerminal({
       environmentId: props.environmentId,
-      input: { workspaceId: props.workspaceId, terminalId },
+      input: { workspaceId: props.workspace.id, terminalId },
     }).then((result) => {
       // Only surface the terminal once the daemon actually created it;
       // previously the failure was swallowed and the UI looked dead.
@@ -2204,34 +2205,38 @@ function SidebarWorkspaceTerminalRows(props: {
       useWorkbenchStore.getState().openTarget(
         terminalTargetForRuntime({
           environmentId: props.environmentId,
-          workspaceId: props.workspaceId,
+          workspaceId: props.workspace.id,
           terminalId,
         }),
       );
     });
   };
   return (
-    <div className="ms-4 flex flex-col gap-px border-s ps-1.5">
-      {sessions.map((session) => {
+    <div
+      role="group"
+      aria-label={`${props.workspace.title} sessions`}
+      className="ms-4 flex flex-col gap-px border-s border-sidebar-border ps-1.5"
+    >
+      {terminalSessions.map((session) => {
         const summary = session.state.summary;
         return (
-          <Tooltip key={`${props.environmentId}:${props.workspaceId}:${session.target.terminalId}`}>
+          <Tooltip
+            key={`${props.environmentId}:${props.workspace.id}:${session.target.terminalId}`}
+          >
             <TooltipTrigger
               render={
                 <SessionRow
                   target={terminalTargetForRuntime({
                     environmentId: props.environmentId,
-                    workspaceId: props.workspaceId,
+                    workspaceId: props.workspace.id,
                     terminalId: session.target.terminalId,
                   })}
-                  role="treeitem"
-                  className="flex min-h-6 w-full items-center gap-1.5 rounded-md px-2 text-left text-[11px] text-sidebar-muted-foreground"
                 />
               }
             >
               <TerminalIcon className="size-3 shrink-0" />
-              <span className="min-w-0 truncate">{summary?.label ?? "Terminal"}</span>
-              <span className="ms-auto shrink-0 text-[10px] uppercase opacity-60">
+              <span className="min-w-0 flex-1 truncate">{summary?.label ?? "Terminal"}</span>
+              <span className="shrink-0 text-[10px] opacity-60">
                 {summary?.status ?? session.state.status}
               </span>
             </TooltipTrigger>
@@ -2239,9 +2244,33 @@ function SidebarWorkspaceTerminalRows(props: {
           </Tooltip>
         );
       })}
+      {agentSessionsIn(props.workspace).map((session) => {
+        const thread = props.threads.find(
+          (candidate) =>
+            candidate.environmentId === props.environmentId && candidate.id === session.threadId,
+        );
+        const executionStatus =
+          thread === undefined ? "unavailable" : (thread.session?.status ?? "not-started");
+        return (
+          <SessionRow
+            key={`${props.environmentId}:${session.id}`}
+            aria-label={`${session.title} (${executionStatus})`}
+            target={{
+              kind: "agentSession",
+              environmentId: props.environmentId,
+              workspaceId: props.workspace.id,
+              agentSessionId: session.id,
+            }}
+          >
+            <CircleDashedIcon className="size-3 shrink-0" />
+            <span className="min-w-0 flex-1 truncate">{session.title}</span>
+            <span className="shrink-0 text-[10px] opacity-60">{executionStatus}</span>
+          </SessionRow>
+        );
+      })}
       <button
         type="button"
-        className="flex min-h-6 w-full items-center gap-1.5 rounded-md px-2 text-left text-[11px] text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+        className="flex min-h-6 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
         onClick={createTerminal}
         aria-label="Create terminal session"
       >
@@ -2447,7 +2476,6 @@ function SidebarWorkspaceTree(props: {
               <div className="ms-4 flex flex-col gap-px border-s border-sidebar-border ps-1.5">
                 <SidebarWorkspaceActions project={project} />
                 {project.workspaces.map((workspace) => {
-                  const sessions = agentSessionsIn(workspace);
                   const selected =
                     props.selectedWorkspace?.environmentId === project.environmentId &&
                     props.selectedWorkspace.t3ProjectId === workspace.t3ProjectId;
@@ -2481,45 +2509,12 @@ function SidebarWorkspaceTree(props: {
                           workspaceRoot={workspace.workspaceRoot}
                         />
                       </button>
-                      <SidebarWorkspaceTerminalRows
+                      <SidebarWorkspaceSessions
                         environmentId={project.environmentId}
-                        workspaceId={workspace.id}
+                        workspace={workspace}
+                        threads={props.threads}
                       />
                       <SidebarWorkspaceActions project={project} workspace={workspace} />
-                      {sessions.map((session) => {
-                        const thread = props.threads.find(
-                          (candidate) =>
-                            candidate.environmentId === project.environmentId &&
-                            candidate.id === session.threadId,
-                        );
-                        const executionStatus =
-                          thread === undefined
-                            ? "unavailable"
-                            : (thread.session?.status ?? "not-started");
-                        return (
-                          <SessionRow
-                            key={`${project.environmentId}:${session.id}`}
-                            type="button"
-                            role="treeitem"
-                            aria-label={`${session.title} (${executionStatus})`}
-                            className={cn(
-                              "ms-4 flex min-h-6 w-[calc(100%-1rem)] items-center gap-1.5 rounded-md border-s-2 border-sidebar-border px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
-                            )}
-                            target={{
-                              kind: "agentSession",
-                              environmentId: project.environmentId,
-                              workspaceId: workspace.id,
-                              agentSessionId: session.id,
-                            }}
-                          >
-                            <CircleDashedIcon className="size-3 shrink-0" />
-                            <span className="min-w-0 flex-1 truncate">{session.title}</span>
-                            <span className="shrink-0 text-[10px] opacity-60">
-                              {executionStatus}
-                            </span>
-                          </SessionRow>
-                        );
-                      })}
                     </div>
                   );
                 })}
