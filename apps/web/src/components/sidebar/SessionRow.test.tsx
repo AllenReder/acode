@@ -1,3 +1,21 @@
+const showContextMenuMock = vi.fn<
+  (items: unknown, position?: { x: number; y: number }) => Promise<unknown>
+>().mockResolvedValue(null);
+
+vi.mock("../../localApi", () => ({
+  readLocalApi: () => ({
+    dialogs: { confirm: vi.fn().mockResolvedValue(true) },
+    contextMenu: { show: showContextMenuMock, close: vi.fn() },
+    shell: { openExternal: vi.fn() },
+    persistence: { getClientSettings: vi.fn(), setClientSettings: vi.fn() },
+  }),
+  ensureLocalApi: () => ({
+    dialogs: { confirm: vi.fn().mockResolvedValue(true) },
+    contextMenu: { show: showContextMenuMock, close: vi.fn() },
+    shell: { openExternal: vi.fn() },
+    persistence: { getClientSettings: vi.fn(), setClientSettings: vi.fn() },
+  }),
+}));
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
@@ -5,6 +23,7 @@ import type { AgentSessionId, EnvironmentId, WorkspaceId } from "@t3tools/contra
 import { SessionRow } from "./SessionRow";
 import { resetWorkbenchStore, useWorkbenchStore } from "../../workbench/workbenchStore";
 import { getActiveTab } from "../../workbench/workbenchState";
+import { ensureLocalApi } from "../../localApi";
 
 let renderer: ReactTestRenderer;
 afterEach(async () => {
@@ -122,4 +141,103 @@ it("requests keyboard focus again when the already-focused Session row is clicke
   expect(renderer!.root.findByType("output").children[0]).not.toBe(firstRequest);
   expect(getActiveTab(useWorkbenchStore.getState()).panes.size).toBe(1);
   clearViewRegistry();
+});
+
+it("opens capability-gated menu on right-click without navigating", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const target = {
+    kind: "agentSession",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    agentSessionId: "one" as AgentSessionId,
+  } as const;
+
+  const api = ensureLocalApi();
+  showContextMenuMock.mockClear();
+
+  await act(() => {
+    renderer = create(<SessionRow target={target}>Agent Row</SessionRow>);
+  });
+
+  const row = renderer!.root.findByType("button");
+  let prevented = false;
+  let stopped = false;
+  await act(() => {
+    row.props.onContextMenu({
+      preventDefault: () => {
+        prevented = true;
+      },
+      stopPropagation: () => {
+        stopped = true;
+      },
+      clientX: 150,
+      clientY: 250,
+    });
+  });
+
+  expect(prevented).toBe(true);
+  expect(stopped).toBe(true);
+  expect(showContextMenuMock).toHaveBeenCalledWith(
+    expect.arrayContaining([
+      expect.objectContaining({ id: "open" }),
+      expect.objectContaining({ id: "split:right" }),
+      expect.objectContaining({ id: "close-session" }),
+      expect.objectContaining({ id: "delete-session" }),
+    ]),
+    { x: 150, y: 250 },
+  );
+
+  // Layout should not have changed — no pane opened simply by right-clicking
+  expect(getActiveTab(useWorkbenchStore.getState()).panes.get(
+    getActiveTab(useWorkbenchStore.getState()).focusedPaneId,
+  )?.target).toEqual({ kind: "welcome" });
+
+  
+});
+
+it("supports keyboard context-menu invocation via ContextMenu and Shift+F10", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const target = {
+    kind: "agentSession",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    agentSessionId: "one" as AgentSessionId,
+  } as const;
+
+  const api = ensureLocalApi();
+  showContextMenuMock.mockClear();
+
+  await act(() => {
+    renderer = create(<SessionRow target={target}>Agent Row</SessionRow>);
+  });
+
+  const row = renderer!.root.findByType("button");
+  const bounds = { left: 40, width: 120, bottom: 90 };
+
+  // 1. ContextMenu key
+  await act(() => {
+    row.props.onKeyDown({
+      preventDefault: () => {},
+      stopPropagation: () => {},
+      key: "ContextMenu",
+      currentTarget: { getBoundingClientRect: () => bounds },
+    });
+  });
+  expect(showContextMenuMock).toHaveBeenCalledWith(expect.any(Array), { x: 100, y: 90 });
+
+  showContextMenuMock.mockClear();
+
+  // 2. Shift+F10
+  await act(() => {
+    row.props.onKeyDown({
+      preventDefault: () => {},
+      stopPropagation: () => {},
+      shiftKey: true,
+      key: "F10",
+      currentTarget: { getBoundingClientRect: () => bounds },
+    });
+  });
+  expect(showContextMenuMock).toHaveBeenCalledWith(expect.any(Array), { x: 100, y: 90 });
+
+  
 });
