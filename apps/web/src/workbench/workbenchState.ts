@@ -6,12 +6,12 @@ import {
   type AcodeTab,
   type SplitDir,
 } from "./layout.ts";
-import { targetKey, type ViewKind, type ViewTarget } from "./viewRegistry.ts";
+import { definitionIdForTarget, targetKey, type ViewTarget } from "./viewRegistry.ts";
 
 /** One presentation occurrence, independent of the Session it displays. */
 export interface ViewInstance {
   readonly id: string;
-  readonly definitionId: ViewKind;
+  readonly definitionId: string;
   readonly target: ViewTarget;
 }
 
@@ -32,7 +32,7 @@ export function getActiveTab(snapshot: WorkbenchSnapshot): WorkbenchTab {
 }
 
 function viewInstance(target: ViewTarget, generateId: () => string): ViewInstance {
-  return { id: generateId(), definitionId: target.kind, target };
+  return { id: generateId(), definitionId: definitionIdForTarget(target), target };
 }
 
 function welcomeTab(generateId: () => string): WorkbenchTab {

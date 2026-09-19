@@ -1,14 +1,11 @@
 import { describe, expect, it, beforeEach } from "vite-plus/test";
 import type { ComponentType } from "react";
 
-import type {
-  AgentSessionId,
-  EnvironmentId,
-  WorkspaceId,
-} from "@t3tools/contracts";
+import type { AgentSessionId, EnvironmentId, WorkspaceId } from "@t3tools/contracts";
 
 import {
   clearViewRegistry,
+  emptyViewBinding,
   registerViewDefinition,
   resolveViewDefinition,
   targetKey,
@@ -97,18 +94,18 @@ describe("registerViewDefinition / resolveViewDefinition", () => {
     label: "Agent",
     accepts: (target): target is Extract<ViewTarget, { kind: "agentSession" }> =>
       target.kind === "agentSession",
+    bind: emptyViewBinding,
     Component: StubComponent as unknown as ViewDefinition<
       Extract<ViewTarget, { kind: "agentSession" }>
     >["Component"],
   };
 
-  const terminalDefinition: ViewDefinition<
-    Extract<ViewTarget, { kind: "workspaceTerminal" }>
-  > = {
+  const terminalDefinition: ViewDefinition<Extract<ViewTarget, { kind: "workspaceTerminal" }>> = {
     id: "workspaceTerminal",
     label: "Terminal",
     accepts: (target): target is Extract<ViewTarget, { kind: "workspaceTerminal" }> =>
       target.kind === "workspaceTerminal",
+    bind: emptyViewBinding,
     Component: StubComponent as unknown as ViewDefinition<
       Extract<ViewTarget, { kind: "workspaceTerminal" }>
     >["Component"],

@@ -1,35 +1,26 @@
-import type { ComponentType } from "react";
+import { createElement, useMemo, useSyncExternalStore, type ComponentType } from "react";
 
 import type {
   AgentSessionId,
+  AcodeProjectId,
   EnvironmentId,
   TerminalSessionId,
   WorkspaceId,
 } from "@t3tools/contracts";
 
-/**
- * The discriminated union of targets a View instance can bind to.
- *
- * Built-in targets:
- *   - `welcome`: the initial View, with no Session ownership.
- *   - `agentSession`: a Workspace-owned Agent Session.
- *   - `workspaceTerminal`: a Workspace-owned Terminal Session.
- *
- * Both carry an ACode Session identity rather than a runtime identity: the T3
- * thread and the PTY terminal id are adapter details behind `urlBridge.ts` and
- * `sessionTarget.ts`.
- *
- * Adding a new target kind is a 3-step change:
- *   1. extend this union,
- *   2. register a matching `ViewDefinition` in `viewDefinitions.ts`,
- *   3. teach the Sidebar to emit it as a click target.
- *
- * Targets are deliberately flat — they carry enough identity for the workbench
- * to dedupe (two Pane instances showing the same target is the same Agent
- * conversation) without coupling to the rendering component.
- */
-export type ViewTarget =
+/** Product identities only. Runtime identities belong to trusted adapters. */
+export type ViewTarget = (
   | { readonly kind: "welcome" }
+  | {
+      readonly kind: "project";
+      readonly environmentId: EnvironmentId;
+      readonly projectId: AcodeProjectId;
+    }
+  | {
+      readonly kind: "workspace";
+      readonly environmentId: EnvironmentId;
+      readonly workspaceId: WorkspaceId;
+    }
   | {
       readonly kind: "agentSession";
       readonly environmentId: EnvironmentId;
@@ -41,7 +32,8 @@ export type ViewTarget =
       readonly environmentId: EnvironmentId;
       readonly workspaceId: WorkspaceId;
       readonly terminalSessionId: TerminalSessionId;
-    };
+    }
+) & { readonly definitionId?: string };
 
 /** All known target kinds. The registry resolves a definition per kind. */
 export type ViewKind = ViewTarget["kind"];
@@ -55,6 +47,20 @@ export function targetKey(target: ViewTarget): string {
   switch (target.kind) {
     case "welcome":
       return "welcome";
+    case "project":
+      return JSON.stringify([
+        target.kind,
+        definitionIdForTarget(target),
+        target.environmentId,
+        target.projectId,
+      ]);
+    case "workspace":
+      return JSON.stringify([
+        target.kind,
+        definitionIdForTarget(target),
+        target.environmentId,
+        target.workspaceId,
+      ]);
     case "agentSession":
       return `agentSession:${target.environmentId}:${target.workspaceId}:${target.agentSessionId}`;
     case "workspaceTerminal":
@@ -67,41 +73,103 @@ export function targetsEqual(a: ViewTarget, b: ViewTarget): boolean {
   return targetKey(a) === targetKey(b);
 }
 
+/** Cached immutable snapshots; subscribe releases all resources on unsubscribe. */
+export interface ViewDataSource<Data> {
+  readonly getSnapshot: () => Data;
+  readonly subscribe: (onChange: () => void) => () => void;
+}
+
+/** A specific granted command, bound by the host to an allowed target scope. */
+export interface ViewCapability<Input = void, Output = void> {
+  readonly execute: (input: Input) => Output;
+}
+
+export interface ViewPresentation<T extends ViewTarget = ViewTarget> {
+  readonly target: T;
+  readonly paneId: string;
+  readonly focused: boolean;
+  readonly availableSize: { readonly width: number; readonly height: number };
+}
+
+export interface ViewProps<T extends ViewTarget, Data, Capabilities> extends ViewPresentation<T> {
+  readonly data: Data;
+  readonly capabilities: Capabilities;
+}
+
 /**
- * A registered View definition describes what it can render. The registry is
- * in-app (per Q2 of the C10 grill) — see `viewDefinitions.ts` for the
- * definitions that ship in v1.
- *
- * `Component` receives the target, the pane's stable id, and a focus flag.
- * Implementations should treat the focus flag as their sole subscription to
- * "is this pane the focused one right now" — there is exactly one focused
- * pane at a time.
+ * bind is trusted host integration, never a service handle passed to a renderer.
+ * It must be pure: subscriptions belong to the source and are owned by React.
+ * This is a typed extension seam, not a sandbox for executing untrusted code.
  */
-export interface ViewDefinition<T extends ViewTarget = ViewTarget> {
-  readonly id: ViewKind;
+export interface ViewDefinition<
+  T extends ViewTarget = ViewTarget,
+  Data = null,
+  Capabilities extends { readonly [K in keyof Capabilities]: ViewCapability<never, unknown> } =
+    Readonly<Record<string, never>>,
+> {
+  readonly id: string;
   readonly label: string;
   readonly accepts: (target: ViewTarget) => target is T;
-  readonly Component: ComponentType<{
-    readonly target: T;
-    readonly paneId: string;
-    readonly focused: boolean;
-    readonly availableSize: { readonly width: number; readonly height: number };
-  }>;
+  readonly bind: (target: T) => {
+    readonly dataSource: ViewDataSource<Data>;
+    readonly capabilities: Capabilities;
+  };
+  readonly Component: ComponentType<ViewProps<T, Data, Capabilities>>;
 }
 
-const REGISTRY = new Map<ViewKind, ViewDefinition>();
-
-/** Register a View definition. Overwrites any existing definition for the same kind. */
-export function registerViewDefinition<T extends ViewTarget>(definition: ViewDefinition<T>): void {
-  REGISTRY.set(definition.id, definition as unknown as ViewDefinition);
+interface RegisteredViewDefinition {
+  readonly id: string;
+  readonly label: string;
+  readonly accepts: (target: ViewTarget) => boolean;
+  readonly Component: ComponentType<ViewPresentation>;
 }
 
-/** Look up the definition that renders a given target. Returns null if none is registered. */
-export function resolveViewDefinition(target: ViewTarget): ViewDefinition | null {
-  return REGISTRY.get(target.kind) ?? null;
+export const emptyViewBinding = () => ({
+  dataSource: { getSnapshot: () => null, subscribe: () => () => {} },
+  capabilities: {},
+});
+
+const REGISTRY = new Map<string, RegisteredViewDefinition>();
+
+export function definitionIdForTarget(target: ViewTarget): string {
+  return target.definitionId ?? target.kind;
 }
 
-/** Test seam. Clears all registered definitions. */
+/** Close over generic types so registry dispatch needs no unsafe renderer casts. */
+export function registerViewDefinition<
+  T extends ViewTarget,
+  Data,
+  Capabilities extends { readonly [K in keyof Capabilities]: ViewCapability<never, unknown> },
+>(definition: ViewDefinition<T, Data, Capabilities>): void {
+  function BoundView(props: ViewPresentation<T>) {
+    const binding = useMemo(() => definition.bind(props.target), [props.target]);
+    const data = useSyncExternalStore(
+      binding.dataSource.subscribe,
+      binding.dataSource.getSnapshot,
+      binding.dataSource.getSnapshot,
+    );
+    return createElement(definition.Component, {
+      ...props,
+      data,
+      capabilities: binding.capabilities,
+    });
+  }
+  REGISTRY.set(definition.id, {
+    id: definition.id,
+    label: definition.label,
+    accepts: definition.accepts,
+    Component: (props) =>
+      definition.accepts(props.target)
+        ? createElement(BoundView, { ...props, target: props.target })
+        : null,
+  });
+}
+
+export function resolveViewDefinition(target: ViewTarget): RegisteredViewDefinition | null {
+  const definition = REGISTRY.get(definitionIdForTarget(target));
+  return definition?.accepts(target) ? definition : null;
+}
+
 export function clearViewRegistry(): void {
   REGISTRY.clear();
 }
