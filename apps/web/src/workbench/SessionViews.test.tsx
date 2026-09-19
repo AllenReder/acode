@@ -11,6 +11,7 @@ import { terminalTargetForRuntime } from "./sessionTarget";
 vi.mock("../state/entities", () => ({
   useAcodeAgentSessionShell: (_environment: unknown, _workspace: unknown, session: string) => ({
     threadId: `thread-${session}`,
+    status: session === "closed-session" ? "closed" : "open",
   }),
   useAcodeWorkspace: () => ({ workspaceRoot: "/checkout" }),
 }));
@@ -87,4 +88,28 @@ it("reattaches the same Terminal identity and forwards changing Pane dimensions 
     );
   });
   expect(read()).toMatchObject({ workspaceId, terminalId: "shell" });
+});
+
+it("renders closed read-only status banner when viewing a closed Agent Session from History", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await act(() => {
+    renderer = create(
+      <AgentView
+        target={{
+          kind: "agentSession",
+          environmentId,
+          workspaceId,
+          agentSessionId: "closed-session" as AgentSessionId,
+        }}
+        paneId="closed-pane"
+        focused={false}
+        availableSize={availableSize}
+      />,
+    );
+  });
+
+  const banner = renderer!.root.findByProps({ role: "status" });
+  expect(banner).toBeDefined();
+  const text = banner.findAllByType("span").map((n) => n.children.join("")).join(" ");
+  expect(text).toContain("This Agent Session is closed and preserved in Workspace History.");
 });
