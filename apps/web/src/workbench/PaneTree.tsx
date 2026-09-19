@@ -191,22 +191,40 @@ interface SashHandleProps {
 
 function SashHandle({ splitId, index, dir, sizes }: SashHandleProps) {
   const setSplitRatio = useWorkbenchStore((s) => s.setSplitRatio);
-  const dragStateRef = useRef<{ startPx: number; sizes: number[] } | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  // Drag bookkeeping. We capture the parent split container's rect on
+  // mousedown — the sash itself is only 1px wide/tall, so its own rect
+  // yields a zero totalPx and the drag silently no-ops.
+  const dragStateRef = useRef<{
+    startPx: number;
+    sizes: number[];
+    totalPx: number;
+  } | null>(null);
   const [hover, setHover] = useState(false);
 
   const onMouseDown = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       event.preventDefault();
+      // Walk to the parent flex wrapper: it owns the full width/height
+      // that the two sibling leaves share. Fallback to the viewport if the
+      // parent is missing (defensive — should not happen in the tree).
+      const container = event.currentTarget.parentElement?.getBoundingClientRect();
+      const totalPx =
+        container !== undefined
+          ? dir === "right"
+            ? container.width
+            : container.height
+          : dir === "right"
+            ? window.innerWidth
+            : window.innerHeight;
       const startPx = dir === "right" ? event.clientX : event.clientY;
-      dragStateRef.current = { startPx, sizes: [...sizes] };
+      dragStateRef.current = { startPx, sizes: [...sizes], totalPx };
+
       const move = (e: MouseEvent) => {
         const state = dragStateRef.current;
         if (state === null) return;
-        const container = containerRef.current?.getBoundingClientRect();
-        const totalPx = dir === "right" ? (container?.width ?? 0) : (container?.height ?? 0);
-        const deltaPx = (dir === "right" ? e.clientX : e.clientY) - state.startPx;
-        const ratio = totalPx > 0 ? deltaPx / totalPx : 0;
+        const currentPx = dir === "right" ? e.clientX : e.clientY;
+        const deltaPx = currentPx - state.startPx;
+        const ratio = state.totalPx > 0 ? deltaPx / state.totalPx : 0;
         const a = state.sizes[index];
         const b = state.sizes[index + 1];
         if (a === undefined || b === undefined) return;
@@ -233,7 +251,6 @@ function SashHandle({ splitId, index, dir, sizes }: SashHandleProps) {
 
   return (
     <div
-      ref={containerRef}
       role="separator"
       aria-orientation={dir === "right" ? "vertical" : "horizontal"}
       onMouseEnter={() => setHover(true)}
