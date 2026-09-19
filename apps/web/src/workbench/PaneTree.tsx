@@ -109,8 +109,24 @@ function Pane({ snapshot, paneId, focused }: PaneProps) {
     if (!focused) setFocused(paneId);
   }, [focused, paneId, setFocused]);
 
-  // availableSize is a hint only — Phase C12 will measure the bounding rect
-  // at drop time. For C10 the View instances render at full Pane size.
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [availableSize, setAvailableSize] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const element = contentRef.current;
+    if (!element) return;
+    const update = ({ width, height }: { width: number; height: number }) => {
+      setAvailableSize((previous) =>
+        previous.width === width && previous.height === height ? previous : { width, height },
+      );
+    };
+    update(element.getBoundingClientRect());
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) update(entry.contentRect);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   const definition = target !== null ? resolveViewDefinition(target) : null;
 
   return (
@@ -118,6 +134,7 @@ function Pane({ snapshot, paneId, focused }: PaneProps) {
       role="region"
       aria-label={target !== null ? `Pane ${target.kind}` : "Unavailable View"}
       onMouseDown={onClick}
+      onFocus={onClick}
       className={
         "flex h-full min-h-0 min-w-0 flex-1 flex-col " +
         (focused ? "outline outline-1 outline-accent" : "")
@@ -133,16 +150,16 @@ function Pane({ snapshot, paneId, focused }: PaneProps) {
         focused={focused}
         onClose={() => closeView(paneId)}
       />
-      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div ref={contentRef} className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {definition === null ? (
           <EmptyPane target={target} />
         ) : (
           <definition.Component
             key={view?.id}
-            target={target as never}
+            target={target!}
             paneId={paneId}
             focused={focused}
-            availableSize={{ width: 0, height: 0 }}
+            availableSize={availableSize}
           />
         )}
       </div>
@@ -196,7 +213,13 @@ function EmptyPane({ target }: { readonly target: ViewTarget | null }) {
 }
 
 function labelForTarget(target: ViewTarget): string {
+  const definition = resolveViewDefinition(target);
+  if (definition) return definition.label;
   switch (target.kind) {
+    case "project":
+      return "Project";
+    case "workspace":
+      return "Workspace";
     case "welcome":
       return "Welcome";
     case "agentSession":

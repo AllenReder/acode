@@ -1,24 +1,23 @@
-import { WelcomeView } from "./WelcomeView";
+import { createWorkspaceViewDefinitions } from "./workspaceViews";
+import { workspaceViewSource } from "./workspaceViewSource";
+import { useWorkbenchStore } from "./workbenchStore";
 import { AgentView } from "./AgentView";
 import { TerminalView } from "./TerminalView";
-import { registerViewDefinition, type ViewDefinition, type ViewTarget } from "./viewRegistry";
+import {
+  emptyViewBinding,
+  registerViewDefinition,
+  type ViewDefinition,
+  type ViewTarget,
+} from "./viewRegistry";
 
-/**
- * Built-in Welcome and Session Views are registered at module load so
- * `resolveViewDefinition` returns a non-null Component for any in-app target.
- *
- * Adding a new View later:
- *   1. extend the `ViewTarget` union in `viewRegistry.ts`,
- *   2. write a Component matching the `ViewDefinition` props,
- *   3. register it here.
- *
- * Per the C10 grill (Q2), the registry is in-app: there is no plugin loader.
- */
+// Agent/Terminal remain trusted runtime adapters. Their migration to dedicated
+// data sources belongs to the Session adapter tickets; no handles cross this seam.
 export const agentViewDefinition: ViewDefinition<Extract<ViewTarget, { kind: "agentSession" }>> = {
   id: "agentSession",
   label: "Agent",
   accepts: (target): target is Extract<ViewTarget, { kind: "agentSession" }> =>
     target.kind === "agentSession",
+  bind: emptyViewBinding,
   Component: AgentView,
 };
 
@@ -29,6 +28,7 @@ export const terminalViewDefinition: ViewDefinition<
   label: "Terminal",
   accepts: (target): target is Extract<ViewTarget, { kind: "workspaceTerminal" }> =>
     target.kind === "workspaceTerminal",
+  bind: emptyViewBinding,
   Component: TerminalView,
 };
 
@@ -40,13 +40,11 @@ let registered = false;
  */
 export function registerCoreViewDefinitions(): void {
   if (registered) return;
-  registerViewDefinition({
-    id: "welcome",
-    label: "Welcome",
-    accepts: (target): target is Extract<ViewTarget, { kind: "welcome" }> =>
-      target.kind === "welcome",
-    Component: WelcomeView,
-  });
+  const definitions = createWorkspaceViewDefinitions(workspaceViewSource, (target) =>
+    useWorkbenchStore.getState().openTarget(target),
+  );
+  registerViewDefinition(definitions.welcome);
+  registerViewDefinition(definitions.workspace);
   registerViewDefinition(agentViewDefinition);
   registerViewDefinition(terminalViewDefinition);
   registered = true;
