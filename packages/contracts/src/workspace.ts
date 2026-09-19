@@ -36,9 +36,16 @@ export type WorkspaceOrigin = typeof WorkspaceOrigin.Type;
  * Workspace projection. The kind discriminates the identity, and the runtime
  * binding for that kind stays on its own shell variant.
  */
+export const AcodeSessionLifecycleStatus = Schema.Literals(["open", "closed"]);
+export type AcodeSessionLifecycleStatus = typeof AcodeSessionLifecycleStatus.Type;
+
 const AcodeSessionShellFields = {
   workspaceId: WorkspaceId,
   title: TrimmedNonEmptyString,
+  status: Schema.optional(AcodeSessionLifecycleStatus).pipe(
+    Schema.withDecodingDefault(Effect.succeed("open" as const)),
+  ),
+  closedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 };
@@ -86,8 +93,23 @@ const isAcodeAgentSessionShell = Schema.is(AcodeAgentSessionShell);
  */
 export function agentSessionsIn(workspace: {
   readonly sessions?: ReadonlyArray<AcodeSessionShell> | undefined;
+  readonly historySessions?: ReadonlyArray<AcodeSessionShell> | undefined;
+}): ReadonlyArray<AcodeAgentSessionShell> {
+  return [...(workspace.sessions ?? []), ...(workspace.historySessions ?? [])].filter(
+    isAcodeAgentSessionShell,
+  );
+}
+
+export function activeAgentSessionsIn(workspace: {
+  readonly sessions?: ReadonlyArray<AcodeSessionShell> | undefined;
 }): ReadonlyArray<AcodeAgentSessionShell> {
   return (workspace.sessions ?? []).filter(isAcodeAgentSessionShell);
+}
+
+export function historyAgentSessionsIn(workspace: {
+  readonly historySessions?: ReadonlyArray<AcodeSessionShell> | undefined;
+}): ReadonlyArray<AcodeAgentSessionShell> {
+  return (workspace.historySessions ?? []).filter(isAcodeAgentSessionShell);
 }
 
 /** A stable checkout owned by one ACode Project. */
@@ -108,6 +130,7 @@ export const AcodeWorkspaceShell = Schema.Struct({
    * execution state remain on the T3 thread shell.
    */
   sessions: Schema.optional(ForwardCompatibleArray(AcodeSessionShell)),
+  historySessions: Schema.optional(ForwardCompatibleArray(AcodeSessionShell)),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });

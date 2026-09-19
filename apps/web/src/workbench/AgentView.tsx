@@ -40,13 +40,26 @@ export function AgentView({ target, focused, focusRequestId = 0, availableSize }
   }
 
   return (
-    <ChatView
-      environmentId={target.environmentId}
-      threadId={session.threadId}
-      routeKind="server"
-      focused={focused}
-      focusRequestId={focusRequestId}
-      availableSize={availableSize}
-    />
+    <div className="relative flex h-full min-h-0 flex-col">
+      {session.status === "closed" && (
+        <div
+          role="status"
+          className="flex shrink-0 items-center justify-between border-b border-border bg-muted/40 px-3 py-1 text-xs text-muted-foreground"
+        >
+          <span>This Agent Session is closed and preserved in Workspace History.</span>
+          <span className="opacity-70">Read-only</span>
+        </div>
+      )}
+      <div className="min-h-0 flex-1">
+        <ChatView
+          environmentId={target.environmentId}
+          threadId={session.threadId}
+          routeKind="server"
+          focused={focused}
+          focusRequestId={focusRequestId}
+          availableSize={availableSize}
+        />
+      </div>
+    </div>
   );
 }

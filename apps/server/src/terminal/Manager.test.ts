@@ -7,6 +7,7 @@ import {
   type TerminalMetadataStreamEvent,
   type TerminalOpenInput,
   type TerminalRestartInput,
+  type TerminalSessionSnapshot,
   ProviderDriverKind,
   ProviderInstanceId,
   ServerSettingsError,
@@ -2916,5 +2917,117 @@ it.layer(
       assert.equal(process.killSignals[0], "SIGTERM");
       expect(process.killSignals).toContain("SIGKILL");
     }).pipe(Effect.provide(TestClock.layer())),
+  );
+  it.effect(
+    "Workspace Terminal close preserves session identity and history across manager recreation",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const { join } = yield* Path.Path;
+        const tempDir = yield* fs.makeTempDirectoryScoped({ prefix: "term-close-persist-" });
+        const logsDir = join(tempDir, "logs");
+        const resolveWorkspaceRoot = () => Effect.succeed(process.cwd());
+
+        const first = yield* createManager(5, { logsDir, resolveWorkspaceRoot });
+        const input = { workspaceId: "workspace-history-persist", terminalId: "term-1" };
+        const opened = yield* first.manager.open(input);
+        const pty = first.ptyAdapter.processes[0]!;
+        pty.emitData("marker-text-to-preserve\r\n");
+
+        yield* waitFor(
+          Effect.map(first.getEvents, (events) =>
+            events.some(
+              (event) => event.type === "output" && event.data.includes("marker-text-to-preserve"),
+            ),
+          ),
+        );
+
+        // Close session without deleting history
+        yield* first.manager.close(input);
+
+        // Metadata in the first manager instance should still list the session with status "closed"
+        const metadataBeforeReboot = yield* first.manager.getMetadata();
+        const closedSummary = metadataBeforeReboot.find(
+          (m) => m.workspaceId === input.workspaceId && m.terminalId === input.terminalId,
+        );
+        expect(closedSummary).toBeDefined();
+        expect(closedSummary?.status).toBe("closed");
+
+        // Recreate manager with the same logsDir (simulating daemon restart)
+        const second = yield* createManager(5, { logsDir, resolveWorkspaceRoot });
+        const metadataAfterReboot = yield* second.manager.getMetadata();
+        const restoredSummary = metadataAfterReboot.find(
+          (m) => m.workspaceId === input.workspaceId && m.terminalId === input.terminalId,
+        );
+        expect(restoredSummary).toBeDefined();
+        expect(restoredSummary?.status).toBe("closed");
+        expect(restoredSummary?.sessionId).toBe(opened.sessionId);
+
+        // Attaching to the closed session returns snapshot with preserved history without spawning a PTY
+        let attachSnapshot: TerminalSessionSnapshot | null = null;
+        yield* second.manager.attachStream(input, (event) =>
+          Effect.sync(() => {
+            if (event.type === "snapshot") {
+              attachSnapshot = event.snapshot;
+            }
+          }),
+        );
+        expect(attachSnapshot).not.toBeNull();
+        const receivedSnapshot = attachSnapshot as unknown as TerminalSessionSnapshot;
+        expect(receivedSnapshot.status).toBe("closed");
+        expect(receivedSnapshot.history).toContain("marker-text-to-preserve");
+        expect(second.ptyAdapter.processes.length).toBe(0);
+
+        // Explicit delete removes it completely
+        yield* second.manager.close({ ...input, deleteHistory: true });
+        const metadataAfterDelete = yield* second.manager.getMetadata();
+        expect(
+          metadataAfterDelete.find(
+            (m) => m.workspaceId === input.workspaceId && m.terminalId === input.terminalId,
+          ),
+        ).toBeUndefined();
+      }),
+  );
+
+  it.effect(
+    "evicting inactive Workspace sessions retains metadata and index without losing history",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const { join } = yield* Path.Path;
+        const tempDir = yield* fs.makeTempDirectoryScoped({ prefix: "term-evict-ws-" });
+        const logsDir = join(tempDir, "logs");
+        const resolveWorkspaceRoot = () => Effect.succeed(process.cwd());
+
+        const fixture = yield* createManager(5, {
+          logsDir,
+          resolveWorkspaceRoot,
+          maxRetainedInactiveSessions: 1,
+        });
+
+        const input1 = { workspaceId: "ws-evict", terminalId: "term-1" };
+        const input2 = { workspaceId: "ws-evict", terminalId: "term-2" };
+
+        yield* fixture.manager.open(input1);
+        yield* fixture.manager.open(input2);
+
+        fixture.ptyAdapter.processes[0]!.emitData("history-1\r\n");
+        fixture.ptyAdapter.processes[1]!.emitData("history-2\r\n");
+
+        yield* fixture.manager.close(input1);
+        yield* fixture.manager.close(input2);
+
+        const metadata = yield* fixture.manager.getMetadata();
+        expect(metadata.filter((m) => m.workspaceId === "ws-evict")).toHaveLength(2);
+
+        // Recreate manager
+        const second = yield* createManager(5, {
+          logsDir,
+          resolveWorkspaceRoot,
+          maxRetainedInactiveSessions: 1,
+        });
+        const secondMetadata = yield* second.manager.getMetadata();
+        expect(secondMetadata.filter((m) => m.workspaceId === "ws-evict")).toHaveLength(2);
+      }),
   );
 });

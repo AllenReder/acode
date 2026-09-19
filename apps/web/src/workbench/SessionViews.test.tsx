@@ -5,12 +5,15 @@ import type { AgentSessionId, EnvironmentId, WorkspaceId } from "@t3tools/contra
 import { AgentView } from "./AgentView";
 import { TerminalView } from "./TerminalView";
 import { terminalTargetForRuntime } from "./sessionTarget";
+import { resetWorkbenchStore, useWorkbenchStore } from "./workbenchStore";
+import { getActiveTab } from "./workbenchState";
 
 // The trusted runtime adapters are the agreed integration boundary. Present
 // their inputs as text, without starting a provider, PTY, or GPU in Node.
 vi.mock("../state/entities", () => ({
   useAcodeAgentSessionShell: (_environment: unknown, _workspace: unknown, session: string) => ({
     threadId: `thread-${session}`,
+    status: session === "closed-session" ? "closed" : "open",
   }),
   useAcodeWorkspace: () => ({ workspaceRoot: "/checkout" }),
 }));
@@ -87,4 +90,73 @@ it("reattaches the same Terminal identity and forwards changing Pane dimensions 
     );
   });
   expect(read()).toMatchObject({ workspaceId, terminalId: "shell" });
+});
+
+it("renders closed read-only status banner when viewing a closed Agent Session from History", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await act(() => {
+    renderer = create(
+      <AgentView
+        target={{
+          kind: "agentSession",
+          environmentId,
+          workspaceId,
+          agentSessionId: "closed-session" as AgentSessionId,
+        }}
+        paneId="closed-pane"
+        focused={false}
+        availableSize={availableSize}
+      />,
+    );
+  });
+
+  const banner = renderer!.root.findByProps({ role: "status" });
+  expect(banner).toBeDefined();
+  const text = banner
+    .findAllByType("span")
+    .map((n) => n.children.join(""))
+    .join(" ");
+  expect(text).toContain("This Agent Session is closed and preserved in Workspace History.");
+});
+it("removes closed Session across multiple tabs while closeView detaches only the current View", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const targetA = {
+    kind: "agentSession",
+    environmentId,
+    workspaceId,
+    agentSessionId: "one" as AgentSessionId,
+  } as const;
+  const targetB = {
+    kind: "agentSession",
+    environmentId,
+    workspaceId,
+    agentSessionId: "two" as AgentSessionId,
+  } as const;
+
+  const store = useWorkbenchStore.getState();
+  store.openTarget(targetA);
+  store.splitFocused(targetB, "right");
+  const tab1Id = getActiveTab(useWorkbenchStore.getState()).id;
+
+  store.createTab();
+  store.openTarget(targetA);
+  const tab2Id = getActiveTab(useWorkbenchStore.getState()).id;
+
+  expect(useWorkbenchStore.getState().tabs).toHaveLength(2);
+
+  // 1. closeView on Tab 2 detaches only that ViewInstance
+  const tab2PaneId = getActiveTab(useWorkbenchStore.getState()).focusedPaneId;
+  store.closeView(tab2PaneId);
+  const tab2 = getActiveTab(useWorkbenchStore.getState());
+  expect(tab2.panes.get(tab2.focusedPaneId)?.target.kind).toBe("welcome");
+
+  // Tab 1 still holds targetA
+  store.activateTab(tab1Id);
+  expect(getActiveTab(useWorkbenchStore.getState()).panes.size).toBe(2);
+
+  // 2. removeSessionViews removes targetA from ALL tabs
+  useWorkbenchStore.getState().removeSessionViews(targetA);
+  const tab1Panes = getActiveTab(useWorkbenchStore.getState()).panes;
+  expect(tab1Panes.size).toBe(1);
+  expect([...tab1Panes.values()][0]?.target).toEqual(targetB);
 });

@@ -31,7 +31,9 @@ import {
   scopedThreadKey,
 } from "@t3tools/client-runtime/environment";
 import {
+  activeAgentSessionsIn,
   agentSessionsIn,
+  historyAgentSessionsIn,
   resolveEnvironmentMachineKind,
   type EnvironmentId,
   type EnvironmentMachineKind,
@@ -48,6 +50,7 @@ import {
   AlarmClockOffIcon,
   CheckIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   CircleAlertIcon,
   CircleCheckIcon,
   CircleDashedIcon,
@@ -2175,20 +2178,27 @@ function SidebarWorkspaceSessions(props: {
   readonly workspace: EnvironmentAcodeProject["workspaces"][number];
   readonly threads: ReadonlyArray<EnvironmentThreadShell>;
 }) {
+  const [historyExpanded, setHistoryExpanded] = useState(false);
   const openTerminal = useAtomCommand(terminalEnvironment.open, "terminal open");
   const terminalSessions = useKnownTerminalSessions({
     environmentId: props.environmentId,
     threadId: null,
     workspaceId: props.workspace.id,
   });
+
+  const activeTerminals = terminalSessions.filter((s) => s.state.status !== "closed");
+  const activeAgents = activeAgentSessionsIn(props.workspace);
+
+  const historyTerminals = terminalSessions.filter((s) => s.state.status === "closed");
+  const historyAgents = historyAgentSessionsIn(props.workspace);
+  const historyCount = historyTerminals.length + historyAgents.length;
+
   const createTerminal = () => {
     const terminalId = nextWorkspaceTerminalId();
     void openTerminal({
       environmentId: props.environmentId,
       input: { workspaceId: props.workspace.id, terminalId },
     }).then((result) => {
-      // Only surface the terminal once the daemon actually created it;
-      // previously the failure was swallowed and the UI looked dead.
       if (result._tag === "Failure") {
         if (!isAtomCommandInterrupted(result)) {
           const error = squashAtomCommandFailure(result);
@@ -2211,14 +2221,16 @@ function SidebarWorkspaceSessions(props: {
       );
     });
   };
+
   return (
     <div
       role="group"
       aria-label={`${props.workspace.title} sessions`}
       className="ms-4 flex flex-col gap-px border-s border-sidebar-border ps-1.5"
     >
-      {terminalSessions.map((session) => {
+      {activeTerminals.map((session) => {
         const summary = session.state.summary;
+        const title = summary?.label ?? "Terminal";
         return (
           <Tooltip
             key={`${props.environmentId}:${props.workspace.id}:${session.target.terminalId}`}
@@ -2226,6 +2238,7 @@ function SidebarWorkspaceSessions(props: {
             <TooltipTrigger
               render={
                 <SessionRow
+                  sessionTitle={title}
                   target={terminalTargetForRuntime({
                     environmentId: props.environmentId,
                     workspaceId: props.workspace.id,
@@ -2235,7 +2248,7 @@ function SidebarWorkspaceSessions(props: {
               }
             >
               <TerminalIcon className="size-3 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{summary?.label ?? "Terminal"}</span>
+              <span className="min-w-0 flex-1 truncate">{title}</span>
               <span className="shrink-0 text-[10px] opacity-60">
                 {summary?.status ?? session.state.status}
               </span>
@@ -2244,7 +2257,7 @@ function SidebarWorkspaceSessions(props: {
           </Tooltip>
         );
       })}
-      {agentSessionsIn(props.workspace).map((session) => {
+      {activeAgents.map((session) => {
         const thread = props.threads.find(
           (candidate) =>
             candidate.environmentId === props.environmentId && candidate.id === session.threadId,
@@ -2254,6 +2267,7 @@ function SidebarWorkspaceSessions(props: {
         return (
           <SessionRow
             key={`${props.environmentId}:${session.id}`}
+            sessionTitle={session.title}
             aria-label={`${session.title} (${executionStatus})`}
             target={{
               kind: "agentSession",
@@ -2277,6 +2291,75 @@ function SidebarWorkspaceSessions(props: {
         <PlusIcon className="size-3 shrink-0" />
         <span>New terminal</span>
       </button>
+
+      {historyCount > 0 && (
+        <div className="mt-1 flex flex-col gap-px">
+          <button
+            type="button"
+            className="flex min-h-6 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+            onClick={() => setHistoryExpanded((e) => !e)}
+            aria-expanded={historyExpanded}
+            aria-label={`History (${historyCount})`}
+          >
+            <ChevronRightIcon
+              className={cn("size-3 shrink-0 transition-transform", historyExpanded && "rotate-90")}
+            />
+            <span className="min-w-0 flex-1 truncate text-[11px] font-medium opacity-80">
+              History ({historyCount})
+            </span>
+          </button>
+          {historyExpanded && (
+            <div className="ms-2 flex flex-col gap-px border-s border-sidebar-border/60 ps-1">
+              {historyTerminals.map((session) => {
+                const summary = session.state.summary;
+                const title = summary?.label ?? "Terminal";
+                return (
+                  <Tooltip
+                    key={`hist-term:${props.environmentId}:${props.workspace.id}:${session.target.terminalId}`}
+                  >
+                    <TooltipTrigger
+                      render={
+                        <SessionRow
+                          isClosed
+                          sessionTitle={title}
+                          target={terminalTargetForRuntime({
+                            environmentId: props.environmentId,
+                            workspaceId: props.workspace.id,
+                            terminalId: session.target.terminalId,
+                          })}
+                        />
+                      }
+                    >
+                      <TerminalIcon className="size-3 shrink-0 opacity-70" />
+                      <span className="min-w-0 flex-1 truncate opacity-80">{title}</span>
+                      <span className="shrink-0 text-[10px] opacity-50">closed</span>
+                    </TooltipTrigger>
+                    <TooltipPopup side="right">{summary?.cwd ?? "Closed terminal"}</TooltipPopup>
+                  </Tooltip>
+                );
+              })}
+              {historyAgents.map((session) => (
+                <SessionRow
+                  key={`hist-agent:${props.environmentId}:${session.id}`}
+                  isClosed
+                  sessionTitle={session.title}
+                  aria-label={`${session.title} (closed)`}
+                  target={{
+                    kind: "agentSession",
+                    environmentId: props.environmentId,
+                    workspaceId: props.workspace.id,
+                    agentSessionId: session.id,
+                  }}
+                >
+                  <CircleDashedIcon className="size-3 shrink-0 opacity-70" />
+                  <span className="min-w-0 flex-1 truncate opacity-80">{session.title}</span>
+                  <span className="shrink-0 text-[10px] opacity-50">closed</span>
+                </SessionRow>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

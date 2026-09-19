@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useParams } from "@tanstack/react-router";
 
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { activeAgentSessionsIn, type EnvironmentId, type ThreadId } from "@t3tools/contracts";
 
 import { useAcodeProjects } from "../state/entities";
 import { PaneTree } from "./PaneTree";
 import { urlParamsToTarget } from "./urlBridge";
+import { targetKey, type ViewTarget } from "./viewRegistry";
 import "./viewDefinitions";
 import { useWorkbenchStore } from "./workbenchStore";
 
@@ -38,15 +39,49 @@ export function Workbench() {
   const { environmentId, threadId } = resolveUrlInputs(params);
   const lastUrlRef = useRef<string | null>(null);
 
+  // Observe transitions from active to closed/deleted to clean up views across tabs
+  const activeSessionTargetsRef = useRef<Map<string, ViewTarget>>(new Map());
+  useEffect(() => {
+    const nextActiveTargets = new Map<string, ViewTarget>();
+    for (const project of projects) {
+      for (const workspace of project.workspaces) {
+        for (const session of activeAgentSessionsIn(workspace)) {
+          const target: ViewTarget = {
+            kind: "agentSession",
+            environmentId: project.environmentId,
+            workspaceId: workspace.id,
+            agentSessionId: session.id,
+          };
+          nextActiveTargets.set(targetKey(target), target);
+        }
+        for (const session of (workspace.sessions ?? []).filter((s) => s.kind === "terminal")) {
+          const target: ViewTarget = {
+            kind: "workspaceTerminal",
+            environmentId: project.environmentId,
+            workspaceId: workspace.id,
+            terminalSessionId: session.id,
+          };
+          nextActiveTargets.set(targetKey(target), target);
+        }
+      }
+    }
+
+    const previous = activeSessionTargetsRef.current;
+    if (previous.size > 0) {
+      for (const [key, target] of previous) {
+        if (!nextActiveTargets.has(key)) {
+          useWorkbenchStore.getState().removeSessionViews(target);
+        }
+      }
+    }
+    activeSessionTargetsRef.current = nextActiveTargets;
+  }, [projects]);
+
   useEffect(() => {
     const urlKey = `${environmentId ?? ""}::${threadId ?? ""}`;
     if (lastUrlRef.current === urlKey) return;
     lastUrlRef.current = urlKey;
-    const target = urlParamsToTarget(
-      environmentId,
-      threadId,
-      projects,
-    );
+    const target = urlParamsToTarget(environmentId, threadId, projects);
     if (target !== null) {
       openTarget(target);
     }

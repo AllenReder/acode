@@ -12,6 +12,7 @@ import {
   applyCreateTab,
   applyActivateTab,
   applyClosePane,
+  applyRemoveSessionViews,
   applyOpenTarget,
   applySetFocused,
   applySetSplitRatio,
@@ -297,4 +298,115 @@ it("opens Project and Workspace independently even with the same definition and 
     project,
     workspace,
   ]);
+});
+
+describe("applyRemoveSessionViews", () => {
+  it("removes matching session across multiple tabs while leaving unrelated tabs and panes intact", () => {
+    const ids = makeIds();
+    // Tab 1: Agent X + Terminal 1
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    snap = applySplitFocused(snap, terminal("term-1"), "right", ids);
+    const tab1Id = snap.activeTabId;
+
+    // Tab 2: Agent X + Agent Y
+    snap = applyCreateTab(snap, ids);
+    snap = applyOpenTarget(snap, agent(AGENT_X), ids);
+    snap = applySplitFocused(snap, agent(AGENT_Y), "right", ids);
+    const tab2Id = snap.activeTabId;
+
+    // Tab 3: Agent Y + Terminal 1 (unrelated to Agent X)
+    snap = applyCreateTab(snap, ids);
+    snap = applyOpenTarget(snap, agent(AGENT_Y), ids);
+    snap = applySplitFocused(snap, terminal("term-1"), "right", ids);
+    const tab3Id = snap.activeTabId;
+
+    const tab3Before = snap.tabs.find((t) => t.id === tab3Id)!;
+
+    // Remove Agent X across all tabs
+    const after = applyRemoveSessionViews(snap, agent(AGENT_X), ids);
+
+    // Tab 1 should now only have Terminal 1
+    const tab1After = after.tabs.find((t) => t.id === tab1Id)!;
+    expect(tab1After.panes.size).toBe(1);
+    expect([...tab1After.panes.values()][0]?.target).toEqual(terminal("term-1"));
+    expect(tab1After.focusedPaneId).toBe([...tab1After.panes.keys()][0]);
+
+    // Tab 2 should now only have Agent Y
+    const tab2After = after.tabs.find((t) => t.id === tab2Id)!;
+    expect(tab2After.panes.size).toBe(1);
+    expect([...tab2After.panes.values()][0]?.target).toEqual(agent(AGENT_Y));
+
+    // Tab 3 was completely unaffected
+    const tab3After = after.tabs.find((t) => t.id === tab3Id)!;
+    expect(tab3After).toBe(tab3Before);
+
+    // activeTabId preserved
+    expect(after.activeTabId).toBe(snap.activeTabId);
+  });
+
+  it("restores Welcome in a tab if the removed session was its only pane", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const tab1Id = snap.activeTabId;
+
+    snap = applyCreateTab(snap, ids);
+    snap = applyOpenTarget(snap, agent(AGENT_X), ids);
+    const tab2Id = snap.activeTabId;
+
+    const after = applyRemoveSessionViews(snap, agent(AGENT_X), ids);
+
+    // Both tabs should recover to Welcome, preserving their Tab IDs
+    const tab1After = after.tabs.find((t) => t.id === tab1Id)!;
+    expect(tab1After.id).toBe(tab1Id);
+    expect(tab1After.panes.size).toBe(1);
+    expect([...tab1After.panes.values()][0]?.target).toEqual({ kind: "welcome" });
+
+    const tab2After = after.tabs.find((t) => t.id === tab2Id)!;
+    expect(tab2After.id).toBe(tab2Id);
+    expect(tab2After.panes.size).toBe(1);
+    expect([...tab2After.panes.values()][0]?.target).toEqual({ kind: "welcome" });
+  });
+
+  it("does not remove sessions with the same id in different environment or workspace", () => {
+    const ids = makeIds();
+    const envBTarget: ViewTarget = {
+      kind: "agentSession",
+      environmentId: ENV_B,
+      workspaceId: WS_A,
+      agentSessionId: AGENT_X,
+    };
+    const wsBTarget: ViewTarget = {
+      kind: "agentSession",
+      environmentId: ENV_A,
+      workspaceId: WS_B,
+      agentSessionId: AGENT_X,
+    };
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), envBTarget, ids);
+    snap = applySplitFocused(snap, wsBTarget, "right", ids);
+
+    const after = applyRemoveSessionViews(snap, agent(AGENT_X), ids);
+    expect(after).toBe(snap);
+    expect(getActiveTab(after).panes.size).toBe(2);
+  });
+
+  it("matches session even when custom definitionId is present on target", () => {
+    const ids = makeIds();
+    const customTarget: ViewTarget = {
+      ...agent(AGENT_X),
+      definitionId: "custom-agent-def",
+    };
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), customTarget, ids);
+    const after = applyRemoveSessionViews(snap, agent(AGENT_X), ids);
+    expect(getActiveTab(after).panes.get(getActiveTab(after).focusedPaneId)?.target).toEqual({
+      kind: "welcome",
+    });
+  });
+
+  it("is idempotent and causes no side effects on repeated calls", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    snap = applyRemoveSessionViews(snap, agent(AGENT_X), ids);
+    const repeat = applyRemoveSessionViews(snap, agent(AGENT_X), ids);
+    expect(repeat).toBe(snap);
+  });
 });

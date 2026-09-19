@@ -303,8 +303,7 @@ const makeRepository = Effect.gen(function* () {
         sessions.archived_at AS "archivedAt",
         sessions.deleted_at AS "deletedAt"
       FROM projection_acode_agent_sessions AS sessions
-      WHERE sessions.archived_at IS NULL
-        AND sessions.deleted_at IS NULL
+      WHERE sessions.deleted_at IS NULL
         AND (${t3ProjectId ?? null} IS NULL OR sessions.t3_project_id = ${t3ProjectId ?? null})
       ORDER BY sessions.created_at ASC, sessions.agent_session_id ASC
     `,
