@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // @effect-diagnostics nodeBuiltinImport:off globalTimers:off globalDate:off globalConsole:off preferSchemaOverJson:off
 
-import * as NodeFS from "node:fs/promises";
+import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeProcess from "node:process";
@@ -72,7 +72,7 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 async function main(): Promise<void> {
-  const baseDir = await NodeFS.mkdtemp(NodePath.join(NodeOS.tmpdir(), "acode-c04-terminal-"));
+  const baseDir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "acode-c04-terminal-"));
   const logsDir = NodePath.join(baseDir, "userdata", "logs", "terminals");
   const shell = currentShell();
   const runtime = ManagedRuntime.make(runtimeLayer);
@@ -304,7 +304,7 @@ async function main(): Promise<void> {
     );
   } finally {
     await runtime.dispose();
-    await NodeFS.rm(baseDir, { recursive: true, force: true });
+    await NodeFSP.rm(baseDir, { recursive: true, force: true });
   }
 }
 

@@ -2182,9 +2182,7 @@ function SidebarWorkspaceTerminalRows(props: {
     workspaceId: props.workspaceId,
   });
   const createTerminal = () => {
-    const terminalId = nextWorkspaceTerminalId(
-      sessions.map((session) => session.target.terminalId),
-    );
+    const terminalId = nextWorkspaceTerminalId();
     void openTerminal({
       environmentId: props.environmentId,
       input: { workspaceId: props.workspaceId, terminalId },
@@ -2212,20 +2210,25 @@ function SidebarWorkspaceTerminalRows(props: {
       {sessions.map((session) => {
         const summary = session.state.summary;
         return (
-          <button
-            type="button"
-            key={`${props.environmentId}:${props.workspaceId}:${session.target.terminalId}`}
-            role="treeitem"
-            className="flex min-h-6 w-full items-center gap-1.5 rounded-md px-2 text-left text-[11px] text-sidebar-muted-foreground"
-            title={summary?.cwd ?? "Workspace terminal"}
-            onClick={() => setActiveTerminalId(session.target.terminalId)}
-          >
-            <TerminalIcon className="size-3 shrink-0" />
-            <span className="min-w-0 truncate">{summary?.label ?? "Terminal"}</span>
-            <span className="ms-auto shrink-0 text-[10px] uppercase opacity-60">
-              {summary?.status ?? session.state.status}
-            </span>
-          </button>
+          <Tooltip key={`${props.environmentId}:${props.workspaceId}:${session.target.terminalId}`}>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  role="treeitem"
+                  className="flex min-h-6 w-full items-center gap-1.5 rounded-md px-2 text-left text-[11px] text-sidebar-muted-foreground"
+                  onClick={() => setActiveTerminalId(session.target.terminalId)}
+                />
+              }
+            >
+              <TerminalIcon className="size-3 shrink-0" />
+              <span className="min-w-0 truncate">{summary?.label ?? "Terminal"}</span>
+              <span className="ms-auto shrink-0 text-[10px] uppercase opacity-60">
+                {summary?.status ?? session.state.status}
+              </span>
+            </TooltipTrigger>
+            <TooltipPopup side="right">{summary?.cwd ?? "Workspace terminal"}</TooltipPopup>
+          </Tooltip>
         );
       })}
       <button

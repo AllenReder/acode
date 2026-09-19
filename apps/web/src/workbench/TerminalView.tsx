@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import { TerminalViewport } from "../components/ThreadTerminalDrawer";
 import { useAcodeWorkspace } from "../state/entities";
 import { runtimeTerminalIdForTarget } from "./sessionTarget";
-import { useWorkbenchStore } from "./workbenchStore";
 import type { ViewTarget } from "./viewRegistry";
 
 interface TerminalViewProps {
@@ -44,10 +43,6 @@ export function TerminalView({ target, paneId, focused }: TerminalViewProps) {
     }
     lastFocusedRef.current = focused;
   }, [focused]);
-
-  // Touch the store so the renderer subscribes to focus changes if the
-  // terminal view is rendered as a placeholder in tests.
-  useWorkbenchStore((state) => state.tab.focusedPaneId);
 
   if (workspace === null || terminalId === null) {
     return (

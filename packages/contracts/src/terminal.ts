@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { TerminalSessionId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import { SessionKind } from "./session.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
 
@@ -133,7 +133,8 @@ export const TerminalSessionSnapshot = Schema.Struct({
   threadId: Schema.optional(TrimmedNonEmptyStringSchema),
   terminalId: Schema.String.check(Schema.isNonEmpty()),
   kind: Schema.optional(Schema.Literal("terminal")),
-  sessionId: Schema.optional(Schema.String.check(Schema.isNonEmpty())),
+  sessionId: Schema.optional(TerminalSessionId),
+  createdAt: Schema.optional(Schema.String),
   cwd: Schema.String.check(Schema.isNonEmpty()),
   worktreePath: Schema.NullOr(TrimmedNonEmptyStringSchema),
   status: TerminalSessionStatus,
@@ -156,7 +157,8 @@ export const TerminalSummary = Schema.Struct({
   threadId: Schema.optional(TrimmedNonEmptyStringSchema),
   terminalId: Schema.String.check(Schema.isNonEmpty()),
   kind: Schema.optional(SessionKind),
-  sessionId: Schema.optional(Schema.String.check(Schema.isNonEmpty())),
+  sessionId: Schema.optional(TerminalSessionId),
+  createdAt: Schema.optional(Schema.String),
   cwd: Schema.String.check(Schema.isNonEmpty()),
   worktreePath: Schema.NullOr(TrimmedNonEmptyStringSchema),
   status: TerminalSessionStatus,

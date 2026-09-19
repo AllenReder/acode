@@ -1,9 +1,11 @@
+import { projectTerminalSessions } from "@t3tools/contracts";
 import type {
   AcodeProjectId,
   AcodeProjectShell,
   EnvironmentId,
   OrchestrationShellSnapshot,
   WorkspaceId,
+  TerminalSummary,
 } from "@t3tools/contracts";
 import { Atom } from "effect/unstable/reactivity";
 
@@ -19,6 +21,9 @@ function snapshotProjects(
 }
 
 export function createEnvironmentWorkspaceAtoms(input: {
+  readonly terminalMetadataAtom?: (
+    environmentId: EnvironmentId,
+  ) => Atom.Atom<ReadonlyArray<TerminalSummary> | null>;
   readonly catalogValueAtom: Atom.Atom<EnvironmentCatalogState>;
   readonly snapshotAtom: (
     environmentId: EnvironmentId,
@@ -26,7 +31,13 @@ export function createEnvironmentWorkspaceAtoms(input: {
 }) {
   const environmentAcodeProjectsAtom = Atom.family((environmentId: EnvironmentId) =>
     Atom.make((get): ReadonlyArray<EnvironmentAcodeProject> =>
-      snapshotProjects(get(input.snapshotAtom(environmentId))).map((project) => ({
+      (() => {
+        const projects = snapshotProjects(get(input.snapshotAtom(environmentId)));
+        const terminals = input.terminalMetadataAtom
+          ? get(input.terminalMetadataAtom(environmentId))
+          : null;
+        return terminals === null ? projects : projectTerminalSessions(projects, terminals);
+      })().map((project) => ({
         ...project,
         environmentId,
       })),

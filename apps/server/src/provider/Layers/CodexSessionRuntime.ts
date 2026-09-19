@@ -24,6 +24,7 @@ import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
@@ -151,18 +152,31 @@ const findCodexCommandProcessGroups = Effect.fn("findCodexCommandProcessGroups")
   platform: NodeJS.Platform,
   appServerPid: number,
   command: string,
+  fileSystem: FileSystem.FileSystem,
 ) {
   const processes = yield* readCodexProcessTable(spawner, platform);
   const descendants = codexDescendantPids(processes, appServerPid);
-  return new Set(
-    processes.flatMap((process) =>
-      descendants.has(process.pid) &&
-      process.pid === process.pgid &&
-      commandMentionsExecutable(command, process.command)
-        ? [process.pgid]
-        : [],
-    ),
+  const groupLeaders = processes.filter(
+    (process) => descendants.has(process.pid) && process.pid === process.pgid,
   );
+  const matches = yield* Effect.forEach(groupLeaders, (process) =>
+    Effect.gen(function* () {
+      // Linux comm is a mutable task name (Node may report "MainThread"),
+      // not the executable. Resolve only this app-server's own descendants.
+      const executable =
+        platform === "linux"
+          ? yield* fileSystem
+              .readLink(`/proc/${process.pid}/exe`)
+              .pipe(Effect.orElseSucceed(() => process.command))
+          : process.command;
+      // Keep the invoked name too: /bin/sh may resolve to dash, for example.
+      return commandMentionsExecutable(command, process.command) ||
+        commandMentionsExecutable(command, executable)
+        ? [process.pgid]
+        : [];
+    }),
+  );
+  return new Set(matches.flat());
 });
 
 export function hasConfiguredMcpServer(appServerArgs: ReadonlyArray<string> | undefined): boolean {
@@ -1388,10 +1402,11 @@ export const makeCodexSessionRuntime = (
 ): Effect.Effect<
   CodexSessionRuntimeShape,
   CodexErrors.CodexAppServerError,
-  ChildProcessSpawner.ChildProcessSpawner | Crypto.Crypto | Scope.Scope
+  ChildProcessSpawner.ChildProcessSpawner | Crypto.Crypto | FileSystem.FileSystem | Scope.Scope
 > =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const fileSystem = yield* FileSystem.FileSystem;
     const hostPlatform = yield* HostProcessPlatform;
     const runtimeScope = yield* Scope.Scope;
     const crypto = yield* Crypto.Crypto;
@@ -1980,6 +1995,7 @@ export const makeCodexSessionRuntime = (
               hostPlatform,
               Number(child.pid),
               item.command,
+              fileSystem,
             ).pipe(Effect.orElseSucceed(() => new Set<number>()));
             yield* Ref.update(activeCommandExecutionsRef, (current) => {
               const next = new Map(current);

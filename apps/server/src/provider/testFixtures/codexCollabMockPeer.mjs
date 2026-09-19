@@ -141,9 +141,13 @@ rl.on("line", (line) => {
     }
     if (script.commandExecution) {
       const processId = script.commandExecution.processId;
+      const executable = script.commandExecution.executableAlias ?? process.execPath;
+      const args = script.commandExecution.executableAlias
+        ? ["30"]
+        : ["-e", "setInterval(() => {}, 1000)"];
       activeCommand = NodeChildProcess.spawn(
-        process.execPath,
-        ["-e", "setInterval(() => {}, 1000)"],
+        executable,
+        args,
         // oxlint-disable-next-line t3code/no-global-process-runtime -- standalone mock peer has no Effect runtime.
         { detached: process.platform !== "win32", stdio: "ignore" },
       );
@@ -158,7 +162,7 @@ rl.on("line", (line) => {
             item: {
               type: "commandExecution",
               id: "active-command",
-              command: `${process.execPath} -e 'setInterval(() => {}, 1000)'`,
+              command: `${executable} ${args.join(" ")}`,
               commandActions: [],
               cwd: process.cwd(),
               processId,

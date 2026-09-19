@@ -1,3 +1,6 @@
+import { Atom, AsyncResult } from "effect/unstable/reactivity";
+import * as Option from "effect/Option";
+import { terminalEnvironment } from "./terminal";
 import { createEnvironmentProjectAtoms } from "@t3tools/client-runtime/state/projects";
 import { createProjectEnvironmentAtoms } from "@t3tools/client-runtime/state/projects";
 import { createEnvironmentWorkspaceAtoms } from "@t3tools/client-runtime/state/workspaceEntities";
@@ -26,6 +29,13 @@ export const environmentProjects = createEnvironmentProjectAtoms({
   snapshotAtom: environmentSnapshotAtom,
 });
 export const environmentWorkspace = createEnvironmentWorkspaceAtoms({
+  terminalMetadataAtom: Atom.family((environmentId) =>
+    Atom.make((get) =>
+      Option.getOrNull(
+        AsyncResult.value(get(terminalEnvironment.metadata({ environmentId, input: null }))),
+      ),
+    ),
+  ),
   catalogValueAtom: environmentCatalog.catalogValueAtom,
   snapshotAtom: environmentSnapshotAtom,
 });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "node:child_process";
+import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
@@ -31,9 +31,10 @@ export function resolveCodexWorktreePath(environment = process.env, cwd = proces
 export function runWorktreeSetup({
   environment = process.env,
   cwd = process.cwd(),
-  spawn = spawnSync,
+  spawn = NodeChildProcess.spawnSync,
 } = {}) {
   const worktreePath = resolveCodexWorktreePath(environment, cwd);
+  // oxlint-disable-next-line t3code/no-global-process-runtime -- This bootstrap hook runs before workspace dependencies are installed.
   const packageManager = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 
   console.log(`[acode] installing dependencies in ${worktreePath}`);

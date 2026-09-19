@@ -1,9 +1,10 @@
+import { WelcomeView } from "./WelcomeView";
 import { AgentView } from "./AgentView";
 import { TerminalView } from "./TerminalView";
 import { registerViewDefinition, type ViewDefinition, type ViewTarget } from "./viewRegistry";
 
 /**
- * The two View definitions C10 ships. Both are registered at module load so
+ * Built-in Welcome and Session Views are registered at module load so
  * `resolveViewDefinition` returns a non-null Component for any in-app target.
  *
  * Adding a new View later:
@@ -13,9 +14,7 @@ import { registerViewDefinition, type ViewDefinition, type ViewTarget } from "./
  *
  * Per the C10 grill (Q2), the registry is in-app: there is no plugin loader.
  */
-export const agentViewDefinition: ViewDefinition<
-  Extract<ViewTarget, { kind: "agentSession" }>
-> = {
+export const agentViewDefinition: ViewDefinition<Extract<ViewTarget, { kind: "agentSession" }>> = {
   id: "agentSession",
   label: "Agent",
   accepts: (target): target is Extract<ViewTarget, { kind: "agentSession" }> =>
@@ -41,6 +40,13 @@ let registered = false;
  */
 export function registerCoreViewDefinitions(): void {
   if (registered) return;
+  registerViewDefinition({
+    id: "welcome",
+    label: "Welcome",
+    accepts: (target): target is Extract<ViewTarget, { kind: "welcome" }> =>
+      target.kind === "welcome",
+    Component: WelcomeView,
+  });
   registerViewDefinition(agentViewDefinition);
   registerViewDefinition(terminalViewDefinition);
   registered = true;

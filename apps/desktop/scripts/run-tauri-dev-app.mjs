@@ -1,12 +1,16 @@
-import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import * as NodeChildProcess from "node:child_process";
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
+import * as NodeURL from "node:url";
 
-const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const repositoryRoot = resolve(desktopRoot, "../..");
-const developmentHome = process.env.ACODE_HOME?.trim() || resolve(repositoryRoot, ".acode");
-const devConfig = resolve(desktopRoot, "src-tauri/tauri.dev.conf.json");
+const desktopRoot = NodePath.resolve(
+  NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)),
+  "..",
+);
+const repositoryRoot = NodePath.resolve(desktopRoot, "../..");
+const developmentHome =
+  process.env.ACODE_HOME?.trim() || NodePath.resolve(repositoryRoot, ".acode");
+const devConfig = NodePath.resolve(desktopRoot, "src-tauri/tauri.dev.conf.json");
 
 const environment = {
   ...process.env,
@@ -15,11 +19,15 @@ const environment = {
   T3CODE_PORT_OFFSET: process.env.T3CODE_PORT_OFFSET?.trim() || "0",
 };
 
-const build = spawnSync("pnpm", ["exec", "tauri", "build", "--debug", "--config", devConfig], {
-  cwd: desktopRoot,
-  env: environment,
-  stdio: "inherit",
-});
+const build = NodeChildProcess.spawnSync(
+  "pnpm",
+  ["exec", "tauri", "build", "--debug", "--config", devConfig],
+  {
+    cwd: desktopRoot,
+    env: environment,
+    stdio: "inherit",
+  },
+);
 
 if (build.error) {
   console.error(`Unable to build the ACode Dev app: ${build.error.message}`);
@@ -27,19 +35,19 @@ if (build.error) {
 } else if (build.status !== 0) {
   process.exitCode = build.status ?? 1;
 } else {
-  const bundleRoot = resolve(desktopRoot, "src-tauri/target/debug/bundle/macos");
-  const preferredAppPath = join(bundleRoot, "ACode Dev.app");
-  if (!existsSync(preferredAppPath)) {
+  const bundleRoot = NodePath.resolve(desktopRoot, "src-tauri/target/debug/bundle/macos");
+  const preferredAppPath = NodePath.join(bundleRoot, "ACode Dev.app");
+  if (!NodeFS.existsSync(preferredAppPath)) {
     console.error(`The ACode Dev app bundle was not found under ${bundleRoot}.`);
     process.exitCode = 1;
   } else {
     const appPath = preferredAppPath;
-    const executable = join(appPath, "Contents/MacOS/acode-desktop");
-    if (!existsSync(executable)) {
+    const executable = NodePath.join(appPath, "Contents/MacOS/acode-desktop");
+    if (!NodeFS.existsSync(executable)) {
       console.error(`The ACode Dev executable was not found at ${executable}.`);
       process.exitCode = 1;
     } else {
-      const child = spawn(executable, [], {
+      const child = NodeChildProcess.spawn(executable, [], {
         cwd: repositoryRoot,
         env: environment,
         detached: true,

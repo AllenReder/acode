@@ -1,7 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off
 // @effect-diagnostics globalTimers:off
 import * as NodeHttp from "node:http";
-import * as NodeFS from "node:fs/promises";
+import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 
 import { describe, expect, it } from "vite-plus/test";
@@ -84,7 +84,7 @@ describe("local daemon discovery", () => {
 
 describe("local daemon launch lock", () => {
   it("serializes concurrent work for one data root", async () => {
-    const root = await NodeFS.mkdtemp(NodePath.join("/tmp", "acode-local-daemon-lock-"));
+    const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "acode-local-daemon-lock-"));
     const order: string[] = [];
 
     const first = withLocalDaemonLaunchLock(root, async () => {
@@ -107,8 +107,8 @@ describe("local daemon launch lock", () => {
 
 const writeDiscovery = async (baseDir: string, state: unknown) => {
   const paths = deriveLocalDaemonPaths(baseDir);
-  await NodeFS.mkdir(paths.stateDir, { recursive: true });
-  await NodeFS.writeFile(paths.runtimeStatePath, `${JSON.stringify(state)}\n`, "utf8");
+  await NodeFSP.mkdir(paths.stateDir, { recursive: true });
+  await NodeFSP.writeFile(paths.runtimeStatePath, `${JSON.stringify(state)}\n`, "utf8");
   return paths;
 };
 
@@ -140,13 +140,13 @@ const listenForHandshake = async (
 
 describe("local daemon discovery diagnostics", () => {
   it("diagnoses malformed and stale records without starting a process", async () => {
-    const malformedRoot = await NodeFS.mkdtemp(NodePath.join("/tmp", "acode-daemon-invalid-"));
+    const malformedRoot = await NodeFSP.mkdtemp(NodePath.join("/tmp", "acode-daemon-invalid-"));
     const malformedPaths = deriveLocalDaemonPaths(malformedRoot);
-    await NodeFS.mkdir(malformedPaths.stateDir, { recursive: true });
-    await NodeFS.writeFile(malformedPaths.runtimeStatePath, "{not-json", "utf8");
+    await NodeFSP.mkdir(malformedPaths.stateDir, { recursive: true });
+    await NodeFSP.writeFile(malformedPaths.runtimeStatePath, "{not-json", "utf8");
     await expect(inspectLocalDaemon(malformedRoot)).resolves.toMatchObject({ status: "invalid" });
 
-    const staleRoot = await NodeFS.mkdtemp(NodePath.join("/tmp", "acode-daemon-stale-"));
+    const staleRoot = await NodeFSP.mkdtemp(NodePath.join("/tmp", "acode-daemon-stale-"));
     const stale = makeLocalDaemonDiscovery({
       daemonId: "stale-daemon",
       pid: 2_147_483_647,
@@ -170,7 +170,7 @@ describe("local daemon discovery diagnostics", () => {
       },
     }));
     try {
-      const root = await NodeFS.mkdtemp(NodePath.join("/tmp", "acode-daemon-foreign-"));
+      const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "acode-daemon-foreign-"));
       const state = makeLocalDaemonDiscovery({
         daemonId: "expected-daemon",
         pid: process.pid,
@@ -202,7 +202,7 @@ describe("local daemon discovery diagnostics", () => {
           : { error: "auth_invalid" },
     }));
     try {
-      const root = await NodeFS.mkdtemp(NodePath.join("/tmp", "acode-daemon-auth-"));
+      const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "acode-daemon-auth-"));
       const state = makeLocalDaemonDiscovery({
         daemonId: "auth-daemon",
         pid: process.pid,
@@ -211,11 +211,11 @@ describe("local daemon discovery diagnostics", () => {
         workingDirectory: "/auth",
       });
       const paths = await writeDiscovery(root, state);
-      await NodeFS.mkdir(NodePath.dirname(paths.credentialPath), { recursive: true });
-      await NodeFS.writeFile(paths.credentialPath, "invalid-token\n", { mode: 0o600 });
+      await NodeFSP.mkdir(NodePath.dirname(paths.credentialPath), { recursive: true });
+      await NodeFSP.writeFile(paths.credentialPath, "invalid-token\n", { mode: 0o600 });
 
       await expect(inspectLocalDaemon(root)).resolves.toMatchObject({ status: "auth-invalid" });
-      await expect(NodeFS.readFile(paths.credentialPath, "utf8")).resolves.toBe("invalid-token\n");
+      await expect(NodeFSP.readFile(paths.credentialPath, "utf8")).resolves.toBe("invalid-token\n");
     } finally {
       await server.close();
     }

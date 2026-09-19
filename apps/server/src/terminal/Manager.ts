@@ -9,6 +9,7 @@
  */
 import {
   DEFAULT_TERMINAL_ID,
+  terminalSessionIdForRuntime,
   TerminalCwdError,
   TerminalCwdNotDirectoryError,
   TerminalCwdNotFoundError,
@@ -209,7 +210,7 @@ export class TerminalManager extends Context.Service<
     /**
      * Restart a terminal session in place.
      *
-     * Always resets history before spawning the new process.
+     * Workspace Sessions retain history; legacy thread terminals reset it.
      */
     readonly restart: (
       input: TerminalRestartInput,
@@ -230,6 +231,9 @@ export class TerminalManager extends Context.Service<
     readonly subscribe: (
       listener: (event: TerminalEvent) => Effect.Effect<void>,
     ) => Effect.Effect<() => void>;
+
+    /** Read the persisted Session metadata, including stopped runtimes. */
+    readonly getMetadata: () => Effect.Effect<ReadonlyArray<TerminalSummary>>;
 
     /**
      * Subscribe to lightweight terminal metadata with an initial full snapshot.
@@ -302,6 +306,7 @@ interface TerminalSessionState {
   processEventDrainRunning: boolean;
   exitCode: number | null;
   exitSignal: number | null;
+  createdAt: string;
   updatedAt: string;
   eventSequence: number;
   cols: number;
@@ -392,7 +397,10 @@ function snapshot(session: TerminalSessionState): TerminalSessionSnapshot {
       ? {
           workspaceId: session.workspaceId,
           kind: "terminal" as const,
-          sessionId: session.terminalId,
+          sessionId: terminalSessionIdForRuntime(
+            WorkspaceId.make(session.workspaceId),
+            session.terminalId,
+          ),
         }
       : { threadId: session.threadId }),
     terminalId: session.terminalId,
@@ -404,6 +412,7 @@ function snapshot(session: TerminalSessionState): TerminalSessionSnapshot {
     exitCode: session.exitCode,
     exitSignal: session.exitSignal,
     label: terminalWireLabel(session),
+    createdAt: session.createdAt,
     updatedAt: session.updatedAt,
     sequence: session.eventSequence,
     generation: session.generation,
@@ -416,7 +425,10 @@ function summary(session: TerminalSessionState): TerminalSummary {
       ? {
           workspaceId: session.workspaceId,
           kind: "terminal" as const,
-          sessionId: session.terminalId,
+          sessionId: terminalSessionIdForRuntime(
+            WorkspaceId.make(session.workspaceId),
+            session.terminalId,
+          ),
         }
       : { threadId: session.threadId }),
     terminalId: session.terminalId,
@@ -428,6 +440,7 @@ function summary(session: TerminalSessionState): TerminalSummary {
     exitSignal: session.exitSignal,
     hasRunningSubprocess: session.hasRunningSubprocess,
     label: terminalWireLabel(session),
+    createdAt: session.createdAt,
     updatedAt: session.updatedAt,
     generation: session.generation,
   };
@@ -1415,6 +1428,7 @@ interface PersistedTerminalSessionRecord {
   readonly status: TerminalSessionStatus;
   readonly exitCode: number | null;
   readonly exitSignal: number | null;
+  readonly createdAt?: string;
   readonly updatedAt: string;
   readonly eventSequence: number;
   readonly generation: number;
@@ -1433,6 +1447,7 @@ const PersistedTerminalSessionRecordSchema = Schema.Struct({
   status: TerminalSessionStatus,
   exitCode: Schema.NullOr(Schema.Int),
   exitSignal: Schema.NullOr(Schema.Int),
+  createdAt: Schema.optional(Schema.String),
   updatedAt: Schema.String,
   eventSequence: Schema.Int,
   generation: Schema.Int,
@@ -1460,6 +1475,7 @@ function persistedTerminalSessionRecord(
     status: session.status,
     exitCode: session.exitCode,
     exitSignal: session.exitSignal,
+    createdAt: session.createdAt,
     updatedAt: session.updatedAt,
     eventSequence: session.eventSequence,
     generation: session.generation,
@@ -1942,7 +1958,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
           ),
         );
     }),
-  });
+  }).pipe(Effect.provideService(Scope.Scope, workerScope));
 
   const queuePersist = Effect.fn("terminal.queuePersist")(function* (
     threadId: string,
@@ -2107,6 +2123,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         processEventDrainRunning: false,
         exitCode: record.exitCode,
         exitSignal: record.exitSignal,
+        createdAt: record.createdAt ?? record.updatedAt,
         updatedAt: record.updatedAt,
         eventSequence: record.eventSequence,
         cols: record.cols,
@@ -2230,7 +2247,8 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     function* () {
       yield* modifyManagerState((state) => {
         const inactiveSessions = [...state.sessions.values()].filter(
-          (session) => session.status !== "running",
+          // Workspace Session metadata survives runtime retention limits.
+          (session) => session.workspaceId === null && session.status !== "running",
         );
         if (inactiveSessions.length <= maxRetainedInactiveSessions) {
           return [undefined, state] as const;
@@ -2364,6 +2382,8 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
           : { threadId: action.threadId }),
         terminalId: action.terminalId,
       });
+      yield* flushPersist(action.workspaceId ?? action.threadId, action.terminalId);
+      yield* persistSessionIndex;
       yield* publishEvent({
         type: "exited",
         ...(action.workspaceId
@@ -2374,7 +2394,6 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         exitCode: action.exitCode,
         exitSignal: action.exitSignal,
       });
-      yield* persistSessionIndex;
       yield* evictInactiveSessionsIfNeeded();
       return;
     }
@@ -2790,10 +2809,32 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
           ] as const,
       );
 
+      // Stop the debounced writer before the final write, including when a
+      // virtual clock has a pending debounce. No older write can race it.
+      for (const session of sessions) cleanupProcessHandles(session);
+      if (sessions.some((session) => session.workspaceId !== null)) {
+        yield* Scope.close(workerScope, Exit.void);
+      }
+
       const cleanupSession = Effect.fn("terminal.cleanupSession")(function* (
         session: TerminalSessionState,
       ) {
         cleanupProcessHandles(session);
+        if (session.workspaceId !== null) {
+          yield* fileSystem
+            .writeFileString(
+              historyPath(session.ownerId, session.terminalId),
+              session.history.value(),
+            )
+            .pipe(
+              Effect.catch((cause) =>
+                Effect.logWarning("failed to persist terminal history on shutdown", {
+                  cause,
+                  terminalId: session.terminalId,
+                }),
+              ),
+            );
+        }
         if (!session.process) return;
         yield* clearKillFiber(session.process);
         yield* runKillEscalation(session.process, session.threadId, session.terminalId);
@@ -2836,6 +2877,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         processEventDrainRunning: false,
         exitCode: null,
         exitSignal: null,
+        createdAt: yield* nowIso,
         updatedAt: yield* nowIso,
         eventSequence: 0,
         cols,
@@ -2893,7 +2935,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       liveSession.cwd = input.cwd;
       liveSession.worktreePath = nextWorktreePath;
       liveSession.runtimeEnv = nextRuntimeEnv;
-      liveSession.history.clear();
+      if (liveSession.workspaceId === null) liveSession.history.clear();
       liveSession.pendingHistoryControlSequence = "";
       liveSession.pendingProcessEvents = [];
       liveSession.pendingProcessEventIndex = 0;
@@ -2902,7 +2944,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     } else if (liveSession.status === "exited" || liveSession.status === "error") {
       liveSession.runtimeEnv = nextRuntimeEnv;
       liveSession.worktreePath = nextWorktreePath;
-      liveSession.history.clear();
+      if (liveSession.workspaceId === null) liveSession.history.clear();
       liveSession.pendingHistoryControlSequence = "";
       liveSession.pendingProcessEvents = [];
       liveSession.pendingProcessEventIndex = 0;
@@ -3285,13 +3327,17 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
           worktreePath: input.worktreePath ?? null,
           status: "starting",
           pid: null,
-          history: new BoundedTerminalHistory(historyLineLimit, "", historyByteLimit),
+          history:
+            input.workspaceId !== undefined
+              ? yield* readHistory(owner.ownerId, terminalId)
+              : new BoundedTerminalHistory(historyLineLimit, "", historyByteLimit),
           pendingHistoryControlSequence: "",
           pendingProcessEvents: [],
           pendingProcessEventIndex: 0,
           processEventDrainRunning: false,
           exitCode: null,
           exitSignal: null,
+          createdAt: yield* nowIso,
           updatedAt: yield* nowIso,
           eventSequence: 0,
           cols,
@@ -3322,7 +3368,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       const cols = input.cols ?? session.cols;
       const rows = input.rows ?? session.rows;
 
-      session.history.clear();
+      if (session.workspaceId === null) session.history.clear();
       session.pendingHistoryControlSequence = "";
       session.pendingProcessEvents = [];
       session.pendingProcessEventIndex = 0;
@@ -3398,6 +3444,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     close,
     subscribe,
     subscribeMetadata,
+    getMetadata: readAllTerminalMetadata,
   });
 });
 

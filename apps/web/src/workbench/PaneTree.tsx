@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-import { layoutLeaves, layoutSashes, type LayoutNode, type SplitDir } from "./layout";
+import { type LayoutNode, type SplitDir } from "./layout";
 import { resolveViewDefinition, type ViewTarget } from "./viewRegistry";
 import { useWorkbenchStore } from "./workbenchStore";
-import type { WorkbenchSnapshot } from "./workbenchState";
+import { getActiveTab, type WorkbenchSnapshot } from "./workbenchState";
 
 interface PaneTreeProps {
   readonly snapshot: WorkbenchSnapshot;
@@ -22,7 +22,11 @@ interface PaneTreeProps {
 export function PaneTree({ snapshot }: PaneTreeProps) {
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-      <PaneNode snapshot={snapshot} node={snapshot.tab.layout} focusedPaneId={snapshot.tab.focusedPaneId} />
+      <PaneNode
+        snapshot={snapshot}
+        node={getActiveTab(snapshot).layout}
+        focusedPaneId={getActiveTab(snapshot).focusedPaneId}
+      />
     </div>
   );
 }
@@ -97,10 +101,9 @@ interface PaneProps {
 
 function Pane({ snapshot, paneId, focused }: PaneProps) {
   const setFocused = useWorkbenchStore((s) => s.setFocused);
-  const closePane = useWorkbenchStore((s) => s.closePane);
-  const target = snapshot.panes.get(paneId) ?? null;
-  const targetRef = useRef<ViewTarget | null>(target);
-  targetRef.current = target;
+  const closeView = useWorkbenchStore((s) => s.closeView);
+  const view = getActiveTab(snapshot).panes.get(paneId);
+  const target = view?.target ?? null;
 
   const onClick = useCallback(() => {
     if (!focused) setFocused(paneId);
@@ -113,13 +116,14 @@ function Pane({ snapshot, paneId, focused }: PaneProps) {
   return (
     <div
       role="region"
-      aria-label={target !== null ? `Pane ${target.kind}` : "Empty pane"}
+      aria-label={target !== null ? `Pane ${target.kind}` : "Unavailable View"}
       onMouseDown={onClick}
       className={
         "flex h-full min-h-0 min-w-0 flex-1 flex-col " +
         (focused ? "outline outline-1 outline-accent" : "")
       }
       data-pane-id={paneId}
+      data-view-instance-id={view?.id}
       data-pane-focused={focused}
       data-pane-target-kind={target?.kind ?? "empty"}
     >
@@ -127,13 +131,14 @@ function Pane({ snapshot, paneId, focused }: PaneProps) {
         paneId={paneId}
         target={target}
         focused={focused}
-        onClose={() => closePane(paneId)}
+        onClose={() => closeView(paneId)}
       />
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {definition === null ? (
           <EmptyPane target={target} />
         ) : (
           <definition.Component
+            key={view?.id}
             target={target as never}
             paneId={paneId}
             focused={focused}
@@ -160,7 +165,9 @@ function PaneHeader({
   void focused;
   return (
     <div className="flex h-8 items-center justify-between gap-2 border-b border-border px-3 text-xs text-muted-foreground">
-      <span className="truncate">{target === null ? "Empty pane" : labelForTarget(target)}</span>
+      <span className="truncate">
+        {target === null ? "Unavailable View" : labelForTarget(target)}
+      </span>
       <button
         type="button"
         aria-label="Close pane"
@@ -183,13 +190,15 @@ function EmptyPane({ target }: { readonly target: ViewTarget | null }) {
   }
   return (
     <div className="flex h-full min-h-0 items-center justify-center p-6 text-sm text-muted-foreground">
-      Empty pane. Open an entry from the Sidebar.
+      View unavailable.
     </div>
   );
 }
 
 function labelForTarget(target: ViewTarget): string {
   switch (target.kind) {
+    case "welcome":
+      return "Welcome";
     case "agentSession":
       return "Agent";
     case "workspaceTerminal":
@@ -246,8 +255,9 @@ function SashHandle({ splitId, index, dir, sizes, style }: SashHandleProps) {
         if (a === undefined || b === undefined) return;
         const pair = a + b;
         if (pair === 0) return;
-        const boundary = a + ratio;
-        setSplitRatio(splitId, index, Math.max(0, Math.min(pair, boundary)));
+        const before = state.sizes.slice(0, index).reduce((sum, size) => sum + size, 0);
+        const boundary = before + a + ratio;
+        setSplitRatio(splitId, index, Math.max(before, Math.min(before + pair, boundary)));
       };
       const up = () => {
         dragStateRef.current = null;
@@ -260,10 +270,13 @@ function SashHandle({ splitId, index, dir, sizes, style }: SashHandleProps) {
     [dir, index, setSplitRatio, sizes, splitId],
   );
 
-  useEffect(() => () => {
-    // Detach listeners if the sash unmounts mid-drag.
-    dragStateRef.current = null;
-  }, []);
+  useEffect(
+    () => () => {
+      // Detach listeners if the sash unmounts mid-drag.
+      dragStateRef.current = null;
+    },
+    [],
+  );
 
   return (
     <div
@@ -282,8 +295,3 @@ function SashHandle({ splitId, index, dir, sizes, style }: SashHandleProps) {
     />
   );
 }
-
-// Pure layout helpers are imported for downstream test consumers; suppress
-// the "unused import" lint without losing them.
-void layoutLeaves;
-void layoutSashes;

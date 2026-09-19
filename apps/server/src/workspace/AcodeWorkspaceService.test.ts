@@ -329,7 +329,6 @@ describe("AcodeWorkspaceService", () => {
           readWorkspace: () => Option.some(mainWorkspace("/tmp/main")),
         }),
       ),
-      Effect.provide(NodeServices.layer),
     ),
   );
 });
