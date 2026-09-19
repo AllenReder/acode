@@ -1,4 +1,5 @@
 import {
+  AcodeProjectId,
   ApprovalRequestId,
   CheckpointRef,
   CommandId,
@@ -4714,3 +4715,304 @@ engineLayer("OrchestrationProjectionPipeline via engine dispatch", (it) => {
     }),
   );
 });
+
+it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-acode-worktrees-")))(
+  "OrchestrationProjectionPipeline ACode workspace attachment",
+  (it) => {
+    const timestamp = "2026-09-18T00:00:00.000Z";
+
+    const readAcodeRows = (acodeProjectId: string) =>
+      Effect.flatMap(SqlClient.SqlClient, (sql) =>
+        sql<{
+          readonly acodeProjectId: string;
+          readonly workspaceId: string;
+          readonly t3ProjectId: string;
+          readonly workspaceRoot: string;
+          readonly role: string;
+          readonly origin: string | null;
+        }>`
+        SELECT
+          projects.acode_project_id AS "acodeProjectId",
+          workspaces.workspace_id AS "workspaceId",
+          workspaces.t3_project_id AS "t3ProjectId",
+          workspaces.workspace_root AS "workspaceRoot",
+          workspaces.role,
+          workspaces.origin
+        FROM projection_acode_projects AS projects
+        INNER JOIN projection_acode_workspaces AS workspaces
+          ON workspaces.acode_project_id = projects.acode_project_id
+        WHERE projects.acode_project_id = ${acodeProjectId}
+        ORDER BY workspaces.workspace_id ASC
+      `,
+    );
+
+    const appendProjectCreated = (input: {
+      readonly eventId: string;
+      readonly projectId: string;
+      readonly title: string;
+      readonly workspaceRoot: string;
+      readonly acodeWorkspace?: {
+        readonly acodeProjectId: string;
+        readonly role: "worktree";
+        readonly origin: "associated" | "acode-created";
+      };
+    }) =>
+      Effect.gen(function* () {
+        const eventStore = yield* OrchestrationEventStore;
+        const projectionPipeline = yield* OrchestrationProjectionPipeline;
+        const event = yield* eventStore.append({
+          type: "project.created",
+          eventId: EventId.make(input.eventId),
+          aggregateKind: "project",
+          aggregateId: ProjectId.make(input.projectId),
+          occurredAt: timestamp,
+          commandId: CommandId.make(`cmd-${input.eventId}`),
+          causationEventId: null,
+          correlationId: null,
+          metadata: {},
+          payload: {
+            projectId: ProjectId.make(input.projectId),
+            title: input.title,
+            workspaceRoot: input.workspaceRoot,
+            ...(input.acodeWorkspace !== undefined
+              ? {
+                  acodeWorkspace: {
+                    acodeProjectId: AcodeProjectId.make(input.acodeWorkspace.acodeProjectId),
+                    role: input.acodeWorkspace.role,
+                    origin: input.acodeWorkspace.origin,
+                  },
+                }
+              : {}),
+            defaultModelSelection: null,
+            scripts: [],
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          },
+        });
+        yield* projectionPipeline.projectEvent(event);
+      });
+
+    const appendProjectMetaUpdated = (input: {
+      readonly eventId: string;
+      readonly projectId: string;
+      readonly title?: string;
+    }) =>
+      Effect.gen(function* () {
+        const eventStore = yield* OrchestrationEventStore;
+        const projectionPipeline = yield* OrchestrationProjectionPipeline;
+        const event = yield* eventStore.append({
+          type: "project.meta-updated",
+          eventId: EventId.make(input.eventId),
+          aggregateKind: "project",
+          aggregateId: ProjectId.make(input.projectId),
+          occurredAt: timestamp,
+          commandId: CommandId.make(`cmd-${input.eventId}`),
+          causationEventId: null,
+          correlationId: null,
+          metadata: {},
+          payload: {
+            projectId: ProjectId.make(input.projectId),
+            ...(input.title !== undefined ? { title: input.title } : {}),
+            updatedAt: timestamp,
+          },
+        });
+        yield* projectionPipeline.projectEvent(event);
+      });
+
+    const appendProjectDeleted = (input: {
+      readonly eventId: string;
+      readonly projectId: string;
+    }) =>
+      Effect.gen(function* () {
+        const eventStore = yield* OrchestrationEventStore;
+        const projectionPipeline = yield* OrchestrationProjectionPipeline;
+        const event = yield* eventStore.append({
+          type: "project.deleted",
+          eventId: EventId.make(input.eventId),
+          aggregateKind: "project",
+          aggregateId: ProjectId.make(input.projectId),
+          occurredAt: timestamp,
+          commandId: CommandId.make(`cmd-${input.eventId}`),
+          causationEventId: null,
+          correlationId: null,
+          metadata: {},
+          payload: {
+            projectId: ProjectId.make(input.projectId),
+            deletedAt: timestamp,
+          },
+        });
+        yield* projectionPipeline.projectEvent(event);
+      });
+
+    it.effect("attaches a created workspace to an existing ACode Project with role and origin", () =>
+      Effect.gen(function* () {
+        yield* appendProjectCreated({
+          eventId: "evt-attach-main",
+          projectId: "project-attach-main",
+          title: "Main",
+          workspaceRoot: "/srv/attach-main",
+        });
+        yield* appendProjectCreated({
+          eventId: "evt-attach-worktree",
+          projectId: "project-attach-wt",
+          title: "Worktree",
+          workspaceRoot: "/srv/attach-main-wt",
+          acodeWorkspace: {
+            acodeProjectId: "acode-project:project-attach-main",
+            role: "worktree",
+            origin: "acode-created",
+          },
+        });
+
+        assert.deepEqual(yield* readAcodeRows("acode-project:project-attach-main"), [
+          {
+            acodeProjectId: "acode-project:project-attach-main",
+            workspaceId: "workspace:project-attach-main",
+            t3ProjectId: "project-attach-main",
+            workspaceRoot: "/srv/attach-main",
+            role: "main",
+            origin: null,
+          },
+          {
+            acodeProjectId: "acode-project:project-attach-main",
+            workspaceId: "workspace:project-attach-wt",
+            t3ProjectId: "project-attach-wt",
+            workspaceRoot: "/srv/attach-main-wt",
+            role: "worktree",
+            origin: "acode-created",
+          },
+        ]);
+      }),
+    );
+
+    it.effect("preserves workspace attachment across project meta updates", () =>
+      Effect.gen(function* () {
+        yield* appendProjectCreated({
+          eventId: "evt-meta-main",
+          projectId: "project-meta-main",
+          title: "Main",
+          workspaceRoot: "/srv/meta-main",
+        });
+        yield* appendProjectCreated({
+          eventId: "evt-meta-worktree",
+          projectId: "project-meta-wt",
+          title: "Worktree",
+          workspaceRoot: "/srv/meta-main-wt",
+          acodeWorkspace: {
+            acodeProjectId: "acode-project:project-meta-main",
+            role: "worktree",
+            origin: "associated",
+          },
+        });
+        yield* appendProjectMetaUpdated({
+          eventId: "evt-meta-update",
+          projectId: "project-meta-wt",
+          title: "Renamed worktree",
+        });
+
+        const rows = yield* readAcodeRows("acode-project:project-meta-main");
+        assert.deepEqual(rows, [
+          {
+            acodeProjectId: "acode-project:project-meta-main",
+            workspaceId: "workspace:project-meta-main",
+            t3ProjectId: "project-meta-main",
+            workspaceRoot: "/srv/meta-main",
+            role: "main",
+            origin: null,
+          },
+          {
+            acodeProjectId: "acode-project:project-meta-main",
+            workspaceId: "workspace:project-meta-wt",
+            t3ProjectId: "project-meta-wt",
+            workspaceRoot: "/srv/meta-main-wt",
+            role: "worktree",
+            origin: "associated",
+          },
+        ]);
+        // The meta update must not derive a shadow ACode Project for the worktree.
+        const sql = yield* SqlClient.SqlClient;
+        const projectRows = yield* sql<{ readonly acodeProjectId: string }>`
+          SELECT acode_project_id AS "acodeProjectId" FROM projection_acode_projects
+          WHERE acode_project_id = 'acode-project:project-meta-wt'
+        `;
+        assert.deepEqual(projectRows, []);
+      }),
+    );
+
+    it.effect("removes only the deleted workspace and keeps the Project while siblings remain", () =>
+      Effect.gen(function* () {
+        yield* appendProjectCreated({
+          eventId: "evt-remove-main",
+          projectId: "project-remove-main",
+          title: "Main",
+          workspaceRoot: "/srv/remove-main",
+        });
+        yield* appendProjectCreated({
+          eventId: "evt-remove-worktree",
+          projectId: "project-remove-wt",
+          title: "Worktree",
+          workspaceRoot: "/srv/remove-main-wt",
+          acodeWorkspace: {
+            acodeProjectId: "acode-project:project-remove-main",
+            role: "worktree",
+            origin: "acode-created",
+          },
+        });
+        yield* appendProjectDeleted({
+          eventId: "evt-remove-delete",
+          projectId: "project-remove-wt",
+        });
+
+        assert.deepEqual(yield* readAcodeRows("acode-project:project-remove-main"), [
+          {
+            acodeProjectId: "acode-project:project-remove-main",
+            workspaceId: "workspace:project-remove-main",
+            t3ProjectId: "project-remove-main",
+            workspaceRoot: "/srv/remove-main",
+            role: "main",
+            origin: null,
+          },
+        ]);
+
+        // Deleting the last workspace still removes the now-empty Project.
+        yield* appendProjectDeleted({
+          eventId: "evt-remove-delete-main",
+          projectId: "project-remove-main",
+        });
+        assert.deepEqual(yield* readAcodeRows("acode-project:project-remove-main"), []);
+      }),
+    );
+
+    it.effect("skips the ACode mapping when the attach target Project is gone", () =>
+      Effect.gen(function* () {
+        yield* appendProjectCreated({
+          eventId: "evt-orphan-worktree",
+          projectId: "project-orphan-wt",
+          title: "Worktree",
+          workspaceRoot: "/srv/orphan-wt",
+          acodeWorkspace: {
+            acodeProjectId: "acode-project:missing",
+            role: "worktree",
+            origin: "associated",
+          },
+        });
+
+        // The T3 projection still lands; no ACode rows are written for a
+        // missing attach target, and no derived Project appears.
+        const sql = yield* SqlClient.SqlClient;
+        assert.deepEqual(
+          yield* sql<{ readonly acodeProjectId: string }>`
+            SELECT acode_project_id AS "acodeProjectId" FROM projection_acode_projects
+            WHERE acode_project_id IN ('acode-project:missing', 'acode-project:project-orphan-wt')
+          `,
+          [],
+        );
+        const t3Rows = yield* sql<{ readonly projectId: string }>`
+          SELECT project_id AS "projectId" FROM projection_projects
+          WHERE project_id = 'project-orphan-wt'
+        `;
+        assert.deepEqual(t3Rows, [{ projectId: "project-orphan-wt" }]);
+      }),
+    );
+  },
+);

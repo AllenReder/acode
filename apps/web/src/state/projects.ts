@@ -1,6 +1,7 @@
 import { createEnvironmentProjectAtoms } from "@t3tools/client-runtime/state/projects";
 import { createProjectEnvironmentAtoms } from "@t3tools/client-runtime/state/projects";
 import { createEnvironmentWorkspaceAtoms } from "@t3tools/client-runtime/state/workspaceEntities";
+import { createEnvironmentWorkspaceCommandAtoms } from "@t3tools/client-runtime/state/workspaceCommands";
 import { createEnvironmentRpcQueryAtomFamily } from "@t3tools/client-runtime/state/runtime";
 import { WS_METHODS } from "@t3tools/contracts";
 
@@ -28,3 +29,4 @@ export const environmentWorkspace = createEnvironmentWorkspaceAtoms({
   catalogValueAtom: environmentCatalog.catalogValueAtom,
   snapshotAtom: environmentSnapshotAtom,
 });
+export const workspaceEnvironment = createEnvironmentWorkspaceCommandAtoms(connectionAtomRuntime);

@@ -32,7 +32,7 @@ import {
   PullRequestReviewDecision,
   PullRequestState,
 } from "./pullRequest.ts";
-import { AcodeAgentSessionShell, AcodeProjectShell } from "./workspace.ts";
+import { AcodeAgentSessionShell, AcodeProjectShell, WorkspaceOrigin } from "./workspace.ts";
 
 export const ORCHESTRATION_WS_METHODS = {
   dispatchCommand: "orchestration.dispatchCommand",
@@ -934,6 +934,8 @@ export const OrchestrationShellStreamEvent = Schema.Union([
     sequence: NonNegativeInt,
     projectId: ProjectId,
     acodeProjectId: Schema.optional(AcodeProjectId),
+    /** The owning ACode tree when a sibling Workspace was removed. */
+    acodeProject: Schema.optional(AcodeProjectShell),
   }),
   Schema.Struct({
     kind: Schema.Literal("thread-upserted"),
@@ -1056,6 +1058,19 @@ export const OrchestrationThreadDetailSnapshot = Schema.Struct({
 });
 export type OrchestrationThreadDetailSnapshot = typeof OrchestrationThreadDetailSnapshot.Type;
 
+/**
+ * Attach the Workspace created by `project.create` under an existing ACode
+ * Project as a sibling checkout instead of deriving a fresh ACode Project and
+ * "main" Workspace. Server-side workspace management flows set this after
+ * validating the checkout on the target daemon; legacy callers omit it.
+ */
+export const ProjectCreateAcodeWorkspace = Schema.Struct({
+  acodeProjectId: AcodeProjectId,
+  role: Schema.Literal("worktree"),
+  origin: WorkspaceOrigin,
+});
+export type ProjectCreateAcodeWorkspace = typeof ProjectCreateAcodeWorkspace.Type;
+
 export const ProjectCreateCommand = Schema.Struct({
   type: Schema.Literal("project.create"),
   commandId: CommandId,
@@ -1063,6 +1078,7 @@ export const ProjectCreateCommand = Schema.Struct({
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
   createWorkspaceRootIfMissing: Schema.optional(Schema.Boolean),
+  acodeWorkspace: Schema.optional(ProjectCreateAcodeWorkspace),
   // Retained for older clients that sent an automatic create-time seed. The
   // server ignores it; explicit project defaults use project.meta.update.
   defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
@@ -1674,6 +1690,10 @@ export const ProjectCreatedPayload = Schema.Struct({
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
+  // Optional so persisted events from older servers still decode. When set,
+  // the projection attaches the Workspace to this existing ACode Project as a
+  // sibling checkout instead of deriving a new ACode Project.
+  acodeWorkspace: Schema.optional(ProjectCreateAcodeWorkspace),
   repositoryIdentity: Schema.optional(Schema.NullOr(RepositoryIdentity)),
   defaultModelSelection: Schema.NullOr(ModelSelection),
   // Optional so persisted events from older servers still decode.

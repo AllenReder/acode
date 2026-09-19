@@ -7,6 +7,7 @@
  * @module ProjectionSnapshotQuery
  */
 import type {
+  AcodeProjectId,
   AgentSessionImportSource,
   ApprovalRequestId,
   CheckpointRef,
@@ -183,6 +184,13 @@ export interface ProjectionSnapshotQueryShape {
   /** Read the ACode navigation Project containing one T3 project mapping. */
   readonly getAcodeProjectByT3ProjectId?: (
     projectId: ProjectId,
+  ) => Effect.Effect<
+    Option.Option<import("@t3tools/contracts").AcodeProjectShell>,
+    ProjectionRepositoryError
+  >;
+  /** Read one ACode Project with its Workspaces by its stable ACode identity. */
+  readonly getAcodeProjectById?: (
+    acodeProjectId: AcodeProjectId,
   ) => Effect.Effect<
     Option.Option<import("@t3tools/contracts").AcodeProjectShell>,
     ProjectionRepositoryError

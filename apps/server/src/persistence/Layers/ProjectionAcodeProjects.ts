@@ -1,4 +1,5 @@
 import {
+  AcodeProjectId,
   acodeProjectIdForT3Project,
   ProjectId,
   ThreadId,
@@ -23,15 +24,16 @@ import {
 
 const T3ProjectIdInput = Schema.Struct({ t3ProjectId: ProjectId });
 const ThreadIdInput = Schema.Struct({ threadId: ThreadId });
+const AcodeProjectIdInput = Schema.Struct({ acodeProjectId: AcodeProjectId });
 
 const makeRepository = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
   const getWorkspaceForT3Project = SqlSchema.findOneOption({
     Request: T3ProjectIdInput,
-    Result: Schema.Struct({ workspaceId: WorkspaceId }),
+    Result: Schema.Struct({ workspaceId: WorkspaceId, acodeProjectId: AcodeProjectId }),
     execute: ({ t3ProjectId }) => sql`
-      SELECT workspace_id AS "workspaceId"
+      SELECT workspace_id AS "workspaceId", acode_project_id AS "acodeProjectId"
       FROM projection_acode_workspaces
       WHERE t3_project_id = ${t3ProjectId}
       LIMIT 1
@@ -40,21 +42,49 @@ const makeRepository = Effect.gen(function* () {
 
   const upsert: ProjectionAcodeProjectRepositoryShape["upsertForT3Project"] = (input) =>
     Effect.gen(function* () {
-      const projectId = acodeProjectIdForT3Project(input.t3ProjectId);
+      const attached = input.acodeProjectId !== undefined;
+      const projectId = input.acodeProjectId ?? acodeProjectIdForT3Project(input.t3ProjectId);
       const workspaceId = workspaceIdForT3Project(input.t3ProjectId);
+      const role = input.role ?? "main";
+      const origin = input.origin ?? null;
       yield* sql.withTransaction(
         Effect.gen(function* () {
-          yield* sql`
-          INSERT INTO projection_acode_projects (
-            acode_project_id, title, created_at, updated_at
-          ) VALUES (
-            ${projectId}, ${input.title}, ${input.createdAt}, ${input.updatedAt}
-          )
-          ON CONFLICT (acode_project_id)
-          DO UPDATE SET
-            title = excluded.title,
-            updated_at = excluded.updated_at
-        `;
+          if (attached) {
+            const target = yield* sql`
+            SELECT acode_project_id
+            FROM projection_acode_projects
+            WHERE acode_project_id = ${projectId}
+            LIMIT 1
+          `;
+            if (target.length === 0) {
+              return yield* new PersistenceSqlError({
+                operation: "ProjectionAcodeProjectRepository.upsert",
+                detail: `No ACode Project '${projectId}' exists to attach T3 project '${input.t3ProjectId}' to.`,
+              });
+            }
+          } else {
+            // A meta update on a main checkout still renames its derived
+            // Project. The same event on a Workspace attached elsewhere must
+            // not materialize a shadow Project for its T3 project id.
+            yield* sql`
+            INSERT INTO projection_acode_projects (
+              acode_project_id, title, created_at, updated_at
+            )
+            SELECT ${projectId}, ${input.title}, ${input.createdAt}, ${input.updatedAt}
+            WHERE NOT EXISTS (
+              SELECT 1 FROM projection_acode_workspaces
+              WHERE t3_project_id = ${input.t3ProjectId}
+                AND acode_project_id <> ${projectId}
+            )
+            ON CONFLICT (acode_project_id)
+            DO UPDATE SET
+              title = excluded.title,
+              updated_at = excluded.updated_at
+          `;
+          }
+          // Ownership, role, and origin are creation facts: a later event for
+          // the same T3 project (meta update, replayed creation) refreshes the
+          // display fields but must never re-parent or re-role the Workspace.
           yield* sql`
           INSERT INTO projection_acode_workspaces (
             workspace_id,
@@ -63,23 +93,28 @@ const makeRepository = Effect.gen(function* () {
             title,
             workspace_root,
             role,
+            origin,
             created_at,
             updated_at
           ) VALUES (
             ${workspaceId}, ${projectId}, ${input.t3ProjectId}, ${input.title},
-            ${input.workspaceRoot}, 'main', ${input.createdAt}, ${input.updatedAt}
+            ${input.workspaceRoot}, ${role}, ${origin}, ${input.createdAt}, ${input.updatedAt}
           )
           ON CONFLICT (t3_project_id)
           DO UPDATE SET
-            acode_project_id = excluded.acode_project_id,
             title = excluded.title,
             workspace_root = excluded.workspace_root,
-            role = excluded.role,
             updated_at = excluded.updated_at
         `;
         }),
       );
-    }).pipe(Effect.mapError(toPersistenceSqlError("ProjectionAcodeProjectRepository.upsert")));
+    }).pipe(
+      Effect.mapError((error) =>
+        Schema.is(PersistenceSqlError)(error)
+          ? error
+          : toPersistenceSqlError("ProjectionAcodeProjectRepository.upsert")(error),
+      ),
+    );
 
   const upsertAgentSession: ProjectionAcodeProjectRepositoryShape["upsertAgentSession"] = (input) =>
     Effect.gen(function* () {
@@ -192,6 +227,7 @@ const makeRepository = Effect.gen(function* () {
         workspaces.title AS "workspaceTitle",
         workspaces.workspace_root AS "workspaceRoot",
         workspaces.role AS "workspaceRole",
+        workspaces.origin AS "workspaceOrigin",
         workspaces.created_at AS "workspaceCreatedAt",
         workspaces.updated_at AS "workspaceUpdatedAt"
       FROM projection_acode_projects AS projects
@@ -199,6 +235,31 @@ const makeRepository = Effect.gen(function* () {
         ON workspaces.acode_project_id = projects.acode_project_id
       ORDER BY projects.created_at ASC, projects.acode_project_id ASC,
         workspaces.created_at ASC, workspaces.workspace_id ASC
+    `,
+  });
+
+  const getRowsForAcodeProject = SqlSchema.findAll({
+    Request: AcodeProjectIdInput,
+    Result: ProjectionAcodeProjectRow,
+    execute: ({ acodeProjectId }) => sql`
+      SELECT
+        projects.acode_project_id AS "acodeProjectId",
+        projects.title AS "projectTitle",
+        projects.created_at AS "projectCreatedAt",
+        projects.updated_at AS "projectUpdatedAt",
+        workspaces.workspace_id AS "workspaceId",
+        workspaces.t3_project_id AS "t3ProjectId",
+        workspaces.title AS "workspaceTitle",
+        workspaces.workspace_root AS "workspaceRoot",
+        workspaces.role AS "workspaceRole",
+        workspaces.origin AS "workspaceOrigin",
+        workspaces.created_at AS "workspaceCreatedAt",
+        workspaces.updated_at AS "workspaceUpdatedAt"
+      FROM projection_acode_projects AS projects
+      INNER JOIN projection_acode_workspaces AS workspaces
+        ON workspaces.acode_project_id = projects.acode_project_id
+      WHERE projects.acode_project_id = ${acodeProjectId}
+      ORDER BY workspaces.created_at ASC, workspaces.workspace_id ASC
     `,
   });
 
@@ -216,6 +277,7 @@ const makeRepository = Effect.gen(function* () {
         workspaces.title AS "workspaceTitle",
         workspaces.workspace_root AS "workspaceRoot",
         workspaces.role AS "workspaceRole",
+        workspaces.origin AS "workspaceOrigin",
         workspaces.created_at AS "workspaceCreatedAt",
         workspaces.updated_at AS "workspaceUpdatedAt"
       FROM projection_acode_projects AS projects
@@ -262,6 +324,7 @@ const makeRepository = Effect.gen(function* () {
         workspaces.title AS "workspaceTitle",
         workspaces.workspace_root AS "workspaceRoot",
         workspaces.role AS "workspaceRole",
+        workspaces.origin AS "workspaceOrigin",
         workspaces.created_at AS "workspaceCreatedAt",
         workspaces.updated_at AS "workspaceUpdatedAt"
       FROM projection_acode_agent_sessions AS sessions
@@ -296,7 +359,10 @@ const makeRepository = Effect.gen(function* () {
 
   const remove: ProjectionAcodeProjectRepositoryShape["removeForT3Project"] = (t3ProjectId) =>
     Effect.gen(function* () {
-      const projectId = acodeProjectIdForT3Project(t3ProjectId);
+      // The owning Project is a creation fact on the workspace row, not a
+      // derivation: attached Workspaces share their Project with siblings, so
+      // the deterministic id would point at a Project that does not exist.
+      const workspace = yield* getWorkspaceForT3Project({ t3ProjectId });
       yield* sql.withTransaction(
         Effect.gen(function* () {
           yield* sql`
@@ -307,14 +373,17 @@ const makeRepository = Effect.gen(function* () {
           DELETE FROM projection_acode_workspaces
           WHERE t3_project_id = ${t3ProjectId}
         `;
-          yield* sql`
-          DELETE FROM projection_acode_projects
-          WHERE acode_project_id = ${projectId}
-            AND NOT EXISTS (
-              SELECT 1 FROM projection_acode_workspaces
-              WHERE acode_project_id = ${projectId}
-            )
-        `;
+          if (Option.isSome(workspace)) {
+            const acodeProjectId = workspace.value.acodeProjectId;
+            yield* sql`
+            DELETE FROM projection_acode_projects
+            WHERE acode_project_id = ${acodeProjectId}
+              AND NOT EXISTS (
+                SELECT 1 FROM projection_acode_workspaces
+                WHERE acode_project_id = ${acodeProjectId}
+              )
+          `;
+          }
         }),
       );
     }).pipe(Effect.mapError(toPersistenceSqlError("ProjectionAcodeProjectRepository.remove")));
@@ -331,6 +400,13 @@ const makeRepository = Effect.gen(function* () {
       Effect.all([getRows(undefined), getActiveSessionRows({})]).pipe(
         Effect.map(([rows, sessions]) => mapProjectionAcodeProjectRows(rows, sessions)),
         Effect.mapError(toPersistenceSqlError("ProjectionAcodeProjectRepository.listTree")),
+      ),
+    getProjectById: (acodeProjectId) =>
+      Effect.all([getRowsForAcodeProject({ acodeProjectId }), getActiveSessionRows({})]).pipe(
+        Effect.map(([rows, sessions]) =>
+          Option.fromNullishOr(mapProjectionAcodeProjectRows(rows, sessions)[0]),
+        ),
+        Effect.mapError(toPersistenceSqlError("ProjectionAcodeProjectRepository.getProjectById")),
       ),
     getByT3ProjectId: (t3ProjectId) =>
       Effect.all([

@@ -78,6 +78,8 @@ import {
   type PullRequestRef,
   WS_METHODS,
   WsRpcGroup,
+  WsAcodeWorkspaceRpcGroup,
+  WsRpcGroupAll,
   WORKTREE_SETUP_ACTIVITY_KIND,
   worktreeSetupActivityId,
   type WorktreeSetupSnapshot,
@@ -134,6 +136,7 @@ import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
 import { readWorkflowScript } from "./orchestration/workflowScriptQuery.ts";
 import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
+import * as AcodeWorkspaceService from "./workspace/AcodeWorkspaceService.ts";
 import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
 import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
 import * as GitWorkflowService from "./git/GitWorkflowService.ts";
@@ -499,8 +502,48 @@ const makeWsRpcLayer = (
   clientOrigin: OrchestrationClientOrigin,
   clientAnalyticsProps: Readonly<Record<string, unknown>>,
   previewAutomationBroker: PreviewAutomationBroker.PreviewAutomationBroker["Service"],
-) =>
-  WsRpcGroup.toLayer(
+  workspaceService: AcodeWorkspaceService.AcodeWorkspaceService["Service"],
+) => {
+  const observeAcodeWorkspaceRpcEffect = <A, E, R>(
+    method: string,
+    effect: Effect.Effect<A, E, R>,
+  ) => {
+    const requiredScope = requiredScopeForRpcMethod(method);
+    const authorizedEffect = currentSession.scopes.includes(requiredScope)
+      ? (effect as Effect.Effect<A, E | EnvironmentAuthorizationError, R>)
+      : (Effect.fail(
+          new EnvironmentAuthorizationError({
+            message: `The authenticated token is missing required scope: ${requiredScope}.`,
+            requiredScope,
+          }),
+        ) as Effect.Effect<A, E | EnvironmentAuthorizationError, R>);
+    return instrumentRpcEffect(method, authorizedEffect, { "rpc.aggregate": "workspace" });
+  };
+
+  const acodeWorkspaceRpcLayer = WsAcodeWorkspaceRpcGroup.toLayer(
+    Effect.gen(function* () {
+      return WsAcodeWorkspaceRpcGroup.of({
+        [WS_METHODS.acodeWorkspaceAssociate]: (input) =>
+          observeAcodeWorkspaceRpcEffect(
+            WS_METHODS.acodeWorkspaceAssociate,
+            workspaceService.associate(input),
+          ),
+        [WS_METHODS.acodeWorkspaceCreateWorktree]: (input) =>
+          observeAcodeWorkspaceRpcEffect(
+            WS_METHODS.acodeWorkspaceCreateWorktree,
+            workspaceService.createWorktree(input),
+          ),
+        [WS_METHODS.acodeWorkspaceRemove]: (input) =>
+          observeAcodeWorkspaceRpcEffect(
+            WS_METHODS.acodeWorkspaceRemove,
+            workspaceService.remove(input),
+          ),
+      });
+    }),
+  );
+
+  return Layer.merge(
+    WsRpcGroup.toLayer(
     Effect.gen(function* () {
       const currentSessionId = currentSession.sessionId;
       const crypto = yield* Crypto.Crypto;
@@ -852,13 +895,27 @@ const makeWsRpcLayer = (
           case "project.meta-updated":
             return projectUpsertOrRemove(ProjectId.make(event.aggregateId), event.sequence);
           case "project.deleted":
-            return Effect.succeed(
-              Option.some({
-                kind: "project-removed" as const,
-                sequence: event.sequence,
-                projectId: ProjectId.make(event.aggregateId),
-                acodeProjectId: acodeProjectIdForT3Project(ProjectId.make(event.aggregateId)),
-              }),
+            return retryShellProjectionRead(
+              "project",
+              event.aggregateId,
+              projectionSnapshotQuery.getAcodeProjectByT3ProjectId?.(ProjectId.make(event.aggregateId)) ??
+                Effect.succeed(Option.none()),
+            ).pipe(
+              Effect.map(Option.flatten),
+              Effect.map((acodeProject) =>
+                Option.some({
+                  kind: "project-removed" as const,
+                  sequence: event.sequence,
+                  projectId: ProjectId.make(event.aggregateId),
+                  ...(Option.isSome(acodeProject)
+                    ? { acodeProject: acodeProject.value }
+                    : {
+                        acodeProjectId: acodeProjectIdForT3Project(
+                          ProjectId.make(event.aggregateId),
+                        ),
+                      }),
+                }),
+              ),
             );
           case "thread.deleted":
           case "thread.archived":
@@ -3691,7 +3748,10 @@ const makeWsRpcLayer = (
           ),
       });
     }),
+    ),
+    acodeWorkspaceRpcLayer,
   );
+};
 
 export const websocketRpcRouteLayer = Layer.unwrap(
   Effect.gen(function* () {
@@ -3724,6 +3784,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
     });
     const pullRequests = yield* PullRequestService.PullRequestService;
     const sql = yield* SqlClient.SqlClient;
+    const acodeWorkspaceService = yield* AcodeWorkspaceService.make;
     return HttpRouter.add(
       "GET",
       "/ws",
@@ -3749,7 +3810,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
         yield* analytics.record("client.connected", clientAnalyticsProps);
         const rpcWebSocketHttpEffect = yield* Effect.gen(function* () {
           const { protocol, httpEffect } = yield* RpcServer.makeProtocolWithHttpEffectWebsocket;
-          yield* RpcServer.make(WsRpcGroup, { disableTracing: true }).pipe(
+          yield* RpcServer.make(WsRpcGroupAll, { disableTracing: true }).pipe(
             Effect.provideService(RpcServer.Protocol, withTerminalOutputWindow(protocol)),
             Effect.forkScoped,
           );
@@ -3762,6 +3823,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
               clientOrigin,
               clientAnalyticsProps,
               previewAutomationBroker,
+              acodeWorkspaceService,
             ).pipe(
               Layer.provideMerge(RpcSerialization.layerJson),
               Layer.provide(Layer.succeed(SqlClient.SqlClient, sql)),
