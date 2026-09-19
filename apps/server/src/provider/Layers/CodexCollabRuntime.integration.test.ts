@@ -654,71 +654,87 @@ describe("CodexSessionRuntime collab integration", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
-  it.live("Stop terminates the active Codex command execution", () =>
-    Effect.gen(function* () {
-      const processId = "active-command-process";
-      const script = {
-        rootThreadId: ROOT,
-        holdTurnOpen: true,
-        notifications: [],
-        commandExecution: { processId, ignoreTerminate: true },
-      };
-      // @effect-diagnostics-next-line preferSchemaOverJson:off
-      NodeFS.writeFileSync(scriptPath, JSON.stringify(script), "utf8");
-      const commandExitsPath = `${scriptPath}.command-exits`;
-      const terminationsPath = `${scriptPath}.terminations`;
-      const interruptsPath = `${scriptPath}.interrupts`;
-      NodeFS.rmSync(commandExitsPath, { force: true });
-      NodeFS.rmSync(terminationsPath, { force: true });
-      NodeFS.rmSync(interruptsPath, { force: true });
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          NodeFS.rmSync(scriptPath, { force: true });
-          NodeFS.rmSync(commandExitsPath, { force: true });
-          NodeFS.rmSync(terminationsPath, { force: true });
-          NodeFS.rmSync(interruptsPath, { force: true });
-        }),
-      );
+  for (const commandKind of ["node", "executable alias"] as const) {
+    it.live.skipIf(
+      commandKind === "executable alias" && HostProcessPlatform.defaultValue() === "win32",
+    )(`Stop terminates the active Codex command execution (${commandKind})`, () =>
+      Effect.gen(function* () {
+        const processId = "active-command-process";
+        const aliasDirectory = NodeFS.mkdtempSync(
+          NodePath.join(NodeOS.tmpdir(), "acode-command-alias-"),
+        );
+        const aliasPath = NodePath.join(aliasDirectory, "acode-sleep");
+        if (commandKind === "executable alias") NodeFS.symlinkSync("/bin/sleep", aliasPath);
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => NodeFS.rmSync(aliasDirectory, { recursive: true, force: true })),
+        );
+        const script = {
+          rootThreadId: ROOT,
+          holdTurnOpen: true,
+          notifications: [],
+          commandExecution: {
+            processId,
+            ignoreTerminate: true,
+            ...(commandKind === "executable alias" ? { executableAlias: aliasPath } : {}),
+          },
+        };
+        // @effect-diagnostics-next-line preferSchemaOverJson:off
+        NodeFS.writeFileSync(scriptPath, JSON.stringify(script), "utf8");
+        const commandExitsPath = `${scriptPath}.command-exits`;
+        const terminationsPath = `${scriptPath}.terminations`;
+        const interruptsPath = `${scriptPath}.interrupts`;
+        NodeFS.rmSync(commandExitsPath, { force: true });
+        NodeFS.rmSync(terminationsPath, { force: true });
+        NodeFS.rmSync(interruptsPath, { force: true });
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            NodeFS.rmSync(scriptPath, { force: true });
+            NodeFS.rmSync(commandExitsPath, { force: true });
+            NodeFS.rmSync(terminationsPath, { force: true });
+            NodeFS.rmSync(interruptsPath, { force: true });
+          }),
+        );
 
-      const runtime = yield* makeCodexSessionRuntime({
-        threadId: ThreadId.make("thread-codex-command-stop"),
-        binaryPath: peerPath,
-        cwd: NodeOS.tmpdir(),
-        runtimeMode: "full-access",
-        environment: { ...process.env, T3_CODEX_COLLAB_SCRIPT: scriptPath },
-      });
-      const commandStarted = yield* Deferred.make<void>();
-      yield* runtime.events.pipe(
-        Stream.runForEach((event) =>
-          event.method === "item/started" && event.itemId === "active-command"
-            ? Deferred.succeed(commandStarted, undefined).pipe(Effect.asVoid)
-            : Effect.void,
-        ),
-        Effect.forkScoped,
-      );
+        const runtime = yield* makeCodexSessionRuntime({
+          threadId: ThreadId.make("thread-codex-command-stop"),
+          binaryPath: peerPath,
+          cwd: NodeOS.tmpdir(),
+          runtimeMode: "full-access",
+          environment: { ...process.env, T3_CODEX_COLLAB_SCRIPT: scriptPath },
+        });
+        const commandStarted = yield* Deferred.make<void>();
+        yield* runtime.events.pipe(
+          Stream.runForEach((event) =>
+            event.method === "item/started" && event.itemId === "active-command"
+              ? Deferred.succeed(commandStarted, undefined).pipe(Effect.asVoid)
+              : Effect.void,
+          ),
+          Effect.forkScoped,
+        );
 
-      yield* runtime.start();
-      yield* runtime.sendTurn({ input: "start a long command" });
-      yield* Deferred.await(commandStarted).pipe(Effect.timeout("2 seconds"));
-      yield* runtime.interruptTurn();
-      assert.isTrue(
-        NodeFS.existsSync(terminationsPath),
-        "Stop must request termination for the active command process",
-      );
-      const terminations = NodeFS.readFileSync(terminationsPath, "utf8")
-        .trim()
-        .split("\n")
-        .map((line) => JSON.parse(line) as { processId?: string });
-      assert.deepEqual(terminations, [{ processId }]);
-      yield* Effect.gen(function* () {
-        while (!NodeFS.existsSync(commandExitsPath)) {
-          yield* Effect.sleep("10 millis");
-        }
-      }).pipe(Effect.timeout("1 second"));
+        yield* runtime.start();
+        yield* runtime.sendTurn({ input: "start a long command" });
+        yield* Deferred.await(commandStarted).pipe(Effect.timeout("2 seconds"));
+        yield* runtime.interruptTurn();
+        assert.isTrue(
+          NodeFS.existsSync(terminationsPath),
+          "Stop must request termination for the active command process",
+        );
+        const terminations = NodeFS.readFileSync(terminationsPath, "utf8")
+          .trim()
+          .split("\n")
+          .map((line) => JSON.parse(line) as { processId?: string });
+        assert.deepEqual(terminations, [{ processId }]);
+        yield* Effect.gen(function* () {
+          while (!NodeFS.existsSync(commandExitsPath)) {
+            yield* Effect.sleep("10 millis");
+          }
+        }).pipe(Effect.timeout("1 second"));
 
-      yield* runtime.close;
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-  );
+        yield* runtime.close;
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    );
+  }
 
   const elicitationCases = [
     {
