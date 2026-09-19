@@ -1,5 +1,7 @@
 import {
   closeLeaf,
+  firstLeafId,
+  leafIds,
   newTab,
   setSplitRatio,
   splitPane,
@@ -156,4 +158,69 @@ export function applyActivateTab(snapshot: WorkbenchSnapshot, tabId: string): Wo
   return snapshot.tabs.some((tab) => tab.id === tabId) && snapshot.activeTabId !== tabId
     ? { ...snapshot, activeTabId: tabId }
     : snapshot;
+}
+
+/** Compare two targets by Session identity across environments and workspaces. */
+export function isSameSessionTarget(a: ViewTarget, b: ViewTarget): boolean {
+  if (a.kind === "agentSession" && b.kind === "agentSession") {
+    return (
+      a.environmentId === b.environmentId &&
+      a.workspaceId === b.workspaceId &&
+      a.agentSessionId === b.agentSessionId
+    );
+  }
+  if (a.kind === "workspaceTerminal" && b.kind === "workspaceTerminal") {
+    return (
+      a.environmentId === b.environmentId &&
+      a.workspaceId === b.workspaceId &&
+      a.terminalSessionId === b.terminalSessionId
+    );
+  }
+  return false;
+}
+
+/**
+ * Remove every ViewInstance displaying this Session from every Tab.
+ *
+ * Preserves Tab IDs, activeTabId, and other ViewInstance identities.
+ * Cleared Tabs recover Welcome.
+ */
+export function applyRemoveSessionViews(
+  snapshot: WorkbenchSnapshot,
+  target: ViewTarget,
+  generateId: () => string,
+): WorkbenchSnapshot {
+  let changed = false;
+  const tabs = snapshot.tabs.map((tab) => {
+    const matchingPaneIds: string[] = [];
+    for (const [paneId, view] of tab.panes) {
+      if (isSameSessionTarget(view.target, target)) {
+        matchingPaneIds.push(paneId);
+      }
+    }
+    if (matchingPaneIds.length === 0) return tab;
+    changed = true;
+    let currentTab: AcodeTab | null = { ...tab };
+    const panes = new Map(tab.panes);
+    for (const paneId of matchingPaneIds) {
+      panes.delete(paneId);
+      if (currentTab !== null) {
+        currentTab = closeLeaf(currentTab, paneId);
+      }
+    }
+    if (currentTab === null) {
+      return { ...welcomeTab(generateId), id: tab.id };
+    }
+    const validFocus = leafIds(currentTab.layout).includes(currentTab.focusedPaneId)
+      ? currentTab.focusedPaneId
+      : firstLeafId(currentTab.layout);
+    return {
+      ...tab,
+      layout: currentTab.layout,
+      focusedPaneId: validFocus,
+      panes,
+    };
+  });
+
+  return changed ? { ...snapshot, tabs } : snapshot;
 }
