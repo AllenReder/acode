@@ -1,5 +1,3 @@
-import { useEffect, useRef, useState } from "react";
-
 import { TerminalViewport } from "../components/ThreadTerminalDrawer";
 import { useAcodeWorkspace } from "../state/entities";
 import { runtimeTerminalIdForTarget } from "./sessionTarget";
@@ -9,6 +7,7 @@ interface TerminalViewProps {
   readonly target: Extract<ViewTarget, { kind: "workspaceTerminal" }>;
   readonly paneId: string;
   readonly focused: boolean;
+  readonly focusRequestId?: number;
   readonly availableSize: { readonly width: number; readonly height: number };
 }
 
@@ -29,21 +28,14 @@ interface TerminalViewProps {
  * the user can reopen the same Session from the Sidebar and reconnect to its
  * scrollback. Stop / terminate is a separate, explicit user action; see D3.
  */
-export function TerminalView({ target, paneId, focused }: TerminalViewProps) {
-  void paneId;
+export function TerminalView({
+  target,
+  focused,
+  focusRequestId = 0,
+  availableSize,
+}: TerminalViewProps) {
   const workspace = useAcodeWorkspace(target.environmentId, target.workspaceId);
   const terminalId = runtimeTerminalIdForTarget(target);
-  // Bump focusRequestId every time `focused` flips true so the viewport's
-  // focus effect re-runs even on the same focused Pane after a Sidebar click.
-  const [focusRequestId, setFocusRequestId] = useState(0);
-  const lastFocusedRef = useRef(focused);
-  useEffect(() => {
-    if (focused && !lastFocusedRef.current) {
-      setFocusRequestId((id) => id + 1);
-    }
-    lastFocusedRef.current = focused;
-  }, [focused]);
-
   if (workspace === null || terminalId === null) {
     return (
       <div className="flex h-full min-h-0 items-center justify-center p-6 text-sm text-muted-foreground">
@@ -63,6 +55,8 @@ export function TerminalView({ target, paneId, focused }: TerminalViewProps) {
       onSessionExited={() => undefined}
       focusRequestId={focusRequestId}
       autoFocus={focused}
+      focused={focused}
+      availableSize={availableSize}
       visible
       resizeEpoch={0}
       drawerHeight={0}

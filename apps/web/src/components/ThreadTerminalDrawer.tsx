@@ -1,5 +1,4 @@
 import { useAtomValue } from "@effect/atom-react";
-import { createPortal } from "react-dom";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -325,6 +324,8 @@ interface TerminalViewportProps {
   onAddTerminalContext?: (selection: TerminalContextSelection) => void;
   focusRequestId: number;
   autoFocus: boolean;
+  focused?: boolean;
+  availableSize?: { readonly width: number; readonly height: number };
   visible: boolean;
   resizeEpoch: number;
   drawerHeight: number;
@@ -353,6 +354,8 @@ export function TerminalViewport({
   onAddTerminalContext,
   focusRequestId,
   autoFocus,
+  focused = true,
+  availableSize,
   visible,
   resizeEpoch,
   drawerHeight,
@@ -361,6 +364,11 @@ export function TerminalViewport({
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<GhosttyTerminalSurface | null>(null);
   const visibleRef = useRef(visible);
+  const focusedRef = useRef(focused);
+  useLayoutEffect(() => {
+    focusedRef.current = focused;
+  }, [focused]);
+  const gridRef = useRef<{ cols: number; rows: number } | null>(null);
   const environmentId = inputEnvironmentId ?? threadRef!.environmentId;
   const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
   const openInPreferredEditor = useOpenInPreferredEditor(
@@ -429,8 +437,10 @@ export function TerminalViewport({
       },
     }),
   );
-  const resizeTerminal = useEffectEvent((cols: number, rows: number) =>
-    runTerminalResize({
+  const resizeTerminal = useEffectEvent((cols: number, rows: number) => {
+    gridRef.current = { cols, rows };
+    if (!focusedRef.current || !visibleRef.current) return;
+    return runTerminalResize({
       environmentId,
       input: {
         ...(workspaceId ? { workspaceId } : { threadId: threadId! }),
@@ -438,8 +448,12 @@ export function TerminalViewport({
         cols,
         rows,
       },
-    }),
-  );
+    });
+  });
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (focused && visible && grid) void resizeTerminal(grid.cols, grid.rows);
+  }, [focused, visible]);
   const terminalOutput = terminalSession.output;
   const terminalError = terminalSession.error;
   const terminalStatus = terminalSession.status;
@@ -848,6 +862,7 @@ export function TerminalViewport({
       }
 
       function handleData(data: string): void {
+        if (!focusedRef.current || !visibleRef.current) return;
         void (async () => {
           const result = await writeTerminal(data);
           if (result._tag === "Success" || isAtomCommandInterrupted(result)) return;
@@ -995,80 +1010,22 @@ export function TerminalViewport({
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [drawerHeight, environmentId, resizeEpoch, terminalId, threadId, workspaceId]);
+  }, [
+    availableSize?.width,
+    availableSize?.height,
+    drawerHeight,
+    environmentId,
+    resizeEpoch,
+    terminalId,
+    threadId,
+    workspaceId,
+  ]);
   return (
     <div
       ref={containerRef}
       tabIndex={-1}
       className="relative h-full w-full overflow-hidden bg-[var(--terminal-background)]"
     />
-  );
-}
-
-/** Minimal Workspace-owned host used before the full Pane/View workbench lands. */
-export function WorkspaceTerminalSurface(props: {
-  readonly environmentId: EnvironmentId;
-  readonly workspaceId: WorkspaceId;
-  readonly terminalId: string;
-  readonly cwd: string;
-  readonly onClose: () => void;
-}) {
-  const closeTerminal = useAtomCommand(terminalEnvironment.close, { reportFailure: false });
-  // Portal out of the Sidebar subtree: the sidebar's scroll fade uses CSS
-  // masks, which trap `position: fixed` descendants and would pin this
-  // overlay inside the sidebar instead of the viewport.
-  return createPortal(
-    <div className="fixed inset-8 z-50 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
-      <div className="flex h-8 shrink-0 items-center justify-between border-b border-border px-3 text-xs text-muted-foreground">
-        <span>Terminal · {props.terminalId}</span>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            className="rounded px-2 py-0.5 hover:bg-muted hover:text-foreground"
-            aria-label="Hide terminal view"
-            onClick={props.onClose}
-          >
-            ×
-          </button>
-          <button
-            type="button"
-            className="rounded px-2 py-0.5 hover:bg-destructive/15 hover:text-destructive"
-            aria-label="Terminate terminal session"
-            onClick={() => {
-              void closeTerminal({
-                environmentId: props.environmentId,
-                input: {
-                  workspaceId: props.workspaceId,
-                  terminalId: props.terminalId,
-                  deleteHistory: true,
-                },
-              });
-              props.onClose();
-            }}
-          >
-            Stop
-          </button>
-        </div>
-      </div>
-      <div className="min-h-0 flex-1">
-        <TerminalViewport
-          advancedTypography={false}
-          environmentId={props.environmentId}
-          workspaceId={props.workspaceId}
-          terminalId={props.terminalId}
-          terminalLabel="Terminal"
-          cwd={props.cwd}
-          onSessionExited={() => undefined}
-          focusRequestId={0}
-          autoFocus
-          visible
-          resizeEpoch={0}
-          drawerHeight={0}
-          keybindings={[]}
-        />
-      </div>
-    </div>,
-    document.body,
   );
 }
 

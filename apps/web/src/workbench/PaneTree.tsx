@@ -101,6 +101,7 @@ interface PaneProps {
 
 function Pane({ snapshot, paneId, focused }: PaneProps) {
   const setFocused = useWorkbenchStore((s) => s.setFocused);
+  const focusRequestId = useWorkbenchStore((s) => s.focusRequestId);
   const closeView = useWorkbenchStore((s) => s.closeView);
   const view = getActiveTab(snapshot).panes.get(paneId);
   const target = view?.target ?? null;
@@ -159,6 +160,7 @@ function Pane({ snapshot, paneId, focused }: PaneProps) {
             target={target!}
             paneId={paneId}
             focused={focused}
+            focusRequestId={focusRequestId}
             availableSize={availableSize}
           />
         )}
