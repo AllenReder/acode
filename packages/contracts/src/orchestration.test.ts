@@ -91,6 +91,7 @@ it.effect("decodes a thread creation result with its durable ACode session", () 
     const result = yield* decodeDispatchResult({
       sequence: 7,
       agentSession: {
+        kind: "agent",
         id: "agent-session:event-1",
         workspaceId: "workspace:project-1",
         threadId: "thread-1",

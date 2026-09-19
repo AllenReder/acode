@@ -1,4 +1,5 @@
 import {
+  type AcodeProjectShell,
   type AgentSessionImportSource,
   AcodeProjectId,
   ChatAttachment,
@@ -3598,8 +3599,12 @@ projectionSnapshotLayer("ProjectionSnapshotQuery ACode workspace tree", (it) => 
             'Feature', '/tmp/siblings-feature', 'worktree', '2026-09-18T00:00:01Z', '2026-09-18T00:00:01Z')
       `;
 
-      const project = yield* query.getAcodeProjectByT3ProjectId?.(
-        ProjectId.make("siblings-feature"),
+      // The method is optional for compatibility with older query layers, so
+      // `?.()` alone would make `yield*` see `Effect | undefined` and widen the
+      // whole test effect to `unknown`. Fall back like the production callers.
+      const project = yield* (
+        query.getAcodeProjectByT3ProjectId?.(ProjectId.make("siblings-feature")) ??
+          Effect.succeed(Option.none<AcodeProjectShell>())
       );
       assert.isTrue(Option.isSome(project));
       if (Option.isSome(project)) {

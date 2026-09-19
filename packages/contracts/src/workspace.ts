@@ -1,11 +1,14 @@
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import {
   AgentSessionId,
   AcodeProjectId,
   EventId,
+  ForwardCompatibleArray,
   IsoDateTime,
   ProjectId,
+  TerminalSessionId,
   ThreadId,
   TrimmedNonEmptyString,
   WorkspaceId,
@@ -28,16 +31,64 @@ export type WorkspaceRole = typeof WorkspaceRole.Type;
 export const WorkspaceOrigin = Schema.Literals(["associated", "acode-created"]);
 export type WorkspaceOrigin = typeof WorkspaceOrigin.Type;
 
-/** The durable ACode identity and T3 conversation binding shown in a Workspace. */
-export const AcodeAgentSessionShell = Schema.Struct({
-  id: AgentSessionId,
+/**
+ * A durable ACode Session shell: the fields every Session kind exposes in the
+ * Workspace projection. The kind discriminates the identity, and the runtime
+ * binding for that kind stays on its own shell variant.
+ */
+const AcodeSessionShellFields = {
   workspaceId: WorkspaceId,
-  threadId: ThreadId,
   title: TrimmedNonEmptyString,
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
+};
+
+/** The durable ACode identity and T3 conversation binding shown in a Workspace. */
+export const AcodeAgentSessionShell = Schema.Struct({
+  /**
+   * Agent was the only Session kind before the shared contract, so shells from
+   * a server that predates this discriminant decode as Agent instead of
+   * failing the whole snapshot. New encodings always carry the key.
+   */
+  kind: Schema.Literal("agent").pipe(Schema.withDecodingDefault(Effect.succeed("agent"))),
+  id: AgentSessionId,
+  ...AcodeSessionShellFields,
+  threadId: ThreadId,
 });
 export type AcodeAgentSessionShell = typeof AcodeAgentSessionShell.Type;
+
+/**
+ * A durable ACode Terminal Session shell. Its identity is independent of the
+ * PTY process currently backing it; the runtime terminal id stays behind the
+ * Terminal Session adapter.
+ */
+export const AcodeTerminalSessionShell = Schema.Struct({
+  kind: Schema.Literal("terminal"),
+  id: TerminalSessionId,
+  ...AcodeSessionShellFields,
+});
+export type AcodeTerminalSessionShell = typeof AcodeTerminalSessionShell.Type;
+
+/** The shared durable Session contract projected under a Workspace. */
+export const AcodeSessionShell = Schema.Union([AcodeAgentSessionShell, AcodeTerminalSessionShell]);
+export type AcodeSessionShell = typeof AcodeSessionShell.Type;
+
+/** Narrow a projected Session shell to the Agent kind. */
+const isAcodeAgentSessionShell = Schema.is(AcodeAgentSessionShell);
+
+/**
+ * The Agent Session shells of one Workspace projection.
+ *
+ * Operates on *decoded* shells. `Schema.is` does not honour the Agent shell's
+ * `kind` decoding default, so a raw pre-discriminant payload that never went
+ * through `AcodeProjectShell` decoding is not recognized and yields no Agent
+ * Sessions. Every caller reads its Workspace from a decoded snapshot.
+ */
+export function agentSessionsIn(workspace: {
+  readonly sessions?: ReadonlyArray<AcodeSessionShell> | undefined;
+}): ReadonlyArray<AcodeAgentSessionShell> {
+  return (workspace.sessions ?? []).filter(isAcodeAgentSessionShell);
+}
 
 /** A stable checkout owned by one ACode Project. */
 export const AcodeWorkspaceShell = Schema.Struct({
@@ -50,8 +101,13 @@ export const AcodeWorkspaceShell = Schema.Struct({
   role: WorkspaceRole,
   /** Only set for "worktree" Workspaces; absent on "main". */
   origin: Schema.optional(WorkspaceOrigin),
-  /** Durable sessions only; the transcript and execution state remain on the T3 thread shell. */
-  sessions: Schema.optional(Schema.Array(AcodeAgentSessionShell)),
+  /**
+   * Sessions of every kind. Decoded with `ForwardCompatibleArray` so a server
+   * that adds a Session kind this build does not know drops that one element
+   * instead of failing the whole Workspace snapshot. The transcript and
+   * execution state remain on the T3 thread shell.
+   */
+  sessions: Schema.optional(ForwardCompatibleArray(AcodeSessionShell)),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });

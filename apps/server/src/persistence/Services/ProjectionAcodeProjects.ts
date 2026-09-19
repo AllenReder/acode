@@ -2,6 +2,7 @@ import {
   AcodeAgentSessionShell,
   AcodeProjectId,
   AcodeProjectShell,
+  AcodeSessionShell,
   AcodeWorkspaceShell,
   AgentSessionId,
   ProjectId,
@@ -146,10 +147,11 @@ export function mapProjectionAcodeProjectRows(
   rows: ReadonlyArray<ProjectionAcodeProjectRow>,
   sessionRows: ReadonlyArray<ProjectionAcodeAgentSessionRow> = [],
 ): ReadonlyArray<AcodeProjectShell> {
-  const sessionsByWorkspace = new Map<WorkspaceId, ReadonlyArray<AcodeAgentSessionShell>>();
+  const sessionsByWorkspace = new Map<WorkspaceId, ReadonlyArray<AcodeSessionShell>>();
   for (const row of sessionRows) {
     if (row.archivedAt !== null || row.deletedAt !== null) continue;
     const session: AcodeAgentSessionShell = {
+      kind: "agent",
       id: row.agentSessionId,
       workspaceId: row.workspaceId,
       threadId: row.threadId,

@@ -7246,6 +7246,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             getAcodeAgentSessionByThreadId: () =>
               Effect.succeed(
                 Option.some({
+                  kind: "agent",
                   id: AgentSessionId.make("agent-session:event-1"),
                   workspaceId: WorkspaceId.make("workspace:project-1"),
                   threadId,

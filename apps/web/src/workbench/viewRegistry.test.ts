@@ -16,6 +16,7 @@ import {
   type ViewDefinition,
   type ViewTarget,
 } from "./viewRegistry";
+import { terminalTargetForRuntime } from "./sessionTarget";
 
 const FIX_ENV: EnvironmentId = "primary" as EnvironmentId;
 const FIX_WORKSPACE: WorkspaceId = "ws-1" as WorkspaceId;
@@ -47,10 +48,11 @@ function terminalTarget(
   overrides: Partial<Extract<ViewTarget, { kind: "workspaceTerminal" }>> = {},
 ): Extract<ViewTarget, { kind: "workspaceTerminal" }> {
   return {
-    kind: "workspaceTerminal",
-    environmentId: FIX_ENV,
-    workspaceId: FIX_WORKSPACE,
-    terminalId: "term-1",
+    ...terminalTargetForRuntime({
+      environmentId: FIX_ENV,
+      workspaceId: FIX_WORKSPACE,
+      terminalId: "term-1",
+    }),
     ...overrides,
   };
 }

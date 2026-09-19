@@ -449,6 +449,7 @@ const makeRepository = Effect.gen(function* () {
       getSessionRowForThread({ threadId }).pipe(
         Effect.map(
           Option.map((row) => ({
+            kind: "agent" as const,
             id: row.agentSessionId,
             workspaceId: row.workspaceId,
             threadId: row.threadId,

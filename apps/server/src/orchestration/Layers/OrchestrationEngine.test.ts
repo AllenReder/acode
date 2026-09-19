@@ -4,6 +4,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 import {
+  agentSessionsIn,
   ApprovalRequestId,
   EventId,
   CheckpointRef,
@@ -189,7 +190,7 @@ describe("OrchestrationEngine", () => {
 
       const firstShell = await first.shell();
       const firstSessions = (firstShell.acodeProjects ?? []).flatMap((project) =>
-        project.workspaces.flatMap((workspace) => workspace.sessions ?? []),
+        project.workspaces.flatMap((workspace) => agentSessionsIn(workspace)),
       );
       const sessionA = firstSessions.find((session) => session.threadId === "session-thread-a");
       const sessionB = firstSessions.find((session) => session.threadId === "session-thread-b");
@@ -245,7 +246,7 @@ describe("OrchestrationEngine", () => {
           .shell()
           .then((shell) =>
             (shell.acodeProjects ?? []).flatMap((project) =>
-              project.workspaces.flatMap((workspace) => workspace.sessions ?? []),
+              project.workspaces.flatMap((workspace) => agentSessionsIn(workspace)),
             ),
           );
         await expect(reopenedSessions).resolves.toMatchObject([
