@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { readLocalApi } from "../localApi";
-import { getActiveTab, isSameSessionTarget } from "../workbench/workbenchState";
+import { getActiveTab, findPaneBySessionTarget } from "../workbench/workbenchState";
 import { useWorkbenchStore } from "../workbench/workbenchStore";
 import {
   buildSessionActionMenuItems,
@@ -27,18 +27,10 @@ export function useSessionActionMenu(input: {
         if (!api) return;
 
         const tab = getActiveTab(store);
-        let isOpenInActiveTab = false;
-        let isFocusedInActiveTab = false;
-
-        for (const [paneId, view] of tab.panes) {
-          if (isSameSessionTarget(view.target, target)) {
-            isOpenInActiveTab = true;
-            if (paneId === tab.focusedPaneId) {
-              isFocusedInActiveTab = true;
-            }
-            break;
-          }
-        }
+        const existingPaneId = findPaneBySessionTarget(tab, target);
+        const isOpenInActiveTab = existingPaneId !== null;
+        const isFocusedInActiveTab =
+          existingPaneId !== null && existingPaneId === tab.focusedPaneId;
 
         const state: SessionActionMenuState = {
           kind: target.kind === "agentSession" ? "agent" : "terminal",

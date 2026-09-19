@@ -11,7 +11,7 @@ import { stackedThreadToast, toastManager } from "../components/ui/toast";
 import { useCopyToClipboard } from "./useCopyToClipboard";
 import { runtimeTerminalIdForTarget } from "../workbench/sessionTarget";
 import { targetKey, type ViewTarget } from "../workbench/viewRegistry";
-import { getActiveTab, isSameSessionTarget, type SplitDir } from "../workbench/workbenchState";
+import { getActiveTab, findPaneBySessionTarget, type SplitDir } from "../workbench/workbenchState";
 import { useWorkbenchStore } from "../workbench/workbenchStore";
 
 export type SessionTarget = Extract<ViewTarget, { kind: "agentSession" | "workspaceTerminal" }>;
@@ -58,11 +58,10 @@ export function useSessionCommands(target: SessionTarget) {
 
   const focusSession = useCallback(() => {
     const tab = getActiveTab(store);
-    for (const [paneId, view] of tab.panes) {
-      if (isSameSessionTarget(view.target, target)) {
-        store.setFocused(paneId);
-        return;
-      }
+    const existingPaneId = findPaneBySessionTarget(tab, target);
+    if (existingPaneId !== null) {
+      store.setFocused(existingPaneId);
+      return;
     }
     store.openTarget(target);
   }, [store, target]);

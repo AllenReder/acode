@@ -1763,6 +1763,20 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     f: (state: TerminalManagerState) => readonly [A, TerminalManagerState],
   ) => SynchronizedRef.modify(managerStateRef, f);
 
+  function reconcileDiskTerminalRecords(
+    diskRecords: ReadonlyArray<PersistedTerminalSessionRecord>,
+    activeKeys: ReadonlySet<string>,
+    deletedKeys: ReadonlySet<string>,
+  ): ReadonlyArray<PersistedTerminalSessionRecord> {
+    return diskRecords.filter((record) => {
+      const key = toSessionKey(
+        record.workspaceId ?? record.threadId ?? record.ownerId,
+        record.terminalId,
+      );
+      return !activeKeys.has(key) && !deletedKeys.has(key);
+    });
+  }
+
   const sessionIndexWriteLock = yield* Semaphore.make(1);
   const persistSessionIndex: Effect.Effect<void, never, never> = Effect.gen(function* () {
     const state = yield* readManagerState;
@@ -1775,13 +1789,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     const deletedKeys = state.deletedSessionKeys ?? new Set<string>();
 
     const diskRecords = yield* readPersistedSessionIndex;
-    const preservedDiskRecords = diskRecords.filter((record) => {
-      const key = toSessionKey(
-        record.workspaceId ?? record.threadId ?? record.ownerId,
-        record.terminalId,
-      );
-      return !activeKeys.has(key) && !deletedKeys.has(key);
-    });
+    const preservedDiskRecords = reconcileDiskTerminalRecords(diskRecords, activeKeys, deletedKeys);
 
     const combined = [...activeRecords, ...preservedDiskRecords].sort(
       (left, right) =>
@@ -3178,14 +3186,8 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       const deletedKeys = state.deletedSessionKeys ?? new Set<string>();
 
       const diskRecords = yield* readPersistedSessionIndex;
-      const diskSummaries = diskRecords
-        .filter((record) => {
-          const key = toSessionKey(
-            record.workspaceId ?? record.threadId ?? record.ownerId,
-            record.terminalId,
-          );
-          return record.workspaceId !== undefined && !memoryKeys.has(key) && !deletedKeys.has(key);
-        })
+      const diskSummaries = reconcileDiskTerminalRecords(diskRecords, memoryKeys, deletedKeys)
+        .filter((record) => record.workspaceId !== undefined)
         .map((record) => ({
           workspaceId: record.workspaceId,
           threadId: record.threadId,

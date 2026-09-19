@@ -126,6 +126,14 @@ export function applySetSplitRatio(
   return layout === tab.layout ? snapshot : updateTab(snapshot, { ...tab, layout });
 }
 
+/** Find a pane in a Tab that displays the given Session target. */
+export function findPaneBySessionTarget(tab: WorkbenchTab, target: ViewTarget): string | null {
+  for (const [paneId, view] of tab.panes) {
+    if (isSameSessionTarget(view.target, target)) return paneId;
+  }
+  return null;
+}
+
 function findPaneByTarget(tab: WorkbenchTab, target: ViewTarget): string | null {
   const key = targetKey(target);
   for (const [paneId, view] of tab.panes) {
