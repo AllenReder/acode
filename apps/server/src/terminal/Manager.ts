@@ -356,6 +356,7 @@ type DrainProcessEventAction =
 interface TerminalManagerState {
   sessions: Map<string, TerminalSessionState>;
   killFibers: Map<PtyAdapter.PtyProcess, Fiber.Fiber<void, never>>;
+  deletedSessionKeys?: Set<string>;
 }
 
 function truncateTerminalWireLabel(value: string): string {
@@ -1764,20 +1765,33 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
 
   const sessionIndexWriteLock = yield* Semaphore.make(1);
   const persistSessionIndex: Effect.Effect<void, never, never> = Effect.gen(function* () {
-    const records = yield* readManagerState.pipe(
-      Effect.map((state) =>
-        [...state.sessions.values()]
-          .map(persistedTerminalSessionRecord)
-          .sort(
-            (left, right) =>
-              left.ownerId.localeCompare(right.ownerId) ||
-              left.terminalId.localeCompare(right.terminalId),
-          ),
+    const state = yield* readManagerState;
+    const activeRecords = [...state.sessions.values()].map(persistedTerminalSessionRecord);
+    const activeKeys = new Set(
+      activeRecords.map((r) =>
+        toSessionKey(r.workspaceId ?? r.threadId ?? r.ownerId, r.terminalId),
       ),
     );
+    const deletedKeys = state.deletedSessionKeys ?? new Set<string>();
+
+    const diskRecords = yield* readPersistedSessionIndex;
+    const preservedDiskRecords = diskRecords.filter((record) => {
+      const key = toSessionKey(
+        record.workspaceId ?? record.threadId ?? record.ownerId,
+        record.terminalId,
+      );
+      return !activeKeys.has(key) && !deletedKeys.has(key);
+    });
+
+    const combined = [...activeRecords, ...preservedDiskRecords].sort(
+      (left, right) =>
+        left.ownerId.localeCompare(right.ownerId) ||
+        left.terminalId.localeCompare(right.terminalId),
+    );
+
     yield* sessionIndexWriteLock
       .withPermit(
-        fileSystem.writeFileString(sessionIndexPath, encodePersistedTerminalSessionIndex(records)),
+        fileSystem.writeFileString(sessionIndexPath, encodePersistedTerminalSessionIndex(combined)),
       )
       .pipe(Effect.orElseSucceed(() => undefined));
   });
@@ -2212,9 +2226,65 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     threadId: string,
     terminalId: string,
   ): Effect.fn.Return<Option.Option<TerminalSessionState>> {
-    return yield* Effect.map(readManagerState, (state) =>
-      Option.fromNullishOr(state.sessions.get(toSessionKey(threadId, terminalId))),
+    const state = yield* readManagerState;
+    const key = toSessionKey(threadId, terminalId);
+    const existing = state.sessions.get(key);
+    if (existing) return Option.some(existing);
+    if (state.deletedSessionKeys?.has(key)) return Option.none();
+
+    const diskRecords = yield* readPersistedSessionIndex;
+    const record = diskRecords.find(
+      (r) =>
+        (r.workspaceId ?? r.threadId ?? r.ownerId) === threadId &&
+        r.terminalId === terminalId,
     );
+    if (!record || record.workspaceId === undefined) return Option.none();
+
+    const history = yield* readHistory(record.ownerId, record.terminalId).pipe(
+      Effect.orElseSucceed(
+        () => new BoundedTerminalHistory(historyLineLimit, "", historyByteLimit),
+      ),
+    );
+    const restoredSession: TerminalSessionState = {
+      ownerId: record.ownerId,
+      workspaceId: record.workspaceId ?? null,
+      threadId: record.threadId ?? record.ownerId,
+      terminalId: record.terminalId,
+      cwd: record.cwd,
+      worktreePath: record.worktreePath,
+      status:
+        record.status === "running" || record.status === "starting"
+          ? "exited"
+          : record.status,
+      pid: null,
+      history,
+      pendingHistoryControlSequence: "",
+      pendingProcessEvents: [],
+      pendingProcessEventIndex: 0,
+      processEventDrainRunning: false,
+      exitCode: record.exitCode,
+      exitSignal: record.exitSignal,
+      createdAt: record.createdAt ?? record.updatedAt,
+      updatedAt: record.updatedAt,
+      eventSequence: record.eventSequence,
+      cols: record.cols,
+      rows: record.rows,
+      process: null,
+      unsubscribeData: null,
+      unsubscribeExit: null,
+      hasRunningSubprocess: false,
+      generation: record.generation,
+      childCommandLabel: null,
+      runtimeEnv: record.runtimeEnv,
+    };
+
+    yield* modifyManagerState((currentState) => {
+      const sessions = new Map(currentState.sessions);
+      sessions.set(key, restoredSession);
+      return [undefined, { ...currentState, sessions }] as const;
+    });
+
+    return Option.some(restoredSession);
   });
 
   const requireSession = Effect.fn("terminal.requireSession")(function* (
@@ -2625,6 +2695,8 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
   ) {
     const key = toSessionKey(ownerId, terminalId);
     const session = yield* getSession(ownerId, terminalId);
+    const isWorkspaceSession =
+      workspaceId !== undefined || (Option.isSome(session) && session.value.workspaceId !== null);
     const closedEventSequence = Option.isSome(session) ? session.value.eventSequence + 1 : 0;
 
     if (Option.isSome(session)) {
@@ -2634,6 +2706,46 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     }
 
     yield* flushPersist(ownerId, terminalId);
+    const closedAt = yield* nowIso;
+
+    if (isWorkspaceSession && !deleteHistoryOnClose) {
+      const updated = yield* modifyManagerState((state) => {
+        const existing = state.sessions.get(key);
+        if (!existing) return [null, state] as const;
+        const next: TerminalSessionState = {
+          ...existing,
+          status: "closed",
+          pid: null,
+          process: null,
+          unsubscribeData: null,
+          unsubscribeExit: null,
+          hasRunningSubprocess: false,
+          childCommandLabel: null,
+          exitCode: existing.exitCode ?? 0,
+          exitSignal: null,
+          updatedAt: closedAt,
+          eventSequence: closedEventSequence,
+        };
+        const sessions = new Map(state.sessions);
+        sessions.set(key, next);
+        return [next, { ...state, sessions }] as const;
+      });
+
+      if (updated) {
+        yield* publishEvent({
+          type: "closed",
+          ...(Option.isSome(session)
+            ? ownerEventFields(session.value)
+            : workspaceId
+              ? { workspaceId }
+              : { threadId: ownerId }),
+          terminalId,
+          sequence: closedEventSequence,
+        });
+        yield* persistSessionIndex;
+      }
+      return;
+    }
 
     const removed = yield* modifyManagerState((state) => {
       if (!state.sessions.has(key)) {
@@ -2641,7 +2753,9 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       }
       const sessions = new Map(state.sessions);
       sessions.delete(key);
-      return [true, { ...state, sessions }] as const;
+      const deletedKeys = new Set(state.deletedSessionKeys ?? []);
+      deletedKeys.add(key);
+      return [true, { ...state, sessions, deletedSessionKeys: deletedKeys }] as const;
     });
 
     if (removed) {
@@ -3027,7 +3141,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
             const targetCols = input.cols ?? session.cols;
             const targetRows = input.rows ?? session.rows;
 
-            if (!session.process && input.cwd && input.restartIfNotRunning === true) {
+            if (session.status !== "closed" && !session.process && input.cwd && input.restartIfNotRunning === true) {
               const resolvedInput = yield* resolveLaunchInputEnvironment({
                 ...input,
                 terminalId,
@@ -3054,20 +3168,55 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     );
 
   const readAllTerminalMetadata = () =>
-    readManagerState.pipe(
-      Effect.map((state) =>
-        [...state.sessions.values()]
-          .map(summary)
-          .sort(
-            (left, right) =>
-              right.updatedAt.localeCompare(left.updatedAt) ||
-              (left.workspaceId ?? left.threadId ?? "").localeCompare(
-                right.workspaceId ?? right.threadId ?? "",
-              ) ||
-              left.terminalId.localeCompare(right.terminalId),
-          ),
-      ),
-    );
+    Effect.gen(function* () {
+      const state = yield* readManagerState;
+      const memorySummaries = [...state.sessions.values()].map(summary);
+      const memoryKeys = new Set(
+        memorySummaries.map((s) =>
+          toSessionKey(s.workspaceId ?? s.threadId ?? "", s.terminalId),
+        ),
+      );
+      const deletedKeys = state.deletedSessionKeys ?? new Set<string>();
+
+      const diskRecords = yield* readPersistedSessionIndex;
+      const diskSummaries = diskRecords
+        .filter((record) => {
+          const key = toSessionKey(
+            record.workspaceId ?? record.threadId ?? record.ownerId,
+            record.terminalId,
+          );
+          return record.workspaceId !== undefined && !memoryKeys.has(key) && !deletedKeys.has(key);
+        })
+        .map((record) => ({
+          workspaceId: record.workspaceId,
+          threadId: record.threadId,
+          terminalId: record.terminalId,
+          kind: "terminal" as const,
+          sessionId: record.workspaceId
+            ? terminalSessionIdForRuntime(WorkspaceId.make(record.workspaceId), record.terminalId)
+            : undefined,
+          createdAt: record.createdAt,
+          cwd: record.cwd,
+          worktreePath: record.worktreePath,
+          status: record.status,
+          pid: null,
+          exitCode: record.exitCode,
+          exitSignal: record.exitSignal,
+          hasRunningSubprocess: false,
+          label: "terminal",
+          updatedAt: record.updatedAt,
+          generation: record.generation,
+        }));
+
+      return [...memorySummaries, ...diskSummaries].sort(
+        (left, right) =>
+          right.updatedAt.localeCompare(left.updatedAt) ||
+          (left.workspaceId ?? left.threadId ?? "").localeCompare(
+            right.workspaceId ?? right.threadId ?? "",
+          ) ||
+          left.terminalId.localeCompare(right.terminalId),
+      );
+    });
 
   const readTerminalMetadata = (input: {
     readonly workspaceId?: string | undefined;
@@ -3156,11 +3305,24 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     }
 
     if (event.type === "closed") {
-      return Effect.succeed({
-        type: "remove" as const,
+      return readTerminalMetadata({
         ...(event.workspaceId ? { workspaceId: event.workspaceId } : { threadId: event.threadId }),
         terminalId: event.terminalId,
-      });
+      }).pipe(
+        Effect.map((terminal) => {
+          if (terminal && terminal.status === "closed") {
+            return {
+              type: "upsert" as const,
+              terminal,
+            };
+          }
+          return {
+            type: "remove" as const,
+            ...(event.workspaceId ? { workspaceId: event.workspaceId } : { threadId: event.threadId }),
+            terminalId: event.terminalId,
+          };
+        }),
+      );
     }
 
     return readTerminalMetadata({
