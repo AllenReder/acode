@@ -142,6 +142,7 @@ import {
   useThreadShells,
 } from "../state/entities";
 import { useWorkbenchStore } from "../workbench/workbenchStore";
+import { sessionRouteForTarget } from "../workbench/deepLinks";
 import { environmentServerConfigsAtom, primaryServerKeybindingsAtom } from "../state/server";
 import { vcsEnvironment } from "../state/vcs";
 import { workspaceEnvironment } from "../state/projects";
@@ -2180,6 +2181,7 @@ function SidebarWorkspaceSessions(props: {
 }) {
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const openTerminal = useAtomCommand(terminalEnvironment.open, "terminal open");
+  const router = useRouter();
   const terminalSessions = useKnownTerminalSessions({
     environmentId: props.environmentId,
     threadId: null,
@@ -2219,6 +2221,13 @@ function SidebarWorkspaceSessions(props: {
           terminalId,
         }),
       );
+      const target = terminalTargetForRuntime({
+        environmentId: props.environmentId,
+        workspaceId: props.workspace.id,
+        terminalId,
+      });
+      const { to, params } = sessionRouteForTarget(target);
+      void router.navigate({ to: to as never, params, replace: true } as never);
     });
   };
 
@@ -2239,6 +2248,9 @@ function SidebarWorkspaceSessions(props: {
               render={
                 <SessionRow
                   sessionTitle={title}
+                  navigateTo={(route) =>
+                    void router.navigate({ ...route, to: route.to as never } as never)
+                  }
                   target={terminalTargetForRuntime({
                     environmentId: props.environmentId,
                     workspaceId: props.workspace.id,
@@ -2275,6 +2287,9 @@ function SidebarWorkspaceSessions(props: {
               workspaceId: props.workspace.id,
               agentSessionId: session.id,
             }}
+            navigateTo={(route) =>
+              void router.navigate({ ...route, to: route.to as never } as never)
+            }
           >
             <CircleDashedIcon className="size-3 shrink-0" />
             <span className="min-w-0 flex-1 truncate">{session.title}</span>
@@ -2322,6 +2337,9 @@ function SidebarWorkspaceSessions(props: {
                         <SessionRow
                           isClosed
                           sessionTitle={title}
+                          navigateTo={(route) =>
+                            void router.navigate({ ...route, to: route.to as never } as never)
+                          }
                           target={terminalTargetForRuntime({
                             environmentId: props.environmentId,
                             workspaceId: props.workspace.id,
@@ -2343,6 +2361,9 @@ function SidebarWorkspaceSessions(props: {
                   key={`hist-agent:${props.environmentId}:${session.id}`}
                   isClosed
                   sessionTitle={session.title}
+                  navigateTo={(route) =>
+                    void router.navigate({ ...route, to: route.to as never } as never)
+                  }
                   aria-label={`${session.title} (closed)`}
                   target={{
                     kind: "agentSession",

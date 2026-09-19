@@ -18,6 +18,7 @@ import {
   type WorkspaceId,
 } from "@t3tools/contracts";
 import { Atom } from "effect/unstable/reactivity";
+import * as Option from "effect/Option";
 import { useMemo } from "react";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { environmentProjects, environmentWorkspace } from "./projects";
@@ -25,7 +26,9 @@ import { environmentServerConfigsAtom } from "./server";
 import {
   allEnvironmentProjectSnapshotsReadyAtom,
   allEnvironmentShellsBootstrappedAtom,
+  environmentShell,
 } from "./shell";
+import type { EnvironmentShellState } from "@t3tools/client-runtime/state/shell";
 import { environmentThreadDetails, environmentThreadShells } from "./threads";
 
 const EMPTY_THREAD_REFS: ReadonlyArray<ScopedThreadRef> = Object.freeze([]);
@@ -44,6 +47,16 @@ const EMPTY_THREAD_DETAIL_ATOM = Atom.make<EnvironmentThread | null>(null).pipe(
 );
 const EMPTY_THREAD_STATUS_ATOM = Atom.make<EnvironmentThreadStatus>("empty").pipe(
   Atom.withLabel("web-thread-status:empty"),
+);
+
+const EMPTY_ENVIRONMENT_SHELL_STATE: EnvironmentShellState = Object.freeze({
+  snapshot: Option.none(),
+  status: "empty",
+  error: Option.none(),
+});
+
+const EMPTY_ENVIRONMENT_SHELL_STATE_ATOM = Atom.make(EMPTY_ENVIRONMENT_SHELL_STATE).pipe(
+  Atom.withLabel("web-environment-shell-state:empty"),
 );
 
 const activeEnvironmentIdAtom = Atom.make<EnvironmentId | null>(null).pipe(
@@ -79,6 +92,15 @@ export function useProjects(): ReadonlyArray<EnvironmentProject> {
 
 export function useAcodeProjects() {
   return useAtomValue(environmentWorkspace.acodeProjectsAtom);
+}
+
+export function useEnvironmentShellSnapshotPresent(environmentId: EnvironmentId | null): boolean {
+  const state = useAtomValue(
+    environmentId === null
+      ? EMPTY_ENVIRONMENT_SHELL_STATE_ATOM
+      : environmentShell.stateValueAtom(environmentId),
+  );
+  return Option.isSome(state.snapshot);
 }
 
 export function useServerConfigs(): ReadonlyMap<EnvironmentId, ServerConfig> {

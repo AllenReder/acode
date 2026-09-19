@@ -23,7 +23,6 @@ import type { AgentSessionId, EnvironmentId, WorkspaceId } from "@t3tools/contra
 import { SessionRow } from "./SessionRow";
 import { resetWorkbenchStore, useWorkbenchStore } from "../../workbench/workbenchStore";
 import { getActiveTab } from "../../workbench/workbenchState";
-import { ensureLocalApi } from "../../localApi";
 
 let renderer: ReactTestRenderer;
 afterEach(async () => {
@@ -39,11 +38,17 @@ it("opens, splits and focuses Agent Sessions by ACode identity, including reopen
     workspaceId: "workspace" as WorkspaceId,
     agentSessionId: "one" as AgentSessionId,
   } as const;
+  const navigate = vi.fn();
   await act(() => {
     renderer = create(
       <>
-        <SessionRow target={target}>First</SessionRow>
-        <SessionRow target={{ ...target, agentSessionId: "two" as AgentSessionId }}>
+        <SessionRow navigateTo={navigate} target={target}>
+          First
+        </SessionRow>
+        <SessionRow
+          navigateTo={navigate}
+          target={{ ...target, agentSessionId: "two" as AgentSessionId }}
+        >
           Second
         </SessionRow>
       </>,
@@ -53,6 +58,16 @@ it("opens, splits and focuses Agent Sessions by ACode identity, including reopen
   await act(() => first!.props.onClick({ altKey: false }));
   expect(getActiveTab(useWorkbenchStore.getState()).panes.size).toBe(1);
   expect([...getActiveTab(useWorkbenchStore.getState()).panes.values()][0]?.target).toEqual(target);
+  expect(navigate).toHaveBeenCalledTimes(1);
+  await act(() => first!.props.onClick({ altKey: false }));
+  expect(navigate).toHaveBeenCalledTimes(2);
+  expect(navigate).toHaveBeenCalledWith(
+    expect.objectContaining({
+      to: "/$environmentId/workspaces/$workspaceId/agent-sessions/$agentSessionId",
+      params: expect.objectContaining({ agentSessionId: "one" }),
+      replace: true,
+    }),
+  );
   await act(() => second!.props.onClick({ altKey: true, shiftKey: false }));
   expect(getActiveTab(useWorkbenchStore.getState()).layout).toMatchObject({
     type: "split",
@@ -143,6 +158,29 @@ it("requests keyboard focus again when the already-focused Session row is clicke
   clearViewRegistry();
 });
 
+it("keeps the URL unchanged for split commands", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const target = {
+    kind: "agentSession",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    agentSessionId: "one" as AgentSessionId,
+  } as const;
+  const navigate = vi.fn();
+
+  await act(() => {
+    renderer = create(
+      <SessionRow navigateTo={navigate} target={target}>
+        Agent
+      </SessionRow>,
+    );
+  });
+  const row = renderer!.root.findByType("button");
+  await act(() => row.props.onClick({ altKey: true }));
+  expect(getActiveTab(useWorkbenchStore.getState()).panes).toHaveLength(1);
+  expect(navigate).not.toHaveBeenCalled();
+});
+
 it("opens capability-gated menu on right-click without navigating", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const target = {
@@ -152,7 +190,6 @@ it("opens capability-gated menu on right-click without navigating", async () => 
     agentSessionId: "one" as AgentSessionId,
   } as const;
 
-  const api = ensureLocalApi();
   showContextMenuMock.mockClear();
 
   await act(() => {
@@ -204,7 +241,6 @@ it("supports keyboard context-menu invocation via ContextMenu and Shift+F10", as
     agentSessionId: "one" as AgentSessionId,
   } as const;
 
-  const api = ensureLocalApi();
   showContextMenuMock.mockClear();
 
   await act(() => {

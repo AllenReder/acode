@@ -140,9 +140,9 @@ it("opens a Workspace from Welcome and opens only that Workspace's Sessions thro
   });
   expect(renderer!.root.findByType("h1").children).toEqual(["Renamed"]);
   await act(() => button("Review").props.onClick());
-  expect([...getActiveTab(useWorkbenchStore.getState()).panes.values()][0]!.target).toEqual(
-    session,
-  );
+  expect(
+    [...getActiveTab(useWorkbenchStore.getState()).panes.values()].map((view) => view.target),
+  ).toEqual([workspace, session]);
   await act(() => {
     data = [];
     listeners.forEach((listener) => listener());

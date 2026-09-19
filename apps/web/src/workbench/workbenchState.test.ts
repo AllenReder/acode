@@ -91,9 +91,9 @@ describe("applyOpenTarget", () => {
     snap = applyOpenTarget(snap, agent(AGENT_X), ids);
     const focusBefore = getActiveTab(snap).focusedPaneId;
     snap = applyOpenTarget(snap, terminal("term-1"), ids);
-    expect(getActiveTab(snap).panes.size).toBe(1);
-    expect(getActiveTab(snap).panes.get(focusBefore)?.target).toEqual(terminal("term-1"));
-    expect(getActiveTab(snap).focusedPaneId).toBe(focusBefore);
+    expect(getActiveTab(snap).panes.size).toBe(2);
+    expect(getActiveTab(snap).panes.get(focusBefore)?.target).toEqual(agent(AGENT_X));
+    expect(getActiveTab(snap).focusedPaneId).not.toBe(focusBefore);
   });
 
   it("focuses the existing pane when the target is already open", () => {
@@ -107,6 +107,20 @@ describe("applyOpenTarget", () => {
     snap = applyOpenTarget(snap, agent(AGENT_X), ids);
     expect(getActiveTab(snap).focusedPaneId).toBe(firstFocus);
     expect(getActiveTab(snap).panes.size).toBe(2);
+  });
+
+  it("adds a right-side pane for a second distinct target while preserving the first", () => {
+    const ids = makeIds();
+    let snap = emptyWorkbenchSnapshot(ids);
+    snap = applyOpenTarget(snap, agent(AGENT_X), ids);
+    const firstPaneId = getActiveTab(snap).focusedPaneId;
+    snap = applyOpenTarget(snap, agent(AGENT_Y), ids);
+    const secondPaneId = getActiveTab(snap).focusedPaneId;
+
+    expect(getActiveTab(snap).panes.size).toBe(2);
+    expect(getActiveTab(snap).panes.get(firstPaneId)?.target).toEqual(agent(AGENT_X));
+    expect(getActiveTab(snap).panes.get(secondPaneId)?.target).toEqual(agent(AGENT_Y));
+    expect(getActiveTab(snap).layout).toMatchObject({ type: "split", dir: "right" });
   });
 });
 

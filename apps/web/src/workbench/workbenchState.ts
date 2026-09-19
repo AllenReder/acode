@@ -66,6 +66,17 @@ export function applyOpenTarget(
   const tab = getActiveTab(snapshot);
   const existingPaneId = findPaneByTarget(tab, target);
   if (existingPaneId !== null) return applySetFocused(snapshot, existingPaneId);
+  if (tab.panes.get(tab.focusedPaneId)?.target.kind !== "welcome") {
+    const paneId = generateId();
+    const panes = new Map(tab.panes);
+    panes.set(paneId, viewInstance(target, generateId));
+    return updateTab(snapshot, {
+      ...tab,
+      panes,
+      layout: splitPane(tab.layout, tab.focusedPaneId, "right", paneId),
+      focusedPaneId: paneId,
+    });
+  }
   const panes = new Map(tab.panes);
   panes.set(tab.focusedPaneId, viewInstance(target, generateId));
   return updateTab(snapshot, { ...tab, panes });

@@ -3,6 +3,7 @@ import { cn } from "../../lib/utils";
 import { getActiveTab } from "../../workbench/workbenchState";
 import { useWorkbenchStore } from "../../workbench/workbenchStore";
 import { targetsEqual, type ViewTarget } from "../../workbench/viewRegistry";
+import { sessionRouteForTarget } from "../../workbench/deepLinks";
 import { useSessionActionMenu } from "../../hooks/useSessionActionMenu";
 
 export type SessionTarget = Extract<ViewTarget, { kind: "agentSession" | "workspaceTerminal" }>;
@@ -12,6 +13,11 @@ export interface SessionRowProps extends ComponentProps<"button"> {
   readonly isClosed?: boolean;
   readonly sessionTitle?: string;
   readonly onStartRename?: () => void;
+  readonly navigateTo?: (input: {
+    readonly to: string;
+    readonly params: Record<string, string>;
+    readonly replace: boolean;
+  }) => void;
 }
 
 /** Sidebar navigation addresses Sessions; Workbench commands own layout and uniqueness. */
@@ -20,6 +26,7 @@ export function SessionRow({
   isClosed = false,
   sessionTitle,
   onStartRename,
+  navigateTo,
   onClick,
   onContextMenu,
   onKeyDown,
@@ -37,7 +44,20 @@ export function SessionRow({
     isClosed,
     sessionTitle,
     onStartRename,
+    navigateTo,
   });
+  const navigateTarget = () => {
+    const route = sessionRouteForTarget(target);
+    if (navigateTo !== undefined) {
+      navigateTo({ ...route, replace: true });
+      return;
+    }
+    if (typeof window !== "undefined" && "__acodeRouter" in window) {
+      const router = (window as { __acodeRouter?: { navigate: (input: unknown) => void } })
+        .__acodeRouter;
+      router?.navigate({ ...route, replace: true });
+    }
+  };
 
   return (
     <button
@@ -55,8 +75,12 @@ export function SessionRow({
       aria-description="Open Session (Alt/Option: split right; Alt/Option+Shift: split down)"
       onClick={(event) => {
         const commands = useWorkbenchStore.getState();
-        if (event.altKey) commands.splitFocused(target, event.shiftKey ? "down" : "right");
-        else commands.openTarget(target);
+        if (event.altKey) {
+          commands.splitFocused(target, event.shiftKey ? "down" : "right");
+        } else {
+          commands.openTarget(target);
+          navigateTarget();
+        }
         onClick?.(event);
       }}
       onContextMenu={(event) => {

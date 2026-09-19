@@ -3,7 +3,7 @@ import { createRouter, RouterHistory } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
 
 export function getRouter(history: RouterHistory) {
-  return createRouter({
+  const router = createRouter({
     routeTree,
     history,
     context: {},
@@ -12,6 +12,10 @@ export function getRouter(history: RouterHistory) {
     // settings or pull-request navigation.
     defaultPreload: "intent",
   });
+  if (typeof window !== "undefined") {
+    (window as { __acodeRouter?: unknown }).__acodeRouter = router;
+  }
+  return router;
 }
 
 export type AppRouter = ReturnType<typeof getRouter>;

@@ -6,6 +6,18 @@ state and are displayed as Panes in Tabs.
 
 ## Language
 
+**Environment**:
+A connected execution-environment scope backed by one ACode daemon/server. It
+scopes Project, Workspace, and Session identities and capabilities; it is not
+itself a Project or Sidebar grouping.
+_Avoid_: Host, Machine, Daemon
+
+**ACode Deep Link**:
+A canonical navigation address that identifies one ACode target by its
+Environment- and target-level identities. It opens or focuses a View but is
+not the authority for Tab, Pane, focus, or layout state.
+_Avoid_: Workbench URL, layout URL, Thread URL
+
 **Project**:
 A registered logical project root in acode. It is the canonical top-level
 domain identity in the Sidebar; external project records are integration
@@ -56,6 +68,13 @@ A View whose target is a Project or Workspace concern rather than a persistent
 Session, such as files, Git state, or plugin-provided workspace content. It
 does not require the daemon to hold a long-lived Session.
 _Avoid_: Session, Workspace panel
+
+**Application View**:
+A View whose target is application-level content rather than a Project,
+Workspace, or Session, such as cross-workspace pull requests, issues,
+notifications, or account status. It does not depend on a particular Workspace
+or Session for its identity.
+_Avoid_: Global View, Workspace View, Session View
 
 **View definition**:
 The registered kind of a View, with its identity and renderer. A definition
