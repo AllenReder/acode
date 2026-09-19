@@ -6,6 +6,7 @@ import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { useAcodeProjects } from "../state/entities";
 import { PaneTree } from "./PaneTree";
 import { urlParamsToTarget } from "./urlBridge";
+import "./viewDefinitions";
 import { useWorkbenchStore } from "./workbenchStore";
 
 /**
