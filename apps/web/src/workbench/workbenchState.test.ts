@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type { AgentSessionId, EnvironmentId, WorkspaceId } from "@t3tools/contracts";
+import type {
+  AcodeProjectId,
+  AgentSessionId,
+  EnvironmentId,
+  WorkspaceId,
+} from "@t3tools/contracts";
 
 import {
   getActiveTab,
@@ -270,4 +275,26 @@ it("keeps Session Views and closeView local to each Tab", () => {
   snap = applySplitFocused(snap, agent(AGENT_X), "down", ids);
   expect(getActiveTab(snap).panes.size).toBe(1);
   expect(applyActivateTab(snap, "unknown")).toBe(snap);
+});
+
+it("opens Project and Workspace independently even with the same definition and local id", () => {
+  const ids = makeIds();
+  const project: ViewTarget = {
+    kind: "project",
+    definitionId: "overview",
+    environmentId: ENV_A,
+    projectId: "shared" as AcodeProjectId,
+  };
+  const workspace: ViewTarget = {
+    kind: "workspace",
+    definitionId: "overview",
+    environmentId: ENV_A,
+    workspaceId: "shared" as WorkspaceId,
+  };
+  const initial = applyOpenTarget(emptyWorkbenchSnapshot(ids), project, ids);
+  const split = applySplitFocused(initial, workspace, "right", ids);
+  expect([...getActiveTab(split).panes.values()].map((view) => view.target)).toEqual([
+    project,
+    workspace,
+  ]);
 });

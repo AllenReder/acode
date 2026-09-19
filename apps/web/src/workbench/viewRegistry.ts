@@ -49,12 +49,14 @@ export function targetKey(target: ViewTarget): string {
       return "welcome";
     case "project":
       return JSON.stringify([
+        target.kind,
         definitionIdForTarget(target),
         target.environmentId,
         target.projectId,
       ]);
     case "workspace":
       return JSON.stringify([
+        target.kind,
         definitionIdForTarget(target),
         target.environmentId,
         target.workspaceId,

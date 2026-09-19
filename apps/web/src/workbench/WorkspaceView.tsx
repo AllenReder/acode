@@ -1,3 +1,4 @@
+import { targetKey } from "./viewRegistry";
 import type { ViewProps } from "./viewRegistry";
 import type { WorkspaceCapabilities, WorkspaceSummary, WorkspaceTarget } from "./workspaceViews";
 
@@ -20,11 +21,9 @@ export function WorkspaceView({
         </p>
       )}
       {data.sessions.map(({ title, target }) => {
-        const id =
-          target.kind === "agentSession" ? target.agentSessionId : target.terminalSessionId;
         return (
           <button
-            key={`${target.kind}:${id}`}
+            key={targetKey(target)}
             type="button"
             className="rounded px-3 py-2 text-left text-sm hover:bg-accent"
             onClick={() => capabilities.openSession.execute(target)}

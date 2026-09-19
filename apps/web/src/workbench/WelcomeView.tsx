@@ -1,3 +1,4 @@
+import { targetKey } from "./viewRegistry";
 import type { ViewProps, ViewTarget } from "./viewRegistry";
 import type { WelcomeCapabilities, WelcomeData } from "./workspaceViews";
 
@@ -18,7 +19,7 @@ export function WelcomeView({
       )}
       {data.map((workspace) => (
         <button
-          key={JSON.stringify([workspace.target.environmentId, workspace.target.workspaceId])}
+          key={targetKey(workspace.target)}
           type="button"
           className="rounded px-3 py-2 text-sm hover:bg-accent"
           onClick={() => capabilities.openWorkspace.execute(workspace.target)}
