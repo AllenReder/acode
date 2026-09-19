@@ -9,12 +9,13 @@ import {
   mergeEnvironmentThread,
 } from "@t3tools/client-runtime/state/threads";
 import type { ScopedProjectRef, ScopedThreadRef, ServerConfig } from "@t3tools/contracts";
-import type {
-  AcodeAgentSessionShell,
-  AcodeWorkspaceShell,
-  AgentSessionId,
-  EnvironmentId,
-  WorkspaceId,
+import {
+  agentSessionsIn,
+  type AcodeAgentSessionShell,
+  type AcodeWorkspaceShell,
+  type AgentSessionId,
+  type EnvironmentId,
+  type WorkspaceId,
 } from "@t3tools/contracts";
 import { Atom } from "effect/unstable/reactivity";
 import { useMemo } from "react";
@@ -187,7 +188,8 @@ export function useAcodeWorkspace(
 /**
  * Look up an ACode Agent Session shell by (workspaceId, agentSessionId).
  * The workspace shell is the durable authority for the Agent Session's
- * thread id — see D3. Returns null when the workspace or session is unknown.
+ * thread id — see D3. Returns null when the workspace or session is unknown
+ * or when the id names a Terminal Session.
  */
 export function useAcodeAgentSessionShell(
   environmentId: EnvironmentId | null,
@@ -196,7 +198,7 @@ export function useAcodeAgentSessionShell(
 ): AcodeAgentSessionShell | null {
   const workspace = useAcodeWorkspace(environmentId, workspaceId);
   if (workspace === null || agentSessionId === null) return null;
-  return workspace.sessions?.find((session) => session.id === agentSessionId) ?? null;
+  return agentSessionsIn(workspace).find((session) => session.id === agentSessionId) ?? null;
 }
 
 /** Resolves when the project event reaches the live client store. */

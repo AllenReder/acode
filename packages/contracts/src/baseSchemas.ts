@@ -110,6 +110,9 @@ export type ThreadId = typeof ThreadId.Type;
 /** Stable ACode identity for an agent conversation, distinct from its T3 thread. */
 export const AgentSessionId = makeEntityId("AgentSessionId");
 export type AgentSessionId = typeof AgentSessionId.Type;
+/** Stable ACode identity for a Workspace-owned terminal, distinct from its runtime PTY id. */
+export const TerminalSessionId = makeEntityId("TerminalSessionId");
+export type TerminalSessionId = typeof TerminalSessionId.Type;
 export const ProjectId = makeEntityId("ProjectId");
 export type ProjectId = typeof ProjectId.Type;
 /** Identity of an ACode navigation Project, distinct from a T3 orchestration project. */

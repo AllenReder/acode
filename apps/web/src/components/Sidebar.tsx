@@ -31,6 +31,7 @@ import {
   scopedThreadKey,
 } from "@t3tools/client-runtime/environment";
 import {
+  agentSessionsIn,
   resolveEnvironmentMachineKind,
   type EnvironmentId,
   type EnvironmentMachineKind,
@@ -2452,7 +2453,7 @@ function SidebarWorkspaceTree(props: {
               <div className="ms-4 flex flex-col gap-px border-s border-sidebar-border ps-1.5">
                 <SidebarWorkspaceActions project={project} />
                 {project.workspaces.map((workspace) => {
-                  const sessions = workspace.sessions ?? [];
+                  const sessions = agentSessionsIn(workspace);
                   const selected =
                     props.selectedWorkspace?.environmentId === project.environmentId &&
                     props.selectedWorkspace.t3ProjectId === workspace.t3ProjectId;
@@ -2881,7 +2882,7 @@ export default function Sidebar() {
           (candidate) => candidate.id === workspaceIdForT3Project(projectId),
         );
         if (workspace === undefined) continue;
-        const session = workspace.sessions?.find(
+        const session = agentSessionsIn(workspace).find(
           (candidate) => candidate.threadId === threadRef.threadId,
         );
         if (session === undefined) continue;

@@ -1,8 +1,10 @@
-import type {
-  AgentSessionId,
-  EnvironmentId,
-  ThreadId,
-  WorkspaceId,
+import {
+  agentSessionRefForShell,
+  agentSessionsIn,
+  type AgentSessionId,
+  type EnvironmentId,
+  type ThreadId,
+  type WorkspaceId,
 } from "@t3tools/contracts";
 
 import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
@@ -16,6 +18,10 @@ import type { ViewTarget } from "./viewRegistry";
  * C10 grill Q3): the thread id resolves to an ACode Agent Session, which
  * becomes an `agentSession` target that the workbench can either focus an
  * existing Pane of or bind to the focused Pane.
+ *
+ * The Thread→Agent Session lookup lives here, at the compatibility boundary:
+ * the target is built from the canonical Agent Session reference, so the T3
+ * thread id stops at this function instead of travelling into the Workbench.
  *
  * Drafts (`_chat.draft.$draftId`) are retired in this ticket — they are
  * promoted to server threads before they ever hit this bridge.
@@ -34,15 +40,16 @@ export function urlParamsToTarget(
   for (const project of projects) {
     if (project.environmentId !== environmentId) continue;
     for (const workspace of project.workspaces) {
-      const session = workspace.sessions?.find(
+      const session = agentSessionsIn(workspace).find(
         (candidate) => candidate.threadId === threadId,
       );
       if (session !== undefined) {
+        const ref = agentSessionRefForShell(session);
         return {
           kind: "agentSession",
           environmentId,
-          workspaceId: workspace.id,
-          agentSessionId: session.id,
+          workspaceId: ref.workspaceId,
+          agentSessionId: ref.agentSessionId,
         };
       }
     }

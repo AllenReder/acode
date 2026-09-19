@@ -39,6 +39,7 @@ function project(
       workspaceRoot: "/tmp/a",
       role: "main" as const,
       sessions: workspace.sessions?.map((session) => ({
+        kind: "agent" as const,
         id: session.id,
         workspaceId: workspace.id,
         threadId: session.threadId,

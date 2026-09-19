@@ -16,6 +16,7 @@ import {
   type WorkbenchSnapshot,
 } from "./workbenchState";
 import { leafIds } from "./layout";
+import { terminalTargetForRuntime } from "./sessionTarget";
 import type { ViewTarget } from "./viewRegistry";
 
 const ENV_A: EnvironmentId = "env-a" as EnvironmentId;
@@ -35,12 +36,11 @@ function agent(id: AgentSessionId, workspaceId: WorkspaceId = WS_A): Extract<Vie
 }
 
 function terminal(id: string, workspaceId: WorkspaceId = WS_A): Extract<ViewTarget, { kind: "workspaceTerminal" }> {
-  return {
-    kind: "workspaceTerminal",
+  return terminalTargetForRuntime({
     environmentId: ENV_A,
     workspaceId,
     terminalId: id,
-  };
+  });
 }
 
 /** Deterministic id generator for tests. */

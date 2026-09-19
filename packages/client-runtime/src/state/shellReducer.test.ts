@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   AcodeProjectId,
+  agentSessionsIn,
   AgentSessionId,
   ProjectId,
   ProviderInstanceId,
@@ -286,6 +287,7 @@ describe("applyShellStreamEvent", () => {
             ...acodeProject.workspaces[0]!,
             sessions: [
               {
+                kind: "agent" as const,
                 id: AgentSessionId.make("agent-session:thread-1"),
                 workspaceId: WorkspaceId.make("workspace:project-1"),
                 threadId: ThreadId.make("thread-1"),
@@ -308,7 +310,7 @@ describe("applyShellStreamEvent", () => {
       );
 
       expect(next.acodeProjects?.[0]?.workspaces[0]?.sessions).toHaveLength(1);
-      expect(next.acodeProjects?.[0]?.workspaces[0]?.sessions?.[0]?.threadId).toBe("thread-1");
+      expect(agentSessionsIn(next.acodeProjects![0]!.workspaces[0]!)[0]?.threadId).toBe("thread-1");
     });
   });
 

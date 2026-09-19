@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import type {
   AgentSessionId,
   EnvironmentId,
+  TerminalSessionId,
   WorkspaceId,
 } from "@t3tools/contracts";
 
@@ -10,8 +11,12 @@ import type {
  * The discriminated union of targets a View instance can bind to.
  *
  * C10 ships exactly two:
- *   - `agentSession`: a Workspace-owned Agent conversation.
+ *   - `agentSession`: a Workspace-owned Agent Session.
  *   - `workspaceTerminal`: a Workspace-owned Terminal Session.
+ *
+ * Both carry an ACode Session identity rather than a runtime identity: the T3
+ * thread and the PTY terminal id are adapter details behind `urlBridge.ts` and
+ * `sessionTarget.ts`.
  *
  * Adding a new target kind is a 3-step change:
  *   1. extend this union,
@@ -33,7 +38,7 @@ export type ViewTarget =
       readonly kind: "workspaceTerminal";
       readonly environmentId: EnvironmentId;
       readonly workspaceId: WorkspaceId;
-      readonly terminalId: string;
+      readonly terminalSessionId: TerminalSessionId;
     };
 
 /** All known target kinds. The registry resolves a definition per kind. */
@@ -49,7 +54,7 @@ export function targetKey(target: ViewTarget): string {
     case "agentSession":
       return `agentSession:${target.environmentId}:${target.workspaceId}:${target.agentSessionId}`;
     case "workspaceTerminal":
-      return `workspaceTerminal:${target.environmentId}:${target.workspaceId}:${target.terminalId}`;
+      return `workspaceTerminal:${target.environmentId}:${target.workspaceId}:${target.terminalSessionId}`;
   }
 }
 
@@ -62,7 +67,7 @@ export function targetsEqual(a: ViewTarget, b: ViewTarget): boolean {
     case "agentSession":
       return b.kind === "agentSession" && a.agentSessionId === b.agentSessionId;
     case "workspaceTerminal":
-      return b.kind === "workspaceTerminal" && a.terminalId === b.terminalId;
+      return b.kind === "workspaceTerminal" && a.terminalSessionId === b.terminalSessionId;
   }
 }
 
