@@ -2273,6 +2273,17 @@ function SidebarWorkspaceActions(props: {
     void associate({
       environmentId: props.project.environmentId,
       input: { projectId: props.project.id, path },
+    }).then((result) => {
+      if (result._tag === "Success") {
+        toastManager.add({ type: "success", title: "Worktree associated" });
+      } else if (!isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        toastManager.add({
+          type: "error",
+          title: "Could not associate worktree",
+          description: error instanceof Error ? error.message : "The worktree could not be associated.",
+        });
+      }
     });
   };
 
@@ -2291,6 +2302,17 @@ function SidebarWorkspaceActions(props: {
         ...(baseRef.trim() ? { baseRef } : {}),
         ...(path.trim() ? { path } : {}),
       },
+    }).then((result) => {
+      if (result._tag === "Success") {
+        toastManager.add({ type: "success", title: "Worktree created" });
+      } else if (!isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        toastManager.add({
+          type: "error",
+          title: "Could not create worktree",
+          description: error instanceof Error ? error.message : "The worktree could not be created.",
+        });
+      }
     });
   };
 

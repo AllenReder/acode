@@ -409,13 +409,16 @@ const makeRepository = Effect.gen(function* () {
         Effect.mapError(toPersistenceSqlError("ProjectionAcodeProjectRepository.getProjectById")),
       ),
     getByT3ProjectId: (t3ProjectId) =>
-      Effect.all([
-        getRowsForT3Project({ t3ProjectId }),
-        getActiveSessionRows({ t3ProjectId }),
-      ]).pipe(
-        Effect.map(([rows, sessions]) =>
-          Option.fromNullishOr(mapProjectionAcodeProjectRows(rows, sessions)[0]),
-        ),
+      Effect.gen(function* () {
+        const matchingRows = yield* getRowsForT3Project({ t3ProjectId });
+        const matchingRow = matchingRows[0];
+        if (matchingRow === undefined) return Option.none();
+        const rows = yield* getRowsForAcodeProject({
+          acodeProjectId: matchingRow.acodeProjectId,
+        });
+        const sessions = yield* getActiveSessionRows({});
+        return Option.fromNullishOr(mapProjectionAcodeProjectRows(rows, sessions)[0]);
+      }).pipe(
         Effect.mapError(toPersistenceSqlError("ProjectionAcodeProjectRepository.getByT3ProjectId")),
       ),
     getWorkspaceById: (workspaceId) =>
@@ -431,11 +434,13 @@ const makeRepository = Effect.gen(function* () {
       ),
     getByThreadId: (threadId) =>
       Effect.gen(function* () {
-        const rows = yield* getRowsForThread({ threadId });
-        if (rows.length === 0) return Option.none();
-        const sessions = yield* getActiveSessionRows({
-          t3ProjectId: rows[0]!.t3ProjectId,
+        const matchingRows = yield* getRowsForThread({ threadId });
+        const matchingRow = matchingRows[0];
+        if (matchingRow === undefined) return Option.none();
+        const rows = yield* getRowsForAcodeProject({
+          acodeProjectId: matchingRow.acodeProjectId,
         });
+        const sessions = yield* getActiveSessionRows({});
         return Option.fromNullishOr(mapProjectionAcodeProjectRows(rows, sessions)[0]);
       }).pipe(
         Effect.mapError(toPersistenceSqlError("ProjectionAcodeProjectRepository.getByThreadId")),
