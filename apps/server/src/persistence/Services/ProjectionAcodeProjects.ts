@@ -147,22 +147,33 @@ export function mapProjectionAcodeProjectRows(
   rows: ReadonlyArray<ProjectionAcodeProjectRow>,
   sessionRows: ReadonlyArray<ProjectionAcodeAgentSessionRow> = [],
 ): ReadonlyArray<AcodeProjectShell> {
-  const sessionsByWorkspace = new Map<WorkspaceId, ReadonlyArray<AcodeSessionShell>>();
+  const activeSessionsByWorkspace = new Map<WorkspaceId, ReadonlyArray<AcodeSessionShell>>();
+  const historySessionsByWorkspace = new Map<WorkspaceId, ReadonlyArray<AcodeSessionShell>>();
   for (const row of sessionRows) {
-    if (row.archivedAt !== null || row.deletedAt !== null) continue;
+    if (row.deletedAt !== null) continue;
+    const isClosed = row.archivedAt !== null;
     const session: AcodeAgentSessionShell = {
       kind: "agent",
       id: row.agentSessionId,
       workspaceId: row.workspaceId,
       threadId: row.threadId,
       title: row.title,
+      status: isClosed ? "closed" : "open",
+      ...(isClosed ? { closedAt: row.archivedAt } : {}),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
-    sessionsByWorkspace.set(row.workspaceId, [
-      ...(sessionsByWorkspace.get(row.workspaceId) ?? []),
-      session,
-    ]);
+    if (isClosed) {
+      historySessionsByWorkspace.set(row.workspaceId, [
+        ...(historySessionsByWorkspace.get(row.workspaceId) ?? []),
+        session,
+      ]);
+    } else {
+      activeSessionsByWorkspace.set(row.workspaceId, [
+        ...(activeSessionsByWorkspace.get(row.workspaceId) ?? []),
+        session,
+      ]);
+    }
   }
 
   const workspaces = new Map<WorkspaceId, AcodeWorkspaceShell>();
@@ -175,7 +186,8 @@ export function mapProjectionAcodeProjectRows(
       workspaceRoot: row.workspaceRoot,
       role: row.workspaceRole,
       ...(row.workspaceOrigin !== null ? { origin: row.workspaceOrigin } : {}),
-      sessions: sessionsByWorkspace.get(row.workspaceId) ?? [],
+      sessions: activeSessionsByWorkspace.get(row.workspaceId) ?? [],
+      historySessions: historySessionsByWorkspace.get(row.workspaceId) ?? [],
       createdAt: row.workspaceCreatedAt,
       updatedAt: row.workspaceUpdatedAt,
     });

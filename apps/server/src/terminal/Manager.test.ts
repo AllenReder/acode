@@ -7,6 +7,7 @@ import {
   type TerminalMetadataStreamEvent,
   type TerminalOpenInput,
   type TerminalRestartInput,
+  type TerminalSessionSnapshot,
   ProviderDriverKind,
   ProviderInstanceId,
   ServerSettingsError,
@@ -2972,8 +2973,9 @@ it.layer(
           }),
         );
         expect(attachSnapshot).not.toBeNull();
-        expect(attachSnapshot?.status).toBe("closed");
-        expect(attachSnapshot?.history).toContain("marker-text-to-preserve");
+        const receivedSnapshot = attachSnapshot as unknown as TerminalSessionSnapshot;
+        expect(receivedSnapshot.status).toBe("closed");
+        expect(receivedSnapshot.history).toContain("marker-text-to-preserve");
         expect(second.ptyAdapter.processes.length).toBe(0);
 
         // Explicit delete removes it completely

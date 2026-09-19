@@ -224,6 +224,11 @@ describe("OrchestrationEngine", () => {
           (project) => project.id === "acode-project:session-project-a",
         )?.workspaces[0]?.sessions,
       ).toEqual([]);
+      expect(
+        archivedShell.acodeProjects?.find(
+          (project) => project.id === "acode-project:session-project-a",
+        )?.workspaces[0]?.historySessions,
+      ).toMatchObject([{ id: sessionA?.id, threadId: "session-thread-a", status: "closed" }]);
 
       await first.run(
         first.engine.dispatch({

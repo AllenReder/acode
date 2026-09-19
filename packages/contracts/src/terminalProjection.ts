@@ -12,21 +12,27 @@ export function projectTerminalSessions(
   projects: ReadonlyArray<AcodeProjectShell>,
   terminals: ReadonlyArray<TerminalSummary>,
 ): ReadonlyArray<AcodeProjectShell> {
-  const sessions = new Map<WorkspaceId, Map<string, AcodeTerminalSessionShell>>();
+  const activeSessions = new Map<WorkspaceId, Map<string, AcodeTerminalSessionShell>>();
+  const historySessions = new Map<WorkspaceId, Map<string, AcodeTerminalSessionShell>>();
+
   for (const terminal of terminals) {
     if (terminal.workspaceId === undefined) continue;
     const workspaceId = WorkspaceId.make(terminal.workspaceId);
     const id = terminalSessionIdForRuntime(workspaceId, terminal.terminalId);
-    let group = sessions.get(workspaceId);
+    const isClosed = terminal.status === "closed";
+    const targetMap = isClosed ? historySessions : activeSessions;
+    let group = targetMap.get(workspaceId);
     if (!group) {
       group = new Map();
-      sessions.set(workspaceId, group);
+      targetMap.set(workspaceId, group);
     }
     group.set(id, {
       kind: "terminal",
       id,
       workspaceId,
       title: terminal.label.trim() || "Terminal",
+      status: isClosed ? "closed" : "open",
+      ...(isClosed ? { closedAt: terminal.updatedAt } : {}),
       createdAt: terminal.createdAt ?? terminal.updatedAt,
       updatedAt: terminal.updatedAt,
     });
@@ -37,7 +43,11 @@ export function projectTerminalSessions(
       ...workspace,
       sessions: [
         ...(workspace.sessions ?? []).filter((session) => session.kind !== "terminal"),
-        ...(sessions.get(workspace.id)?.values() ?? []),
+        ...(activeSessions.get(workspace.id)?.values() ?? []),
+      ],
+      historySessions: [
+        ...(workspace.historySessions ?? []).filter((session) => session.kind !== "terminal"),
+        ...(historySessions.get(workspace.id)?.values() ?? []),
       ],
     })),
   }));
