@@ -266,7 +266,7 @@ function SashHandle({ splitId, index, dir, sizes }: SashHandleProps) {
       onMouseDown={onMouseDown}
       className={
         (dir === "right" ? "w-1 cursor-col-resize " : "h-1 cursor-row-resize ") +
-        (hover ? "bg-accent" : "bg-border")
+        (hover ? "bg-foreground/40" : "bg-foreground/15")
       }
       data-sash-id={splitId}
       data-sash-index={index}
