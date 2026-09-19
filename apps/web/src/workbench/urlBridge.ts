@@ -1,4 +1,5 @@
 import {
+  activeAgentSessionsIn,
   agentSessionRefForShell,
   agentSessionsIn,
   type AgentSessionId,
@@ -40,7 +41,7 @@ export function urlParamsToTarget(
   for (const project of projects) {
     if (project.environmentId !== environmentId) continue;
     for (const workspace of project.workspaces) {
-      const session = agentSessionsIn(workspace).find(
+      const session = activeAgentSessionsIn(workspace).find(
         (candidate) => candidate.threadId === threadId,
       );
       if (session !== undefined) {

@@ -104,5 +104,31 @@ describe("urlParamsToTarget", () => {
       },
     ];
     expect(urlParamsToTarget(ENV, THREAD, projects)).toBeNull();
+  });  it("ignores closed / history sessions so URL hydration does not revive closed views", () => {
+    const baseProject = project([{ id: WS, sessions: [] }]);
+    const workspace = baseProject.workspaces[0]!;
+    const projects: ReadonlyArray<EnvironmentAcodeProject> = [
+      {
+        ...baseProject,
+        workspaces: [
+          {
+            ...workspace,
+            historySessions: [
+              {
+                kind: "agent" as const,
+                id: AGENT,
+                workspaceId: WS,
+                threadId: THREAD,
+                title: "Closed Session",
+                status: "closed" as const,
+                createdAt: "2026-01-01T00:00:00Z",
+                updatedAt: "2026-01-01T00:00:00Z",
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    expect(urlParamsToTarget(ENV, THREAD, projects)).toBeNull();
   });
 });
