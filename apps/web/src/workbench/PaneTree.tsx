@@ -40,6 +40,9 @@ function PaneNode({ snapshot, node, focusedPaneId }: PaneNodeProps) {
 
   const items: ReactNode[] = [];
   for (let i = 0; i < node.children.length; i++) {
+    const child = node.children[i];
+    if (child === undefined) continue;
+    const size = node.sizes[i] ?? 0;
     if (i > 0) {
       items.push(
         <SashHandle
@@ -51,13 +54,18 @@ function PaneNode({ snapshot, node, focusedPaneId }: PaneNodeProps) {
         />,
       );
     }
+    // Each child gets a fixed flex-basis matching the layout's `sizes[i]`,
+    // so dragging the sash (which calls `setSplitRatio`) actually changes
+    // the rendered widths/heights. Using `flex-1` alone would ignore the
+    // size array and split panes evenly.
     items.push(
-      <PaneNode
-        key={node.children[i]!.type === "leaf" ? node.children[i]!.id : node.children[i]!.id}
-        snapshot={snapshot}
-        node={node.children[i]!}
-        focusedPaneId={focusedPaneId}
-      />,
+      <div
+        key={child.type === "leaf" ? `leaf-${child.id}` : `split-${child.id}`}
+        className="flex min-h-0 min-w-0 flex-col overflow-hidden"
+        style={{ flexBasis: `${size * 100}%`, flexGrow: 0, flexShrink: 0 }}
+      >
+        <PaneNode snapshot={snapshot} node={child} focusedPaneId={focusedPaneId} />
+      </div>,
     );
   }
 
