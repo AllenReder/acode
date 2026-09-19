@@ -6,6 +6,7 @@ interface AgentViewProps {
   readonly target: Extract<ViewTarget, { kind: "agentSession" }>;
   readonly paneId: string;
   readonly focused: boolean;
+  readonly focusRequestId?: number;
   readonly availableSize: { readonly width: number; readonly height: number };
 }
 
@@ -23,8 +24,7 @@ interface AgentViewProps {
  * the daemon, so re-opening the same Session from the Sidebar reattaches to
  * the live Agent Session rather than creating a fresh one.
  */
-export function AgentView({ target, paneId }: AgentViewProps) {
-  void paneId;
+export function AgentView({ target, focused, focusRequestId = 0, availableSize }: AgentViewProps) {
   const session = useAcodeAgentSessionShell(
     target.environmentId,
     target.workspaceId,
@@ -44,6 +44,9 @@ export function AgentView({ target, paneId }: AgentViewProps) {
       environmentId={target.environmentId}
       threadId={session.threadId}
       routeKind="server"
+      focused={focused}
+      focusRequestId={focusRequestId}
+      availableSize={availableSize}
     />
   );
 }

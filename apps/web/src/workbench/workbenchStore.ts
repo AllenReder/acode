@@ -16,6 +16,7 @@ import type { ViewTarget } from "./viewRegistry.ts";
 
 /** Public presentation commands; none owns Session runtime lifecycle. */
 export interface WorkbenchStore extends WorkbenchSnapshot {
+  readonly focusRequestId: number;
   createTab: () => void;
   activateTab: (tabId: string) => void;
   closeView: (paneId: string) => void;
@@ -33,13 +34,21 @@ const generateId = (): string => {
 
 export const useWorkbenchStore = create<WorkbenchStore>((set) => ({
   ...emptyWorkbenchSnapshot(generateId),
+  focusRequestId: 0,
   createTab: () => set((snapshot) => applyCreateTab(snapshot, generateId)),
   activateTab: (tabId) => set((snapshot) => applyActivateTab(snapshot, tabId)),
   closeView: (paneId) =>
     set((snapshot) => applyClosePane(snapshot, paneId, generateId) ?? snapshot),
-  openTarget: (target) => set((snapshot) => applyOpenTarget(snapshot, target, generateId)),
+  openTarget: (target) =>
+    set((snapshot) => ({
+      ...applyOpenTarget(snapshot, target, generateId),
+      focusRequestId: snapshot.focusRequestId + 1,
+    })),
   splitFocused: (target, dir) =>
-    set((snapshot) => applySplitFocused(snapshot, target, dir, generateId)),
+    set((snapshot) => ({
+      ...applySplitFocused(snapshot, target, dir, generateId),
+      focusRequestId: snapshot.focusRequestId + 1,
+    })),
   setFocused: (paneId) => set((snapshot) => applySetFocused(snapshot, paneId)),
   setSplitRatio: (splitId, index, ratio) =>
     set((snapshot) => applySetSplitRatio(snapshot, splitId, index, ratio)),
@@ -47,5 +56,5 @@ export const useWorkbenchStore = create<WorkbenchStore>((set) => ({
 
 /** Test seam. Reset the store back to an empty workbench. */
 export function resetWorkbenchStore(): void {
-  useWorkbenchStore.setState(emptyWorkbenchSnapshot(generateId));
+  useWorkbenchStore.setState({ ...emptyWorkbenchSnapshot(generateId), focusRequestId: 0 });
 }

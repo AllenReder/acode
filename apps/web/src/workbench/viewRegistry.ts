@@ -88,6 +88,8 @@ export interface ViewPresentation<T extends ViewTarget = ViewTarget> {
   readonly target: T;
   readonly paneId: string;
   readonly focused: boolean;
+  /** Explicit navigation can request focus even when the Pane is already focused. */
+  readonly focusRequestId?: number;
   readonly availableSize: { readonly width: number; readonly height: number };
 }
 
