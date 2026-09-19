@@ -1,11 +1,14 @@
-import { spawn } from "node:child_process";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import * as NodeChildProcess from "node:child_process";
+import * as NodePath from "node:path";
+import * as NodeURL from "node:url";
 
-const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const repositoryRoot = resolve(desktopRoot, "../..");
+const desktopRoot = NodePath.resolve(
+  NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)),
+  "..",
+);
+const repositoryRoot = NodePath.resolve(desktopRoot, "../..");
 const inheritedHome = process.env.ACODE_HOME?.trim() || process.env.T3CODE_HOME?.trim();
-const developmentHome = inheritedHome || resolve(repositoryRoot, ".acode");
+const developmentHome = inheritedHome || NodePath.resolve(repositoryRoot, ".acode");
 const cliArgs = process.argv.slice(2);
 const hasExplicitConfig = cliArgs.some((argument) => argument === "--config" || argument === "-c");
 const tauriArgs =
@@ -15,12 +18,12 @@ const tauriArgs =
         "tauri",
         "dev",
         "--config",
-        resolve(desktopRoot, "src-tauri/tauri.dev.conf.json"),
+        NodePath.resolve(desktopRoot, "src-tauri/tauri.dev.conf.json"),
         ...cliArgs.slice(1),
       ]
     : ["exec", "tauri", ...cliArgs];
 
-const child = spawn("pnpm", tauriArgs, {
+const child = NodeChildProcess.spawn("pnpm", tauriArgs, {
   cwd: desktopRoot,
   env: {
     ...process.env,

@@ -1,11 +1,14 @@
-import { spawn } from "node:child_process";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import * as NodeChildProcess from "node:child_process";
+import * as NodePath from "node:path";
+import * as NodeURL from "node:url";
 
-const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const repositoryRoot = resolve(desktopRoot, "../..");
+const desktopRoot = NodePath.resolve(
+  NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)),
+  "..",
+);
+const repositoryRoot = NodePath.resolve(desktopRoot, "../..");
 
-const child = spawn("pnpm", ["dev:web"], {
+const child = NodeChildProcess.spawn("pnpm", ["dev:web"], {
   cwd: repositoryRoot,
   env: process.env,
   stdio: "inherit",

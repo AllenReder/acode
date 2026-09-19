@@ -2,7 +2,7 @@
 // @effect-diagnostics nodeBuiltinImport:off globalTimers:off globalFetch:off globalConsole:off
 
 import * as NodeChildProcess from "node:child_process";
-import * as NodeFS from "node:fs/promises";
+import * as NodeFSP from "node:fs/promises";
 import * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
@@ -33,6 +33,7 @@ import {
 } from "@t3tools/client-runtime/rpc";
 import { AuthSessionState, AuthStandardClientScopes, WS_METHODS } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Option from "effect/Option";
@@ -135,7 +136,7 @@ function startServer(baseDir: string, port: number): ServerHandle {
   return { child, ready };
 }
 
-async function stopServer(server: ServerHandle): Promise<void> {
+async function stopServer(server: ServerHandle, platform: NodeJS.Platform): Promise<void> {
   if (server.child.exitCode !== null || server.child.signalCode !== null) return;
 
   await new Promise<void>((resolve) => {
@@ -147,7 +148,7 @@ async function stopServer(server: ServerHandle): Promise<void> {
       resolve();
     };
     const forceKillTimer = setTimeout(() => {
-      if (process.platform === "win32") {
+      if (platform === "win32") {
         server.child.kill();
       } else {
         server.child.kill("SIGKILL");
@@ -210,7 +211,8 @@ function waitForSupervisorState(
 }
 
 async function main(): Promise<void> {
-  const serverBinaryExists = await NodeFS.access(SERVER_BINARY)
+  const platform = Effect.runSync(HostProcessPlatform);
+  const serverBinaryExists = await NodeFSP.access(SERVER_BINARY)
     .then(() => true)
     .catch(() => false);
   if (!serverBinaryExists) {
@@ -219,7 +221,7 @@ async function main(): Promise<void> {
     );
   }
 
-  const baseDir = await NodeFS.mkdtemp(NodePath.join(NodeOS.tmpdir(), "acode-c01-connection-"));
+  const baseDir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "acode-c01-connection-"));
   const port = await findFreePort();
   let firstServer: ServerHandle | undefined;
   let secondServer: ServerHandle | undefined;
@@ -364,7 +366,7 @@ async function main(): Promise<void> {
             );
           }
 
-          yield* Effect.promise(() => stopServer(firstServer!));
+          yield* Effect.promise(() => stopServer(firstServer!, platform));
           yield* waitForSupervisorState(
             supervisor,
             (phase) => phase === "backoff" || phase === "connecting" || phase === "offline",
@@ -420,11 +422,11 @@ async function main(): Promise<void> {
       "Verified: unauthenticated pairing, bearer auth, typed probe, daemon disconnect, and automatic reconnect.",
     );
   } finally {
-    if (secondServer !== undefined) await stopServer(secondServer).catch(() => undefined);
-    if (firstServer !== undefined) await stopServer(firstServer).catch(() => undefined);
+    if (secondServer !== undefined) await stopServer(secondServer, platform).catch(() => undefined);
+    if (firstServer !== undefined) await stopServer(firstServer, platform).catch(() => undefined);
     await sessionRuntime.dispose();
     await httpRuntime.dispose();
-    await NodeFS.rm(baseDir, { recursive: true, force: true });
+    await NodeFSP.rm(baseDir, { recursive: true, force: true });
   }
 }
 
