@@ -50,13 +50,9 @@ export type SessionRef = typeof SessionRef.Type;
  * unambiguous even when either id itself contains ":" — without it,
  * `("a:b", "c")` and `("a", "b:c")` would collide on one ACode identity.
  *
- * NOTE: this makes the ACode identity a pure function of the runtime pair, so
- * it is only as stable as the runtime terminal id. Runtime ids are currently
- * recycled (the Sidebar reuses the lowest free `term-N`), so closing `term-1`
- * and creating a new terminal yields the same ACode identity for different
- * work. That is sufficient for the expand phase — the identity is stable for
- * as long as a runtime session lives, which is all the adapter contract needs —
- * but a durable allocation must land before History and reopen rely on it.
+ * New Workspace terminals allocate a UUID once per creation request. The
+ * runtime persists that id across process generations; old term-N identities
+ * remain readable through the same adapter.
  */
 const TERMINAL_SESSION_ID_PREFIX = "terminal-session:";
 

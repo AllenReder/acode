@@ -7,6 +7,8 @@ import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hos
 import {
   type DeviceServiceState,
   AgentSessionId,
+  AcodeProjectId,
+  TerminalSessionId,
   AuthAccessTokenType,
   AuthStandardClientScopes,
   AuthEnvironmentBootstrapTokenType,
@@ -935,6 +937,7 @@ const buildAppUnderTest = (options?: {
       Layer.provide(
         Layer.mergeAll(
           Layer.mock(TerminalManager.TerminalManager)({
+            getMetadata: () => Effect.succeed([]),
             ...options?.layers?.terminalManager,
           }),
           WorktreeSetupTracker.layer,
@@ -8562,6 +8565,84 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.effect("includes Workspace-owned Terminal Sessions in shell snapshots", () =>
+    Effect.gen(function* () {
+      const projectId = AcodeProjectId.make("project");
+      const workspaceId = WorkspaceId.make("workspace");
+      yield* buildAppUnderTest({
+        layers: {
+          projectionSnapshotQuery: {
+            getShellSnapshot: () =>
+              Effect.succeed({
+                snapshotSequence: 0,
+                projects: [],
+                threads: [],
+                updatedAt: "2026-09-19T00:00:00Z",
+                acodeProjects: [
+                  {
+                    id: projectId,
+                    title: "Project",
+                    createdAt: "2026-09-19T00:00:00Z",
+                    updatedAt: "2026-09-19T00:00:00Z",
+                    workspaces: [
+                      {
+                        id: workspaceId,
+                        projectId,
+                        t3ProjectId: ProjectId.make("t3-project"),
+                        title: "Main",
+                        workspaceRoot: "/tmp/project",
+                        role: "main",
+                        createdAt: "2026-09-19T00:00:00Z",
+                        updatedAt: "2026-09-19T00:00:00Z",
+                      },
+                    ],
+                  },
+                ],
+              }),
+          },
+          terminalManager: {
+            getMetadata: () =>
+              Effect.succeed([
+                {
+                  workspaceId,
+                  terminalId: "terminal-unique",
+                  cwd: "/tmp/project",
+                  worktreePath: null,
+                  status: "exited",
+                  pid: null,
+                  exitCode: 0,
+                  exitSignal: null,
+                  hasRunningSubprocess: false,
+                  label: "Shell",
+                  createdAt: "2026-09-19T00:00:00Z",
+                  updatedAt: "2026-09-19T00:00:00Z",
+                },
+              ]),
+          },
+        },
+      });
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const first = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.subscribeShell]({}).pipe(Stream.runHead),
+        ),
+      );
+      const item = Option.getOrThrow(first);
+      assert.equal(item.kind, "snapshot");
+      if (item.kind !== "snapshot") return;
+      assert.deepEqual(item.snapshot.acodeProjects?.[0]?.workspaces[0]?.sessions, [
+        {
+          kind: "terminal",
+          id: TerminalSessionId.make("terminal-session:9:workspace:terminal-unique"),
+          workspaceId,
+          title: "Shell",
+          createdAt: "2026-09-19T00:00:00Z",
+          updatedAt: "2026-09-19T00:00:00Z",
+        },
+      ]);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect("marks an empty shell catch-up replay as synchronized when requested", () =>
     Effect.gen(function* () {
       yield* buildAppUnderTest({
@@ -10287,10 +10368,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       );
 
       assert.equal(dispatchResult.sequence, 1);
-      assert.deepEqual(effects, [
-        "dispatch:thread.archive",
-        "dispatch:thread.session.stop",
-      ]);
+      assert.deepEqual(effects, ["dispatch:thread.archive", "dispatch:thread.session.stop"]);
       const sessionStopCommand = dispatchedCommands[1];
       assert.equal(sessionStopCommand?.type, "thread.session.stop");
       if (sessionStopCommand?.type === "thread.session.stop") {
@@ -10656,10 +10734,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       );
 
       assert.equal(dispatchResult.sequence, 1);
-      assert.deepEqual(effects, [
-        "dispatch:thread.archive",
-        "dispatch:thread.session.stop",
-      ]);
+      assert.deepEqual(effects, ["dispatch:thread.archive", "dispatch:thread.session.stop"]);
       assert.deepEqual(
         dispatchedCommands.map((command) => command.type),
         ["thread.archive", "thread.session.stop"],
@@ -10727,10 +10802,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       );
 
       assert.equal(dispatchResult.sequence, 1);
-      assert.deepEqual(effects, [
-        "dispatch:thread.archive",
-        "dispatch:thread.session.stop",
-      ]);
+      assert.deepEqual(effects, ["dispatch:thread.archive", "dispatch:thread.session.stop"]);
       assert.deepEqual(
         dispatchedCommands.map((command) => command.type),
         ["thread.archive", "thread.session.stop"],

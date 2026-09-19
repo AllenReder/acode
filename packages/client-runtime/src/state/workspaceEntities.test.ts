@@ -1,5 +1,8 @@
 import {
   AcodeProjectId,
+  AgentSessionId,
+  ThreadId,
+  type TerminalSummary,
   EnvironmentId,
   ProjectId,
   WorkspaceId,
@@ -85,4 +88,64 @@ describe("environment ACode workspace entities", () => {
 
     registry.dispose();
   });
+});
+
+it("projects live Terminal Sessions beside Agent Sessions and removes only the terminal on close", () => {
+  const shell = snapshot("Project");
+  const workspace = shell.acodeProjects![0]!.workspaces[0]!;
+  const agent = {
+    kind: "agent" as const,
+    id: AgentSessionId.make("agent-1"),
+    workspaceId: WORKSPACE_ID,
+    threadId: ThreadId.make("thread-1"),
+    title: "Agent",
+    createdAt: workspace.createdAt,
+    updatedAt: workspace.updatedAt,
+  };
+  const snapshotAtom = Atom.make<OrchestrationShellSnapshot | null>({
+    ...shell,
+    acodeProjects: [
+      { ...shell.acodeProjects![0]!, workspaces: [{ ...workspace, sessions: [agent] }] },
+    ],
+  });
+  const terminal: TerminalSummary = {
+    workspaceId: WORKSPACE_ID,
+    terminalId: "term-1",
+    cwd: workspace.workspaceRoot,
+    worktreePath: null,
+    status: "running",
+    pid: 42,
+    exitCode: null,
+    exitSignal: null,
+    hasRunningSubprocess: false,
+    label: "Shell",
+    updatedAt: workspace.updatedAt,
+  };
+  const metadata = Atom.make<ReadonlyArray<TerminalSummary> | null>([terminal]);
+  const entities = createEnvironmentWorkspaceAtoms({
+    catalogValueAtom: Atom.make({
+      isReady: true,
+      entries: new Map([[LOCAL, { enabled: true }]]),
+    } as unknown as EnvironmentCatalogState),
+    snapshotAtom: () => snapshotAtom,
+    terminalMetadataAtom: () => metadata,
+  });
+  const registry = AtomRegistry.make();
+  const atom = entities.workspaceAtom({ environmentId: LOCAL, workspaceId: WORKSPACE_ID });
+  const unmount = registry.mount(atom);
+  expect(registry.get(atom)?.sessions).toEqual([
+    agent,
+    {
+      kind: "terminal",
+      id: "terminal-session:25:workspace:shared-local-id:term-1",
+      workspaceId: WORKSPACE_ID,
+      title: "Shell",
+      createdAt: workspace.updatedAt,
+      updatedAt: workspace.updatedAt,
+    },
+  ]);
+  registry.set(metadata, []);
+  expect(registry.get(atom)?.sessions).toEqual([agent]);
+  unmount();
+  registry.dispose();
 });

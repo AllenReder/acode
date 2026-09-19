@@ -24,6 +24,7 @@ import {
   type AuthEnvironmentScope,
   AuthSessionId,
   acodeProjectIdForT3Project,
+  projectTerminalSessions,
   workspaceIdForT3Project,
   ClientConnectionMethod,
   ClientDeviceType,
@@ -2110,6 +2111,14 @@ const makeWsRpcLayer = (
               );
 
               const loadSnapshot = projectionSnapshotQuery.getShellSnapshot().pipe(
+                Effect.flatMap((snapshot) =>
+                  terminalManager.getMetadata().pipe(
+                    Effect.map((terminals) => ({
+                      ...snapshot,
+                      acodeProjects: projectTerminalSessions(snapshot.acodeProjects ?? [], terminals),
+                    })),
+                  ),
+                ),
                 Effect.tapError((cause) =>
                   Effect.logError("orchestration shell snapshot load failed", { cause }),
                 ),

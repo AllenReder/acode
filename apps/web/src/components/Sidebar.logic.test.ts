@@ -2545,18 +2545,10 @@ describe("navigation after parking a thread", () => {
 });
 
 describe("nextWorkspaceTerminalId", () => {
-  it("picks the first free term-N id", () => {
-    expect(nextWorkspaceTerminalId([])).toBe("term-1");
-    expect(nextWorkspaceTerminalId(["term-1"])).toBe("term-2");
-    expect(nextWorkspaceTerminalId(["term-1", "term-2"])).toBe("term-3");
-  });
-
-  it("fills gaps left by closed terminals", () => {
-    expect(nextWorkspaceTerminalId(["term-1", "term-3"])).toBe("term-2");
-    expect(nextWorkspaceTerminalId(["term-2"])).toBe("term-1");
-  });
-
-  it("ignores unrelated ids", () => {
-    expect(nextWorkspaceTerminalId(["default", "scratch"])).toBe("term-1");
+  it("allocates distinct identities even before metadata catches up or after all terminals close", () => {
+    const first = nextWorkspaceTerminalId();
+    const second = nextWorkspaceTerminalId();
+    expect(first).not.toBe(second);
+    expect(nextWorkspaceTerminalId()).not.toBe(first);
   });
 });

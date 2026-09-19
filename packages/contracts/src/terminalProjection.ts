@@ -1,0 +1,44 @@
+import { WorkspaceId } from "./baseSchemas.ts";
+import { terminalSessionIdForRuntime } from "./session.ts";
+import type { TerminalSummary } from "./terminal.ts";
+import type { AcodeProjectShell, AcodeTerminalSessionShell } from "./workspace.ts";
+
+/**
+ * Join the terminal metadata projection to the durable Workspace tree. The
+ * metadata stream is authoritative for terminals; orchestration owns Agents.
+ * Legacy thread terminals cannot be assigned a Workspace by guessing a cwd.
+ */
+export function projectTerminalSessions(
+  projects: ReadonlyArray<AcodeProjectShell>,
+  terminals: ReadonlyArray<TerminalSummary>,
+): ReadonlyArray<AcodeProjectShell> {
+  const sessions = new Map<WorkspaceId, Map<string, AcodeTerminalSessionShell>>();
+  for (const terminal of terminals) {
+    if (terminal.workspaceId === undefined) continue;
+    const workspaceId = WorkspaceId.make(terminal.workspaceId);
+    const id = terminalSessionIdForRuntime(workspaceId, terminal.terminalId);
+    let group = sessions.get(workspaceId);
+    if (!group) {
+      group = new Map();
+      sessions.set(workspaceId, group);
+    }
+    group.set(id, {
+      kind: "terminal",
+      id,
+      workspaceId,
+      title: terminal.label.trim() || "Terminal",
+      createdAt: terminal.createdAt ?? terminal.updatedAt,
+      updatedAt: terminal.updatedAt,
+    });
+  }
+  return projects.map((project) => ({
+    ...project,
+    workspaces: project.workspaces.map((workspace) => ({
+      ...workspace,
+      sessions: [
+        ...(workspace.sessions ?? []).filter((session) => session.kind !== "terminal"),
+        ...(sessions.get(workspace.id)?.values() ?? []),
+      ],
+    })),
+  }));
+}

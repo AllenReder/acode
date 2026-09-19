@@ -516,15 +516,141 @@ it.layer(
     }),
   );
 
+  it.effect("keeps Workspace Terminal Session identity and history when restarting its PTY", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter, getEvents } = yield* createManager(5, {
+        resolveWorkspaceRoot: () => Effect.succeed(process.cwd()),
+      });
+      const input = { workspaceId: "workspace-restart", terminalId: "term-1" };
+      const opened = yield* manager.open(input);
+      ptyAdapter.processes[0]!.emitData("retained work\r\n");
+      yield* waitFor(
+        Effect.map(getEvents, (events) => events.some((event) => event.type === "output")),
+      );
+      const restarted = yield* manager.restart({ ...input, cols: 80, rows: 24 });
+      expect(restarted.sessionId).toBe("terminal-session:17:workspace-restart:term-1");
+      expect(restarted.sessionId).toBe(opened.sessionId);
+      expect(restarted.history).toContain("retained work");
+      expect(restarted.generation).toBe(2);
+      expect(restarted.pid).not.toBe(opened.pid);
+    }),
+  );
+
+  it.effect("still terminates Workspace PTYs when the shutdown history write fails", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const ptyAdapter = new FakePtyAdapter();
+      let failWrites = false;
+      const failingFs = FileSystem.FileSystem.of({
+        ...fs,
+        writeFileString: (path, contents, options) =>
+          failWrites && path.endsWith(".log")
+            ? Effect.fail(
+                new PlatformError.PlatformError(
+                  new PlatformError.SystemError({
+                    _tag: "Unknown",
+                    module: "FileSystem",
+                    method: "writeFileString",
+                    description: "Disk full",
+                  }),
+                ),
+              )
+            : fs.writeFileString(path, contents, options),
+      });
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const { manager } = yield* createManager(5, {
+            ptyAdapter,
+            resolveWorkspaceRoot: () => Effect.succeed(process.cwd()),
+          });
+          yield* manager.open({ workspaceId: "workspace", terminalId: "terminal" });
+          failWrites = true;
+        }).pipe(Effect.provideService(FileSystem.FileSystem, failingFs)),
+      );
+      expect(ptyAdapter.processes[0]?.killSignals).toContain("SIGKILL");
+    }),
+  );
+
+  it.effect(
+    "retains stopped Workspace Sessions beyond the runtime cache limit across reconnect",
+    () =>
+      Effect.gen(function* () {
+        const first = yield* createManager(5, {
+          maxRetainedInactiveSessions: 1,
+          resolveWorkspaceRoot: () => Effect.succeed(process.cwd()),
+        });
+        for (const terminalId of ["one", "two"]) {
+          yield* first.manager.open({ workspaceId: "workspace", terminalId });
+          first.ptyAdapter.processes.at(-1)!.emitExit({ exitCode: 0, signal: 0 });
+          yield* waitFor(
+            Effect.map(first.getEvents, (events) =>
+              events.some((event) => event.type === "exited" && event.terminalId === terminalId),
+            ),
+          );
+        }
+        yield* first.manager.open({ workspaceId: "workspace", terminalId: "three" });
+        expect(
+          (yield* first.manager.getMetadata()).map((session) => session.terminalId).sort(),
+        ).toEqual(["one", "three", "two"]);
+        const second = yield* createManager(5, {
+          logsDir: first.logsDir,
+          resolveWorkspaceRoot: () => Effect.succeed(process.cwd()),
+        });
+        expect(
+          (yield* second.manager.getMetadata()).map((session) => session.terminalId).sort(),
+        ).toEqual(["one", "three", "two"]);
+      }),
+  );
+
+  it.effect("flushes active Workspace terminal history on daemon shutdown before reconnect", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const logsDir = yield* fs.makeTempDirectoryScoped({ prefix: "acode-terminal-reconnect-" });
+      const input = { workspaceId: "workspace-live", terminalId: "session-unique" };
+      const opened = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const first = yield* createManager(5, {
+            logsDir,
+            resolveWorkspaceRoot: () => Effect.succeed(process.cwd()),
+          });
+          const opened = yield* first.manager.open(input);
+          first.ptyAdapter.processes[0]!.emitData("last output before shutdown\r\n");
+          yield* waitFor(
+            Effect.map(first.getEvents, (events) =>
+              events.some((event) => event.type === "output"),
+            ),
+          );
+          return opened;
+        }),
+      );
+      const second = yield* createManager(5, {
+        logsDir,
+        resolveWorkspaceRoot: () => Effect.succeed(process.cwd()),
+      });
+      const resumed = yield* second.manager.open(input);
+      expect(resumed.sessionId).toBe(opened.sessionId);
+      expect(resumed.createdAt).toBe(opened.createdAt);
+      expect(resumed.history).toContain("last output before shutdown");
+    }),
+  );
+
   it.effect("persists Workspace identity and marks an old PTY exited after daemon restart", () =>
     Effect.gen(function* () {
       const first = yield* createManager(5, {
         resolveWorkspaceRoot: () => Effect.succeed(process.cwd()),
       });
-      yield* first.manager.open({ workspaceId: "workspace-restart", terminalId: "term-1" });
+      const opened = yield* first.manager.open({
+        workspaceId: "workspace-restart",
+        terminalId: "term-1",
+      });
+      expect(opened.createdAt).toBeDefined();
       const ptyProcess = first.ptyAdapter.processes[0];
       expect(ptyProcess).toBeDefined();
       if (!ptyProcess) return;
+      ptyProcess.emitData("work before reconnect\r\n");
+      yield* waitFor(
+        Effect.map(first.getEvents, (events) => events.some((event) => event.type === "output")),
+      );
       ptyProcess.emitExit({ exitCode: 0, signal: 0 });
       yield* waitFor(
         Effect.map(first.getEvents, (events) => events.some((event) => event.type === "exited")),
@@ -544,6 +670,9 @@ it.layer(
       const snapshot = (yield* Ref.get(attached)).find((event) => event.type === "snapshot");
       expect(snapshot?.type).toBe("snapshot");
       if (snapshot?.type === "snapshot") {
+        expect(snapshot.snapshot.sessionId).toBe(opened.sessionId);
+        expect(snapshot.snapshot.createdAt).toBe(opened.createdAt);
+        expect(snapshot.snapshot.history).toContain("work before reconnect");
         expect(snapshot.snapshot.status).toBe("exited");
         expect(snapshot.snapshot.generation).toBe(1);
         expect(snapshot.snapshot.workspaceId).toBe("workspace-restart");
@@ -554,6 +683,9 @@ it.layer(
         workspaceId: "workspace-restart",
         terminalId: "term-1",
       });
+      expect(restarted.sessionId).toBe(opened.sessionId);
+      expect(restarted.createdAt).toBe(opened.createdAt);
+      expect(restarted.history).toContain("work before reconnect");
       expect(restarted.status).toBe("running");
       expect(restarted.generation).toBe(2);
       expect(second.ptyAdapter.spawnInputs).toHaveLength(1);

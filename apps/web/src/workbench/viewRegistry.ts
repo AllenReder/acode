@@ -10,7 +10,8 @@ import type {
 /**
  * The discriminated union of targets a View instance can bind to.
  *
- * C10 ships exactly two:
+ * Built-in targets:
+ *   - `welcome`: the initial View, with no Session ownership.
  *   - `agentSession`: a Workspace-owned Agent Session.
  *   - `workspaceTerminal`: a Workspace-owned Terminal Session.
  *
@@ -28,6 +29,7 @@ import type {
  * conversation) without coupling to the rendering component.
  */
 export type ViewTarget =
+  | { readonly kind: "welcome" }
   | {
       readonly kind: "agentSession";
       readonly environmentId: EnvironmentId;
@@ -51,6 +53,8 @@ export type ViewKind = ViewTarget["kind"];
  */
 export function targetKey(target: ViewTarget): string {
   switch (target.kind) {
+    case "welcome":
+      return "welcome";
     case "agentSession":
       return `agentSession:${target.environmentId}:${target.workspaceId}:${target.agentSessionId}`;
     case "workspaceTerminal":
@@ -60,15 +64,7 @@ export function targetKey(target: ViewTarget): string {
 
 /** Structural equality over `ViewTarget`. Used to compare the focus of two panes. */
 export function targetsEqual(a: ViewTarget, b: ViewTarget): boolean {
-  if (a.kind !== b.kind) return false;
-  if (a.environmentId !== b.environmentId) return false;
-  if (a.workspaceId !== b.workspaceId) return false;
-  switch (a.kind) {
-    case "agentSession":
-      return b.kind === "agentSession" && a.agentSessionId === b.agentSessionId;
-    case "workspaceTerminal":
-      return b.kind === "workspaceTerminal" && a.terminalSessionId === b.terminalSessionId;
-  }
+  return targetKey(a) === targetKey(b);
 }
 
 /**
@@ -96,9 +92,7 @@ export interface ViewDefinition<T extends ViewTarget = ViewTarget> {
 const REGISTRY = new Map<ViewKind, ViewDefinition>();
 
 /** Register a View definition. Overwrites any existing definition for the same kind. */
-export function registerViewDefinition<T extends ViewTarget>(
-  definition: ViewDefinition<T>,
-): void {
+export function registerViewDefinition<T extends ViewTarget>(definition: ViewDefinition<T>): void {
   REGISTRY.set(definition.id, definition as unknown as ViewDefinition);
 }
 

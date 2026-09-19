@@ -2182,9 +2182,7 @@ function SidebarWorkspaceTerminalRows(props: {
     workspaceId: props.workspaceId,
   });
   const createTerminal = () => {
-    const terminalId = nextWorkspaceTerminalId(
-      sessions.map((session) => session.target.terminalId),
-    );
+    const terminalId = nextWorkspaceTerminalId();
     void openTerminal({
       environmentId: props.environmentId,
       input: { workspaceId: props.workspaceId, terminalId },

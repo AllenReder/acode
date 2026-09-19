@@ -22,7 +22,7 @@ import {
   type ThreadSortInput,
 } from "../lib/threadSort";
 import type { SidebarThreadSummary, Thread } from "../types";
-import { cn } from "../lib/utils";
+import { cn, randomUUID } from "../lib/utils";
 import { isLatestTurnSettled } from "../session-logic";
 
 export function shouldNavigateAfterThreadPark(input: {
@@ -1252,14 +1252,7 @@ export function sortScopedProjectsForSidebar<
   );
 }
 
-/**
- * Picks the next `term-N` id for a workspace terminal, skipping ids already
- * present in the metadata snapshot. Server-side open is idempotent per id, so
- * collisions would silently attach to the existing terminal instead.
- */
-export function nextWorkspaceTerminalId(existingIds: ReadonlyArray<string>): string {
-  const ids = new Set(existingIds);
-  let index = 1;
-  while (ids.has(`term-${index}`)) index += 1;
-  return `term-${index}`;
+/** Allocate once per creation request, independently of delayed metadata or closed Sessions. */
+export function nextWorkspaceTerminalId(): string {
+  return `term-${randomUUID()}`;
 }
