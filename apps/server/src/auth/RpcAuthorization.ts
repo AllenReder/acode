@@ -9,15 +9,15 @@ import {
   ORCHESTRATION_WS_METHODS,
   type AuthEnvironmentScope,
   WS_METHODS,
-  WsRpcGroup,
+  WsRpcGroupAll,
 } from "@t3tools/contracts";
 import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
-type WsRpcMethod = RpcGroup.Rpcs<typeof WsRpcGroup>["_tag"];
+type WsRpcMethod = RpcGroup.Rpcs<typeof WsRpcGroupAll>["_tag"];
 
 /**
  * Keep authorization coverage coupled to the RPC group itself. Adding an RPC to
- * `WsRpcGroup` without choosing a scope is a type error instead of a production
+ * `WsRpcGroupAll` without choosing a scope is a type error instead of a production
  * runtime failure.
  */
 export const RPC_REQUIRED_SCOPES = {
@@ -129,6 +129,11 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.vcsCreateRef]: AuthOrchestrationOperateScope,
   [WS_METHODS.vcsSwitchRef]: AuthOrchestrationOperateScope,
   [WS_METHODS.vcsInit]: AuthOrchestrationOperateScope,
+  // All three workspace mutations register work, create checkouts, or remove
+  // them, so they share the operate scope of the VCS mutations they compose.
+  [WS_METHODS.acodeWorkspaceAssociate]: AuthOrchestrationOperateScope,
+  [WS_METHODS.acodeWorkspaceCreateWorktree]: AuthOrchestrationOperateScope,
+  [WS_METHODS.acodeWorkspaceRemove]: AuthOrchestrationOperateScope,
   [WS_METHODS.reviewGetDiffPreview]: AuthReviewWriteScope,
   [WS_METHODS.reviewGetDiffFileContents]: AuthReviewWriteScope,
   [WS_METHODS.terminalOpen]: AuthTerminalOperateScope,

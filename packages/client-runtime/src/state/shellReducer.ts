@@ -43,12 +43,14 @@ export function applyShellStreamEvent(
         ...snapshot,
         projects: Arr.filter(snapshot.projects, (p) => p.id !== event.projectId),
         acodeProjects:
-          event.acodeProjectId === undefined
-            ? snapshot.acodeProjects
-            : Arr.filter(
-                snapshot.acodeProjects ?? [],
-                (project) => project.id !== event.acodeProjectId,
-              ),
+          event.acodeProject !== undefined
+            ? applyAcodeProjectUpdate(snapshot.acodeProjects, event.acodeProject)
+            : event.acodeProjectId === undefined
+              ? snapshot.acodeProjects
+              : Arr.filter(
+                  snapshot.acodeProjects ?? [],
+                  (project) => project.id !== event.acodeProjectId,
+                ),
         snapshotSequence: event.sequence,
       };
     case "thread-upserted": {

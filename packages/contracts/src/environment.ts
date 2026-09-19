@@ -171,6 +171,10 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
       desktop servers whose app predates the remote trigger, where clients
       must keep telling the user to update the app on that machine. */
   desktopAppUpdate: Schema.optionalKey(Schema.Boolean),
+  /** Server exposes the acodeWorkspace.associate / createWorktree / remove
+      RPCs. Absent on servers from before workspace management shipped, where
+      clients hide the sidebar actions instead of calling unknown methods. */
+  workspaceManagement: Schema.optionalKey(Schema.Boolean),
 });
 export type ExecutionEnvironmentCapabilities = typeof ExecutionEnvironmentCapabilities.Type;
 

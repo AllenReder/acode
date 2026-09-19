@@ -524,13 +524,40 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             updatedAt: event.payload.updatedAt,
             deletedAt: null,
           });
-          yield* projectionAcodeProjectRepository.upsertForT3Project({
-            t3ProjectId: event.payload.projectId,
-            title: event.payload.title,
-            workspaceRoot: event.payload.workspaceRoot,
-            createdAt: event.payload.createdAt,
-            updatedAt: event.payload.updatedAt,
-          });
+          yield* projectionAcodeProjectRepository
+            .upsertForT3Project({
+              t3ProjectId: event.payload.projectId,
+              title: event.payload.title,
+              workspaceRoot: event.payload.workspaceRoot,
+              ...(event.payload.acodeWorkspace !== undefined
+                ? {
+                    acodeProjectId: event.payload.acodeWorkspace.acodeProjectId,
+                    role: event.payload.acodeWorkspace.role,
+                    origin: event.payload.acodeWorkspace.origin,
+                  }
+                : {}),
+              createdAt: event.payload.createdAt,
+              updatedAt: event.payload.updatedAt,
+            })
+            .pipe(
+              Effect.catchCause((cause) => {
+                const error = Cause.squash(cause);
+                if (
+                  Schema.is(PersistenceSqlError)(error) &&
+                  error.operation === "ProjectionAcodeProjectRepository.upsert" &&
+                  error.detail?.startsWith("No ACode Project")
+                ) {
+                  // The attach target vanished between command validation and
+                  // projection. Drop only the ACode mapping: the T3 project row
+                  // stays, and one bad event must not stall the pipeline.
+                  return Effect.logWarning("ACode workspace attachment skipped: Project is gone", {
+                    t3ProjectId: event.payload.projectId,
+                    acodeProjectId: event.payload.acodeWorkspace?.acodeProjectId,
+                  }).pipe(Effect.asVoid);
+                }
+                return Effect.failCause(cause);
+              }),
+            );
           return;
 
         case "project.meta-updated": {

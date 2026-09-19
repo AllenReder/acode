@@ -169,6 +169,60 @@ describe("applyShellStreamEvent", () => {
       expect(next.acodeProjects).toHaveLength(0);
       expect(next.snapshotSequence).toBe(3);
     });
+
+    it("keeps a shared ACode Project when one sibling Workspace is removed", () => {
+      const acodeProject = {
+        id: AcodeProjectId.make("acode-project:project-1"),
+        title: "Repository",
+        workspaces: [
+          {
+            id: WorkspaceId.make("workspace:project-1"),
+            projectId: AcodeProjectId.make("acode-project:project-1"),
+            t3ProjectId: ProjectId.make("project-1"),
+            title: "Main",
+            workspaceRoot: "/workspace/main",
+            role: "main" as const,
+            createdAt: "2026-04-01T00:00:00.000Z",
+            updatedAt: "2026-04-01T00:00:00.000Z",
+          },
+          {
+            id: WorkspaceId.make("workspace:project-2"),
+            projectId: AcodeProjectId.make("acode-project:project-1"),
+            t3ProjectId: ProjectId.make("project-2"),
+            title: "Feature",
+            workspaceRoot: "/workspace/feature",
+            role: "worktree" as const,
+            origin: "associated" as const,
+            createdAt: "2026-04-01T00:00:00.000Z",
+            updatedAt: "2026-04-01T00:00:00.000Z",
+          },
+        ],
+        createdAt: "2026-04-01T00:00:00.000Z",
+        updatedAt: "2026-04-01T00:00:00.000Z",
+      };
+      const next = applyShellStreamEvent(
+        {
+          ...baseSnapshot,
+          projects: [stubProject, { ...stubProject, id: ProjectId.make("project-2") }],
+          acodeProjects: [acodeProject],
+        },
+        {
+          kind: "project-removed",
+          sequence: 7,
+          projectId: ProjectId.make("project-2"),
+          acodeProject: {
+            ...acodeProject,
+            workspaces: [acodeProject.workspaces[0]!],
+          },
+        },
+      );
+
+      expect(next.projects).toHaveLength(1);
+      expect(next.acodeProjects).toEqual([
+        { ...acodeProject, workspaces: [acodeProject.workspaces[0]!] },
+      ]);
+      expect(next.snapshotSequence).toBe(7);
+    });
   });
 
   describe("thread-upserted", () => {

@@ -140,6 +140,7 @@ import {
 import { useWorkbenchStore } from "../workbench/workbenchStore";
 import { environmentServerConfigsAtom, primaryServerKeybindingsAtom } from "../state/server";
 import { vcsEnvironment } from "../state/vcs";
+import { workspaceEnvironment } from "../state/projects";
 import { threadEnvironment } from "../state/threads";
 import { terminalEnvironment } from "../state/terminal";
 import { WorkspaceTerminalSurface } from "./ThreadTerminalDrawer";
@@ -2255,6 +2256,148 @@ function SidebarWorkspaceTerminalRows(props: {
   );
 }
 
+function SidebarWorkspaceActions(props: {
+  readonly project: EnvironmentAcodeProject;
+  readonly workspace?: EnvironmentAcodeProject["workspaces"][number];
+}) {
+  const serverConfigs = useAtomValue(environmentServerConfigsAtom);
+  if (serverConfigs.get(props.project.environmentId)?.environment.capabilities.workspaceManagement !== true) {
+    return null;
+  }
+  const associate = useAtomCommand(workspaceEnvironment.associate, { reportFailure: true });
+  const createWorktree = useAtomCommand(workspaceEnvironment.createWorktree, {
+    reportFailure: true,
+  });
+  const remove = useAtomCommand(workspaceEnvironment.remove, { reportFailure: true });
+  const removeWorkspace = async (input: {
+    readonly workspaceId: WorkspaceId;
+    readonly deleteDirectory?: boolean;
+  }) => {
+    const result = await remove({
+      environmentId: props.project.environmentId,
+      input,
+    });
+    if (result._tag === "Success" && result.value.warning !== undefined) {
+      toastManager.add({
+        type: "warning",
+        title: "Workspace registration removed",
+        description: result.value.warning,
+      });
+    }
+  };
+
+  const associateExisting = () => {
+    const path = window.prompt("Path of an existing Git worktree");
+    if (!path?.trim()) return;
+    void associate({
+      environmentId: props.project.environmentId,
+      input: { projectId: props.project.id, path },
+    }).then((result) => {
+      if (result._tag === "Success") {
+        toastManager.add({ type: "success", title: "Worktree associated" });
+      } else if (!isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        toastManager.add({
+          type: "error",
+          title: "Could not associate worktree",
+          description: error instanceof Error ? error.message : "The worktree could not be associated.",
+        });
+      }
+    });
+  };
+
+  const createNewWorktree = () => {
+    const newBranch = window.prompt("New branch name (leave blank for detached HEAD)");
+    if (newBranch === null) return;
+    const baseRef = window.prompt("Base branch, tag, or commit", "HEAD");
+    if (baseRef === null) return;
+    const path = window.prompt("Destination path (leave blank for the managed worktrees folder)");
+    if (path === null) return;
+    void createWorktree({
+      environmentId: props.project.environmentId,
+      input: {
+        projectId: props.project.id,
+        ...(newBranch.trim() ? { newBranch } : {}),
+        ...(baseRef.trim() ? { baseRef } : {}),
+        ...(path.trim() ? { path } : {}),
+      },
+    }).then((result) => {
+      if (result._tag === "Success") {
+        toastManager.add({ type: "success", title: "Worktree created" });
+      } else if (!isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        toastManager.add({
+          type: "error",
+          title: "Could not create worktree",
+          description: error instanceof Error ? error.message : "The worktree could not be created.",
+        });
+      }
+    });
+  };
+
+  const removeRegistration = () => {
+    if (props.workspace === undefined) return;
+    if (!window.confirm(`Remove '${props.workspace.title}' from this ACode Project?`)) return;
+    void removeWorkspace({ workspaceId: props.workspace.id });
+  };
+
+  const deleteCreatedWorktree = () => {
+    if (props.workspace === undefined || props.workspace.origin !== "acode-created") return;
+    if (!window.confirm(`Remove '${props.workspace.title}' and delete its worktree directory?`)) {
+      return;
+    }
+    void removeWorkspace({ workspaceId: props.workspace.id, deleteDirectory: true });
+  };
+
+  if (props.workspace === undefined) {
+    return (
+      <div className="ms-4 flex gap-1 border-s border-sidebar-border ps-1.5">
+        <button
+          type="button"
+          className="flex min-h-6 items-center gap-1 rounded-md px-2 text-[11px] text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+          onClick={associateExisting}
+        >
+          <PlusIcon className="size-3" />
+          Associate worktree
+        </button>
+        <button
+          type="button"
+          className="flex min-h-6 items-center gap-1 rounded-md px-2 text-[11px] text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+          onClick={createNewWorktree}
+        >
+          <GitBranchIcon className="size-3" />
+          New worktree
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ms-4 flex gap-1 border-s border-sidebar-border ps-1.5">
+      <button
+        type="button"
+        className="flex min-h-5 items-center gap-1 rounded-md px-2 text-[10px] text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+        onClick={removeRegistration}
+        aria-label={`Remove registration for ${props.workspace.title}`}
+      >
+        <XIcon className="size-3" />
+        Remove registration
+      </button>
+      {props.workspace.origin === "acode-created" ? (
+        <button
+          type="button"
+          className="flex min-h-5 items-center gap-1 rounded-md px-2 text-[10px] text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-destructive"
+          onClick={deleteCreatedWorktree}
+          aria-label={`Delete worktree for ${props.workspace.title}`}
+        >
+          <XIcon className="size-3" />
+          Delete worktree
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function SidebarWorkspaceTree(props: {
   readonly projects: ReadonlyArray<EnvironmentAcodeProject>;
   readonly threads: ReadonlyArray<EnvironmentThreadShell>;
@@ -2306,6 +2449,7 @@ function SidebarWorkspaceTree(props: {
             </button>
             {!isCollapsed ? (
               <div className="ms-4 flex flex-col gap-px border-s border-sidebar-border ps-1.5">
+                <SidebarWorkspaceActions project={project} />
                 {project.workspaces.map((workspace) => {
                   const sessions = workspace.sessions ?? [];
                   const selected =
@@ -2346,6 +2490,7 @@ function SidebarWorkspaceTree(props: {
                         workspaceId={workspace.id}
                         workspaceRoot={workspace.workspaceRoot}
                       />
+                      <SidebarWorkspaceActions project={project} workspace={workspace} />
                       {sessions.map((session) => {
                         const thread = props.threads.find(
                           (candidate) =>

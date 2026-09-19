@@ -155,6 +155,10 @@
       "types": "./src/state/workspaceEntities.ts",
       "default": "./src/state/workspaceEntities.ts"
     },
+    "./state/workspaceCommands": {
+      "types": "./src/state/workspaceCommands.ts",
+      "default": "./src/state/workspaceCommands.ts"
+    },
     "./state/provider-instance-display": {
       "types": "./src/state/providerInstanceDisplay.ts",
       "default": "./src/state/providerInstanceDisplay.ts"
