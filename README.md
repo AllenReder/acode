@@ -93,6 +93,24 @@ and this checkout's `.acode` directory by default:
 pnpm dev:desktop
 ```
 
+The bundled Ghostty terminal fetches same-origin WASM assets. Desktop CSP must
+allow `'self'` in `connect-src` and `'wasm-unsafe-eval'` in production
+`script-src`; permitting the daemon's localhost endpoint alone does not permit
+bundled terminal assets. The browser smoke checks both desktop policies with
+the production Ghostty loader and ensures packaged JavaScript `eval` stays
+blocked:
+
+```bash
+pnpm --filter @t3tools/scripts exec playwright install chromium
+pnpm smoke:desktop-terminal
+# Optional WebKit coverage (install its system dependencies on Linux):
+pnpm --filter @t3tools/scripts exec playwright install webkit
+pnpm smoke:desktop-terminal --webkit
+```
+
+This headless check complements native desktop UI verification; it does not
+launch the Tauri application or establish macOS UI acceptance.
+
 The explicit CLI stop is separate from closing the window:
 
 ```bash
