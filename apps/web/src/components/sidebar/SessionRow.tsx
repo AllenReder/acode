@@ -5,6 +5,7 @@ import { useWorkbenchStore } from "../../workbench/workbenchStore";
 import { targetsEqual, type ViewTarget } from "../../workbench/viewRegistry";
 import { sessionRouteForTarget } from "../../workbench/deepLinks";
 import { useSessionActionMenu } from "../../hooks/useSessionActionMenu";
+import { useWorkbenchDragSource } from "../../workbench/workbenchDrag";
 
 export type SessionTarget = Extract<ViewTarget, { kind: "agentSession" | "workspaceTerminal" }>;
 
@@ -28,8 +29,10 @@ export function SessionRow({
   onStartRename,
   navigateTo,
   onClick,
+  onClickCapture,
   onContextMenu,
   onKeyDown,
+  onPointerDown,
   className,
   ...props
 }: SessionRowProps) {
@@ -46,6 +49,10 @@ export function SessionRow({
     onStartRename,
     navigateTo,
   });
+  const drag = useWorkbenchDragSource(
+    { kind: "sidebar", target },
+    sessionTitle ?? (target.kind === "agentSession" ? "Agent Session" : "Terminal Session"),
+  );
   const navigateTarget = () => {
     const route = sessionRouteForTarget(target);
     if (navigateTo !== undefined) {
@@ -65,6 +72,7 @@ export function SessionRow({
       type="button"
       role="treeitem"
       aria-level={3}
+      data-workbench-drag-source="sidebar"
       className={cn(
         "flex min-h-6 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
         selected && "bg-sidebar-row-active text-sidebar-foreground",
@@ -83,6 +91,14 @@ export function SessionRow({
         }
         onClick?.(event);
       }}
+      onClickCapture={(event) => {
+        if (drag.consumeSuppressedClick()) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        onClickCapture?.(event);
+      }}
       onContextMenu={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -97,6 +113,10 @@ export function SessionRow({
           openMenu({ x: rect.left + rect.width / 2, y: rect.bottom });
         }
         onKeyDown?.(event);
+      }}
+      onPointerDown={(event) => {
+        drag.onPointerDown(event);
+        onPointerDown?.(event);
       }}
     />
   );

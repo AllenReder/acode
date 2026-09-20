@@ -2,10 +2,15 @@ import {
   closeLeaf,
   firstLeafId,
   leafIds,
+  movePane,
   newTab,
+  placePane,
+  removePane,
+  replaceLeafId,
   setSplitRatio,
   splitPane,
   type AcodeTab,
+  type PaneDropZone,
   type SplitDir,
 } from "./layout.ts";
 import { definitionIdForTarget, targetKey, type ViewTarget } from "./viewRegistry.ts";
@@ -28,6 +33,34 @@ export interface WorkbenchTab extends AcodeTab {
 export interface WorkbenchSnapshot {
   readonly tabs: ReadonlyArray<WorkbenchTab>;
   readonly activeTabId: string;
+}
+
+export type SessionViewTarget = Extract<ViewTarget, { kind: "agentSession" | "workspaceTerminal" }>;
+
+export type ViewDragSource =
+  | { readonly kind: "sidebar"; readonly target: SessionViewTarget }
+  | { readonly kind: "pane"; readonly tabId: string; readonly paneId: string };
+
+export type ViewDuplicateSource = {
+  readonly kind: "pane";
+  readonly tabId: string;
+  readonly paneId: string;
+};
+
+export type ViewDropTarget =
+  | {
+      readonly kind: "pane";
+      readonly tabId: string;
+      readonly paneId: string;
+      readonly zone: PaneDropZone;
+    }
+  | { readonly kind: "existingTab"; readonly tabId: string }
+  | { readonly kind: "newTab"; readonly index: number };
+
+export interface ViewDropResult {
+  readonly snapshot: WorkbenchSnapshot;
+  readonly tabId: string;
+  readonly paneId: string;
 }
 
 export function getActiveTab(snapshot: WorkbenchSnapshot): WorkbenchTab {
@@ -71,6 +104,82 @@ function updateTab(snapshot: WorkbenchSnapshot, tab: WorkbenchTab): WorkbenchSna
     ...snapshot,
     tabs: snapshot.tabs.map((current) => (current.id === tab.id ? tab : current)),
   };
+}
+
+function removeViewFromTab(
+  tab: WorkbenchTab,
+  paneId: string,
+  generateId: () => string,
+): WorkbenchTab | null {
+  if (!tab.panes.has(paneId)) return null;
+  const next = closeLeaf(tab, paneId);
+  if (next === null) {
+    return {
+      ...welcomeTab(generateId),
+      id: tab.id,
+      titleMode: tab.titleMode,
+      titleOverride: tab.titleOverride,
+    };
+  }
+  const panes = new Map(tab.panes);
+  panes.delete(paneId);
+  return { ...tab, ...next, panes };
+}
+
+function insertViewIntoTab(
+  tab: WorkbenchTab,
+  paneId: string,
+  view: ViewInstance,
+  generateId: () => string,
+): { readonly tab: WorkbenchTab; readonly paneId: string } {
+  const existing = tab.panes.get(paneId);
+  const resolvedPaneId =
+    existing !== undefined && existing.target.kind !== "welcome" ? generateId() : paneId;
+  const focused = tab.panes.get(tab.focusedPaneId);
+  if (focused?.target.kind === "welcome") {
+    const panes = new Map(tab.panes);
+    panes.delete(tab.focusedPaneId);
+    panes.set(resolvedPaneId, view);
+    return {
+      tab: {
+        ...tab,
+        layout: replaceLeafId(tab.layout, tab.focusedPaneId, resolvedPaneId),
+        panes,
+        focusedPaneId: resolvedPaneId,
+      },
+      paneId: resolvedPaneId,
+    };
+  }
+
+  const panes = new Map(tab.panes);
+  panes.set(resolvedPaneId, view);
+  return {
+    tab: {
+      ...tab,
+      layout: placePane(tab.layout, resolvedPaneId, tab.focusedPaneId, "right"),
+      panes,
+      focusedPaneId: resolvedPaneId,
+    },
+    paneId: resolvedPaneId,
+  };
+}
+
+function insertPresentationTab(
+  snapshot: WorkbenchSnapshot,
+  view: ViewInstance,
+  index: number,
+  generateId: () => string,
+  paneId = generateId(),
+): ViewDropResult {
+  const tab: WorkbenchTab = {
+    ...newTab(paneId),
+    panes: new Map([[paneId, view]]),
+    titleMode: "auto",
+    titleOverride: null,
+  };
+  const tabs = [...snapshot.tabs];
+  tabs.splice(Math.max(0, Math.min(index, tabs.length)), 0, tab);
+  return { snapshot: { tabs, activeTabId: tab.id }, tabId: tab.id, paneId };
 }
 
 function findNewAgentSessionPane(
@@ -240,6 +349,195 @@ export function applyReplacePaneTarget(
     target,
   });
   return updateTab(snapshot, { ...tab, panes });
+}
+
+/** Apply one drag/drop transaction without owning runtime Session lifecycle. */
+export function applyViewDrop(
+  snapshot: WorkbenchSnapshot,
+  source: ViewDragSource,
+  target: ViewDropTarget,
+  generateId: () => string,
+): ViewDropResult | null {
+  if (source.kind === "pane" && target.kind === "pane") {
+    const sourceTab = snapshot.tabs.find((candidate) => candidate.id === source.tabId);
+    const targetTab = snapshot.tabs.find((candidate) => candidate.id === target.tabId);
+    if (
+      sourceTab === undefined ||
+      targetTab === undefined ||
+      !sourceTab.panes.has(source.paneId) ||
+      !targetTab.panes.has(target.paneId) ||
+      source.paneId === target.paneId
+    ) {
+      return null;
+    }
+    if (sourceTab.id === targetTab.id) {
+      if (target.zone === "replace") {
+        const layout = removePane(sourceTab.layout, source.paneId);
+        if (layout === null) return null;
+        const panes = new Map(sourceTab.panes);
+        const sourceView = panes.get(source.paneId);
+        if (sourceView === undefined) return null;
+        panes.delete(source.paneId);
+        panes.set(target.paneId, sourceView);
+        return {
+          snapshot: updateTab(snapshot, {
+            ...sourceTab,
+            layout,
+            panes,
+            focusedPaneId: target.paneId,
+          }),
+          tabId: sourceTab.id,
+          paneId: target.paneId,
+        };
+      }
+      return {
+        snapshot: updateTab(snapshot, {
+          ...sourceTab,
+          layout: movePane(sourceTab.layout, source.paneId, target.paneId, target.zone),
+          focusedPaneId: source.paneId,
+        }),
+        tabId: sourceTab.id,
+        paneId: source.paneId,
+      };
+    }
+    return null;
+  }
+
+  if (source.kind === "pane" && target.kind === "existingTab") {
+    const sourceTab = snapshot.tabs.find((candidate) => candidate.id === source.tabId);
+    const targetTab = snapshot.tabs.find((candidate) => candidate.id === target.tabId);
+    if (
+      sourceTab === undefined ||
+      targetTab === undefined ||
+      sourceTab.id === targetTab.id ||
+      !sourceTab.panes.has(source.paneId) ||
+      findPaneByTarget(targetTab, sourceTab.panes.get(source.paneId)!.target) !== null
+    ) {
+      return null;
+    }
+    const sourceView = sourceTab.panes.get(source.paneId);
+    if (sourceView === undefined) return null;
+    const inserted = insertViewIntoTab(targetTab, source.paneId, sourceView, generateId);
+    const sourceAfter = removeViewFromTab(sourceTab, source.paneId, generateId);
+    if (sourceAfter === null) return null;
+    const tabs = snapshot.tabs.map((tab) => {
+      if (tab.id === sourceTab.id) return sourceAfter;
+      if (tab.id === targetTab.id) return inserted.tab;
+      return tab;
+    });
+    return {
+      snapshot: { tabs, activeTabId: targetTab.id },
+      tabId: targetTab.id,
+      paneId: inserted.paneId,
+    };
+  }
+
+  if (source.kind === "pane" && target.kind === "newTab") {
+    const sourceTab = snapshot.tabs.find((candidate) => candidate.id === source.tabId);
+    if (sourceTab === undefined || !sourceTab.panes.has(source.paneId)) return null;
+    const sourceView = sourceTab.panes.get(source.paneId);
+    if (sourceView === undefined) return null;
+    const sourceAfter = removeViewFromTab(sourceTab, source.paneId, generateId);
+    if (sourceAfter === null) return null;
+    const nextSnapshot = {
+      ...snapshot,
+      tabs: snapshot.tabs.map((candidate) =>
+        candidate.id === sourceTab.id ? sourceAfter : candidate,
+      ),
+    };
+    return insertPresentationTab(nextSnapshot, sourceView, target.index, generateId, source.paneId);
+  }
+
+  if (source.kind === "sidebar" && target.kind === "existingTab") {
+    const targetTab = snapshot.tabs.find((candidate) => candidate.id === target.tabId);
+    if (targetTab === undefined) return null;
+    const existingPaneId = findPaneByTarget(targetTab, source.target);
+    if (existingPaneId !== null) {
+      return {
+        snapshot: applySetFocused(applyActivateTab(snapshot, targetTab.id), existingPaneId),
+        tabId: targetTab.id,
+        paneId: existingPaneId,
+      };
+    }
+    const focused = targetTab.panes.get(targetTab.focusedPaneId);
+    const paneId = focused?.target.kind === "welcome" ? targetTab.focusedPaneId : generateId();
+    const inserted = insertViewIntoTab(
+      targetTab,
+      paneId,
+      viewInstance(source.target, generateId),
+      generateId,
+    );
+    return {
+      snapshot: updateTab(applyActivateTab(snapshot, targetTab.id), inserted.tab),
+      tabId: targetTab.id,
+      paneId: inserted.paneId,
+    };
+  }
+
+  if (source.kind === "sidebar" && target.kind === "newTab") {
+    return insertPresentationTab(
+      snapshot,
+      viewInstance(source.target, generateId),
+      target.index,
+      generateId,
+    );
+  }
+
+  if (source.kind !== "sidebar" || target.kind !== "pane") return null;
+  const tab = snapshot.tabs.find((candidate) => candidate.id === target.tabId);
+  if (tab === undefined || !tab.panes.has(target.paneId)) return null;
+  const existingPaneId = findPaneByTarget(tab, source.target);
+  if (existingPaneId !== null) {
+    return {
+      snapshot: applySetFocused(applyActivateTab(snapshot, tab.id), existingPaneId),
+      tabId: tab.id,
+      paneId: existingPaneId,
+    };
+  }
+
+  if (target.zone === "replace") {
+    const panes = new Map(tab.panes);
+    panes.set(target.paneId, viewInstance(source.target, generateId));
+    return {
+      snapshot: updateTab(snapshot, { ...tab, panes, focusedPaneId: target.paneId }),
+      tabId: tab.id,
+      paneId: target.paneId,
+    };
+  }
+
+  const paneId = generateId();
+  const panes = new Map(tab.panes);
+  panes.set(paneId, viewInstance(source.target, generateId));
+  return {
+    snapshot: updateTab(snapshot, {
+      ...tab,
+      panes,
+      layout: placePane(tab.layout, paneId, target.paneId, target.zone),
+      focusedPaneId: paneId,
+    }),
+    tabId: tab.id,
+    paneId,
+  };
+}
+
+/** Duplicate presentation into a new Tab without duplicating its work. */
+export function applyDuplicateToNewTab(
+  snapshot: WorkbenchSnapshot,
+  source: ViewDuplicateSource,
+  index: number,
+  generateId: () => string,
+): ViewDropResult | null {
+  const sourceTarget = snapshot.tabs
+    .find((tab) => tab.id === source.tabId)
+    ?.panes.get(source.paneId)?.target;
+  if (
+    sourceTarget === undefined ||
+    (sourceTarget.kind !== "agentSession" && sourceTarget.kind !== "workspaceTerminal")
+  ) {
+    return null;
+  }
+
+  return insertPresentationTab(snapshot, viewInstance(sourceTarget, generateId), index, generateId);
 }
 
 export function applySetSplitRatio(

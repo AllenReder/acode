@@ -1,9 +1,19 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
+import { CopyPlusIcon, GripVerticalIcon } from "lucide-react";
 
+import { readLocalApi } from "../localApi";
 import { type LayoutNode, type SplitDir } from "./layout";
 import { resolveViewDefinition, type ViewTarget } from "./viewRegistry";
 import { useWorkbenchStore } from "./workbenchStore";
 import { getActiveTab, type WorkbenchSnapshot } from "./workbenchState";
+import { useWorkbenchDragSource } from "./workbenchDrag";
 
 interface PaneTreeProps {
   readonly snapshot: WorkbenchSnapshot;
@@ -103,12 +113,32 @@ function Pane({ snapshot, paneId, focused }: PaneProps) {
   const setFocused = useWorkbenchStore((s) => s.setFocused);
   const focusRequestId = useWorkbenchStore((s) => s.focusRequestId);
   const closeView = useWorkbenchStore((s) => s.closeView);
-  const view = getActiveTab(snapshot).panes.get(paneId);
+  const duplicateToNewTab = useWorkbenchStore((s) => s.duplicateToNewTab);
+  const activeTab = getActiveTab(snapshot);
+  const view = activeTab.panes.get(paneId);
   const target = view?.target ?? null;
+  const drag = useWorkbenchDragSource(
+    { kind: "pane", tabId: activeTab.id, paneId },
+    target === null ? "View" : labelForTarget(target),
+  );
 
   const onClick = useCallback(() => {
     if (!focused) setFocused(paneId);
   }, [focused, paneId, setFocused]);
+
+  const onDuplicate = () => {
+    duplicateToNewTab({ kind: "pane", tabId: activeTab.id, paneId });
+  };
+
+  const openPaneMenu = (position: { readonly x: number; readonly y: number }) => {
+    const api = readLocalApi();
+    if (!api) return;
+    void api.contextMenu
+      .show([{ id: "duplicate", label: "Duplicate pane", icon: "copy-plus" }], position)
+      .then((clicked) => {
+        if (clicked === "duplicate") onDuplicate();
+      });
+  };
 
   const contentRef = useRef<HTMLDivElement>(null);
   const [availableSize, setAvailableSize] = useState({ width: 0, height: 0 });
@@ -141,6 +171,8 @@ function Pane({ snapshot, paneId, focused }: PaneProps) {
         (focused ? "outline outline-1 outline-accent" : "")
       }
       data-pane-id={paneId}
+      data-workbench-pane-drop=""
+      data-workbench-tab-id={activeTab.id}
       data-view-instance-id={view?.id}
       data-pane-focused={focused}
       data-pane-target-kind={target?.kind ?? "empty"}
@@ -149,6 +181,9 @@ function Pane({ snapshot, paneId, focused }: PaneProps) {
         paneId={paneId}
         target={target}
         focused={focused}
+        onDragStart={drag.onPointerDown}
+        onDuplicate={onDuplicate}
+        onOpenMenu={openPaneMenu}
         onClose={() => closeView(paneId)}
       />
       <div ref={contentRef} className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -173,28 +208,68 @@ function PaneHeader({
   paneId,
   target,
   focused,
+  onDragStart,
+  onDuplicate,
+  onOpenMenu,
   onClose,
 }: {
   readonly paneId: string;
   readonly target: ViewTarget | null;
   readonly focused: boolean;
+  readonly onDragStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  readonly onDuplicate: () => void;
+  readonly onOpenMenu: (position: { readonly x: number; readonly y: number }) => void;
   readonly onClose: () => void;
 }) {
   void paneId;
   void focused;
   return (
-    <div className="flex h-8 items-center justify-between gap-2 border-b border-border px-3 text-xs text-muted-foreground">
+    <div
+      className="flex h-8 items-center justify-between gap-2 border-b border-border px-3 text-xs text-muted-foreground"
+      tabIndex={0}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onOpenMenu({ x: event.clientX, y: event.clientY });
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const rect = event.currentTarget.getBoundingClientRect();
+        onOpenMenu({ x: rect.left + rect.width / 2, y: rect.bottom });
+      }}
+    >
       <span className="truncate">
         {target === null ? "Unavailable View" : labelForTarget(target)}
       </span>
-      <button
-        type="button"
-        aria-label="Close pane"
-        className="rounded px-1.5 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-        onClick={onClose}
-      >
-        ×
-      </button>
+      <div className="flex items-center gap-0.5">
+        <button
+          type="button"
+          aria-label="Duplicate pane"
+          className="flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+          onClick={onDuplicate}
+        >
+          <CopyPlusIcon className="size-3" />
+        </button>
+        <button
+          type="button"
+          aria-label="Move pane"
+          data-workbench-pane-drag-handle=""
+          className="flex size-5 touch-none cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing"
+          onPointerDown={onDragStart}
+        >
+          <GripVerticalIcon className="size-3" />
+        </button>
+        <button
+          type="button"
+          aria-label="Close pane"
+          className="rounded px-1.5 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+          onClick={onClose}
+        >
+          ×
+        </button>
+      </div>
     </div>
   );
 }

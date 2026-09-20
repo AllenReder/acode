@@ -75,6 +75,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
         <div
           className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           data-tauri-drag-region
+          data-workbench-tab-strip-drop=""
           role="tablist"
           aria-label="Workbench tabs"
         >
@@ -94,6 +95,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
                 tabIndex={active ? 0 : -1}
                 title={title}
                 data-tab-id={tab.id}
+                data-workbench-tab-drop={tab.id}
                 data-active-tab={active ? "true" : "false"}
                 className={cn(
                   "group flex h-7 shrink-0 cursor-pointer items-center gap-2.5 overflow-hidden rounded-[var(--control-radius)] border transition-[width,background-color,border-color] duration-150",
@@ -182,6 +184,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
         <button
           type="button"
           aria-label="New tab"
+          data-workbench-new-tab-drop="end"
           className="flex size-7 shrink-0 items-center justify-center rounded-[var(--control-radius)] border border-border/70 bg-muted/25 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
           onClick={createTab}
         >
