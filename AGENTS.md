@@ -66,6 +66,12 @@ when available. Native shell or runtime changes should rebuild the relevant
 native process. On macOS, grant Computer Use Screen Recording and
 Accessibility permissions when prompted.
 
+## Real Agent tests
+
+For any real Agent test, Codex may use only `gpt-5.6-luna` or the legacy
+`MiniMax-M3` model. Do not substitute another model to work around availability
+or cost.
+
 ## Agent skills
 
 ### Issue tracker
