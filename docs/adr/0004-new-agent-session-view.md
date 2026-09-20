@@ -22,6 +22,11 @@ model without inventing a second work lifecycle.
 
 - Draft state remains client-owned and must survive closing or reloading its
   View without appearing as a Session in the Sidebar or History.
+- A draft is persisted under its owning Workspace identity. Existing drafts are
+  migrated by matching their checkout path to a Workspace, falling back to the
+  Project's main Workspace; when several drafts map to one Workspace, the most
+  recently updated draft is exposed and the remaining payloads are retained
+  without appearing as active drafts.
 - The New Agent Session View has presentation actions such as open, focus,
   split, close view, and discard; it does not have Session lifecycle actions.
 - Thread-only navigation and lifecycle actions do not return through this

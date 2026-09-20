@@ -13,9 +13,16 @@ behind typed adapters rather than product-level navigation identities.
 - ACode Project is the canonical project identity. A Workspace is a stable
   checkout belonging to exactly one Project. A Session belongs to exactly one
   Workspace and is independent of its runtime process.
+- A Workspace has an independent, mutable display title. Creating a Workspace
+  may seed that title from its Project, but Project and Workspace renames do
+  not rename each other.
 - The main area renders Views, never raw Sessions. A Session View targets an
   Agent or Terminal Session; a Workspace View targets Project/Workspace content
   without requiring a daemon-held Session.
+- File and Git presentation are Workspace Views. Existing file
+  browsing/preview/editing and diff content may be reused, but their ownership
+  must not depend on an Agent Session, a Thread, or the thread-scoped right
+  panel.
 - A Tab is independent of Project and Workspace. A Pane is a layout leaf that
   contains exactly one View instance. A Session View may occur once per Tab and
   may occur in multiple Tabs.

@@ -2,9 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useParams } from "@tanstack/react-router";
 
 import { useAcodeProjects, useEnvironmentShellSnapshotPresent } from "../state/entities";
+import { useComposerDraftStore } from "../composerDraftStore";
 import { useEnvironmentCatalogSnapshot } from "../state/environmentCatalogSnapshot";
 import { PaneTree } from "./PaneTree";
-import { deepLinkInputFromParams, resolveDeepLink, type DeepLinkResolution } from "./deepLinks";
+import {
+  deepLinkInputFromParams,
+  draftIdFromParams,
+  resolveDeepLink,
+  resolveNewAgentSessionTarget,
+  type DeepLinkResolution,
+} from "./deepLinks";
 import { targetKey, type ViewTarget } from "./viewRegistry";
 import "./viewDefinitions";
 import { useWorkbenchStore } from "./workbenchStore";
@@ -21,6 +28,9 @@ interface WorkbenchProps {
 export function Workbench({ navigate: navigateTo }: WorkbenchProps = {}) {
   const snapshot = useWorkbenchStore();
   const openTarget = useWorkbenchStore((s) => s.openTarget);
+  const reconcileDraftWorkspaceBindings = useComposerDraftStore(
+    (state) => state.reconcileDraftWorkspaceBindings,
+  );
   const projects = useAcodeProjects();
   const router = useRouter();
   const navigate =
@@ -36,6 +46,14 @@ export function Workbench({ navigate: navigateTo }: WorkbenchProps = {}) {
 
   const params = useParams({ strict: false }) as Parameters<typeof deepLinkInputFromParams>[0];
   const deepLinkInput = deepLinkInputFromParams(params);
+  const draftId = draftIdFromParams(params as { draftId?: string });
+  const draft = useComposerDraftStore((state) =>
+    draftId === null ? null : state.getDraftSession(draftId),
+  );
+  const draftTarget =
+    draftId === null || draft === null
+      ? null
+      : resolveNewAgentSessionTarget(draftId, draft, projects);
   const environmentId = deepLinkInput?.environmentId ?? null;
   const catalog = useEnvironmentCatalogSnapshot(environmentId);
   const environmentSnapshotPresent = useEnvironmentShellSnapshotPresent(environmentId);
@@ -84,8 +102,19 @@ export function Workbench({ navigate: navigateTo }: WorkbenchProps = {}) {
   }, [projects]);
 
   useEffect(() => {
+    const workspaces = projects.flatMap((project) =>
+      project.workspaces.map((workspace) => ({
+        environmentId: project.environmentId,
+        workspaceId: workspace.id,
+        workspaceRoot: workspace.workspaceRoot,
+      })),
+    );
+    reconcileDraftWorkspaceBindings(workspaces);
+  }, [projects, reconcileDraftWorkspaceBindings]);
+
+  useEffect(() => {
     if (deepLinkInput === null || resolution.state !== "ready") return;
-    const routeKey = JSON.stringify(deepLinkInput);
+    const routeKey = `deep-link:${JSON.stringify(deepLinkInput)}`;
     if (handledRouteKeyRef.current === routeKey) return;
     handledRouteKeyRef.current = routeKey;
     if (resolution.legacy) {
@@ -94,6 +123,14 @@ export function Workbench({ navigate: navigateTo }: WorkbenchProps = {}) {
     }
     openTarget(resolution.target);
   }, [deepLinkInput, navigate, openTarget, resolution]);
+
+  useEffect(() => {
+    if (draftTarget === null) return;
+    const routeKey = `draft:${draftTarget.draftId}:${draftTarget.environmentId}:${draftTarget.workspaceId}`;
+    if (handledRouteKeyRef.current === routeKey) return;
+    handledRouteKeyRef.current = routeKey;
+    openTarget(draftTarget);
+  }, [draftTarget, openTarget]);
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">

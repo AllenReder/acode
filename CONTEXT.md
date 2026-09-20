@@ -27,8 +27,10 @@ _Avoid_: Repo, Repository, Folder (as UI labels)
 **Workspace**:
 One stable checkout of a Project. It may be the Project's main checkout or a
 Git worktree. A Workspace has its own ACode identity independent of its current
-branch, commit, or detached-HEAD state. Sibling Workspaces of one Project are
-different checkouts of the same repository.
+branch, commit, or detached-HEAD state. Its display title is Workspace metadata,
+not Project identity; renaming a Workspace does not rename its Project, and
+renaming a Project does not rename its Workspaces. Sibling Workspaces of one
+Project are different checkouts of the same repository.
 _Avoid_: Session, Checkout. Not paseo's Workspace, which is a `cwd` that
 happens to carry a branch.
 
@@ -75,6 +77,18 @@ A View whose target is a Project or Workspace concern rather than a persistent
 Session, such as files, Git state, or plugin-provided workspace content. It
 does not require the daemon to hold a long-lived Session.
 _Avoid_: Session, Workspace panel
+
+**File View**:
+A Workspace View for browsing, previewing, and editing files relative to its
+Workspace. Its content is addressed by Workspace path and does not require an
+Agent Session or Thread.
+_Avoid_: File panel, File browser
+
+**Git View**:
+A Workspace View for inspecting Git state and changes in its Workspace. It
+presents the checkout's worktree state rather than owning a Session or running
+Git operations on the user's behalf.
+_Avoid_: Diff panel, Source Control Session
 
 **Application View**:
 A View whose target is application-level content rather than a Project,

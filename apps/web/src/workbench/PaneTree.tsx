@@ -226,6 +226,8 @@ function labelForTarget(target: ViewTarget): string {
       return "Welcome";
     case "agentSession":
       return "Agent";
+    case "newAgentSession":
+      return "New Agent";
     case "workspaceTerminal":
       return "Terminal";
   }

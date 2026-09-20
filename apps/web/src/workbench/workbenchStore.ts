@@ -5,6 +5,7 @@ import {
   applyActivateTab,
   applyClosePane,
   applyRemoveSessionViews,
+  applyReplacePaneTarget,
   applyOpenTarget,
   applySetFocused,
   applySetSplitRatio,
@@ -22,6 +23,7 @@ export interface WorkbenchStore extends WorkbenchSnapshot {
   activateTab: (tabId: string) => void;
   closeView: (paneId: string) => void;
   removeSessionViews: (target: ViewTarget) => void;
+  replaceTarget: (paneId: string, target: ViewTarget) => void;
   openTarget: (target: ViewTarget) => void;
   splitFocused: (target: ViewTarget, dir: SplitDir) => void;
   setFocused: (paneId: string) => void;
@@ -43,6 +45,8 @@ export const useWorkbenchStore = create<WorkbenchStore>((set) => ({
     set((snapshot) => applyClosePane(snapshot, paneId, generateId) ?? snapshot),
   removeSessionViews: (target) =>
     set((snapshot) => applyRemoveSessionViews(snapshot, target, generateId)),
+  replaceTarget: (paneId, target) =>
+    set((snapshot) => applyReplacePaneTarget(snapshot, paneId, target)),
   openTarget: (target) =>
     set((snapshot) => ({
       ...applyOpenTarget(snapshot, target, generateId),

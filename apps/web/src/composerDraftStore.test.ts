@@ -14,6 +14,8 @@ import {
   ProviderInstanceId,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   ThreadId,
+  WorkspaceId,
+  workspaceIdForT3Project,
   type ModelSelection,
   type PreviewAnnotationPayload,
   type ProviderOptionSelection,
@@ -1288,6 +1290,234 @@ describe("composerDraftStore project draft thread mapping", () => {
       interactionMode: "default",
       createdAt: "2026-01-01T00:00:00.000Z",
     });
+  });
+
+  it("stores and reads a draft under its explicit Workspace identity", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-02-03T04:05:06.000Z"));
+    try {
+      const workspaceId = WorkspaceId.make("workspace-worktree");
+      const store = useComposerDraftStore.getState();
+
+      store.setWorkspaceDraftThreadId(workspaceId, projectRef, draftId, {
+        threadId,
+        branch: "feature/workspace",
+        worktreePath: "/tmp/workspace-worktree",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+
+      expect(
+        useComposerDraftStore
+          .getState()
+          .getDraftSessionByWorkspace(TEST_ENVIRONMENT_ID, workspaceId),
+      ).toMatchObject({
+        draftId,
+        workspaceId,
+        environmentId: TEST_ENVIRONMENT_ID,
+        projectId,
+        threadId,
+        updatedAt: "2026-02-03T04:05:06.000Z",
+      });
+
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("migrates a legacy project draft to the Project's main Workspace", () => {
+    const persistApi = useComposerDraftStore.persist as unknown as {
+      getOptions: () => {
+        merge: (
+          persistedState: unknown,
+          currentState: ReturnType<typeof useComposerDraftStore.getState>,
+        ) => ReturnType<typeof useComposerDraftStore.getState>;
+      };
+    };
+    const legacyDraftId = "draft-legacy-workspace";
+    const createdAt = "2026-01-01T00:00:00.000Z";
+    const merged = persistApi.getOptions().merge(
+      {
+        draftsByThreadKey: {
+          [legacyDraftId]: {
+            prompt: "legacy draft",
+            attachments: [],
+            files: [],
+            terminalContexts: [],
+            previewAnnotations: [],
+            reviewComments: [],
+            modelSelectionByProvider: {},
+            activeProvider: null,
+            runtimeMode: null,
+            interactionMode: null,
+          },
+        },
+        draftThreadsByThreadKey: {
+          [legacyDraftId]: {
+            threadId,
+            environmentId: TEST_ENVIRONMENT_ID,
+            projectId,
+            logicalProjectKey: scopedProjectKey(projectRef),
+            createdAt,
+            runtimeMode: "full-access",
+            interactionMode: "default",
+            branch: null,
+            worktreePath: null,
+            envMode: "local",
+            startFromOrigin: false,
+          },
+        },
+        logicalProjectDraftThreadKeyByLogicalProjectKey: {},
+      },
+      useComposerDraftStore.getInitialState(),
+    );
+    useComposerDraftStore.setState(merged);
+
+    expect(
+      useComposerDraftStore.getState().getDraftSessionByWorkspace(
+        TEST_ENVIRONMENT_ID,
+        workspaceIdForT3Project(projectId),
+      ),
+    ).toMatchObject({
+      draftId: legacyDraftId,
+      workspaceId: workspaceIdForT3Project(projectId),
+      updatedAt: createdAt,
+    });
+  });
+
+  it("selects the most recently updated legacy draft per Workspace without deleting the others", () => {
+    const persistApi = useComposerDraftStore.persist as unknown as {
+      getOptions: () => {
+        merge: (
+          persistedState: unknown,
+          currentState: ReturnType<typeof useComposerDraftStore.getState>,
+        ) => ReturnType<typeof useComposerDraftStore.getState>;
+      };
+    };
+    const legacyDrafts = [
+      {
+        id: "draft-legacy-older",
+        threadId: ThreadId.make("thread-legacy-older"),
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "draft-legacy-newer",
+        threadId: ThreadId.make("thread-legacy-newer"),
+        createdAt: "2026-01-02T00:00:00.000Z",
+      },
+    ];
+    const merged = persistApi.getOptions().merge(
+      {
+        draftsByThreadKey: Object.fromEntries(
+          legacyDrafts.map((draft) => [
+            draft.id,
+            {
+              prompt: draft.id,
+              attachments: [],
+              files: [],
+              terminalContexts: [],
+              previewAnnotations: [],
+              reviewComments: [],
+              modelSelectionByProvider: {},
+              activeProvider: null,
+              runtimeMode: null,
+              interactionMode: null,
+            },
+          ]),
+        ),
+        draftThreadsByThreadKey: Object.fromEntries(
+          legacyDrafts.map((draft) => [
+            draft.id,
+            {
+              threadId: draft.threadId,
+              environmentId: TEST_ENVIRONMENT_ID,
+              projectId,
+              logicalProjectKey: scopedProjectKey(projectRef),
+              createdAt: draft.createdAt,
+              runtimeMode: "full-access",
+              interactionMode: "default",
+              branch: null,
+              worktreePath: null,
+              envMode: "local",
+              startFromOrigin: false,
+            },
+          ]),
+        ),
+        logicalProjectDraftThreadKeyByLogicalProjectKey: {},
+      },
+      useComposerDraftStore.getInitialState(),
+    );
+    useComposerDraftStore.setState(merged);
+
+    expect(
+      useComposerDraftStore
+        .getState()
+        .getDraftSessionByWorkspace(TEST_ENVIRONMENT_ID, workspaceIdForT3Project(projectId)),
+    ).toMatchObject({ draftId: "draft-legacy-newer" });
+    expect(useComposerDraftStore.getState().getDraftSession(DraftId.make("draft-legacy-older"))).not.toBeNull();
+  });
+
+  it("rebinds a legacy worktree draft when its checkout becomes a Workspace", () => {
+    const persistApi = useComposerDraftStore.persist as unknown as {
+      getOptions: () => {
+        merge: (
+          persistedState: unknown,
+          currentState: ReturnType<typeof useComposerDraftStore.getState>,
+        ) => ReturnType<typeof useComposerDraftStore.getState>;
+      };
+    };
+    const legacyDraftId = "draft-legacy-worktree";
+    const workspaceId = WorkspaceId.make("workspace-worktree");
+    const worktreePath = "/tmp/acode-worktree";
+    const merged = persistApi.getOptions().merge(
+      {
+        draftsByThreadKey: {
+          [legacyDraftId]: {
+            prompt: "legacy worktree draft",
+            attachments: [],
+            files: [],
+            terminalContexts: [],
+            previewAnnotations: [],
+            reviewComments: [],
+            modelSelectionByProvider: {},
+            activeProvider: null,
+            runtimeMode: null,
+            interactionMode: null,
+          },
+        },
+        draftThreadsByThreadKey: {
+          [legacyDraftId]: {
+            threadId,
+            environmentId: TEST_ENVIRONMENT_ID,
+            projectId,
+            logicalProjectKey: scopedProjectKey(projectRef),
+            createdAt: "2026-01-01T00:00:00.000Z",
+            runtimeMode: "full-access",
+            interactionMode: "default",
+            branch: "feature/worktree",
+            worktreePath,
+            envMode: "worktree",
+            startFromOrigin: false,
+          },
+        },
+        logicalProjectDraftThreadKeyByLogicalProjectKey: {},
+      },
+      useComposerDraftStore.getInitialState(),
+    );
+    useComposerDraftStore.setState(merged);
+
+    useComposerDraftStore.getState().reconcileDraftWorkspaceBindings([
+      {
+        environmentId: TEST_ENVIRONMENT_ID,
+        workspaceId,
+        workspaceRoot: worktreePath,
+      },
+    ]);
+
+    expect(
+      useComposerDraftStore
+        .getState()
+        .getDraftSessionByWorkspace(TEST_ENVIRONMENT_ID, workspaceId),
+    ).toMatchObject({ draftId: legacyDraftId, workspaceId });
   });
 
   it("removes a draft's previous project mapping when retargeted in place", () => {
