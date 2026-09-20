@@ -12,7 +12,6 @@ describe("resolveWorkbenchTitlebarStyle", () => {
       }),
     ).toEqual({
       "--workspace-controls-left": "var(--desktop-window-controls-inset, 90px)",
-      "--workbench-titlebar-center": "18px",
     });
   });
 
