@@ -3917,7 +3917,7 @@ describe("ProviderRuntimeIngestion", () => {
     const thread = await waitForThread(
       harness.readModel,
       (entry) =>
-        entry.title === "Thread" &&
+        entry.title === "Renamed by provider" &&
         entry.activities.some(
           (activity: ProviderRuntimeTestActivity) => activity.kind === "turn.plan.updated",
         ) &&
@@ -3932,7 +3932,7 @@ describe("ProviderRuntimeIngestion", () => {
         ),
     );
 
-    expect(thread.title).toBe("Thread");
+    expect(thread.title).toBe("Renamed by provider");
 
     const planActivity = thread.activities.find(
       (activity: ProviderRuntimeTestActivity) => activity.id === "evt-turn-plan-updated",
@@ -3997,13 +3997,75 @@ describe("ProviderRuntimeIngestion", () => {
     expect(thread.title).toBe("Renamed by provider");
   });
 
-  it("rejects a provider title once the thread has a real title", async () => {
-    const harness = await createHarness({ threadTitle: "User-set title" });
+  it("follows a provider title before manual ownership has been recorded", async () => {
+    const harness = await createHarness({ threadTitle: "Seeded session title" });
     const now = "2026-01-01T00:00:00.000Z";
 
     harness.emit({
       type: "thread.metadata.updated",
-      eventId: asEventId("evt-thread-metadata-real"),
+      eventId: asEventId("evt-thread-metadata-seeded"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      payload: {
+        name: "Provider-owned title",
+        metadata: { source: "provider" },
+      },
+    });
+
+    const thread = await waitForThread(
+      harness.readModel,
+      (entry) => entry.title === "Provider-owned title",
+    );
+    expect(thread.title).toBe("Provider-owned title");
+  });
+
+  it("follows provider titles while the Session owns the title", async () => {
+    const harness = await createHarness({ threadTitle: DEFAULT_THREAD_TITLE });
+    const now = "2026-01-01T00:00:00.000Z";
+
+    await harness.dispatch({
+      type: "thread.title.generate.complete",
+      commandId: CommandId.make("generated-session-title"),
+      threadId: asThreadId("thread-1"),
+      expectedTitle: DEFAULT_THREAD_TITLE,
+      expectedVersion: null,
+      title: "Generated session title",
+      needsRefinement: false,
+    });
+
+    harness.emit({
+      type: "thread.metadata.updated",
+      eventId: asEventId("evt-thread-metadata-refresh"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      payload: {
+        name: "Updated by the Session",
+        metadata: { source: "provider" },
+      },
+    });
+
+    const thread = await waitForThread(
+      harness.readModel,
+      (entry) => entry.title === "Updated by the Session",
+    );
+    expect(thread.title).toBe("Updated by the Session");
+  });
+
+  it("rejects a provider title after a manual rename", async () => {
+    const harness = await createHarness({ threadTitle: DEFAULT_THREAD_TITLE });
+    const now = "2026-01-01T00:00:00.000Z";
+    await harness.dispatch({
+      type: "thread.meta.update",
+      commandId: CommandId.make("manual-session-title"),
+      threadId: asThreadId("thread-1"),
+      title: "User-set title",
+    });
+
+    harness.emit({
+      type: "thread.metadata.updated",
+      eventId: asEventId("evt-thread-metadata-after-manual-title"),
       provider: ProviderDriverKind.make("codex"),
       createdAt: now,
       threadId: asThreadId("thread-1"),

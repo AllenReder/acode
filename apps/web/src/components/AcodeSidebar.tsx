@@ -40,7 +40,8 @@ import { nextWorkspaceTerminalId } from "./Sidebar.logic";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { SidebarContent, SidebarGroup, SidebarGroupLabel } from "./ui/sidebar";
 import { sessionRouteForTarget } from "../workbench/deepLinks";
-import { terminalTargetForRuntime } from "../workbench/sessionTarget";
+import { runtimeTerminalIdForTarget, terminalTargetForRuntime } from "../workbench/sessionTarget";
+import type { ViewTarget } from "../workbench/viewRegistry";
 import { useWorkbenchStore } from "../workbench/workbenchStore";
 
 type ProjectMenuId =
@@ -161,6 +162,7 @@ export function AcodeSidebar() {
   const renameProject = useAtomCommand(workspaceEnvironment.renameProject);
   const deleteProject = useAtomCommand(projectEnvironment.delete);
   const openTerminal = useAtomCommand(terminalEnvironment.open);
+  const renameTerminalSession = useAtomCommand(terminalEnvironment.rename);
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata);
 
   const openAddProject = useCallback(() => openCommandPalette({ open: "add-project" }), []);
@@ -406,6 +408,33 @@ export function AcodeSidebar() {
     [updateThreadMetadata],
   );
 
+  const renameTerminal = useCallback(
+    (target: Extract<ViewTarget, { kind: "workspaceTerminal" }>, currentTitle: string) => {
+      const title = window.prompt("Session name", currentTitle)?.trim();
+      if (!title) return;
+      const terminalId = runtimeTerminalIdForTarget(target);
+      if (!terminalId) {
+        commandFailureToast(
+          "Could not rename Terminal Session",
+          new Error("Terminal id is unavailable."),
+        );
+        return;
+      }
+      void renameTerminalSession({
+        environmentId: target.environmentId,
+        input: { workspaceId: target.workspaceId, terminalId, title },
+      }).then((result) => {
+        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+          commandFailureToast(
+            "Could not rename Terminal Session",
+            squashAtomCommandFailure(result),
+          );
+        }
+      });
+    },
+    [renameTerminalSession],
+  );
+
   if (projects.length === 0) {
     return (
       <SidebarContent className="gap-0">
@@ -580,6 +609,17 @@ export function AcodeSidebar() {
                                     navigateTo={(route) =>
                                       void navigate({ ...route, to: route.to as never } as never)
                                     }
+                                    onStartRename={() =>
+                                      renameTerminal(
+                                        {
+                                          kind: "workspaceTerminal",
+                                          environmentId: project.environmentId,
+                                          workspaceId: workspace.id,
+                                          terminalSessionId: session.id,
+                                        },
+                                        session.title,
+                                      )
+                                    }
                                   >
                                     <TerminalIcon className="size-3 shrink-0" />
                                     <span className="min-w-0 flex-1 truncate">{session.title}</span>
@@ -664,6 +704,17 @@ export function AcodeSidebar() {
                                             ...route,
                                             to: route.to as never,
                                           } as never)
+                                        }
+                                        onStartRename={() =>
+                                          renameTerminal(
+                                            {
+                                              kind: "workspaceTerminal",
+                                              environmentId: project.environmentId,
+                                              workspaceId: workspace.id,
+                                              terminalSessionId: session.id,
+                                            },
+                                            session.title,
+                                          )
                                         }
                                       >
                                         <TerminalIcon className="size-3 shrink-0" />

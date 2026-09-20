@@ -31,6 +31,7 @@ import {
   type TerminalEvent,
   type TerminalMetadataStreamEvent,
   type TerminalOpenInput,
+  type TerminalRenameInput,
   type TerminalResizeInput,
   type ResourceMonitorProcessTableEntry,
   type TerminalRestartInput,
@@ -110,6 +111,7 @@ const DEFAULT_OPEN_ROWS = 30;
 const TERMINAL_ENV_BLOCKLIST = new Set(["PORT", "ELECTRON_RENDERER_PORT", "ELECTRON_RUN_AS_NODE"]);
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 const MAX_TERMINAL_LABEL_LENGTH = 128;
+const MAX_PENDING_TERMINAL_TITLE_SEQUENCE = 8_192;
 const decodeClaudeSettings = Schema.decodeUnknownOption(ClaudeSettings);
 const decodeCodexSettings = Schema.decodeUnknownOption(CodexSettings);
 
@@ -207,6 +209,9 @@ export class TerminalManager extends Context.Service<
      */
     readonly clear: (input: TerminalClearInput) => Effect.Effect<void, TerminalError>;
 
+    /** Persist a user-chosen title and stop following terminal-provided titles. */
+    readonly rename: (input: TerminalRenameInput) => Effect.Effect<TerminalSummary, TerminalError>;
+
     /**
      * Restart a terminal session in place.
      *
@@ -295,6 +300,13 @@ interface TerminalSessionState {
   /** Compatibility-only T3 thread owner. */
   threadId: string;
   terminalId: string;
+  /** Stable default title assigned from Workspace creation order. */
+  defaultTitle: string;
+  /** Current display title. Manual titles win over terminal-provided titles. */
+  title: string;
+  titleSource: "default" | "terminal" | "manual";
+  /** Incremental OSC parser state for terminal-provided titles. */
+  pendingTitleSequence: string;
   cwd: string;
   worktreePath: string | null;
   status: TerminalSessionStatus;
@@ -329,6 +341,7 @@ interface PersistHistoryRequest {
 
 type PendingProcessEvent =
   | { type: "output"; data: string }
+  | { type: "title"; title: string }
   | { type: "exit"; event: PtyAdapter.PtyExitEvent };
 
 type DrainProcessEventAction =
@@ -341,6 +354,14 @@ type DrainProcessEventAction =
       sequence: number;
       history: BoundedTerminalHistory | null;
       data: string;
+    }
+  | {
+      type: "title";
+      threadId: string;
+      workspaceId?: string;
+      terminalId: string;
+      sequence: number;
+      title: string;
     }
   | {
       type: "exit";
@@ -413,6 +434,7 @@ function snapshot(session: TerminalSessionState): TerminalSessionSnapshot {
     exitCode: session.exitCode,
     exitSignal: session.exitSignal,
     label: terminalWireLabel(session),
+    title: terminalDisplayTitle(session),
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
     sequence: session.eventSequence,
@@ -441,6 +463,7 @@ function summary(session: TerminalSessionState): TerminalSummary {
     exitSignal: session.exitSignal,
     hasRunningSubprocess: session.hasRunningSubprocess,
     label: terminalWireLabel(session),
+    title: terminalDisplayTitle(session),
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
     generation: session.generation,
@@ -461,6 +484,8 @@ function shouldPublishTerminalMetadataEvent(event: TerminalEvent): boolean {
     case "closed":
     case "error":
     case "activity":
+      return true;
+    case "renamed":
       return true;
     case "output":
     case "cleared":
@@ -483,6 +508,8 @@ function terminalEventToAttachEvent(event: TerminalEvent): TerminalAttachStreamE
     case "restarted":
     case "activity":
       return event;
+    case "renamed":
+      return null;
   }
 }
 
@@ -1130,6 +1157,110 @@ function findStringTerminatorIndex(input: string, start: number): number | null 
   return null;
 }
 
+function terminalDisplayTitle(
+  session: Pick<TerminalSessionState, "defaultTitle" | "title">,
+): string {
+  return session.title.trim() || session.defaultTitle;
+}
+
+function nextDefaultTerminalTitle(
+  sessions: Iterable<{ readonly ownerId: string; readonly defaultTitle?: string }>,
+  ownerId: string,
+): string {
+  let highest = 0;
+  for (const session of sessions) {
+    if (session.ownerId !== ownerId) continue;
+    const match = /^Terminal ([1-9][0-9]*)$/.exec(session.defaultTitle ?? "");
+    if (match === null) continue;
+    highest = Math.max(highest, Number(match[1]));
+  }
+  return `Terminal ${highest + 1}`;
+}
+
+function restoredTerminalTitles(
+  records: ReadonlyArray<PersistedTerminalSessionRecord>,
+): ReadonlyMap<
+  string,
+  { defaultTitle: string; title: string; titleSource: "default" | "terminal" | "manual" }
+> {
+  const groups = new Map<string, PersistedTerminalSessionRecord[]>();
+  for (const record of records) {
+    const group = groups.get(record.ownerId);
+    if (group) group.push(record);
+    else groups.set(record.ownerId, [record]);
+  }
+
+  const result = new Map<
+    string,
+    { defaultTitle: string; title: string; titleSource: "default" | "terminal" | "manual" }
+  >();
+  for (const group of groups.values()) {
+    const ordered = [...group].sort(
+      (left, right) =>
+        (left.createdAt ?? left.updatedAt).localeCompare(right.createdAt ?? right.updatedAt) ||
+        left.terminalId.localeCompare(right.terminalId),
+    );
+    let highest = 0;
+    for (const record of ordered) {
+      const match = /^Terminal ([1-9][0-9]*)$/.exec(record.defaultTitle ?? "");
+      if (match !== null) highest = Math.max(highest, Number(match[1]));
+    }
+    for (const record of ordered) {
+      const defaultTitle = record.defaultTitle?.trim() || `Terminal ${highest + 1}`;
+      if (!record.defaultTitle?.trim()) highest += 1;
+      const titleSource = record.titleSource ?? (record.title ? "manual" : "default");
+      const manualTitle = titleSource === "manual" ? record.title?.trim() : undefined;
+      const terminalTitle = titleSource === "terminal" ? record.title?.trim() : undefined;
+      result.set(toSessionKey(record.ownerId, record.terminalId), {
+        defaultTitle,
+        title: manualTitle || terminalTitle || defaultTitle,
+        titleSource: manualTitle ? "manual" : terminalTitle ? "terminal" : "default",
+      });
+    }
+  }
+  return result;
+}
+
+function parseTerminalTitleUpdates(
+  pending: string,
+  data: string,
+): { readonly pending: string; readonly title: string | null } {
+  const input = `${pending}${data}`;
+  let cursor = 0;
+  let title: string | null = null;
+
+  while (cursor < input.length) {
+    const escapeOsc = input.indexOf("\u001b]", cursor);
+    const c1Osc = input.indexOf("\u009d", cursor);
+    const osc = escapeOsc < 0 ? c1Osc : c1Osc < 0 ? escapeOsc : Math.min(escapeOsc, c1Osc);
+    if (osc < 0) {
+      return {
+        pending: input.endsWith("\u001b") ? "\u001b" : "",
+        title,
+      };
+    }
+
+    const contentStart = input.charCodeAt(osc) === 0x9d ? osc + 1 : osc + 2;
+    const terminator = findStringTerminatorIndex(input, contentStart);
+    if (terminator === null) {
+      return {
+        pending: input.slice(osc).slice(-MAX_PENDING_TERMINAL_TITLE_SEQUENCE),
+        title,
+      };
+    }
+
+    const content = stripStringTerminator(input.slice(contentStart, terminator));
+    const separator = content.indexOf(";");
+    const command = separator < 0 ? content : content.slice(0, separator);
+    if (separator >= 0 && (command === "0" || command === "1" || command === "2")) {
+      title = truncateTerminalWireLabel(content.slice(separator + 1).trim());
+    }
+    cursor = terminator;
+  }
+
+  return { pending: "", title };
+}
+
 function isEscapeIntermediateByte(codePoint: number): boolean {
   return codePoint >= 0x20 && codePoint <= 0x2f;
 }
@@ -1424,6 +1555,9 @@ interface PersistedTerminalSessionRecord {
   readonly workspaceId?: string;
   readonly threadId?: string;
   readonly terminalId: string;
+  readonly defaultTitle?: string;
+  readonly title?: string;
+  readonly titleSource?: "default" | "terminal" | "manual";
   readonly cwd: string;
   readonly worktreePath: string | null;
   readonly status: TerminalSessionStatus;
@@ -1443,6 +1577,9 @@ const PersistedTerminalSessionRecordSchema = Schema.Struct({
   workspaceId: Schema.optional(Schema.String),
   threadId: Schema.optional(Schema.String),
   terminalId: Schema.String,
+  defaultTitle: Schema.optional(Schema.String),
+  title: Schema.optional(Schema.String),
+  titleSource: Schema.optional(Schema.Literals(["default", "terminal", "manual"])),
   cwd: Schema.String,
   worktreePath: Schema.NullOr(Schema.String),
   status: TerminalSessionStatus,
@@ -1471,6 +1608,9 @@ function persistedTerminalSessionRecord(
     ...(session.workspaceId !== null ? { workspaceId: session.workspaceId } : {}),
     ...(session.workspaceId === null ? { threadId: session.threadId } : {}),
     terminalId: session.terminalId,
+    defaultTitle: session.defaultTitle,
+    title: session.title,
+    titleSource: session.titleSource,
     cwd: session.cwd,
     worktreePath: session.worktreePath,
     status: session.status,
@@ -1778,31 +1918,35 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
   }
 
   const sessionIndexWriteLock = yield* Semaphore.make(1);
-  const persistSessionIndex: Effect.Effect<void, never, never> = Effect.gen(function* () {
-    const state = yield* readManagerState;
-    const activeRecords = [...state.sessions.values()].map(persistedTerminalSessionRecord);
-    const activeKeys = new Set(
-      activeRecords.map((r) =>
-        toSessionKey(r.workspaceId ?? r.threadId ?? r.ownerId, r.terminalId),
-      ),
-    );
-    const deletedKeys = state.deletedSessionKeys ?? new Set<string>();
+  const persistSessionIndex: Effect.Effect<void, never, never> = sessionIndexWriteLock.withPermit(
+    Effect.gen(function* () {
+      const state = yield* readManagerState;
+      const activeRecords = [...state.sessions.values()].map(persistedTerminalSessionRecord);
+      const activeKeys = new Set(
+        activeRecords.map((r) =>
+          toSessionKey(r.workspaceId ?? r.threadId ?? r.ownerId, r.terminalId),
+        ),
+      );
+      const deletedKeys = state.deletedSessionKeys ?? new Set<string>();
 
-    const diskRecords = yield* readPersistedSessionIndex;
-    const preservedDiskRecords = reconcileDiskTerminalRecords(diskRecords, activeKeys, deletedKeys);
+      const diskRecords = yield* readPersistedSessionIndex;
+      const preservedDiskRecords = reconcileDiskTerminalRecords(
+        diskRecords,
+        activeKeys,
+        deletedKeys,
+      );
 
-    const combined = [...activeRecords, ...preservedDiskRecords].sort(
-      (left, right) =>
-        left.ownerId.localeCompare(right.ownerId) ||
-        left.terminalId.localeCompare(right.terminalId),
-    );
+      const combined = [...activeRecords, ...preservedDiskRecords].sort(
+        (left, right) =>
+          left.ownerId.localeCompare(right.ownerId) ||
+          left.terminalId.localeCompare(right.terminalId),
+      );
 
-    yield* sessionIndexWriteLock
-      .withPermit(
-        fileSystem.writeFileString(sessionIndexPath, encodePersistedTerminalSessionIndex(combined)),
-      )
-      .pipe(Effect.orElseSucceed(() => undefined));
-  });
+      yield* fileSystem
+        .writeFileString(sessionIndexPath, encodePersistedTerminalSessionIndex(combined))
+        .pipe(Effect.orElseSucceed(() => undefined));
+    }),
+  );
 
   const readPersistedSessionIndex: Effect.Effect<
     ReadonlyArray<PersistedTerminalSessionRecord>,
@@ -2122,17 +2266,23 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
   const persistedSessions = yield* readPersistedSessionIndex;
   if (persistedSessions.length > 0) {
     const restored = new Map<string, TerminalSessionState>();
+    const restoredTitles = restoredTerminalTitles(persistedSessions);
     for (const record of persistedSessions) {
       const history = yield* readHistory(record.ownerId, record.terminalId).pipe(
         Effect.orElseSucceed(
           () => new BoundedTerminalHistory(historyLineLimit, "", historyByteLimit),
         ),
       );
+      const restoredTitle = restoredTitles.get(toSessionKey(record.ownerId, record.terminalId));
       restored.set(toSessionKey(record.ownerId, record.terminalId), {
         ownerId: record.ownerId,
         workspaceId: record.workspaceId ?? null,
         threadId: record.threadId ?? record.ownerId,
         terminalId: record.terminalId,
+        defaultTitle: restoredTitle?.defaultTitle ?? `Terminal ${restored.size + 1}`,
+        title: restoredTitle?.title ?? restoredTitle?.defaultTitle ?? "Terminal",
+        titleSource: restoredTitle?.titleSource ?? "default",
+        pendingTitleSequence: "",
         cwd: record.cwd,
         worktreePath: record.worktreePath,
         status:
@@ -2251,11 +2401,18 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         () => new BoundedTerminalHistory(historyLineLimit, "", historyByteLimit),
       ),
     );
+    const restoredTitle = restoredTerminalTitles(diskRecords).get(
+      toSessionKey(record.ownerId, record.terminalId),
+    );
     const restoredSession: TerminalSessionState = {
       ownerId: record.ownerId,
       workspaceId: record.workspaceId ?? null,
       threadId: record.threadId ?? record.ownerId,
       terminalId: record.terminalId,
+      defaultTitle: restoredTitle?.defaultTitle ?? "Terminal 1",
+      title: restoredTitle?.title ?? restoredTitle?.defaultTitle ?? "Terminal 1",
+      titleSource: restoredTitle?.titleSource ?? "default",
+      pendingTitleSequence: "",
       cwd: record.cwd,
       worktreePath: record.worktreePath,
       status:
@@ -2397,12 +2554,29 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
           } as const;
         }
 
+        if (nextEvent.type === "title") {
+          if (session.titleSource !== "manual") {
+            session.title = nextEvent.title;
+            session.titleSource = "terminal";
+          }
+          const eventStamp = advanceEventSequence(session);
+          return {
+            type: "title",
+            threadId: session.threadId,
+            ...(session.workspaceId !== null ? { workspaceId: session.workspaceId } : {}),
+            terminalId: session.terminalId,
+            sequence: eventStamp.sequence,
+            title: terminalDisplayTitle(session),
+          } as const;
+        }
+
         const process = session.process;
         cleanupProcessHandles(session);
         session.process = null;
         session.pid = null;
         session.hasRunningSubprocess = false;
         session.childCommandLabel = null;
+        session.pendingTitleSequence = "";
         session.status = "exited";
         session.pendingHistoryControlSequence = "";
         session.pendingProcessEvents = [];
@@ -2449,6 +2623,20 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         continue;
       }
 
+      if (action.type === "title") {
+        yield* persistSessionIndex;
+        yield* publishEvent({
+          type: "renamed",
+          ...(action.workspaceId
+            ? { workspaceId: action.workspaceId }
+            : { threadId: action.threadId }),
+          terminalId: action.terminalId,
+          sequence: action.sequence,
+          title: action.title,
+        });
+        continue;
+      }
+
       yield* clearKillFiber(action.process);
       yield* unregisterTerminal({
         ...(action.workspaceId
@@ -2484,6 +2672,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       session.pid = null;
       session.hasRunningSubprocess = false;
       session.childCommandLabel = null;
+      session.pendingTitleSequence = "";
       session.status = "exited";
       session.pendingHistoryControlSequence = "";
       session.pendingProcessEvents = [];
@@ -2580,6 +2769,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       session.exitSignal = null;
       session.hasRunningSubprocess = false;
       session.childCommandLabel = null;
+      session.pendingTitleSequence = "";
       session.generation += 1;
       session.pendingProcessEvents = [];
       session.pendingProcessEventIndex = 0;
@@ -2604,7 +2794,19 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
 
             const processPid = ptyProcess.pid;
             const unsubscribeData = ptyProcess.onData((data) => {
-              if (!enqueueProcessEvent(session, processPid, { type: "output", data })) {
+              const scannedTitle = parseTerminalTitleUpdates(session.pendingTitleSequence, data);
+              session.pendingTitleSequence = scannedTitle.pending;
+              const nextTitle =
+                scannedTitle.title === null ? null : scannedTitle.title || session.defaultTitle;
+              const titleStartedDrain =
+                nextTitle !== null &&
+                session.titleSource !== "manual" &&
+                enqueueProcessEvent(session, processPid, { type: "title", title: nextTitle });
+              const outputStartedDrain = enqueueProcessEvent(session, processPid, {
+                type: "output",
+                data,
+              });
+              if (!titleStartedDrain && !outputStartedDrain) {
                 return;
               }
               runFork(drainProcessEvents(session, processPid));
@@ -2660,6 +2862,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         session.process = null;
         session.hasRunningSubprocess = false;
         session.childCommandLabel = null;
+        session.pendingTitleSequence = "";
         session.pendingProcessEvents = [];
         session.pendingProcessEventIndex = 0;
         session.processEventDrainRunning = false;
@@ -2979,11 +3182,21 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       const history = yield* readHistory(owner.ownerId, terminalId);
       const cols = input.cols ?? DEFAULT_OPEN_COLS;
       const rows = input.rows ?? DEFAULT_OPEN_ROWS;
+      const managerState = yield* readManagerState;
+      const persistedSessions = yield* readPersistedSessionIndex;
+      const defaultTitle = nextDefaultTerminalTitle(
+        [...managerState.sessions.values(), ...persistedSessions],
+        owner.ownerId,
+      );
       const session: TerminalSessionState = {
         ownerId: owner.ownerId,
         workspaceId: input.workspaceId ?? null,
         threadId: input.threadId ?? owner.ownerId,
         terminalId,
+        defaultTitle,
+        title: defaultTitle,
+        titleSource: "default",
+        pendingTitleSequence: "",
         cwd: input.cwd,
         worktreePath: input.worktreePath ?? null,
         status: "starting",
@@ -3186,28 +3399,33 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       const deletedKeys = state.deletedSessionKeys ?? new Set<string>();
 
       const diskRecords = yield* readPersistedSessionIndex;
+      const restoredTitles = restoredTerminalTitles(diskRecords);
       const diskSummaries = reconcileDiskTerminalRecords(diskRecords, memoryKeys, deletedKeys)
         .filter((record) => record.workspaceId !== undefined)
-        .map((record) => ({
-          workspaceId: record.workspaceId,
-          threadId: record.threadId,
-          terminalId: record.terminalId,
-          kind: "terminal" as const,
-          sessionId: record.workspaceId
-            ? terminalSessionIdForRuntime(WorkspaceId.make(record.workspaceId), record.terminalId)
-            : undefined,
-          createdAt: record.createdAt,
-          cwd: record.cwd,
-          worktreePath: record.worktreePath,
-          status: record.status,
-          pid: null,
-          exitCode: record.exitCode,
-          exitSignal: record.exitSignal,
-          hasRunningSubprocess: false,
-          label: "terminal",
-          updatedAt: record.updatedAt,
-          generation: record.generation,
-        }));
+        .map((record) => {
+          const restoredTitle = restoredTitles.get(toSessionKey(record.ownerId, record.terminalId));
+          return {
+            workspaceId: record.workspaceId,
+            threadId: record.threadId,
+            terminalId: record.terminalId,
+            kind: "terminal" as const,
+            sessionId: record.workspaceId
+              ? terminalSessionIdForRuntime(WorkspaceId.make(record.workspaceId), record.terminalId)
+              : undefined,
+            createdAt: record.createdAt,
+            cwd: record.cwd,
+            worktreePath: record.worktreePath,
+            status: record.status,
+            pid: null,
+            exitCode: record.exitCode,
+            exitSignal: record.exitSignal,
+            hasRunningSubprocess: false,
+            label: "terminal",
+            title: restoredTitle?.title ?? record.title ?? "Terminal",
+            updatedAt: record.updatedAt,
+            generation: record.generation,
+          };
+        });
 
       return [...memorySummaries, ...diskSummaries].sort(
         (left, right) =>
@@ -3470,6 +3688,33 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         ),
     );
 
+  const rename: TerminalManager["Service"]["rename"] = (input) =>
+    Effect.flatMap(
+      Effect.sync(() => ownerFields(input)),
+      (owner) =>
+        withThreadLock(
+          owner.ownerId,
+          Effect.gen(function* () {
+            const session = yield* requireSession(owner.ownerId, input.terminalId);
+            const title = input.title.trim();
+            const eventStamp = yield* Effect.sync(() => {
+              session.title = title;
+              session.titleSource = "manual";
+              return advanceEventSequence(session);
+            });
+            yield* persistSessionIndex;
+            yield* publishEvent({
+              type: "renamed",
+              ...ownerEventFields(session),
+              terminalId: session.terminalId,
+              sequence: eventStamp.sequence,
+              title,
+            });
+            return summary(session);
+          }),
+        ),
+    );
+
   const restartResolved = (input: TerminalRestartInput & { readonly cwd: string }) =>
     Effect.gen(function* () {
       const owner = ownerFields(input);
@@ -3483,11 +3728,21 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       if (Option.isNone(existingSession)) {
         const cols = input.cols ?? DEFAULT_OPEN_COLS;
         const rows = input.rows ?? DEFAULT_OPEN_ROWS;
+        const managerState = yield* readManagerState;
+        const persistedSessions = yield* readPersistedSessionIndex;
+        const defaultTitle = nextDefaultTerminalTitle(
+          [...managerState.sessions.values(), ...persistedSessions],
+          owner.ownerId,
+        );
         session = {
           ownerId: owner.ownerId,
           workspaceId: input.workspaceId ?? null,
           threadId: input.threadId ?? owner.ownerId,
           terminalId,
+          defaultTitle,
+          title: defaultTitle,
+          titleSource: "default",
+          pendingTitleSequence: "",
           cwd: input.cwd,
           worktreePath: input.worktreePath ?? null,
           status: "starting",
@@ -3528,6 +3783,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         session.cwd = input.cwd;
         session.worktreePath = input.worktreePath ?? null;
         session.runtimeEnv = normalizedRuntimeEnv(input.env);
+        session.pendingTitleSequence = "";
       }
 
       const cols = input.cols ?? session.cols;
@@ -3605,6 +3861,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     write,
     resize,
     clear,
+    rename,
     restart,
     close,
     subscribe,

@@ -93,6 +93,12 @@ export function createTerminalEnvironmentAtoms<R, E>(
       scheduler: lifecycleScheduler,
       concurrency: lifecycleConcurrency,
     }),
+    rename: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:terminal:rename",
+      tag: WS_METHODS.terminalRename,
+      scheduler: lifecycleScheduler,
+      concurrency: lifecycleConcurrency,
+    }),
     restart: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:terminal:restart",
       tag: WS_METHODS.terminalRestart,

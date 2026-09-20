@@ -45,7 +45,7 @@ export function useSessionActionMenu(input: {
           isClosed,
           isOpenInActiveTab,
           isFocusedInActiveTab,
-          canRename: target.kind === "agentSession" && onStartRename !== undefined,
+          canRename: onStartRename !== undefined,
           canClose: true,
           canDelete: true,
         };

@@ -69,6 +69,20 @@ describe("buildSessionActionMenuItems", () => {
     expect(items.some((i) => i.id === "rename")).toBe(false);
   });
 
+  it("includes Rename on Terminal Session when the caller provides the rename capability", () => {
+    const items = buildSessionActionMenuItems({
+      kind: "terminal",
+      isClosed: true,
+      isOpenInActiveTab: false,
+      isFocusedInActiveTab: false,
+      canRename: true,
+      canClose: true,
+      canDelete: true,
+    });
+
+    expect(items.some((i) => i.id === "rename")).toBe(true);
+  });
+
   it("omits Close session on closed / history rows while retaining Delete session", () => {
     const items = buildSessionActionMenuItems({
       kind: "agent",

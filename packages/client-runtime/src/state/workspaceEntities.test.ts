@@ -118,7 +118,8 @@ it("projects live Terminal Sessions beside Agent Sessions and removes only the t
     exitCode: null,
     exitSignal: null,
     hasRunningSubprocess: false,
-    label: "Shell",
+    label: "zsh",
+    title: "Primary shell",
     updatedAt: workspace.updatedAt,
   };
   const metadata = Atom.make<ReadonlyArray<TerminalSummary> | null>([terminal]);
@@ -139,7 +140,7 @@ it("projects live Terminal Sessions beside Agent Sessions and removes only the t
       kind: "terminal",
       id: "terminal-session:25:workspace:shared-local-id:term-1",
       workspaceId: WORKSPACE_ID,
-      title: "Shell",
+      title: "Primary shell",
       status: "open",
       createdAt: workspace.updatedAt,
       updatedAt: workspace.updatedAt,

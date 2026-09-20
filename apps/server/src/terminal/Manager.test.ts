@@ -2748,6 +2748,127 @@ it.layer(
     }),
   );
 
+  it.effect(
+    "assigns sequential Workspace titles and lets OSC titles update until manual rename",
+    () =>
+      Effect.gen(function* () {
+        const { manager, ptyAdapter } = yield* createManager(5, {
+          ptyAdapter: new FakePtyAdapter("async"),
+          resolveWorkspaceRoot: () => Effect.succeed(process.cwd()),
+        });
+        const workspaceId = "workspace-titles";
+        const first = yield* manager.open(
+          openInput({ threadId: undefined, workspaceId, terminalId: "term-title-1" }),
+        );
+        const second = yield* manager.open(
+          openInput({ threadId: undefined, workspaceId, terminalId: "term-title-2" }),
+        );
+
+        expect(first.title).toBe("Terminal 1");
+        expect(second.title).toBe("Terminal 2");
+
+        const firstProcess = ptyAdapter.processes[0];
+        expect(firstProcess).toBeDefined();
+        firstProcess?.emitData("\u001b]0;Shell from OSC\u0007");
+        yield* waitFor(
+          Effect.map(manager.getMetadata(), (terminals) =>
+            terminals.some(
+              (terminal) =>
+                terminal.terminalId === "term-title-1" && terminal.title === "Shell from OSC",
+            ),
+          ),
+          "1200 millis",
+        );
+
+        const renamed = yield* manager.rename({
+          workspaceId,
+          terminalId: "term-title-2",
+          title: "Build watcher",
+        });
+        expect(renamed.title).toBe("Build watcher");
+
+        const secondProcess = ptyAdapter.processes[1];
+        expect(secondProcess).toBeDefined();
+        secondProcess?.emitData("\u001b]2;Ignored by manual title\u0007");
+        yield* Effect.sleep("50 millis");
+        expect(
+          (yield* manager.getMetadata()).find((terminal) => terminal.terminalId === "term-title-2")
+            ?.title,
+        ).toBe("Build watcher");
+      }),
+  );
+
+  it.effect("preserves the last OSC title when queued updates return to the current title", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager(5, {
+        resolveWorkspaceRoot: () => Effect.succeed(process.cwd()),
+      });
+      const input = { workspaceId: "workspace-title-burst", terminalId: "term-title-burst" };
+      yield* manager.open(input);
+      const pty = ptyAdapter.processes[0]!;
+      pty.emitData(String.fromCharCode(27) + "]2;Temporary title" + String.fromCharCode(7));
+      pty.emitData(String.fromCharCode(27) + "]2;Intermediate title" + String.fromCharCode(7));
+      pty.emitData(String.fromCharCode(27) + "]1;Temporary title" + String.fromCharCode(27));
+      pty.emitData(String.fromCharCode(92) + "after-title-burst");
+      yield* waitFor(
+        Effect.map(manager.open(input), (snapshot) =>
+          snapshot.history.includes("after-title-burst"),
+        ),
+        "1200 millis",
+      );
+      expect((yield* manager.open(input)).title).toBe("Temporary title");
+    }),
+  );
+
+  it.effect(
+    "accepts split OSC title updates and preserves terminal and manual titles across manager restarts",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const { join } = yield* Path.Path;
+        const tempDir = yield* fs.makeTempDirectoryScoped({ prefix: "term-title-restore-" });
+        const logsDir = join(tempDir, "logs");
+        const resolveWorkspaceRoot = () => Effect.succeed(process.cwd());
+        const workspaceId = "workspace-title-restore";
+        const manualInput = { workspaceId, terminalId: "term-manual-title" };
+        const shellInput = { workspaceId, terminalId: "term-shell-title" };
+
+        const first = yield* createManager(5, { logsDir, resolveWorkspaceRoot });
+        yield* first.manager.open(manualInput);
+        yield* first.manager.open(shellInput);
+        const shellProcess = first.ptyAdapter.processes[1];
+        expect(shellProcess).toBeDefined();
+        shellProcess?.emitData("\u001b]2;Split shell title");
+        shellProcess?.emitData("\u0007after");
+
+        yield* waitFor(
+          Effect.map(first.manager.getMetadata(), (terminals) =>
+            terminals.some(
+              (terminal) =>
+                terminal.terminalId === shellInput.terminalId &&
+                terminal.title === "Split shell title",
+            ),
+          ),
+          "1200 millis",
+        );
+        yield* first.manager.rename({
+          ...manualInput,
+          title: "Pinned title",
+        });
+        yield* first.manager.close(manualInput);
+        yield* first.manager.close(shellInput);
+
+        const second = yield* createManager(5, { logsDir, resolveWorkspaceRoot });
+        const restored = yield* second.manager.getMetadata();
+        expect(
+          restored.find((terminal) => terminal.terminalId === manualInput.terminalId)?.title,
+        ).toBe("Pinned title");
+        expect(
+          restored.find((terminal) => terminal.terminalId === shellInput.terminalId)?.title,
+        ).toBe("Split shell title");
+      }),
+  );
+
   it.effect("removes terminal metadata subscriptions when initial delivery fails", () =>
     Effect.gen(function* () {
       const { manager } = yield* createManager();
