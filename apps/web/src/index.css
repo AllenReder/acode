@@ -1639,6 +1639,17 @@ code {
   -webkit-app-region: no-drag;
 }
 
+html[data-workbench-dragging] {
+  cursor: grabbing;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html[data-workbench-dragging] * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 /* The Workbench owns one frameless title strip across the Sidebar and main area. */
 html[data-workbench-window-chrome] {
   --workbench-titlebar-height: 36px;

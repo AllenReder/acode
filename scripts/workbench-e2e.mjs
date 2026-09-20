@@ -430,6 +430,11 @@ async function main() {
       timeout: timeoutMs,
     });
     NodeAssert.equal(await workbenchStateSignature(page), stateBeforePreview);
+    NodeAssert.equal(
+      await page.evaluate(() => getComputedStyle(document.documentElement).userSelect),
+      "none",
+      "Dragging must disable text selection across the document.",
+    );
     const previewDestination = page.locator(
       '[data-workbench-preview-pane][data-destination="true"]',
     );

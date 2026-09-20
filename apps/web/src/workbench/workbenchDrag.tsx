@@ -208,6 +208,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           : handle;
       const startRect = rectFromElement(sourceElement) ?? rectFromElement(handle);
       if (startRect === null) return;
+      document.documentElement.dataset.workbenchDragging = "pending";
 
       if (finishTimerRef.current !== null) {
         clearTimeout(finishTimerRef.current);
@@ -300,6 +301,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           }
           activeRef.current = true;
           document.documentElement.dataset.workbenchDragging = "true";
+          window.getSelection()?.removeAllRanges();
           const target = resolveTarget(lastX, lastY);
           const result = previewFor(target);
           publishedTarget = target;
