@@ -205,6 +205,21 @@ async function main() {
     const addProject = page.getByTestId("sidebar-add-project");
     const workspaceRow = page.getByTestId("sidebar-workspace-row").first();
     await workspaceRow.waitFor({ state: "visible", timeout: timeoutMs });
+    await page.locator("header[data-workbench-window-chrome]").waitFor({
+      state: "visible",
+      timeout: timeoutMs,
+    });
+    NodeAssert.equal(await page.locator(".sidebar-stage-backdrop").count(), 0);
+    NodeAssert.equal(await page.getByText("T3 Code", { exact: true }).count(), 0);
+
+    const sidebarToggle = page.getByRole("button", { name: "Toggle sidebar", exact: true });
+    const sidebarToggleBefore = await sidebarToggle.boundingBox();
+    await sidebarToggle.click();
+    await page.waitForTimeout(400);
+    const sidebarToggleAfter = await sidebarToggle.boundingBox();
+    NodeAssert.deepEqual(sidebarToggleAfter, sidebarToggleBefore);
+    await sidebarToggle.click();
+    await page.waitForTimeout(400);
 
     await chooseContextMenuItem(page, workspaceRow, "New Agent Session");
     const draftPane = page.locator('[data-pane-target-kind="newAgentSession"]');
@@ -238,7 +253,14 @@ async function main() {
         `Terminal Session did not open. Visible text:\n${(await page.locator("body").innerText()).slice(0, 8_000)}`,
       );
     }
-    NodeAssert.equal(await page.locator("[data-pane-id]").count(), 2);
+    const paneTargetKinds = await page
+      .locator("[data-pane-id]")
+      .evaluateAll((elements) =>
+        elements.map((element) => element.getAttribute("data-pane-target-kind")),
+      );
+    NodeAssert.equal(new Set(paneTargetKinds).size, paneTargetKinds.length);
+    NodeAssert.ok(paneTargetKinds.includes("newAgentSession"));
+    NodeAssert.ok(paneTargetKinds.includes("workspaceTerminal"));
     NodeAssert.match(page.url(), /\/terminal-sessions\//);
     const terminalTarget = await readOpenTerminalTarget(page);
 
@@ -254,10 +276,7 @@ async function main() {
     NodeAssert.ok(separatorBox !== null, "Expected a visible BSP separator.");
     const separatorHit = await separator.evaluate((element) => {
       const rect = element.getBoundingClientRect();
-      const hit = document.elementFromPoint(
-        rect.left + rect.width / 2,
-        rect.top + rect.height / 2,
-      );
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
       return hit?.closest("[data-sash-id]")?.getAttribute("data-sash-id") ?? null;
     });
     NodeAssert.equal(
@@ -289,12 +308,28 @@ async function main() {
       /Timeout|detached|hidden/i,
     );
     NodeAssert.equal(await page.locator('[data-pane-target-kind="workspaceTerminal"]').count(), 1);
+    NodeAssert.equal(await page.locator('[data-pane-target-kind="newAgentSession"]').count(), 0);
 
     await chooseContextMenuItem(
       page,
       page.getByTestId("sidebar-workspace-row").first(),
       "New Agent Session",
     );
+    await page.locator('[data-pane-target-kind="newAgentSession"]').waitFor({
+      state: "visible",
+      timeout: timeoutMs,
+    });
+
+    const tabsBeforeUiCreate = await page.locator('[role="tab"]').count();
+    await page.getByRole("button", { name: "New tab" }).click();
+    await page.waitForTimeout(250);
+    NodeAssert.equal(await page.locator('[role="tab"]').count(), tabsBeforeUiCreate + 1);
+    await page
+      .locator('[role="tab"][aria-selected="true"]')
+      .getByRole("button", { name: /^Close / })
+      .click();
+    await page.waitForTimeout(250);
+    NodeAssert.equal(await page.locator('[role="tab"]').count(), tabsBeforeUiCreate);
     await page.locator('[data-pane-target-kind="newAgentSession"]').waitFor({
       state: "visible",
       timeout: timeoutMs,
@@ -364,9 +399,26 @@ async function main() {
     NodeAssert.equal(await page.locator("[data-pane-id]").count(), 1);
     NodeAssert.deepEqual(pageErrors, []);
 
+    const finalActiveTab = page.locator('[role="tab"][aria-selected="true"]');
+    await finalActiveTab.dblclick();
+    const titleInput = page.getByRole("textbox", { name: "Tab title" });
+    await titleInput.fill("Pinned workbench");
+    await titleInput.press("Enter");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.locator("header[data-workbench-window-chrome]").waitFor({
+      state: "visible",
+      timeout: timeoutMs,
+    });
+    await NodeAssert.doesNotReject(
+      page.getByRole("tab", { name: "Open Pinned workbench" }).waitFor({
+        state: "visible",
+        timeout: timeoutMs,
+      }),
+    );
+
     await addProject.waitFor({ state: "visible", timeout: timeoutMs });
     console.log(
-      "workbench E2E passed: draft reload, Agent+Terminal split, resize, closeView, cross-Tab closeSession, Delete, remove project",
+      "workbench E2E passed: chrome geometry, tabs, draft reload, split/resize, cross-Tab closeSession, Delete, title/persistence, remove project",
     );
   } catch (error) {
     console.error(`Browser page errors: ${pageErrors.map(String).join("\n")}`);

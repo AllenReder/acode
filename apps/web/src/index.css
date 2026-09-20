@@ -1637,6 +1637,20 @@ code {
   -webkit-app-region: no-drag;
 }
 
+/* The Workbench owns one frameless title strip across the Sidebar and main area. */
+html[data-workbench-window-chrome] [data-sidebar-control] {
+  display: none;
+}
+
+html[data-workbench-window-chrome] [data-slot="sidebar-container"] {
+  top: var(--workspace-topbar-height);
+  height: calc(100% - var(--workspace-topbar-height));
+}
+
+html[data-workbench-window-chrome] [data-slot="sidebar-inset"] {
+  padding-top: var(--workspace-topbar-height);
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: var(--app-scrollbar-width);

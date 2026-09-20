@@ -9,6 +9,7 @@ import {
   type SplitDir,
 } from "./layout.ts";
 import { definitionIdForTarget, targetKey, type ViewTarget } from "./viewRegistry.ts";
+import { fallbackTargetTitle } from "./workbenchTitles.ts";
 
 /** One presentation occurrence, independent of the Session it displays. */
 export interface ViewInstance {
@@ -20,6 +21,8 @@ export interface ViewInstance {
 /** Every layout leaf owns exactly one ViewInstance. */
 export interface WorkbenchTab extends AcodeTab {
   readonly panes: ReadonlyMap<string, ViewInstance>;
+  readonly titleMode: "auto" | "manual";
+  readonly titleOverride: string | null;
 }
 
 export interface WorkbenchSnapshot {
@@ -42,12 +45,25 @@ function welcomeTab(generateId: () => string): WorkbenchTab {
   return {
     ...newTab(paneId),
     panes: new Map([[paneId, viewInstance({ kind: "welcome" }, generateId)]]),
+    titleMode: "auto",
+    titleOverride: null,
   };
 }
 
 export function emptyWorkbenchSnapshot(generateId: () => string): WorkbenchSnapshot {
   const tab = welcomeTab(generateId);
   return { tabs: [tab], activeTabId: tab.id };
+}
+
+export function tabDisplayTitle(
+  tab: WorkbenchTab,
+  resolveTargetTitle: (target: ViewTarget) => string,
+): string {
+  if (tab.titleMode === "manual" && tab.titleOverride !== null) return tab.titleOverride;
+  const firstPane = tab.panes.get(firstLeafId(tab.layout));
+  if (firstPane === undefined) return "Welcome";
+  const resolved = resolveTargetTitle(firstPane.target).trim();
+  return resolved.length > 0 ? resolved : fallbackTargetTitle(firstPane.target);
 }
 
 function updateTab(snapshot: WorkbenchSnapshot, tab: WorkbenchTab): WorkbenchSnapshot {
@@ -107,6 +123,37 @@ export function applyOpenTarget(
   return updateTab(snapshot, { ...tab, panes });
 }
 
+/**
+ * Deep links are recovery inputs, not layout owners. Focus an existing target,
+ * replace a sole Welcome View, or create a new Tab without mutating restored work.
+ */
+export function applyOpenDeepLinkTarget(
+  snapshot: WorkbenchSnapshot,
+  target: ViewTarget,
+  generateId: () => string,
+): WorkbenchSnapshot {
+  if (target.kind === "newAgentSession") {
+    const existingDraft = findNewAgentSessionPane(snapshot, target);
+    if (existingDraft !== null) {
+      return applySetFocused(applyActivateTab(snapshot, existingDraft.tabId), existingDraft.paneId);
+    }
+  }
+  for (const tab of snapshot.tabs) {
+    const paneId = findPaneByTarget(tab, target);
+    if (paneId !== null) {
+      return applySetFocused(applyActivateTab(snapshot, tab.id), paneId);
+    }
+  }
+
+  const activeTab = getActiveTab(snapshot);
+  const onlyWelcome =
+    snapshot.tabs.length === 1 &&
+    activeTab.panes.size === 1 &&
+    activeTab.panes.get(activeTab.focusedPaneId)?.target.kind === "welcome";
+  if (onlyWelcome) return applyOpenTarget(snapshot, target, generateId);
+  return applyOpenTarget(applyCreateTab(snapshot, generateId), target, generateId);
+}
+
 export function applySplitFocused(
   snapshot: WorkbenchSnapshot,
   target: ViewTarget,
@@ -145,10 +192,17 @@ export function applyClosePane(
   const tab = getActiveTab(snapshot);
   if (!tab.panes.has(paneId)) return null;
   const next = closeLeaf(tab, paneId);
-  if (next === null) return updateTab(snapshot, { ...welcomeTab(generateId), id: tab.id });
+  if (next === null) {
+    return updateTab(snapshot, {
+      ...welcomeTab(generateId),
+      id: tab.id,
+      titleMode: tab.titleMode,
+      titleOverride: tab.titleOverride,
+    });
+  }
   const panes = new Map(tab.panes);
   panes.delete(paneId);
-  return updateTab(snapshot, { ...next, panes });
+  return updateTab(snapshot, { ...tab, ...next, panes });
 }
 
 export function applySetFocused(snapshot: WorkbenchSnapshot, paneId: string): WorkbenchSnapshot {
@@ -166,6 +220,19 @@ export function applyReplacePaneTarget(
   const tab = getActiveTab(snapshot);
   const view = tab.panes.get(paneId);
   if (view === undefined) return snapshot;
+  const existingPaneId = findPaneByTarget(tab, target);
+  if (existingPaneId !== null && existingPaneId !== paneId) {
+    const panes = new Map(tab.panes);
+    panes.delete(paneId);
+    const next = closeLeaf(tab, paneId);
+    if (next === null) return applySetFocused(snapshot, existingPaneId);
+    return updateTab(snapshot, {
+      ...tab,
+      ...next,
+      panes,
+      focusedPaneId: existingPaneId,
+    });
+  }
   const panes = new Map(tab.panes);
   panes.set(paneId, {
     ...view,
@@ -229,6 +296,31 @@ export function applyActivateTab(snapshot: WorkbenchSnapshot, tabId: string): Wo
     : snapshot;
 }
 
+export function applyRenameTab(
+  snapshot: WorkbenchSnapshot,
+  tabId: string,
+  title: string | null,
+): WorkbenchSnapshot {
+  const tab = snapshot.tabs.find((candidate) => candidate.id === tabId);
+  if (tab === undefined) return snapshot;
+  const trimmed = title?.trim() ?? "";
+  return updateTab(snapshot, {
+    ...tab,
+    titleMode: trimmed.length === 0 ? "auto" : "manual",
+    titleOverride: trimmed.length === 0 ? null : trimmed,
+  });
+}
+
+export function applyCloseTab(snapshot: WorkbenchSnapshot, tabId: string): WorkbenchSnapshot {
+  if (snapshot.tabs.length <= 1) return snapshot;
+  const closingIndex = snapshot.tabs.findIndex((tab) => tab.id === tabId);
+  if (closingIndex < 0) return snapshot;
+  const tabs = snapshot.tabs.filter((tab) => tab.id !== tabId);
+  if (snapshot.activeTabId !== tabId) return { ...snapshot, tabs };
+  const nextActive = tabs[Math.min(closingIndex, tabs.length - 1)];
+  return nextActive === undefined ? snapshot : { tabs, activeTabId: nextActive.id };
+}
+
 /** Compare two targets by Session identity across environments and workspaces. */
 export function isSameSessionTarget(a: ViewTarget, b: ViewTarget): boolean {
   if (a.kind === "agentSession" && b.kind === "agentSession") {
@@ -272,7 +364,12 @@ function applyRemoveMatchingViews(
       }
     }
     if (currentTab === null) {
-      return { ...welcomeTab(generateId), id: tab.id };
+      return {
+        ...welcomeTab(generateId),
+        id: tab.id,
+        titleMode: tab.titleMode,
+        titleOverride: tab.titleOverride,
+      };
     }
     const validFocus = leafIds(currentTab.layout).includes(currentTab.focusedPaneId)
       ? currentTab.focusedPaneId
@@ -333,10 +430,12 @@ export function applyPruneWorkspaceViews(
   snapshot: WorkbenchSnapshot,
   knownWorkspaces: ReadonlyArray<KnownWorkspace>,
   generateId: () => string,
+  observedEnvironmentIds: ReadonlyArray<string> = [],
 ): WorkbenchSnapshot {
   const known = new Set(
     knownWorkspaces.map((workspace) => `${workspace.environmentId}:${workspace.workspaceId}`),
   );
+  const observedEnvironments = new Set(observedEnvironmentIds);
   return applyRemoveMatchingViews(
     snapshot,
     (target) => {
@@ -345,7 +444,10 @@ export function applyPruneWorkspaceViews(
         case "agentSession":
         case "newAgentSession":
         case "workspaceTerminal":
-          return !known.has(`${target.environmentId}:${target.workspaceId}`);
+          return (
+            observedEnvironments.has(target.environmentId) &&
+            !known.has(`${target.environmentId}:${target.workspaceId}`)
+          );
         case "project":
         case "welcome":
           return false;
