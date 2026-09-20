@@ -20,7 +20,7 @@ import {
   PlusIcon,
   TerminalIcon,
 } from "lucide-react";
-import { useCallback, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useCallback, useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { useComposerDraftStore } from "../composerDraftStore";
@@ -29,6 +29,7 @@ import { isElectron } from "../env";
 import { newDraftId, newThreadId } from "../lib/utils";
 import { readLocalApi } from "../localApi";
 import { environmentServerConfigsAtom } from "../state/server";
+import { useEnvironments } from "../state/environments";
 import { useAcodeProjects } from "../state/entities";
 import { projectEnvironment, workspaceEnvironment } from "../state/projects";
 import { terminalEnvironment } from "../state/terminal";
@@ -142,6 +143,16 @@ function rowKeydown(handler: (rect: DOMRect) => void) {
 export function AcodeSidebar() {
   const navigate = useNavigate();
   const projects = useAcodeProjects();
+  const { environments } = useEnvironments();
+  const connectedEnvironmentIds = useMemo(
+    () =>
+      new Set(
+        environments
+          .filter((environment) => environment.connection.phase === "connected")
+          .map((environment) => environment.environmentId),
+      ),
+    [environments],
+  );
   const serverConfigs = useAtomValue(environmentServerConfigsAtom);
   const [collapsedProjects, setCollapsedProjects] = useState<ReadonlySet<string>>(new Set());
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<ReadonlySet<string>>(new Set());
@@ -409,6 +420,7 @@ export function AcodeSidebar() {
         <SidebarGroup className="px-2 py-2">
           <button
             type="button"
+            data-testid="sidebar-add-project"
             className="flex h-8 items-center gap-2 rounded-md px-2 text-xs hover:bg-sidebar-row-hover"
             onClick={openAddProject}
           >
@@ -425,6 +437,7 @@ export function AcodeSidebar() {
       <SidebarGroup className="px-2 py-2">
         <button
           type="button"
+          data-testid="sidebar-add-project"
           className="flex h-8 items-center gap-2 rounded-md px-2 text-xs hover:bg-sidebar-row-hover"
           onClick={openAddProject}
         >
@@ -445,6 +458,7 @@ export function AcodeSidebar() {
               <div key={projectKey} role="treeitem" aria-expanded={!projectCollapsed}>
                 <button
                   type="button"
+                  data-testid="sidebar-project-row"
                   className="flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs font-medium hover:bg-sidebar-row-hover"
                   onClick={() =>
                     setCollapsedProjects((current) => {
@@ -483,6 +497,7 @@ export function AcodeSidebar() {
                           <div className="flex items-center gap-1">
                             <button
                               type="button"
+                              data-testid="sidebar-workspace-disclosure"
                               aria-label={
                                 workspaceExpanded ? "Collapse Workspace" : "Expand Workspace"
                               }
@@ -504,6 +519,10 @@ export function AcodeSidebar() {
                             </button>
                             <button
                               type="button"
+                              data-testid="sidebar-workspace-row"
+                              data-environment-connected={connectedEnvironmentIds.has(
+                                project.environmentId,
+                              )}
                               role="treeitem"
                               className="flex min-h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
                               onClick={() => openWorkspace(project, workspace)}
@@ -536,6 +555,8 @@ export function AcodeSidebar() {
                                   return (
                                     <SessionRow
                                       key={session.id}
+                                      data-testid="sidebar-session-row"
+                                      data-session-kind="agent"
                                       sessionTitle={session.title}
                                       target={{
                                         kind: "agentSession",
@@ -563,6 +584,8 @@ export function AcodeSidebar() {
                                 return (
                                   <SessionRow
                                     key={session.id}
+                                    data-testid="sidebar-session-row"
+                                    data-session-kind="terminal"
                                     sessionTitle={session.title}
                                     target={{
                                       kind: "workspaceTerminal",
@@ -585,6 +608,7 @@ export function AcodeSidebar() {
                               {historySessions.length > 0 ? (
                                 <button
                                   type="button"
+                                  data-testid="sidebar-history-toggle"
                                   className="flex min-h-6 items-center gap-1 rounded-md px-2 text-left text-[10px] text-sidebar-muted-foreground hover:bg-sidebar-row-hover"
                                   onClick={() =>
                                     setHistoryExpanded((current) => {
@@ -608,6 +632,9 @@ export function AcodeSidebar() {
                                     session.kind === "agent" ? (
                                       <SessionRow
                                         key={session.id}
+                                        data-testid="sidebar-session-row"
+                                        data-session-kind="agent"
+                                        data-session-closed="true"
                                         isClosed
                                         sessionTitle={session.title}
                                         target={{
@@ -637,6 +664,9 @@ export function AcodeSidebar() {
                                     ) : (
                                       <SessionRow
                                         key={session.id}
+                                        data-testid="sidebar-session-row"
+                                        data-session-kind="terminal"
+                                        data-session-closed="true"
                                         isClosed
                                         sessionTitle={session.title}
                                         target={{
