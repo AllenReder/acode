@@ -57,17 +57,23 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
 
   return (
     <header
-      className="drag-region fixed inset-x-0 top-0 z-50 h-[var(--workbench-titlebar-height)] border-b border-border/60 bg-background/95 backdrop-blur"
+      className="drag-region fixed inset-x-0 top-0 z-50 flex h-[var(--workbench-titlebar-height)] items-center border-b border-border/60 bg-background/95 backdrop-blur"
       data-tauri-drag-region
       data-workbench-window-chrome=""
     >
-      <div className="absolute top-[var(--workbench-titlebar-center)] left-[var(--workspace-controls-left)] -translate-y-1/2 [-webkit-app-region:no-drag]">
+      <div
+        className="flex shrink-0 items-center [-webkit-app-region:no-drag]"
+        style={{
+          paddingLeft: "var(--workspace-controls-left)",
+          marginRight: "var(--workspace-titlebar-control-gap)",
+        }}
+      >
         <SidebarTrigger aria-label="Toggle sidebar" />
       </div>
 
-      <div className="absolute top-[var(--workbench-titlebar-center)] right-3 left-[var(--workspace-titlebar-content-left)] flex h-8 min-w-0 -translate-y-1/2 items-center gap-2 [-webkit-app-region:no-drag]">
+      <div className="flex min-w-0 flex-1 items-center gap-2 pr-3 [-webkit-app-region:no-drag]">
         <div
-          className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           data-tauri-drag-region
           role="tablist"
           aria-label="Workbench tabs"
@@ -90,10 +96,10 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
                 data-tab-id={tab.id}
                 data-active-tab={active ? "true" : "false"}
                 className={cn(
-                  "group flex h-8 shrink-0 cursor-pointer items-center gap-2.5 overflow-hidden rounded-[var(--control-radius)] border transition-[width,background-color,border-color] duration-150",
+                  "group flex h-7 shrink-0 cursor-pointer items-center gap-2.5 overflow-hidden rounded-[var(--control-radius)] border transition-[width,background-color,border-color] duration-150",
                   active
-                    ? "w-64 justify-start border-border bg-muted/70 px-3 text-foreground"
-                    : "w-8 justify-center border-border bg-background/80 text-muted-foreground shadow-xs hover:w-28 hover:justify-start hover:bg-muted/50 hover:px-3",
+                    ? "w-64 justify-start border-border bg-muted/70 px-2.5 text-foreground"
+                    : "w-7 justify-center border-border bg-background/80 text-muted-foreground shadow-xs hover:w-28 hover:justify-start hover:bg-muted/50 hover:px-2.5",
                 )}
                 onClick={() => {
                   if (!active) activateTab(tab.id);
@@ -149,8 +155,8 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
                   <div
                     className={cn("min-w-0 flex-1", active ? "block" : "hidden group-hover:block")}
                   >
-                    <div className="truncate text-xs font-medium">{title}</div>
-                    <div className="truncate text-[9px] text-muted-foreground">
+                    <div className="truncate text-xs font-medium leading-none">{title}</div>
+                    <div className="truncate text-[9px] text-muted-foreground leading-none mt-0.5">
                       {resolveTargetContext(target, projects)}
                     </div>
                   </div>
@@ -176,7 +182,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
         <button
           type="button"
           aria-label="New tab"
-          className="flex size-8 shrink-0 items-center justify-center rounded-[var(--control-radius)] border border-border/70 bg-muted/25 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+          className="flex size-7 shrink-0 items-center justify-center rounded-[var(--control-radius)] border border-border/70 bg-muted/25 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
           onClick={createTab}
         >
           <PlusIcon className="size-4" />

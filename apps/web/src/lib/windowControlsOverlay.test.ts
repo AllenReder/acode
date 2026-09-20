@@ -11,7 +11,7 @@ describe("resolveWorkbenchTitlebarStyle", () => {
         fullscreen: false,
       }),
     ).toEqual({
-      "--workspace-controls-left": "var(--desktop-window-controls-inset, 90px)",
+      "--workspace-controls-left": "var(--desktop-window-controls-inset, 80px)",
       "--workbench-titlebar-height": "36px",
     });
   });
