@@ -7,6 +7,8 @@ import {
   type AcodeWorkspaceCreateWorktreeResult,
   type AcodeWorkspaceRemoveInput,
   type AcodeWorkspaceRemoveResult,
+  type AcodeWorkspaceRenameInput,
+  type AcodeWorkspaceRenameResult,
   CommandId,
   ProjectId,
   type AcodeProjectShell,
@@ -53,6 +55,9 @@ export class AcodeWorkspaceService extends Context.Service<
     readonly remove: (
       input: AcodeWorkspaceRemoveInput,
     ) => Effect.Effect<AcodeWorkspaceRemoveResult, AcodeWorkspaceError>;
+    readonly rename: (
+      input: AcodeWorkspaceRenameInput,
+    ) => Effect.Effect<AcodeWorkspaceRenameResult, AcodeWorkspaceError>;
   }
 >()("t3/workspace/AcodeWorkspaceService") {}
 
@@ -625,7 +630,67 @@ export const make = Effect.gen(function* () {
       }),
     );
 
-  return AcodeWorkspaceService.of({ associate, createWorktree, remove });
+  const rename: AcodeWorkspaceService["Service"]["rename"] = (input) =>
+    Effect.gen(function* () {
+      const workspaceOption = yield* readWorkspace(input.workspaceId).pipe(
+        Effect.mapError((cause) =>
+          workspaceError(
+            "registration-failed",
+            `Could not read Workspace '${input.workspaceId}'.`,
+            undefined,
+            cause,
+          ),
+        ),
+      );
+      if (Option.isNone(workspaceOption)) {
+        return yield* workspaceError(
+          "workspace-not-found",
+          `Workspace '${input.workspaceId}' was not found.`,
+        );
+      }
+      const updateTitle = projectionQuery.updateAcodeWorkspaceTitle;
+      if (updateTitle === undefined) {
+        return yield* workspaceError(
+          "registration-failed",
+          "Workspace rename is unavailable on this server.",
+          workspaceOption.value.workspaceRoot,
+        );
+      }
+      const updatedAt = DateTime.formatIso(yield* DateTime.now);
+      yield* updateTitle({
+        workspaceId: input.workspaceId,
+        title: input.title,
+        updatedAt,
+      }).pipe(
+        Effect.mapError((cause) =>
+          workspaceError(
+            "registration-failed",
+            `Could not rename Workspace '${input.workspaceId}'.`,
+            workspaceOption.value.workspaceRoot,
+            cause,
+          ),
+        ),
+      );
+      const updated = yield* readWorkspace(input.workspaceId).pipe(
+        Effect.mapError((cause) =>
+          workspaceError(
+            "registration-failed",
+            `Could not read Workspace '${input.workspaceId}' after rename.`,
+            workspaceOption.value.workspaceRoot,
+            cause,
+          ),
+        ),
+      );
+      if (Option.isNone(updated)) {
+        return yield* workspaceError(
+          "workspace-not-found",
+          `Workspace '${input.workspaceId}' disappeared after rename.`,
+        );
+      }
+      return { workspace: updated.value };
+    });
+
+  return AcodeWorkspaceService.of({ associate, createWorktree, remove, rename });
 });
 
 export const layer = Layer.effect(AcodeWorkspaceService, make);

@@ -202,6 +202,11 @@ export interface ProjectionSnapshotQueryShape {
     Option.Option<import("@t3tools/contracts").AcodeWorkspaceShell>,
     ProjectionRepositoryError
   >;
+  readonly updateAcodeWorkspaceTitle?: (input: {
+    readonly workspaceId: WorkspaceId;
+    readonly title: string;
+    readonly updatedAt: string;
+  }) => Effect.Effect<void, ProjectionRepositoryError>;
   /** Read the owning ACode tree for a session that just left the active shell. */
   readonly getAcodeProjectByThreadId?: (
     threadId: ThreadId,

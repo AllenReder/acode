@@ -77,6 +77,7 @@ const makeLayer = (input: {
   readonly onDispatch: (command: Parameters<OrchestrationEngine.OrchestrationEngineService["Service"]["dispatch"]>[0]) => void;
   readonly readProject: () => AcodeProjectShell;
   readonly readWorkspace: () => Option.Option<AcodeWorkspaceShell>;
+  readonly onRename?: (input: { readonly workspaceId: WorkspaceId; readonly title: string }) => void;
 }) => {
   const serverConfigLayer = ServerConfig.layerTest(process.cwd(), {
     prefix: "acode-workspace-service-test-",
@@ -84,6 +85,8 @@ const makeLayer = (input: {
   const projectionLayer = Layer.mock(ProjectionSnapshotQuery.ProjectionSnapshotQuery)({
     getAcodeProjectById: () => Effect.succeed(Option.some(input.readProject())),
     getAcodeWorkspaceById: () => Effect.succeed(input.readWorkspace()),
+    updateAcodeWorkspaceTitle: ({ workspaceId, title }) =>
+      Effect.sync(() => input.onRename?.({ workspaceId, title })),
     getShellSnapshot: () =>
       Effect.succeed({
         snapshotSequence: 1,
@@ -331,4 +334,34 @@ describe("AcodeWorkspaceService", () => {
       ),
     ),
   );
+
+  it.effect("renames a Workspace without renaming its Project", () => {
+    let project = makeProject("/tmp/main");
+    let workspace = mainWorkspace("/tmp/main");
+    return Effect.gen(function* () {
+      const service = yield* AcodeWorkspaceService.AcodeWorkspaceService;
+      const result = yield* service.rename({ workspaceId: workspace.id, title: "Primary checkout" });
+      assert.equal(result.workspace.title, "Primary checkout");
+      assert.equal(project.title, "Repository");
+      assert.equal(project.workspaces[0]?.title, "Primary checkout");
+    }).pipe(
+      Effect.provide(
+        makeLayer({
+          root: "/tmp/main",
+          sibling: "/tmp/sibling",
+          commonDir: "/tmp/main/.git",
+          onDispatch: () => undefined,
+          readProject: () => project,
+          readWorkspace: () => Option.some(workspace),
+          onRename: ({ title }) => {
+            workspace = { ...workspace, title };
+            project = {
+              ...project,
+              workspaces: [workspace],
+            };
+          },
+        }),
+      ),
+    );
+  });
 });

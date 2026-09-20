@@ -38,5 +38,11 @@ export function createEnvironmentWorkspaceCommandAtoms<R, E>(
       scheduler: workspaceCommandScheduler,
       concurrency: workspaceCommandConcurrency,
     }),
+    rename: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:workspace:rename",
+      tag: RpcMethods.acodeWorkspaceRename,
+      scheduler: workspaceCommandScheduler,
+      concurrency: workspaceCommandConcurrency,
+    }),
   };
 }

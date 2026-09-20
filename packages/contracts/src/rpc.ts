@@ -60,6 +60,8 @@ import {
   AcodeWorkspaceError,
   AcodeWorkspaceRemoveInput,
   AcodeWorkspaceRemoveResult,
+  AcodeWorkspaceRenameInput,
+  AcodeWorkspaceRenameResult,
 } from "./workspace.ts";
 import {
   GitActionProgressEvent,
@@ -332,6 +334,7 @@ export const WS_METHODS = {
   acodeWorkspaceAssociate: "acodeWorkspace.associate",
   acodeWorkspaceCreateWorktree: "acodeWorkspace.createWorktree",
   acodeWorkspaceRemove: "acodeWorkspace.remove",
+  acodeWorkspaceRename: "acodeWorkspace.rename",
 
   // Review methods
   reviewGetDiffPreview: "review.getDiffPreview",
@@ -1089,6 +1092,12 @@ const WsAcodeWorkspaceRemoveRpc = Rpc.make(WS_METHODS.acodeWorkspaceRemove, {
   error: Schema.Union([AcodeWorkspaceError, EnvironmentAuthorizationError]),
 });
 
+const WsAcodeWorkspaceRenameRpc = Rpc.make(WS_METHODS.acodeWorkspaceRename, {
+  payload: AcodeWorkspaceRenameInput,
+  success: AcodeWorkspaceRenameResult,
+  error: Schema.Union([AcodeWorkspaceError, EnvironmentAuthorizationError]),
+});
+
 /**
  * Ephemeral live diff preview for compact/mobile surfaces.
  * Not the persisted T3 Review model. Future review sessions should use
@@ -1542,6 +1551,7 @@ export const WsAcodeWorkspaceRpcGroup = RpcGroup.make(
   WsAcodeWorkspaceAssociateRpc,
   WsAcodeWorkspaceCreateWorktreeRpc,
   WsAcodeWorkspaceRemoveRpc,
+  WsAcodeWorkspaceRenameRpc,
 );
 
 /**

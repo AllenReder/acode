@@ -387,6 +387,19 @@ const makeRepository = Effect.gen(function* () {
       );
     }).pipe(Effect.mapError(toPersistenceSqlError("ProjectionAcodeProjectRepository.remove")));
 
+  const updateWorkspaceTitle: ProjectionAcodeProjectRepositoryShape["updateWorkspaceTitle"] = (
+    input,
+  ) =>
+    sql`
+      UPDATE projection_acode_workspaces
+      SET title = ${input.title}, updated_at = ${input.updatedAt}
+      WHERE workspace_id = ${input.workspaceId}
+    `.pipe(
+      Effect.mapError(
+        toPersistenceSqlError("ProjectionAcodeProjectRepository.updateWorkspaceTitle"),
+      ),
+    );
+
   return {
     upsertForT3Project: upsert,
     upsertAgentSession,
@@ -395,6 +408,7 @@ const makeRepository = Effect.gen(function* () {
     unarchiveAgentSession,
     deleteAgentSession,
     removeForT3Project: remove,
+    updateWorkspaceTitle,
     listTree: () =>
       Effect.all([getRows(undefined), getActiveSessionRows({})]).pipe(
         Effect.map(([rows, sessions]) => mapProjectionAcodeProjectRows(rows, sessions)),

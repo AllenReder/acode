@@ -539,6 +539,11 @@ const makeWsRpcLayer = (
             WS_METHODS.acodeWorkspaceRemove,
             workspaceService.remove(input),
           ),
+        [WS_METHODS.acodeWorkspaceRename]: (input) =>
+          observeAcodeWorkspaceRpcEffect(
+            WS_METHODS.acodeWorkspaceRename,
+            workspaceService.rename(input),
+          ),
       });
     }),
   );
