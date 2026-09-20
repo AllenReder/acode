@@ -62,6 +62,7 @@ interface ChatHeaderProps {
   keybindings: ResolvedKeybindingsConfig;
   availableEditors: ReadonlyArray<EditorId>;
   rightPanelOpen: boolean;
+  workbenchMode?: boolean;
   gitCwd: string | null;
   readonly onOpenPullRequest?: ((number: number) => void) | undefined;
   onNewThreadInProject: () => void;
@@ -131,6 +132,7 @@ export const ChatHeader = memo(function ChatHeader({
   keybindings,
   availableEditors,
   rightPanelOpen,
+  workbenchMode = false,
   gitCwd,
   onOpenPullRequest,
   onNewThreadInProject,
@@ -235,11 +237,12 @@ export const ChatHeader = memo(function ChatHeader({
     [activeThreadId, cancelPendingTitleMenu],
   );
   const openTitleMenuNow = useCallback(() => {
+    if (workbenchMode) return;
     cancelPendingTitleMenu();
     const rect = titleButtonRef.current?.getBoundingClientRect();
     if (!rect) return;
     openMenu({ x: rect.left, y: rect.bottom + 4 });
-  }, [cancelPendingTitleMenu, openMenu]);
+  }, [cancelPendingTitleMenu, openMenu, workbenchMode]);
   const openMenuFromTitle = useCallback(
     (event: ReactMouseEvent<HTMLButtonElement>) => {
       // The trailing click of a double-click belongs to rename, not the menu.
@@ -264,6 +267,7 @@ export const ChatHeader = memo(function ChatHeader({
   );
   const handleTitleDoubleClick = useCallback(
     (event: ReactMouseEvent) => {
+      if (workbenchMode) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       // The chevron is the explicit menu affordance; only the title text renames.
       if ((event.target as HTMLElement).closest("[data-thread-title-chevron]") !== null) return;
@@ -297,7 +301,14 @@ export const ChatHeader = memo(function ChatHeader({
       }
       openMenu({ x: event.clientX, y: event.clientY });
     },
-    [cancelPendingTitleMenu, isServerThread, onOpenProjectSettings, openMenu, renamingTitle],
+    [
+      cancelPendingTitleMenu,
+      isServerThread,
+      onOpenProjectSettings,
+      openMenu,
+      renamingTitle,
+      workbenchMode,
+    ],
   );
   const handleRenameKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLInputElement>) => {
@@ -368,9 +379,13 @@ export const ChatHeader = memo(function ChatHeader({
                   <button
                     ref={titleButtonRef}
                     type="button"
-                    aria-label={`Thread actions for ${activeThreadTitle}`}
-                    aria-haspopup="menu"
-                    onClick={openMenuFromTitle}
+                    aria-label={
+                      workbenchMode
+                        ? `Rename Agent Session ${activeThreadTitle}`
+                        : `Thread actions for ${activeThreadTitle}`
+                    }
+                    {...(workbenchMode ? {} : { "aria-haspopup": "menu" as const })}
+                    onClick={workbenchMode ? undefined : openMenuFromTitle}
                     onDoubleClick={handleTitleDoubleClick}
                     onBlur={cancelPendingTitleMenu}
                     className="group/thread-title inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1 rounded-sm text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
@@ -378,11 +393,13 @@ export const ChatHeader = memo(function ChatHeader({
                 }
               >
                 <h2 className="min-w-0 truncate">{activeThreadTitle}</h2>
-                <ChevronDownIcon
-                  aria-hidden
-                  data-thread-title-chevron
-                  className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/thread-title:opacity-100 group-focus-visible/thread-title:opacity-100"
-                />
+                {!workbenchMode ? (
+                  <ChevronDownIcon
+                    aria-hidden
+                    data-thread-title-chevron
+                    className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/thread-title:opacity-100 group-focus-visible/thread-title:opacity-100"
+                  />
+                ) : null}
               </TooltipTrigger>
               <TooltipPopup side="top">{activeThreadTitle}</TooltipPopup>
             </Tooltip>

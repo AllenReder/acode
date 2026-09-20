@@ -18,10 +18,7 @@ import { sessionRouteForTarget } from "./deepLinks";
 import type { ViewTarget } from "./viewRegistry";
 import { useWorkbenchStore } from "./workbenchStore";
 
-type AgentSessionViewTarget = Extract<
-  ViewTarget,
-  { kind: "agentSession" | "newAgentSession" }
->;
+type AgentSessionViewTarget = Extract<ViewTarget, { kind: "agentSession" | "newAgentSession" }>;
 
 interface AgentSessionViewProps {
   readonly target: AgentSessionViewTarget;
@@ -54,10 +51,7 @@ export function NewAgentSessionView({
   const draft = useComposerDraftStore((state) => state.getDraftSession(target.draftId));
   const projects = useAcodeProjects();
   const draftThreadRef = useMemo(
-    () =>
-      draft === null
-        ? null
-        : scopeThreadRef(target.environmentId, draft.threadId),
+    () => (draft === null ? null : scopeThreadRef(target.environmentId, draft.threadId)),
     [draft, target.environmentId],
   );
   const draftThread = useComposerDraftStore((state) =>
@@ -78,9 +72,7 @@ export function NewAgentSessionView({
     if (draftThreadRef === null || draft === null) return null;
     for (const project of projects) {
       if (project.environmentId !== target.environmentId) continue;
-      const workspace = project.workspaces.find(
-        (candidate) => candidate.id === draft.workspaceId,
-      );
+      const workspace = project.workspaces.find((candidate) => candidate.id === draft.workspaceId);
       if (workspace === undefined) continue;
       const session = agentSessionsIn(workspace).find(
         (candidate) => candidate.threadId === draftThreadRef.threadId,
@@ -130,6 +122,7 @@ export function NewAgentSessionView({
       threadId={draft.threadId}
       routeKind="draft"
       draftId={target.draftId}
+      workbenchMode
       focused={focused}
       focusRequestId={focusRequestId}
       availableSize={availableSize}

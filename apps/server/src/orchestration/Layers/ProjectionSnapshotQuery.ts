@@ -3760,6 +3760,7 @@ pending_approval_requests AS (
     getAcodeProjectById: acodeProjectRepository.getProjectById,
     getAcodeWorkspaceById: acodeProjectRepository.getWorkspaceById,
     updateAcodeWorkspaceTitle: acodeProjectRepository.updateWorkspaceTitle,
+    updateAcodeProjectTitle: acodeProjectRepository.updateProjectTitle,
     getAcodeProjectByThreadId: acodeProjectRepository.getByThreadId,
     getAcodeAgentSessionByThreadId: acodeProjectRepository.getAgentSessionByThreadId,
     getFirstActiveThreadIdByProjectId,

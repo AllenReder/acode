@@ -8,7 +8,6 @@ import { terminalEnvironment } from "../state/terminal";
 import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
-import { useCopyToClipboard } from "./useCopyToClipboard";
 import { runtimeTerminalIdForTarget } from "../workbench/sessionTarget";
 import { targetKey, type ViewTarget } from "../workbench/viewRegistry";
 import { getActiveTab, findPaneBySessionTarget, type SplitDir } from "../workbench/workbenchState";
@@ -38,19 +37,6 @@ export function useSessionCommands(target: SessionTarget) {
     target.kind === "agentSession" ? target.workspaceId : null,
     target.kind === "agentSession" ? target.agentSessionId : null,
   );
-
-  const { copyToClipboard } = useCopyToClipboard<{ identity: string }>({
-    onCopy: ({ identity }) => {
-      toastManager.add({
-        type: "success",
-        title: "Session identity copied",
-        description: identity,
-      });
-    },
-    onError: (error) => {
-      failureToast("Failed to copy identity", error);
-    },
-  });
 
   const openSession = useCallback(() => {
     store.openTarget(target);
@@ -215,17 +201,11 @@ export function useSessionCommands(target: SessionTarget) {
     ],
   );
 
-  const copySessionIdentity = useCallback(() => {
-    const identity = targetKey(target);
-    copyToClipboard(identity, { identity });
-  }, [copyToClipboard, target]);
-
   return {
     openSession,
     focusSession,
     splitSession,
     closeSession: handleCloseSession,
     deleteSession: handleDeleteSession,
-    copySessionIdentity,
   };
 }

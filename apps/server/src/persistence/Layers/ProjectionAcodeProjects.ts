@@ -400,6 +400,15 @@ const makeRepository = Effect.gen(function* () {
       ),
     );
 
+  const updateProjectTitle: ProjectionAcodeProjectRepositoryShape["updateProjectTitle"] = (input) =>
+    sql`
+      UPDATE projection_acode_projects
+      SET title = ${input.title}, updated_at = ${input.updatedAt}
+      WHERE acode_project_id = ${input.acodeProjectId}
+    `.pipe(
+      Effect.mapError(toPersistenceSqlError("ProjectionAcodeProjectRepository.updateProjectTitle")),
+    );
+
   return {
     upsertForT3Project: upsert,
     upsertAgentSession,
@@ -409,6 +418,7 @@ const makeRepository = Effect.gen(function* () {
     deleteAgentSession,
     removeForT3Project: remove,
     updateWorkspaceTitle,
+    updateProjectTitle,
     listTree: () =>
       Effect.all([getRows(undefined), getActiveSessionRows({})]).pipe(
         Effect.map(([rows, sessions]) => mapProjectionAcodeProjectRows(rows, sessions)),

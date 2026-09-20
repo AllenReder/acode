@@ -117,6 +117,12 @@ export interface ProjectionAcodeProjectRepositoryShape {
     readonly title: string;
     readonly updatedAt: string;
   }) => Effect.Effect<void, ProjectionRepositoryError>;
+  /** Change an ACode Project display title without changing its Workspaces. */
+  readonly updateProjectTitle: (input: {
+    readonly acodeProjectId: AcodeProjectId;
+    readonly title: string;
+    readonly updatedAt: string;
+  }) => Effect.Effect<void, ProjectionRepositoryError>;
   /** Read the complete active Project → Workspace tree. */
   readonly listTree: () => Effect.Effect<
     ReadonlyArray<AcodeProjectShell>,

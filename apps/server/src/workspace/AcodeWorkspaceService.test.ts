@@ -73,11 +73,22 @@ const makeLayer = (input: {
   readonly commonDir: string;
   readonly targetCommonDir?: string;
   readonly dirty?: boolean;
-  readonly onCreate?: (input: Parameters<GitWorkflowService.GitWorkflowService["Service"]["createWorktree"]>[0]) => void;
-  readonly onDispatch: (command: Parameters<OrchestrationEngine.OrchestrationEngineService["Service"]["dispatch"]>[0]) => void;
+  readonly onCreate?: (
+    input: Parameters<GitWorkflowService.GitWorkflowService["Service"]["createWorktree"]>[0],
+  ) => void;
+  readonly onDispatch: (
+    command: Parameters<OrchestrationEngine.OrchestrationEngineService["Service"]["dispatch"]>[0],
+  ) => void;
   readonly readProject: () => AcodeProjectShell;
   readonly readWorkspace: () => Option.Option<AcodeWorkspaceShell>;
-  readonly onRename?: (input: { readonly workspaceId: WorkspaceId; readonly title: string }) => void;
+  readonly onRename?: (input: {
+    readonly workspaceId: WorkspaceId;
+    readonly title: string;
+  }) => void;
+  readonly onRenameProject?: (input: {
+    readonly acodeProjectId: AcodeProjectId;
+    readonly title: string;
+  }) => void;
 }) => {
   const serverConfigLayer = ServerConfig.layerTest(process.cwd(), {
     prefix: "acode-workspace-service-test-",
@@ -87,6 +98,8 @@ const makeLayer = (input: {
     getAcodeWorkspaceById: () => Effect.succeed(input.readWorkspace()),
     updateAcodeWorkspaceTitle: ({ workspaceId, title }) =>
       Effect.sync(() => input.onRename?.({ workspaceId, title })),
+    updateAcodeProjectTitle: ({ acodeProjectId, title }) =>
+      Effect.sync(() => input.onRenameProject?.({ acodeProjectId, title })),
     getShellSnapshot: () =>
       Effect.succeed({
         snapshotSequence: 1,
@@ -131,10 +144,11 @@ const makeLayer = (input: {
     removeWorktree: () => Effect.void,
   });
   const orchestrationLayer = Layer.mock(OrchestrationEngine.OrchestrationEngineService)({
-    dispatch: (command, _options) => Effect.sync(() => {
-      input.onDispatch(command);
-      return { sequence: 1 };
-    }),
+    dispatch: (command, _options) =>
+      Effect.sync(() => {
+        input.onDispatch(command);
+        return { sequence: 1 };
+      }),
   });
 
   return AcodeWorkspaceService.layer.pipe(
@@ -223,7 +237,9 @@ describe("AcodeWorkspaceService", () => {
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const parent = yield* fileSystem.makeTempDirectoryScoped({ prefix: "acode-different-repo-" });
+        const parent = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "acode-different-repo-",
+        });
         const root = path.join(parent, "main");
         const sibling = path.join(parent, "other");
         yield* fileSystem.makeDirectory(root, { recursive: true });
@@ -263,7 +279,9 @@ describe("AcodeWorkspaceService", () => {
         const sibling = path.join(parent, "created");
         yield* fileSystem.makeDirectory(root, { recursive: true });
         let project = makeProject(root);
-        let createInput: Parameters<GitWorkflowService.GitWorkflowService["Service"]["createWorktree"]>[0] | undefined;
+        let createInput:
+          | Parameters<GitWorkflowService.GitWorkflowService["Service"]["createWorktree"]>[0]
+          | undefined;
         const result = yield* Effect.gen(function* () {
           const service = yield* AcodeWorkspaceService.AcodeWorkspaceService;
           return yield* service.createWorktree({
@@ -340,7 +358,10 @@ describe("AcodeWorkspaceService", () => {
     let workspace = mainWorkspace("/tmp/main");
     return Effect.gen(function* () {
       const service = yield* AcodeWorkspaceService.AcodeWorkspaceService;
-      const result = yield* service.rename({ workspaceId: workspace.id, title: "Primary checkout" });
+      const result = yield* service.rename({
+        workspaceId: workspace.id,
+        title: "Primary checkout",
+      });
       assert.equal(result.workspace.title, "Primary checkout");
       assert.equal(project.title, "Repository");
       assert.equal(project.workspaces[0]?.title, "Primary checkout");
@@ -359,6 +380,31 @@ describe("AcodeWorkspaceService", () => {
               ...project,
               workspaces: [workspace],
             };
+          },
+        }),
+      ),
+    );
+  });
+
+  it.effect("renames an ACode Project without renaming its Workspaces", () => {
+    let project = makeProject("/tmp/main");
+    const originalWorkspaceTitle = project.workspaces[0]!.title;
+    return Effect.gen(function* () {
+      const service = yield* AcodeWorkspaceService.AcodeWorkspaceService;
+      const result = yield* service.renameProject({ projectId: project.id, title: "Renamed" });
+      assert.equal(result.project.title, "Renamed");
+      assert.equal(result.project.workspaces[0]?.title, originalWorkspaceTitle);
+    }).pipe(
+      Effect.provide(
+        makeLayer({
+          root: "/tmp/main",
+          sibling: "/tmp/sibling",
+          commonDir: "/tmp/main/.git",
+          onDispatch: () => undefined,
+          readProject: () => project,
+          readWorkspace: () => Option.some(mainWorkspace("/tmp/main")),
+          onRenameProject: ({ title }) => {
+            project = { ...project, title };
           },
         }),
       ),

@@ -73,9 +73,6 @@ export function useSessionActionMenu(input: {
           case "rename":
             onStartRename?.();
             return;
-          case "copy:identity":
-            commands.copySessionIdentity();
-            return;
           case "close-session":
             void commands.closeSession();
             return;

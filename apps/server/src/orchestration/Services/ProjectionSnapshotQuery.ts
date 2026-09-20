@@ -207,6 +207,11 @@ export interface ProjectionSnapshotQueryShape {
     readonly title: string;
     readonly updatedAt: string;
   }) => Effect.Effect<void, ProjectionRepositoryError>;
+  readonly updateAcodeProjectTitle?: (input: {
+    readonly acodeProjectId: AcodeProjectId;
+    readonly title: string;
+    readonly updatedAt: string;
+  }) => Effect.Effect<void, ProjectionRepositoryError>;
   /** Read the owning ACode tree for a session that just left the active shell. */
   readonly getAcodeProjectByThreadId?: (
     threadId: ThreadId,
