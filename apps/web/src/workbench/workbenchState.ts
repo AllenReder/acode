@@ -1,4 +1,16 @@
 import {
+  columnsTree,
+  reconcileColumns,
+  reconcileBsp,
+  placeInColumns,
+  LAYOUT_VERSION,
+  MIN_COLUMN_WIDTH,
+  MAX_COLUMN_WIDTH,
+  type Column,
+  type LayoutMode,
+  type LayoutMemory,
+} from "./scrollingLayout";
+import {
   closeLeaf,
   firstLeafId,
   leafIds,
@@ -8,7 +20,6 @@ import {
   removePane,
   replaceLeafId,
   setSplitRatio,
-  splitPane,
   type AcodeTab,
   type PaneDropZone,
   type SplitDir,
@@ -26,6 +37,9 @@ export interface ViewInstance {
 /** Every layout leaf owns exactly one ViewInstance. */
 export interface WorkbenchTab extends AcodeTab {
   readonly panes: ReadonlyMap<string, ViewInstance>;
+  readonly layoutMode?: LayoutMode;
+  readonly columns?: readonly Column[];
+  readonly layoutMemory?: LayoutMemory;
   readonly titleMode: "auto" | "manual";
   readonly titleOverride: string | null;
 }
@@ -100,10 +114,118 @@ export function tabDisplayTitle(
 }
 
 function updateTab(snapshot: WorkbenchSnapshot, tab: WorkbenchTab): WorkbenchSnapshot {
+  tab = reconcileTab(tab);
   return {
     ...snapshot,
     tabs: snapshot.tabs.map((current) => (current.id === tab.id ? tab : current)),
   };
+}
+
+export function reconcileTab(tab: WorkbenchTab): WorkbenchTab {
+  if (tab.layoutMode !== "scrolling") return tab;
+  const ids = leafIds(tab.layout).filter((id) => tab.panes.has(id));
+  for (const id of tab.panes.keys()) if (!ids.includes(id)) ids.push(id);
+  const columns = reconcileColumns(tab.columns ?? [], ids);
+  return { ...tab, columns, layout: columnsTree(columns) };
+}
+
+function placedLayout(tab: WorkbenchTab, paneId: string, targetId: string, zone: PaneDropZone) {
+  if (tab.layoutMode !== "scrolling")
+    return {
+      layout:
+        zone === "replace"
+          ? replaceLeafId(tab.layout, targetId, paneId)
+          : placePane(tab.layout, paneId, targetId, zone),
+    };
+  const columns = placeInColumns(tab.columns ?? [], paneId, targetId, zone);
+  return { columns, layout: columnsTree(columns) };
+}
+
+export function applySetLayoutMode(
+  snapshot: WorkbenchSnapshot,
+  mode: LayoutMode,
+): WorkbenchSnapshot {
+  const tab = getActiveTab(snapshot);
+  if ((tab.layoutMode ?? "bsp") === mode) return snapshot;
+  const memory =
+    tab.layoutMemory?.version === LAYOUT_VERSION ? tab.layoutMemory : { version: LAYOUT_VERSION };
+  const ids = leafIds(tab.layout);
+  if (mode === "scrolling") {
+    const columns = reconcileColumns(memory.columns ?? [], ids);
+    return updateTab(snapshot, {
+      ...tab,
+      layoutMode: mode,
+      columns,
+      layout: columnsTree(columns),
+      layoutMemory: { ...memory, bsp: tab.layout },
+    });
+  }
+  return updateTab(snapshot, {
+    ...tab,
+    layoutMode: mode,
+    layout: reconcileBsp(memory.bsp, ids),
+    layoutMemory: { ...memory, columns: tab.columns ?? [] },
+  });
+}
+
+export function applyColumnChange(
+  snapshot: WorkbenchSnapshot,
+  columnId: string,
+  change: { width?: number; direction?: -1 | 1; shares?: readonly number[] },
+): WorkbenchSnapshot {
+  const tab = getActiveTab(snapshot);
+  if (tab.layoutMode !== "scrolling") return snapshot;
+  const columns = [...(tab.columns ?? [])];
+  const index = columns.findIndex((c) => c.id === columnId);
+  const column = columns[index];
+  if (!column) return snapshot;
+  let updated = column;
+  if (change.width !== undefined && Number.isFinite(change.width))
+    updated = {
+      ...updated,
+      width: Math.max(MIN_COLUMN_WIDTH, Math.min(MAX_COLUMN_WIDTH, change.width)),
+    };
+  if (
+    change.shares?.length === column.paneIds.length &&
+    change.shares.every((n) => Number.isFinite(n) && n > 0)
+  ) {
+    const sum = change.shares.reduce((a, b) => a + b, 0);
+    updated = { ...updated, shares: change.shares.map((n) => n / sum) };
+  }
+  columns[index] = updated;
+  if (change.direction && columns[index + change.direction]) {
+    columns[index] = columns[index + change.direction]!;
+    columns[index + change.direction] = updated;
+  }
+  return updateTab(snapshot, { ...tab, columns, layout: columnsTree(columns) });
+}
+
+export function applyMoveInColumn(
+  snapshot: WorkbenchSnapshot,
+  paneId: string,
+  direction: -1 | 1,
+): WorkbenchSnapshot {
+  const tab = getActiveTab(snapshot);
+  const columns = tab.columns?.map((column) => {
+    const index = column.paneIds.indexOf(paneId);
+    if (index < 0 || !column.paneIds[index + direction]) return column;
+    const paneIds = [...column.paneIds];
+    [paneIds[index], paneIds[index + direction]] = [paneIds[index + direction]!, paneIds[index]!];
+    return { ...column, paneIds };
+  });
+  return tab.layoutMode === "scrolling" && columns
+    ? updateTab(snapshot, { ...tab, columns, layout: columnsTree(columns) })
+    : snapshot;
+}
+
+function clearedTab(tab: WorkbenchTab, generateId: () => string): WorkbenchTab {
+  return reconcileTab({
+    ...welcomeTab(generateId),
+    id: tab.id,
+    titleMode: tab.titleMode,
+    titleOverride: tab.titleOverride,
+    layoutMode: tab.layoutMode ?? "bsp",
+  });
 }
 
 function removeViewFromTab(
@@ -114,16 +236,11 @@ function removeViewFromTab(
   if (!tab.panes.has(paneId)) return null;
   const next = closeLeaf(tab, paneId);
   if (next === null) {
-    return {
-      ...welcomeTab(generateId),
-      id: tab.id,
-      titleMode: tab.titleMode,
-      titleOverride: tab.titleOverride,
-    };
+    return clearedTab(tab, generateId);
   }
   const panes = new Map(tab.panes);
   panes.delete(paneId);
-  return { ...tab, ...next, panes };
+  return reconcileTab({ ...tab, ...next, panes });
 }
 
 function insertViewIntoTab(
@@ -156,7 +273,7 @@ function insertViewIntoTab(
   return {
     tab: {
       ...tab,
-      layout: placePane(tab.layout, resolvedPaneId, tab.focusedPaneId, "right"),
+      ...placedLayout(tab, resolvedPaneId, tab.focusedPaneId, "right"),
       panes,
       focusedPaneId: resolvedPaneId,
     },
@@ -223,7 +340,7 @@ export function applyOpenTarget(
     return updateTab(snapshot, {
       ...tab,
       panes,
-      layout: splitPane(tab.layout, tab.focusedPaneId, "right", paneId),
+      ...placedLayout(tab, paneId, tab.focusedPaneId, "right"),
       focusedPaneId: paneId,
     });
   }
@@ -287,7 +404,7 @@ export function applySplitFocused(
   return updateTab(snapshot, {
     ...tab,
     panes,
-    layout: splitPane(tab.layout, tab.focusedPaneId, dir, paneId),
+    ...placedLayout(tab, paneId, tab.focusedPaneId, dir === "down" ? "bottom" : "right"),
     focusedPaneId: paneId,
   });
 }
@@ -302,12 +419,7 @@ export function applyClosePane(
   if (!tab.panes.has(paneId)) return null;
   const next = closeLeaf(tab, paneId);
   if (next === null) {
-    return updateTab(snapshot, {
-      ...welcomeTab(generateId),
-      id: tab.id,
-      titleMode: tab.titleMode,
-      titleOverride: tab.titleOverride,
-    });
+    return updateTab(snapshot, clearedTab(tab, generateId));
   }
   const panes = new Map(tab.panes);
   panes.delete(paneId);
@@ -393,14 +505,39 @@ export function applyViewDrop(
       return {
         snapshot: updateTab(snapshot, {
           ...sourceTab,
-          layout: movePane(sourceTab.layout, source.paneId, target.paneId, target.zone),
+          ...(sourceTab.layoutMode === "scrolling"
+            ? placedLayout(sourceTab, source.paneId, target.paneId, target.zone)
+            : { layout: movePane(sourceTab.layout, source.paneId, target.paneId, target.zone) }),
           focusedPaneId: source.paneId,
         }),
         tabId: sourceTab.id,
         paneId: source.paneId,
       };
     }
-    return null;
+    const view = sourceTab.panes.get(source.paneId)!;
+    if (findPaneByTarget(targetTab, view.target) !== null) return null;
+    const sourceAfter = removeViewFromTab(sourceTab, source.paneId, generateId);
+    if (!sourceAfter) return null;
+    const panes = new Map(targetTab.panes);
+    if (target.zone === "replace") panes.delete(target.paneId);
+    panes.set(source.paneId, view);
+    const targetAfter = reconcileTab({
+      ...targetTab,
+      ...placedLayout(targetTab, source.paneId, target.paneId, target.zone),
+      panes,
+      focusedPaneId: source.paneId,
+    });
+    return {
+      snapshot: {
+        ...snapshot,
+        activeTabId: targetTab.id,
+        tabs: snapshot.tabs.map((tab) =>
+          tab.id === sourceTab.id ? sourceAfter : tab.id === targetTab.id ? targetAfter : tab,
+        ),
+      },
+      tabId: targetTab.id,
+      paneId: source.paneId,
+    };
   }
 
   if (source.kind === "pane" && target.kind === "existingTab") {
@@ -422,7 +559,7 @@ export function applyViewDrop(
     if (sourceAfter === null) return null;
     const tabs = snapshot.tabs.map((tab) => {
       if (tab.id === sourceTab.id) return sourceAfter;
-      if (tab.id === targetTab.id) return inserted.tab;
+      if (tab.id === targetTab.id) return reconcileTab(inserted.tab);
       return tab;
     });
     return {
@@ -512,7 +649,7 @@ export function applyViewDrop(
     snapshot: updateTab(snapshot, {
       ...tab,
       panes,
-      layout: placePane(tab.layout, paneId, target.paneId, target.zone),
+      ...placedLayout(tab, paneId, target.paneId, target.zone),
       focusedPaneId: paneId,
     }),
     tabId: tab.id,
@@ -662,22 +799,17 @@ function applyRemoveMatchingViews(
       }
     }
     if (currentTab === null) {
-      return {
-        ...welcomeTab(generateId),
-        id: tab.id,
-        titleMode: tab.titleMode,
-        titleOverride: tab.titleOverride,
-      };
+      return clearedTab(tab, generateId);
     }
     const validFocus = leafIds(currentTab.layout).includes(currentTab.focusedPaneId)
       ? currentTab.focusedPaneId
       : firstLeafId(currentTab.layout);
-    return {
+    return reconcileTab({
       ...tab,
       layout: currentTab.layout,
       focusedPaneId: validFocus,
       panes,
-    };
+    });
   });
 
   return changed ? { ...snapshot, tabs } : snapshot;

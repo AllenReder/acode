@@ -1,3 +1,12 @@
+import {
+  columnsTree,
+  reconcileColumns,
+  LAYOUT_VERSION,
+  MIN_COLUMN_WIDTH,
+  MAX_COLUMN_WIDTH,
+  type Column,
+  type LayoutMemory,
+} from "./scrollingLayout";
 import { leafIds, type LayoutNode } from "./layout";
 import { targetKey, type ViewTarget } from "./viewRegistry";
 import type { ViewInstance, WorkbenchSnapshot, WorkbenchTab } from "./workbenchState";
@@ -31,6 +40,35 @@ function isLayoutNode(value: unknown): value is LayoutNode {
     return false;
   }
   return value.children.every(isLayoutNode);
+}
+
+function isColumns(value: unknown): value is Column[] {
+  if (!Array.isArray(value) || !value.length) return false;
+  const ids = new Set<string>();
+  const panes = new Set<string>();
+  return value.every((c) => {
+    if (
+      !isRecord(c) ||
+      typeof c.id !== "string" ||
+      ids.has(c.id) ||
+      typeof c.width !== "number" ||
+      !Number.isFinite(c.width) ||
+      c.width < MIN_COLUMN_WIDTH ||
+      c.width > MAX_COLUMN_WIDTH ||
+      !Array.isArray(c.paneIds) ||
+      !c.paneIds.length ||
+      !Array.isArray(c.shares) ||
+      c.shares.length !== c.paneIds.length ||
+      !c.shares.every((n) => typeof n === "number" && Number.isFinite(n) && n > 0)
+    )
+      return false;
+    ids.add(c.id);
+    return c.paneIds.every((id) => {
+      if (typeof id !== "string" || !id || panes.has(id)) return false;
+      panes.add(id);
+      return true;
+    });
+  });
 }
 
 function isViewTarget(value: unknown): value is ViewTarget {
@@ -104,12 +142,40 @@ function decodeWorkbenchTab(value: unknown): WorkbenchTab | null {
     panes.set(entry[0], entry[1]);
   }
   const ids = leafIds(value.layout);
+  if (new Set(ids).size !== ids.length) return null;
   if (ids.length !== panes.size || ids.some((id) => !panes.has(id))) return null;
   if (!panes.has(value.focusedPaneId)) return null;
   if (value.titleMode === "manual" && (value.titleOverride ?? "").trim().length === 0) return null;
+  if (
+    value.layoutMode !== undefined &&
+    value.layoutMode !== "bsp" &&
+    value.layoutMode !== "scrolling"
+  )
+    return null;
+  const columns = isColumns(value.columns) ? reconcileColumns(value.columns, ids) : undefined;
+  const rawMemory =
+    isRecord(value.layoutMemory) && value.layoutMemory.version === LAYOUT_VERSION
+      ? value.layoutMemory
+      : null;
+  const layoutMemory: LayoutMemory | undefined = rawMemory
+    ? {
+        version: LAYOUT_VERSION,
+        ...(isLayoutNode(rawMemory.bsp) &&
+        new Set(leafIds(rawMemory.bsp)).size === leafIds(rawMemory.bsp).length
+          ? { bsp: rawMemory.bsp }
+          : {}),
+        ...(isColumns(rawMemory.columns) ? { columns: rawMemory.columns } : {}),
+      }
+    : undefined;
+  // Keep valid work references even when optional layout metadata is damaged.
+  const recoveredColumns =
+    value.layoutMode === "scrolling" ? (columns ?? reconcileColumns([], ids)) : columns;
   return {
     id: value.id,
-    layout: value.layout,
+    ...(value.layoutMode ? { layoutMode: value.layoutMode } : {}),
+    ...(recoveredColumns ? { columns: recoveredColumns } : {}),
+    ...(layoutMemory ? { layoutMemory } : {}),
+    layout: value.layoutMode === "scrolling" ? columnsTree(recoveredColumns!) : value.layout,
     focusedPaneId: value.focusedPaneId,
     titleMode: value.titleMode,
     titleOverride: value.titleOverride,
@@ -153,6 +219,9 @@ export function serializeWorkbenchSnapshot(snapshot: WorkbenchSnapshot): string 
     tabs: snapshot.tabs.map((tab) => ({
       id: tab.id,
       layout: tab.layout,
+      layoutMode: tab.layoutMode,
+      columns: tab.columns,
+      layoutMemory: tab.layoutMemory,
       focusedPaneId: tab.focusedPaneId,
       titleMode: tab.titleMode,
       titleOverride: tab.titleOverride,

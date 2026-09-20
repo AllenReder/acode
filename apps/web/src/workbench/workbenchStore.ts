@@ -1,6 +1,10 @@
+import { type LayoutMode } from "./scrollingLayout";
 import { create } from "zustand";
 
 import {
+  applySetLayoutMode,
+  applyColumnChange,
+  applyMoveInColumn,
   applyCreateTab,
   applyDuplicateToNewTab,
   applyActivateTab,
@@ -31,6 +35,12 @@ import { readWorkbenchSnapshot, writeWorkbenchSnapshot } from "./workbenchPersis
 /** Public presentation commands; none owns Session runtime lifecycle. */
 export interface WorkbenchStore extends WorkbenchSnapshot {
   readonly focusRequestId: number;
+  setLayoutMode: (mode: LayoutMode) => void;
+  changeColumn: (
+    id: string,
+    change: { width?: number; direction?: -1 | 1; shares?: readonly number[] },
+  ) => void;
+  moveInColumn: (paneId: string, direction: -1 | 1) => void;
   createTab: () => void;
   activateTab: (tabId: string) => void;
   closeTab: (tabId: string) => void;
@@ -71,9 +81,17 @@ export function createWorkbenchStore(options: WorkbenchStoreOptions = {}) {
     options.initialSnapshot ?? readWorkbenchSnapshot() ?? emptyWorkbenchSnapshot(generateId),
     generateId,
   );
+  const previews = new WeakMap<ViewDropResult, WorkbenchSnapshot>();
   const store = create<WorkbenchStore>((set, get) => ({
     ...initialSnapshot,
     focusRequestId: 0,
+    setLayoutMode: (mode) =>
+      set((snapshot) => ({
+        ...applySetLayoutMode(snapshot, mode),
+        focusRequestId: snapshot.focusRequestId + 1,
+      })),
+    changeColumn: (id, change) => set((snapshot) => applyColumnChange(snapshot, id, change)),
+    moveInColumn: (id, direction) => set((snapshot) => applyMoveInColumn(snapshot, id, direction)),
     createTab: () => set((snapshot) => applyCreateTab(snapshot, generateId)),
     activateTab: (tabId) => set((snapshot) => applyActivateTab(snapshot, tabId)),
     closeTab: (tabId) => set((snapshot) => applyCloseTab(snapshot, tabId)),
@@ -84,12 +102,20 @@ export function createWorkbenchStore(options: WorkbenchStoreOptions = {}) {
       set((snapshot) => applyRemoveSessionViews(snapshot, target, generateId)),
     replaceTarget: (paneId, target) =>
       set((snapshot) => applyReplacePaneTarget(snapshot, paneId, target)),
-    previewDrop: (source, target) => applyViewDrop(get(), source, target, generateId),
+    previewDrop: (source, target) => {
+      const base = get();
+      const result = applyViewDrop(base, source, target, generateId);
+      if (result) previews.set(result, base);
+      return result;
+    },
     commitDrop: (result) =>
-      set((snapshot) => ({
-        ...result.snapshot,
-        focusRequestId: snapshot.focusRequestId + 1,
-      })),
+      set((snapshot) => {
+        const base = previews.get(result);
+        previews.delete(result);
+        if (!base || base.tabs !== snapshot.tabs || base.activeTabId !== snapshot.activeTabId)
+          return snapshot;
+        return { ...result.snapshot, focusRequestId: snapshot.focusRequestId + 1 };
+      }),
     duplicateToNewTab: (source) =>
       set((snapshot) => {
         const sourceIndex = snapshot.tabs.findIndex((tab) => tab.id === source.tabId);

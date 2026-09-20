@@ -13,6 +13,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { MIN_PANE_HEIGHT } from "./scrollingLayout";
 import { layoutLeaves, paneDropZoneFromPoint } from "./layout";
 import { type ViewDragSource, type ViewDropTarget, type ViewDropResult } from "./workbenchState";
 import { useWorkbenchStore } from "./workbenchStore";
@@ -275,8 +276,9 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         activeRef.current = false;
         suppressClickRef.current = true;
         const liveTarget = cancelled ? null : resolveWorkbenchDropTargetAtPoint(lastX, lastY);
-        const target = !cancelled && sameTarget(liveTarget, lastTarget) ? liveTarget : null;
-        const result = target === null ? null : lastResult;
+        const target = liveTarget;
+        const result =
+          target === null ? null : useWorkbenchStore.getState().previewDrop(source, target);
         if (!cancelled && target !== null && result !== null) {
           useWorkbenchStore.getState().commitDrop(result);
           setState(null);
@@ -438,21 +440,50 @@ export function WorkbenchDropOverlay() {
     previewTabId === null
       ? null
       : (preview?.snapshot.tabs.find((tab) => tab.id === previewTabId) ?? null);
-  const previewLeaves = previewTab === null ? [] : layoutLeaves(previewTab.layout);
+  const previewLeaves =
+    previewTab === null || previewTab.layoutMode === "scrolling"
+      ? []
+      : layoutLeaves(previewTab.layout);
   const destinationLeaf =
     preview === null ? null : (previewLeaves.find((leaf) => leaf.id === preview.paneId) ?? null);
 
+  let scrollingDestination: WorkbenchRect | null = null;
+  if (previewTab?.layoutMode === "scrolling" && preview && surfaceRect) {
+    const viewport = document.querySelector<HTMLElement>(".workbench-viewport");
+    let left = surfaceRect.left - (viewport?.scrollLeft ?? 0);
+    for (const column of previewTab.columns ?? []) {
+      const index = column.paneIds.indexOf(preview.paneId);
+      if (index >= 0) {
+        const height = Math.max(
+          surfaceRect.height,
+          ...(previewTab.columns ?? []).flatMap((c) =>
+            c.shares.map((share) => MIN_PANE_HEIGHT / share),
+          ),
+        );
+        const before = column.shares.slice(0, index).reduce((a, b) => a + b, 0);
+        scrollingDestination = {
+          left: left + 5,
+          top: surfaceRect.top + before * height - (viewport?.scrollTop ?? 0) + 5,
+          width: column.width - 10,
+          height: column.shares[index]! * height - 10,
+        };
+        break;
+      }
+      left += column.width + 8;
+    }
+  }
   const destinationRect =
-    destinationLeaf !== null && surfaceRect !== null
+    scrollingDestination ??
+    (destinationLeaf !== null && surfaceRect !== null
       ? {
-          left: surfaceRect.left + destinationLeaf.rect.x * surfaceRect.width,
-          top: surfaceRect.top + destinationLeaf.rect.y * surfaceRect.height,
-          width: destinationLeaf.rect.w * surfaceRect.width,
-          height: destinationLeaf.rect.h * surfaceRect.height,
+          left: surfaceRect.left + destinationLeaf.rect.x * surfaceRect.width + 5,
+          top: surfaceRect.top + destinationLeaf.rect.y * surfaceRect.height + 5,
+          width: destinationLeaf.rect.w * surfaceRect.width - 10,
+          height: destinationLeaf.rect.h * surfaceRect.height - 10,
         }
       : state.target === null
         ? null
-        : targetFallbackRect(state.target);
+        : targetFallbackRect(state.target));
 
   const ghostRect =
     state.phase === "canceling"
@@ -496,10 +527,10 @@ export function WorkbenchDropOverlay() {
                   : "border-border/80 bg-background/55")
               }
               style={{
-                left: `${leaf.rect.x * 100}%`,
-                top: `${leaf.rect.y * 100}%`,
-                width: `${leaf.rect.w * 100}%`,
-                height: `${leaf.rect.h * 100}%`,
+                left: `calc(${leaf.rect.x * 100}% + 5px)`,
+                top: `calc(${leaf.rect.y * 100}% + 5px)`,
+                width: `calc(${leaf.rect.w * 100}% - 10px)`,
+                height: `calc(${leaf.rect.h * 100}% - 10px)`,
               }}
             />
           );
