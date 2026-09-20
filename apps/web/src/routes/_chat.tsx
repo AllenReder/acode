@@ -4,7 +4,9 @@ import { useEffect, useMemo } from "react";
 
 import { isCommandPaletteOpen } from "../commandPaletteBus";
 import { ThreadRouteView } from "../components/ThreadRouteView";
+import { SidebarInset } from "../components/ui/sidebar";
 import { Workbench } from "../workbench/Workbench";
+import { deepLinkInputFromParams } from "../workbench/deepLinks";
 import { resolveThreadRouteTarget } from "../threadRoutes";
 import { useClientSettings, useLegacySidebarEnabled } from "../hooks/useSettings";
 import { openCommandPalette } from "../commandPaletteBus";
@@ -178,8 +180,13 @@ function ChatRouteGlobalShortcuts() {
 }
 
 function ChatRouteLayout() {
-  // Both thread routes render here, not in their own leaf components, so the
-  // draft-to-thread promotion keeps one ChatView mounted across the swap.
+  // Canonical Session routes, the legacy Thread compatibility route, and
+  // drafts all render through this layout. The Workbench owns deep-link
+  // handling; drafts keep their temporary standalone presentation.
+  const deepLink = useParams({
+    strict: false,
+    select: (params) => deepLinkInputFromParams(params),
+  });
   const threadTarget = useParams({
     strict: false,
     select: (params) => resolveThreadRouteTarget(params),
@@ -187,14 +194,16 @@ function ChatRouteLayout() {
   return (
     <>
       <ChatRouteGlobalShortcuts />
-      {threadTarget === null ? (
+      {deepLink === null && threadTarget === null ? (
         <Outlet />
-      ) : threadTarget.kind === "server" ? (
-        // The workbench replaces the temporary T3 outer navigation. Server
-        // thread URLs now route through Workbench (which dispatches the
-        // Agent View) — drafts keep their legacy ThreadRouteView to preserve
-        // the existing draft UX until they promote to a server thread.
-        <Workbench />
+      ) : deepLink?.kind === "legacyThread" ||
+        deepLink?.kind === "agentSession" ||
+        deepLink?.kind === "workspaceTerminal" ? (
+        <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground md:h-dvh">
+          <Workbench />
+        </SidebarInset>
+      ) : threadTarget === null ? (
+        <Outlet />
       ) : (
         <ThreadRouteView target={threadTarget} />
       )}

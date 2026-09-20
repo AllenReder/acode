@@ -50,7 +50,7 @@ export function AgentView({ target, focused, focusRequestId = 0, availableSize }
           <span className="opacity-70">Read-only</span>
         </div>
       )}
-      <div className="min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col">
         <ChatView
           environmentId={target.environmentId}
           threadId={session.threadId}

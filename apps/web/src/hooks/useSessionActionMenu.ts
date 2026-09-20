@@ -3,6 +3,7 @@ import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { readLocalApi } from "../localApi";
 import { getActiveTab, findPaneBySessionTarget } from "../workbench/workbenchState";
 import { useWorkbenchStore } from "../workbench/workbenchStore";
+import { sessionRouteForTarget } from "../workbench/deepLinks";
 import {
   buildSessionActionMenuItems,
   type SessionActionMenuId,
@@ -15,8 +16,15 @@ export function useSessionActionMenu(input: {
   readonly isClosed?: boolean | undefined;
   readonly sessionTitle?: string | undefined;
   readonly onStartRename?: (() => void) | undefined;
+  readonly navigateTo?:
+    | ((input: {
+        readonly to: string;
+        readonly params: Record<string, string>;
+        readonly replace: boolean;
+      }) => void)
+    | undefined;
 }) {
-  const { target, isClosed = false, sessionTitle, onStartRename } = input;
+  const { target, isClosed = false, sessionTitle, onStartRename, navigateTo } = input;
   const store = useWorkbenchStore();
   const commands = useSessionCommands(target);
 
@@ -50,9 +58,11 @@ export function useSessionActionMenu(input: {
         switch (action) {
           case "open":
             commands.openSession();
+            navigateTo?.({ ...sessionRouteForTarget(target), replace: true });
             return;
           case "focus":
             commands.focusSession();
+            navigateTo?.({ ...sessionRouteForTarget(target), replace: true });
             return;
           case "split:right":
             commands.splitSession("right");
@@ -75,7 +85,7 @@ export function useSessionActionMenu(input: {
         }
       })();
     },
-    [commands, isClosed, onStartRename, sessionTitle, store, target],
+    [commands, isClosed, navigateTo, onStartRename, sessionTitle, store, target],
   );
 
   return { openMenu };

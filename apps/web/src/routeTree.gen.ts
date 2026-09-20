@@ -32,6 +32,8 @@ import { Route as ProjectsProjectKeyRouteImport } from './routes/projects.$proje
 import { Route as ChatPullRequestsRouteImport } from './routes/_chat.pull-requests'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
+import { Route as ChatEnvironmentIdWorkspacesWorkspaceIdTerminalSessionsTerminalSessionIdRouteImport } from './routes/_chat.$environmentId.workspaces.$workspaceId.terminal-sessions.$terminalSessionId'
+import { Route as ChatEnvironmentIdWorkspacesWorkspaceIdAgentSessionsAgentSessionIdRouteImport } from './routes/_chat.$environmentId.workspaces.$workspaceId.agent-sessions.$agentSessionId'
 
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
@@ -149,6 +151,22 @@ const ChatEnvironmentIdThreadIdRoute =
     path: '/$environmentId/$threadId',
     getParentRoute: () => ChatRoute,
   } as any)
+const ChatEnvironmentIdWorkspacesWorkspaceIdTerminalSessionsTerminalSessionIdRoute =
+  ChatEnvironmentIdWorkspacesWorkspaceIdTerminalSessionsTerminalSessionIdRouteImport.update(
+    {
+      id: '/$environmentId/workspaces/$workspaceId/terminal-sessions/$terminalSessionId',
+      path: '/$environmentId/workspaces/$workspaceId/terminal-sessions/$terminalSessionId',
+      getParentRoute: () => ChatRoute,
+    } as any,
+  )
+const ChatEnvironmentIdWorkspacesWorkspaceIdAgentSessionsAgentSessionIdRoute =
+  ChatEnvironmentIdWorkspacesWorkspaceIdAgentSessionsAgentSessionIdRouteImport.update(
+    {
+      id: '/$environmentId/workspaces/$workspaceId/agent-sessions/$agentSessionId',
+      path: '/$environmentId/workspaces/$workspaceId/agent-sessions/$agentSessionId',
+      getParentRoute: () => ChatRoute,
+    } as any,
+  )
 
 export interface FileRoutesByFullPath {
   '/': typeof ChatIndexRoute
@@ -173,6 +191,8 @@ export interface FileRoutesByFullPath {
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
+  '/$environmentId/workspaces/$workspaceId/agent-sessions/$agentSessionId': typeof ChatEnvironmentIdWorkspacesWorkspaceIdAgentSessionsAgentSessionIdRoute
+  '/$environmentId/workspaces/$workspaceId/terminal-sessions/$terminalSessionId': typeof ChatEnvironmentIdWorkspacesWorkspaceIdTerminalSessionsTerminalSessionIdRoute
 }
 export interface FileRoutesByTo {
   '/connect': typeof ConnectRoute
@@ -197,6 +217,8 @@ export interface FileRoutesByTo {
   '/': typeof ChatIndexRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
+  '/$environmentId/workspaces/$workspaceId/agent-sessions/$agentSessionId': typeof ChatEnvironmentIdWorkspacesWorkspaceIdAgentSessionsAgentSessionIdRoute
+  '/$environmentId/workspaces/$workspaceId/terminal-sessions/$terminalSessionId': typeof ChatEnvironmentIdWorkspacesWorkspaceIdTerminalSessionsTerminalSessionIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -223,6 +245,8 @@ export interface FileRoutesById {
   '/_chat/': typeof ChatIndexRoute
   '/_chat/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/_chat/draft/$draftId': typeof ChatDraftDraftIdRoute
+  '/_chat/$environmentId/workspaces/$workspaceId/agent-sessions/$agentSessionId': typeof ChatEnvironmentIdWorkspacesWorkspaceIdAgentSessionsAgentSessionIdRoute
+  '/_chat/$environmentId/workspaces/$workspaceId/terminal-sessions/$terminalSessionId': typeof ChatEnvironmentIdWorkspacesWorkspaceIdTerminalSessionsTerminalSessionIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -249,6 +273,8 @@ export interface FileRouteTypes {
     | '/settings/source-control'
     | '/$environmentId/$threadId'
     | '/draft/$draftId'
+    | '/$environmentId/workspaces/$workspaceId/agent-sessions/$agentSessionId'
+    | '/$environmentId/workspaces/$workspaceId/terminal-sessions/$terminalSessionId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/connect'
@@ -273,6 +299,8 @@ export interface FileRouteTypes {
     | '/'
     | '/$environmentId/$threadId'
     | '/draft/$draftId'
+    | '/$environmentId/workspaces/$workspaceId/agent-sessions/$agentSessionId'
+    | '/$environmentId/workspaces/$workspaceId/terminal-sessions/$terminalSessionId'
   id:
     | '__root__'
     | '/_chat'
@@ -298,6 +326,8 @@ export interface FileRouteTypes {
     | '/_chat/'
     | '/_chat/$environmentId/$threadId'
     | '/_chat/draft/$draftId'
+    | '/_chat/$environmentId/workspaces/$workspaceId/agent-sessions/$agentSessionId'
+    | '/_chat/$environmentId/workspaces/$workspaceId/terminal-sessions/$terminalSessionId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -473,6 +503,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatEnvironmentIdThreadIdRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/_chat/$environmentId/workspaces/$workspaceId/terminal-sessions/$terminalSessionId': {
+      id: '/_chat/$environmentId/workspaces/$workspaceId/terminal-sessions/$terminalSessionId'
+      path: '/$environmentId/workspaces/$workspaceId/terminal-sessions/$terminalSessionId'
+      fullPath: '/$environmentId/workspaces/$workspaceId/terminal-sessions/$terminalSessionId'
+      preLoaderRoute: typeof ChatEnvironmentIdWorkspacesWorkspaceIdTerminalSessionsTerminalSessionIdRouteImport
+      parentRoute: typeof ChatRoute
+    }
+    '/_chat/$environmentId/workspaces/$workspaceId/agent-sessions/$agentSessionId': {
+      id: '/_chat/$environmentId/workspaces/$workspaceId/agent-sessions/$agentSessionId'
+      path: '/$environmentId/workspaces/$workspaceId/agent-sessions/$agentSessionId'
+      fullPath: '/$environmentId/workspaces/$workspaceId/agent-sessions/$agentSessionId'
+      preLoaderRoute: typeof ChatEnvironmentIdWorkspacesWorkspaceIdAgentSessionsAgentSessionIdRouteImport
+      parentRoute: typeof ChatRoute
+    }
   }
 }
 
@@ -481,6 +525,8 @@ interface ChatRouteChildren {
   ChatIndexRoute: typeof ChatIndexRoute
   ChatEnvironmentIdThreadIdRoute: typeof ChatEnvironmentIdThreadIdRoute
   ChatDraftDraftIdRoute: typeof ChatDraftDraftIdRoute
+  ChatEnvironmentIdWorkspacesWorkspaceIdAgentSessionsAgentSessionIdRoute: typeof ChatEnvironmentIdWorkspacesWorkspaceIdAgentSessionsAgentSessionIdRoute
+  ChatEnvironmentIdWorkspacesWorkspaceIdTerminalSessionsTerminalSessionIdRoute: typeof ChatEnvironmentIdWorkspacesWorkspaceIdTerminalSessionsTerminalSessionIdRoute
 }
 
 const ChatRouteChildren: ChatRouteChildren = {
@@ -488,6 +534,10 @@ const ChatRouteChildren: ChatRouteChildren = {
   ChatIndexRoute: ChatIndexRoute,
   ChatEnvironmentIdThreadIdRoute: ChatEnvironmentIdThreadIdRoute,
   ChatDraftDraftIdRoute: ChatDraftDraftIdRoute,
+  ChatEnvironmentIdWorkspacesWorkspaceIdAgentSessionsAgentSessionIdRoute:
+    ChatEnvironmentIdWorkspacesWorkspaceIdAgentSessionsAgentSessionIdRoute,
+  ChatEnvironmentIdWorkspacesWorkspaceIdTerminalSessionsTerminalSessionIdRoute:
+    ChatEnvironmentIdWorkspacesWorkspaceIdTerminalSessionsTerminalSessionIdRoute,
 }
 
 const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)
