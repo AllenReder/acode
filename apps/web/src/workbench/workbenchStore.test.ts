@@ -14,6 +14,7 @@ import { createWorkbenchStore } from "./workbenchStore";
 const ENV_A: EnvironmentId = "env-a" as EnvironmentId;
 const WS_A: WorkspaceId = "ws-a" as WorkspaceId;
 const AGENT_A: AgentSessionId = "agent-a" as AgentSessionId;
+const WORKSPACE_A: WorkspaceId = "workspace-a" as WorkspaceId;
 
 function agent(): Extract<ViewTarget, { kind: "agentSession" }> {
   return {
@@ -109,4 +110,20 @@ it("keeps drag preview out of persisted Workbench state until the exact result i
 
   expect(store.getState().tabs).toEqual(preview!.snapshot.tabs);
   expect(writes).toHaveLength(1);
+});
+
+it("drops legacy Workspace Views when restoring a Workbench layout", () => {
+  const ids = makeIds();
+  const legacyWorkspace = {
+    kind: "workspace",
+    environmentId: ENV_A,
+    workspaceId: WORKSPACE_A,
+  } as const;
+  const restored = applyOpenTarget(emptyWorkbenchSnapshot(ids), legacyWorkspace, ids);
+
+  const store = createWorkbenchStore({ initialSnapshot: restored, generateId: ids });
+  const tab = getActiveTab(store.getState());
+
+  expect(tab.panes.size).toBe(1);
+  expect(tab.panes.get(tab.focusedPaneId)?.target).toEqual({ kind: "welcome" });
 });

@@ -12,6 +12,7 @@ import {
   applyOpenDeepLinkTarget,
   applyOpenTarget,
   applyPruneWorkspaceViews,
+  applyRemoveWorkspaceViews,
   applySetFocused,
   applySetSplitRatio,
   applySplitFocused,
@@ -66,8 +67,10 @@ export interface WorkbenchStoreOptions {
 export function createWorkbenchStore(options: WorkbenchStoreOptions = {}) {
   const generateId = options.generateId ?? defaultGenerateId;
   const persist = options.persist ?? ((snapshot) => writeWorkbenchSnapshot(snapshot));
-  const initialSnapshot =
-    options.initialSnapshot ?? readWorkbenchSnapshot() ?? emptyWorkbenchSnapshot(generateId);
+  const initialSnapshot = applyRemoveWorkspaceViews(
+    options.initialSnapshot ?? readWorkbenchSnapshot() ?? emptyWorkbenchSnapshot(generateId),
+    generateId,
+  );
   const store = create<WorkbenchStore>((set, get) => ({
     ...initialSnapshot,
     focusRequestId: 0,

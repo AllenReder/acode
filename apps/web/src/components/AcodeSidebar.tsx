@@ -51,7 +51,6 @@ type ProjectMenuId =
   | "remove-project";
 
 type WorkspaceMenuId =
-  | "open"
   | "new-agent-session"
   | "new-terminal-session"
   | "rename-workspace"
@@ -94,7 +93,6 @@ export function workspaceMenuItems(input: {
   readonly canDeleteDirectory: boolean;
 }): ReadonlyArray<ContextMenuItem<WorkspaceMenuId>> {
   return [
-    { id: "open", label: "Open", icon: "maximize-2" },
     { id: "new-agent-session", label: "New Agent Session", icon: "message-square-plus" },
     { id: "new-terminal-session", label: "New Terminal Session", icon: "terminal" },
     { id: "rename-workspace", label: "Rename", icon: "pencil", separatorBefore: true },
@@ -167,16 +165,14 @@ export function AcodeSidebar() {
 
   const openAddProject = useCallback(() => openCommandPalette({ open: "add-project" }), []);
 
-  const openWorkspace = useCallback(
-    (project: EnvironmentAcodeProject, workspace: AcodeWorkspaceShell) => {
-      useWorkbenchStore.getState().openTarget({
-        kind: "workspace",
-        environmentId: project.environmentId,
-        workspaceId: workspace.id,
-      });
-    },
-    [],
-  );
+  const toggleWorkspaceExpanded = useCallback((workspaceKey: string) => {
+    setExpandedWorkspaces((current) => {
+      const next = new Set(current);
+      if (next.has(workspaceKey)) next.delete(workspaceKey);
+      else next.add(workspaceKey);
+      return next;
+    });
+  }, []);
 
   const openDraft = useCallback(
     (
@@ -354,7 +350,6 @@ export function AcodeSidebar() {
           position,
         );
         if (clicked === null) return;
-        if (clicked === "open") openWorkspace(project, workspace);
         if (clicked === "new-agent-session") newAgentSession(project, workspace);
         if (clicked === "new-terminal-session") newTerminalSession(project, workspace);
         if (clicked === "rename-workspace") {
@@ -395,7 +390,7 @@ export function AcodeSidebar() {
         }
       })();
     },
-    [newAgentSession, newTerminalSession, openWorkspace, removeWorkspace, renameWorkspace],
+    [newAgentSession, newTerminalSession, removeWorkspace, renameWorkspace],
   );
 
   const renameAgent = useCallback(
@@ -498,14 +493,7 @@ export function AcodeSidebar() {
                                 workspaceExpanded ? "Collapse Workspace" : "Expand Workspace"
                               }
                               className="flex size-5 shrink-0 items-center justify-center rounded hover:bg-sidebar-row-hover"
-                              onClick={() =>
-                                setExpandedWorkspaces((current) => {
-                                  const next = new Set(current);
-                                  if (next.has(workspaceKey)) next.delete(workspaceKey);
-                                  else next.add(workspaceKey);
-                                  return next;
-                                })
-                              }
+                              onClick={() => toggleWorkspaceExpanded(workspaceKey)}
                             >
                               {workspaceExpanded ? (
                                 <ChevronDownIcon className="size-3" />
@@ -521,7 +509,7 @@ export function AcodeSidebar() {
                               )}
                               role="treeitem"
                               className="flex min-h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
-                              onClick={() => openWorkspace(project, workspace)}
+                              onClick={() => toggleWorkspaceExpanded(workspaceKey)}
                               onContextMenu={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();

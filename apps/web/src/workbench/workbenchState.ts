@@ -701,6 +701,14 @@ export function applyRemoveSessionViews(
   );
 }
 
+/** Remove legacy Workspace overview Views from restored layouts. */
+export function applyRemoveWorkspaceViews(
+  snapshot: WorkbenchSnapshot,
+  generateId: () => string,
+): WorkbenchSnapshot {
+  return applyRemoveMatchingViews(snapshot, (target) => target.kind === "workspace", generateId);
+}
+
 /** Remove the explicit New Agent Session View without deleting its draft payload. */
 export function applyRemoveNewAgentSessionViews(
   snapshot: WorkbenchSnapshot,

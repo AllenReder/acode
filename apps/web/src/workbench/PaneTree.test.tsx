@@ -10,8 +10,8 @@ import {
 } from "./viewRegistry";
 import { resetWorkbenchStore, useWorkbenchStore } from "./workbenchStore";
 import { getActiveTab } from "./workbenchState";
-import { createWorkspaceViewDefinitions, type WelcomeData } from "./workspaceViews";
-import type { EnvironmentId, WorkspaceId, AgentSessionId } from "@t3tools/contracts";
+import { createWelcomeViewDefinition } from "./welcomeViewDefinition";
+import type { EnvironmentId, WorkspaceId } from "@t3tools/contracts";
 
 let renderer: ReactTestRenderer | undefined;
 afterEach(async () => {
@@ -87,68 +87,17 @@ it("passes measured content size and keyboard focus to each View and releases me
   expect(observers[0]!.disconnect).toHaveBeenCalled();
 });
 
-it("opens a Workspace from Welcome and opens only that Workspace's Sessions through granted commands", async () => {
+it("renders Welcome without Workspace navigation or a Workspace View", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  const workspace = {
-    kind: "workspace",
-    environmentId: "remote" as EnvironmentId,
-    workspaceId: "w1" as WorkspaceId,
-  } as const;
-  const session = {
-    kind: "agentSession",
-    environmentId: workspace.environmentId,
-    workspaceId: workspace.workspaceId,
-    agentSessionId: "s1" as AgentSessionId,
-  } as const;
-  let data: WelcomeData = [
-    {
-      target: workspace,
-      title: "Main",
-      projectTitle: "ACode",
-      sessions: [{ title: "Review", target: session }],
-    },
-  ];
-  const listeners = new Set<() => void>();
-  const definitions = createWorkspaceViewDefinitions(
-    {
-      getSnapshot: () => data,
-      subscribe: (listener) => {
-        listeners.add(listener);
-        return () => {
-          listeners.delete(listener);
-        };
-      },
-    },
-    (target) => useWorkbenchStore.getState().openTarget(target),
-  );
-  registerViewDefinition(definitions.welcome);
-  registerViewDefinition(definitions.workspace);
+  const definition = createWelcomeViewDefinition();
+  registerViewDefinition(definition);
   await act(() => {
     renderer = create(<Harness />);
   });
-  const button = (text: string) =>
-    renderer!.root.findAllByType("button").find((node) => node.children.join("") === text)!;
-  await act(() => button("ACode / Main").props.onClick());
-  expect(renderer!.root.findByType("h1").children).toEqual(["Main"]);
-  const commands = definitions.workspace.bind(workspace).capabilities;
-  expect(commands.openSession.execute({ ...session, workspaceId: "other" as WorkspaceId })).toBe(
-    false,
-  );
-  await act(() => {
-    data = [{ ...data[0]!, title: "Renamed" }];
-    listeners.forEach((listener) => listener());
-  });
-  expect(renderer!.root.findByType("h1").children).toEqual(["Renamed"]);
-  await act(() => button("Review").props.onClick());
+  expect(renderer!.root.findByType("h1").children).toEqual(["Welcome to ACode"]);
   expect(
-    [...getActiveTab(useWorkbenchStore.getState()).panes.values()].map((view) => view.target),
-  ).toEqual([workspace, session]);
-  await act(() => {
-    data = [];
-    listeners.forEach((listener) => listener());
-  });
-  expect(commands.openSession.execute(session)).toBe(false);
-  expect(
-    definitions.welcome.bind({ kind: "welcome" }).capabilities.openWorkspace.execute(workspace),
+    renderer!.root
+      .findAllByType("button")
+      .some((node) => node.children.join("").includes("ACode / Main")),
   ).toBe(false);
 });
