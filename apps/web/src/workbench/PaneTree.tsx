@@ -8,15 +8,18 @@ import {
 } from "react";
 import { CopyPlusIcon, GripVerticalIcon } from "lucide-react";
 
+import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
 import { readLocalApi } from "../localApi";
 import { type LayoutNode, type SplitDir } from "./layout";
 import { resolveViewDefinition, type ViewTarget } from "./viewRegistry";
 import { useWorkbenchStore } from "./workbenchStore";
 import { getActiveTab, type WorkbenchSnapshot } from "./workbenchState";
 import { useWorkbenchDragSource } from "./workbenchDrag";
+import { resolveTargetBreadcrumbs } from "./workbenchTitles";
 
 interface PaneTreeProps {
   readonly snapshot: WorkbenchSnapshot;
+  readonly projects?: ReadonlyArray<EnvironmentAcodeProject>;
 }
 
 /**
@@ -29,11 +32,12 @@ interface PaneTreeProps {
  * C10 ships BSP + click-focus + drag-resize. Drag-to-move (cross-pane drop)
  * is C12 and explicitly deferred by the ticket.
  */
-export function PaneTree({ snapshot }: PaneTreeProps) {
+export function PaneTree({ snapshot, projects = [] }: PaneTreeProps) {
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
       <PaneNode
         snapshot={snapshot}
+        projects={projects}
         node={getActiveTab(snapshot).layout}
         focusedPaneId={getActiveTab(snapshot).focusedPaneId}
       />
@@ -43,13 +47,21 @@ export function PaneTree({ snapshot }: PaneTreeProps) {
 
 interface PaneNodeProps {
   readonly snapshot: WorkbenchSnapshot;
+  readonly projects: ReadonlyArray<EnvironmentAcodeProject>;
   readonly node: LayoutNode;
   readonly focusedPaneId: string;
 }
 
-function PaneNode({ snapshot, node, focusedPaneId }: PaneNodeProps) {
+function PaneNode({ snapshot, projects, node, focusedPaneId }: PaneNodeProps) {
   if (node.type === "leaf") {
-    return <Pane snapshot={snapshot} paneId={node.id} focused={node.id === focusedPaneId} />;
+    return (
+      <Pane
+        snapshot={snapshot}
+        projects={projects}
+        paneId={node.id}
+        focused={node.id === focusedPaneId}
+      />
+    );
   }
 
   // Split node: use absolute positioning so each child gets an explicit
@@ -73,7 +85,12 @@ function PaneNode({ snapshot, node, focusedPaneId }: PaneNodeProps) {
         className="absolute flex min-h-0 min-w-0 flex-col overflow-hidden"
         style={childStyle}
       >
-        <PaneNode snapshot={snapshot} node={child} focusedPaneId={focusedPaneId} />
+        <PaneNode
+          snapshot={snapshot}
+          projects={projects}
+          node={child}
+          focusedPaneId={focusedPaneId}
+        />
       </div>,
     );
     if (i > 0) {
@@ -105,11 +122,12 @@ function PaneNode({ snapshot, node, focusedPaneId }: PaneNodeProps) {
 
 interface PaneProps {
   readonly snapshot: WorkbenchSnapshot;
+  readonly projects: ReadonlyArray<EnvironmentAcodeProject>;
   readonly paneId: string;
   readonly focused: boolean;
 }
 
-function Pane({ snapshot, paneId, focused }: PaneProps) {
+function Pane({ snapshot, projects, paneId, focused }: PaneProps) {
   const setFocused = useWorkbenchStore((s) => s.setFocused);
   const focusRequestId = useWorkbenchStore((s) => s.focusRequestId);
   const closeView = useWorkbenchStore((s) => s.closeView);
@@ -117,9 +135,11 @@ function Pane({ snapshot, paneId, focused }: PaneProps) {
   const activeTab = getActiveTab(snapshot);
   const view = activeTab.panes.get(paneId);
   const target = view?.target ?? null;
+  const breadcrumbs =
+    target === null ? ["Unavailable View"] : resolveTargetBreadcrumbs(target, projects);
   const drag = useWorkbenchDragSource(
     { kind: "pane", tabId: activeTab.id, paneId },
-    target === null ? "View" : labelForTarget(target),
+    breadcrumbs.at(-1) ?? "View",
   );
 
   const onClick = useCallback(() => {
@@ -180,6 +200,7 @@ function Pane({ snapshot, paneId, focused }: PaneProps) {
       <PaneHeader
         paneId={paneId}
         target={target}
+        breadcrumbs={breadcrumbs}
         focused={focused}
         onDragStart={drag.onPointerDown}
         onDuplicate={onDuplicate}
@@ -207,6 +228,7 @@ function Pane({ snapshot, paneId, focused }: PaneProps) {
 function PaneHeader({
   paneId,
   target,
+  breadcrumbs,
   focused,
   onDragStart,
   onDuplicate,
@@ -215,6 +237,7 @@ function PaneHeader({
 }: {
   readonly paneId: string;
   readonly target: ViewTarget | null;
+  readonly breadcrumbs: ReadonlyArray<string>;
   readonly focused: boolean;
   readonly onDragStart: (event: ReactPointerEvent<HTMLElement>) => void;
   readonly onDuplicate: () => void;
@@ -250,9 +273,22 @@ function PaneHeader({
         onOpenMenu({ x: rect.left + rect.width / 2, y: rect.bottom });
       }}
     >
-      <span className="truncate">
-        {target === null ? "Unavailable View" : labelForTarget(target)}
-      </span>
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+        {breadcrumbs.map((breadcrumb, index) => (
+          <span key={`${breadcrumb}-${index}`} className="flex min-w-0 items-center gap-1.5">
+            {index > 0 ? <span className="shrink-0 text-muted-foreground/50">·</span> : null}
+            <span
+              className={
+                index === breadcrumbs.length - 1
+                  ? "truncate text-foreground"
+                  : "truncate text-muted-foreground"
+              }
+            >
+              {breadcrumb}
+            </span>
+          </span>
+        ))}
+      </div>
       <div className="flex items-center gap-0.5">
         <button
           type="button"
@@ -296,25 +332,6 @@ function EmptyPane({ target }: { readonly target: ViewTarget | null }) {
       View unavailable.
     </div>
   );
-}
-
-function labelForTarget(target: ViewTarget): string {
-  const definition = resolveViewDefinition(target);
-  if (definition) return definition.label;
-  switch (target.kind) {
-    case "project":
-      return "Project";
-    case "workspace":
-      return "Workspace";
-    case "welcome":
-      return "Welcome";
-    case "agentSession":
-      return "Agent";
-    case "newAgentSession":
-      return "New Agent";
-    case "workspaceTerminal":
-      return "Terminal";
-  }
 }
 
 interface SashHandleProps {

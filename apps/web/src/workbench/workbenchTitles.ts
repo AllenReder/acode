@@ -11,12 +11,40 @@ function workspaceFor(
   target: WorkspaceScopedTarget,
   projects: ReadonlyArray<EnvironmentAcodeProject>,
 ) {
+  return locationFor(target, projects)?.workspace ?? null;
+}
+
+function locationFor(
+  target: WorkspaceScopedTarget,
+  projects: ReadonlyArray<EnvironmentAcodeProject>,
+) {
   for (const project of projects) {
     if (project.environmentId !== target.environmentId) continue;
     const workspace = project.workspaces.find((candidate) => candidate.id === target.workspaceId);
-    if (workspace !== undefined) return workspace;
+    if (workspace !== undefined) return { project, workspace };
   }
   return null;
+}
+
+/** Resolve the Project, Workspace, and View title breadcrumb for a Pane target. */
+export function resolveTargetBreadcrumbs(
+  target: ViewTarget,
+  projects: ReadonlyArray<EnvironmentAcodeProject>,
+): ReadonlyArray<string> {
+  if (target.kind === "welcome") return ["Welcome"];
+  if (target.kind === "project") {
+    const project = projects.find(
+      (candidate) =>
+        candidate.environmentId === target.environmentId && candidate.id === target.projectId,
+    );
+    return [project?.title ?? "Project"];
+  }
+
+  const location = locationFor(target, projects);
+  const projectTitle = location?.project.title ?? "Project";
+  const workspaceTitle = location?.workspace.title ?? "Workspace";
+  if (target.kind === "workspace") return [projectTitle, workspaceTitle];
+  return [projectTitle, workspaceTitle, resolveTargetTitle(target, projects)];
 }
 
 export function resolveTargetContext(

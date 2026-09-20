@@ -9,7 +9,11 @@ import type {
 
 import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
 import type { ViewTarget } from "./viewRegistry";
-import { resolveTargetContext, resolveTargetTitle } from "./workbenchTitles";
+import {
+  resolveTargetBreadcrumbs,
+  resolveTargetContext,
+  resolveTargetTitle,
+} from "./workbenchTitles";
 
 const environmentId = "env-a" as EnvironmentId;
 const workspaceId = "ws-a" as WorkspaceId;
@@ -101,5 +105,39 @@ describe("resolveTargetTitle", () => {
 
   it("resolves the Workspace context separately from the View title", () => {
     expect(resolveTargetContext(agentTarget, projects)).toBe("Main checkout");
+  });
+
+  it("builds Project, Workspace, and View breadcrumbs for Session Panes", () => {
+    expect(resolveTargetBreadcrumbs(agentTarget, projects)).toEqual([
+      "ACode",
+      "Main checkout",
+      "Implement tabs",
+    ]);
+    expect(
+      resolveTargetBreadcrumbs(
+        {
+          kind: "workspaceTerminal",
+          environmentId,
+          workspaceId,
+          terminalSessionId,
+        } satisfies ViewTarget,
+        projects,
+      ),
+    ).toEqual(["ACode", "Main checkout", "Dev server"]);
+  });
+
+  it("keeps stable breadcrumb fallbacks while a target is offline", () => {
+    expect(
+      resolveTargetBreadcrumbs(
+        {
+          kind: "agentSession",
+          environmentId,
+          workspaceId,
+          agentSessionId: "missing" as AgentSessionId,
+        },
+        projects,
+      ),
+    ).toEqual(["ACode", "Main checkout", "Agent"]);
+    expect(resolveTargetBreadcrumbs({ kind: "welcome" }, projects)).toEqual(["Welcome"]);
   });
 });
