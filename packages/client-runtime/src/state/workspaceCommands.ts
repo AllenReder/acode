@@ -1,6 +1,4 @@
-import type {
-  EnvironmentId,
-} from "@t3tools/contracts";
+import type { EnvironmentId } from "@t3tools/contracts";
 import { WS_METHODS as RpcMethods } from "@t3tools/contracts";
 import { Atom } from "effect/unstable/reactivity";
 
@@ -10,7 +8,10 @@ import { createAtomCommandScheduler, createEnvironmentRpcCommand } from "./runti
 const workspaceCommandScheduler = createAtomCommandScheduler();
 const workspaceCommandConcurrency = {
   mode: "serial" as const,
-  key: ({ environmentId, input }: {
+  key: ({
+    environmentId,
+    input,
+  }: {
     readonly environmentId: EnvironmentId;
     readonly input: { readonly projectId?: string; readonly workspaceId?: string };
   }) => JSON.stringify([environmentId, input.projectId ?? input.workspaceId]),
@@ -35,6 +36,18 @@ export function createEnvironmentWorkspaceCommandAtoms<R, E>(
     remove: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:workspace:remove",
       tag: RpcMethods.acodeWorkspaceRemove,
+      scheduler: workspaceCommandScheduler,
+      concurrency: workspaceCommandConcurrency,
+    }),
+    rename: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:workspace:rename",
+      tag: RpcMethods.acodeWorkspaceRename,
+      scheduler: workspaceCommandScheduler,
+      concurrency: workspaceCommandConcurrency,
+    }),
+    renameProject: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:project:rename",
+      tag: RpcMethods.acodeProjectRename,
       scheduler: workspaceCommandScheduler,
       concurrency: workspaceCommandConcurrency,
     }),

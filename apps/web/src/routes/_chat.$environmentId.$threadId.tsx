@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-// The view lives in the `_chat` layout (see ThreadRouteView) so a draft's
-// promotion onto this route keeps the same ChatView mounted.
+// The pathless chat layout resolves this legacy Thread route through the
+// Workbench compatibility adapter and redirects to the canonical Session URL.
 export const Route = createFileRoute("/_chat/$environmentId/$threadId")({
   component: () => null,
 });

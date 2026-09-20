@@ -1,21 +1,36 @@
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import type { AgentSessionId, EnvironmentId, WorkspaceId } from "@t3tools/contracts";
+import {
+  ThreadId,
+  type AgentSessionId,
+  type EnvironmentId,
+  type ProjectId,
+  type WorkspaceId,
+} from "@t3tools/contracts";
+import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { AgentView } from "./AgentView";
+import { NewAgentSessionView } from "./NewAgentSessionView";
 import { TerminalView } from "./TerminalView";
 import { terminalTargetForRuntime } from "./sessionTarget";
 import { resetWorkbenchStore, useWorkbenchStore } from "./workbenchStore";
 import { getActiveTab } from "./workbenchState";
+import { DraftId, useComposerDraftStore } from "../composerDraftStore";
 
 // The trusted runtime adapters are the agreed integration boundary. Present
 // their inputs as text, without starting a provider, PTY, or GPU in Node.
 vi.mock("../state/entities", () => ({
+  useAcodeProjects: () => [],
   useAcodeAgentSessionShell: (_environment: unknown, _workspace: unknown, session: string) => ({
     threadId: `thread-${session}`,
     status: session === "closed-session" ? "closed" : "open",
   }),
   useAcodeWorkspace: () => ({ workspaceRoot: "/checkout" }),
+  useThread: () => null,
+  useThreadShell: () => null,
+}));
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => vi.fn(),
 }));
 vi.mock("../components/ChatView", () => ({
   default: (props: unknown) => <output>{JSON.stringify(props)}</output>,
@@ -24,13 +39,47 @@ vi.mock("../components/ThreadTerminalDrawer", () => ({
   TerminalViewport: (props: unknown) => <output>{JSON.stringify(props)}</output>,
 }));
 let renderer: ReactTestRenderer;
+const initialComposerState = useComposerDraftStore.getInitialState();
 afterEach(async () => {
   await act(() => renderer?.unmount());
+  useComposerDraftStore.setState(initialComposerState);
   vi.unstubAllGlobals();
 });
 const environmentId = "local" as EnvironmentId;
 const workspaceId = "workspace" as WorkspaceId;
 const availableSize = { width: 640, height: 480 };
+
+it("renders a New Agent Session View from its Workspace draft before Session promotion", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const draftId = DraftId.make("draft-one");
+  const threadId = ThreadId.make("thread-reserved");
+  useComposerDraftStore.getState().setWorkspaceDraftThreadId(
+    workspaceId,
+    scopeProjectRef(environmentId, "project" as ProjectId),
+    draftId,
+    { threadId },
+  );
+
+  await act(() => {
+    renderer = create(
+      <NewAgentSessionView
+        target={{ kind: "newAgentSession", environmentId, workspaceId, draftId }}
+        paneId="draft-pane"
+        focused
+        availableSize={availableSize}
+      />,
+    );
+  });
+
+  expect(JSON.parse(renderer!.root.findByType("output").children[0] as string)).toMatchObject({
+    environmentId,
+    threadId,
+    routeKind: "draft",
+    draftId,
+    focused: true,
+    availableSize,
+  });
+});
 
 it("isolates Agent data by Session target and forwards focus and measured size to the existing presentation", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);

@@ -7,10 +7,13 @@ import {
   type WorkspaceId,
 } from "@t3tools/contracts";
 import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
+import { normalizeProjectPathForComparison } from "@t3tools/shared/path";
+import type { DraftId } from "../composerDraftStore";
 
 import type { ViewTarget } from "./viewRegistry";
 
 export type SessionTarget = Extract<ViewTarget, { kind: "agentSession" | "workspaceTerminal" }>;
+export type NewAgentSessionTarget = Extract<ViewTarget, { kind: "newAgentSession" }>;
 
 export type SessionRoutePath =
   | "/$environmentId/workspaces/$workspaceId/agent-sessions/$agentSessionId"
@@ -19,6 +22,63 @@ export type SessionRoutePath =
 export interface SessionRouteLocation {
   readonly to: SessionRoutePath;
   readonly params: Readonly<Record<string, string>>;
+}
+
+export function draftIdFromParams(params: {
+  readonly draftId?: string | undefined;
+}): DraftId | null {
+  return params.draftId === undefined || params.draftId.length === 0
+    ? null
+    : (params.draftId as DraftId);
+}
+
+export function newAgentSessionTargetForDraft(
+  draftId: DraftId,
+  draft: { readonly environmentId: EnvironmentId; readonly workspaceId: WorkspaceId },
+): NewAgentSessionTarget {
+  return {
+    kind: "newAgentSession",
+    environmentId: draft.environmentId,
+    workspaceId: draft.workspaceId,
+    draftId,
+  };
+}
+
+export function resolveNewAgentSessionTarget(
+  draftId: DraftId,
+  draft: {
+    readonly environmentId: EnvironmentId;
+    readonly workspaceId: WorkspaceId;
+    readonly worktreePath?: string | null | undefined;
+  },
+  projects: ReadonlyArray<EnvironmentAcodeProject>,
+): NewAgentSessionTarget | null {
+  if (draft.worktreePath) {
+    const normalizedCheckout = normalizeProjectPathForComparison(draft.worktreePath);
+    for (const project of projects) {
+      if (project.environmentId !== draft.environmentId) continue;
+      const workspace = project.workspaces.find(
+        (candidate) =>
+          normalizeProjectPathForComparison(candidate.workspaceRoot) === normalizedCheckout,
+      );
+      if (workspace !== undefined) {
+        return newAgentSessionTargetForDraft(draftId, {
+          environmentId: draft.environmentId,
+          workspaceId: workspace.id,
+        });
+      }
+    }
+  }
+
+  const storedWorkspace = projects
+    .find((project) => project.environmentId === draft.environmentId)
+    ?.workspaces.find((workspace) => workspace.id === draft.workspaceId);
+  return storedWorkspace === undefined
+    ? null
+    : newAgentSessionTargetForDraft(draftId, {
+        environmentId: draft.environmentId,
+        workspaceId: draft.workspaceId,
+      });
 }
 
 export type DeepLinkRouteInput =
@@ -85,7 +145,12 @@ export function sessionRouteForTarget(target: SessionTarget): SessionRouteLocati
 export function deepLinkInputFromParams(
   params: Partial<
     Record<
-      "environmentId" | "workspaceId" | "agentSessionId" | "terminalSessionId" | "threadId",
+      | "environmentId"
+      | "workspaceId"
+      | "agentSessionId"
+      | "terminalSessionId"
+      | "threadId"
+      | "draftId",
       string | undefined
     >
   >,

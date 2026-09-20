@@ -111,6 +111,18 @@ export interface ProjectionAcodeProjectRepositoryShape {
   readonly removeForT3Project: (
     t3ProjectId: ProjectId,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
+  /** Change a Workspace display title without changing Project or checkout identity. */
+  readonly updateWorkspaceTitle: (input: {
+    readonly workspaceId: WorkspaceId;
+    readonly title: string;
+    readonly updatedAt: string;
+  }) => Effect.Effect<void, ProjectionRepositoryError>;
+  /** Change an ACode Project display title without changing its Workspaces. */
+  readonly updateProjectTitle: (input: {
+    readonly acodeProjectId: AcodeProjectId;
+    readonly title: string;
+    readonly updatedAt: string;
+  }) => Effect.Effect<void, ProjectionRepositoryError>;
   /** Read the complete active Project → Workspace tree. */
   readonly listTree: () => Effect.Effect<
     ReadonlyArray<AcodeProjectShell>,

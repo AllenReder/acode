@@ -225,6 +225,28 @@ export const AcodeWorkspaceRemoveResult = Schema.Struct({
 });
 export type AcodeWorkspaceRemoveResult = typeof AcodeWorkspaceRemoveResult.Type;
 
+export const AcodeWorkspaceRenameInput = Schema.Struct({
+  workspaceId: WorkspaceId,
+  title: TrimmedNonEmptyString,
+});
+export type AcodeWorkspaceRenameInput = typeof AcodeWorkspaceRenameInput.Type;
+
+export const AcodeWorkspaceRenameResult = Schema.Struct({
+  workspace: AcodeWorkspaceShell,
+});
+export type AcodeWorkspaceRenameResult = typeof AcodeWorkspaceRenameResult.Type;
+
+export const AcodeProjectRenameInput = Schema.Struct({
+  projectId: AcodeProjectId,
+  title: TrimmedNonEmptyString,
+});
+export type AcodeProjectRenameInput = typeof AcodeProjectRenameInput.Type;
+
+export const AcodeProjectRenameResult = Schema.Struct({
+  project: AcodeProjectShell,
+});
+export type AcodeProjectRenameResult = typeof AcodeProjectRenameResult.Type;
+
 export const AcodeWorkspaceErrorReason = Schema.Literals([
   /** The target ACode Project does not exist (or has no checkout to anchor on). */
   "project-not-found",
@@ -250,6 +272,10 @@ export const AcodeWorkspaceErrorReason = Schema.Literals([
   "dirty-worktree",
   /** Registration removal was refused because the Workspace still owns Sessions. */
   "workspace-not-empty",
+  /** The requested Workspace identity does not exist on this server. */
+  "workspace-not-found",
+  /** The requested ACode Project identity does not exist on this server. */
+  "acode-project-not-found",
   /** The underlying Git operation failed; the directory state is unchanged. */
   "git-failed",
   /** The worktree was created on disk but Workspace registration failed. The directory was kept. */

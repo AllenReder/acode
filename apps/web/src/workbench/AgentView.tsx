@@ -55,6 +55,7 @@ export function AgentView({ target, focused, focusRequestId = 0, availableSize }
           environmentId={target.environmentId}
           threadId={session.threadId}
           routeKind="server"
+          workbenchMode
           focused={focused}
           focusRequestId={focusRequestId}
           availableSize={availableSize}

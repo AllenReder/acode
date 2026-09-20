@@ -134,6 +134,8 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.acodeWorkspaceAssociate]: AuthOrchestrationOperateScope,
   [WS_METHODS.acodeWorkspaceCreateWorktree]: AuthOrchestrationOperateScope,
   [WS_METHODS.acodeWorkspaceRemove]: AuthOrchestrationOperateScope,
+  [WS_METHODS.acodeWorkspaceRename]: AuthOrchestrationOperateScope,
+  [WS_METHODS.acodeProjectRename]: AuthOrchestrationOperateScope,
   [WS_METHODS.reviewGetDiffPreview]: AuthReviewWriteScope,
   [WS_METHODS.reviewGetDiffFileContents]: AuthReviewWriteScope,
   [WS_METHODS.terminalOpen]: AuthTerminalOperateScope,

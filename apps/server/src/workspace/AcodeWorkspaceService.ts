@@ -7,6 +7,10 @@ import {
   type AcodeWorkspaceCreateWorktreeResult,
   type AcodeWorkspaceRemoveInput,
   type AcodeWorkspaceRemoveResult,
+  type AcodeWorkspaceRenameInput,
+  type AcodeWorkspaceRenameResult,
+  type AcodeProjectRenameInput,
+  type AcodeProjectRenameResult,
   CommandId,
   ProjectId,
   type AcodeProjectShell,
@@ -53,6 +57,12 @@ export class AcodeWorkspaceService extends Context.Service<
     readonly remove: (
       input: AcodeWorkspaceRemoveInput,
     ) => Effect.Effect<AcodeWorkspaceRemoveResult, AcodeWorkspaceError>;
+    readonly rename: (
+      input: AcodeWorkspaceRenameInput,
+    ) => Effect.Effect<AcodeWorkspaceRenameResult, AcodeWorkspaceError>;
+    readonly renameProject: (
+      input: AcodeProjectRenameInput,
+    ) => Effect.Effect<AcodeProjectRenameResult, AcodeWorkspaceError>;
   }
 >()("t3/workspace/AcodeWorkspaceService") {}
 
@@ -97,7 +107,9 @@ function pathSlug(value: string): string {
   return slug.length === 0 ? "detached" : slug;
 }
 
-function allWorkspaces(projects: ReadonlyArray<AcodeProjectShell>): ReadonlyArray<AcodeWorkspaceShell> {
+function allWorkspaces(
+  projects: ReadonlyArray<AcodeProjectShell>,
+): ReadonlyArray<AcodeWorkspaceShell> {
   return projects.flatMap((project) => project.workspaces);
 }
 
@@ -128,7 +140,9 @@ export const make = Effect.gen(function* () {
       Effect.flatMap(
         Option.match({
           onNone: () =>
-            Effect.fail(workspaceError("project-not-found", `ACode Project '${projectId}' was not found.`)),
+            Effect.fail(
+              workspaceError("project-not-found", `ACode Project '${projectId}' was not found.`),
+            ),
           onSome: Effect.succeed,
         }),
       ),
@@ -155,7 +169,12 @@ export const make = Effect.gen(function* () {
     projectionQuery.getShellSnapshot().pipe(
       Effect.map((snapshot) => snapshot.acodeProjects ?? []),
       Effect.mapError((cause) =>
-        workspaceError("registration-failed", "Failed to read registered ACode Workspaces.", undefined, cause),
+        workspaceError(
+          "registration-failed",
+          "Failed to read registered ACode Workspaces.",
+          undefined,
+          cause,
+        ),
       ),
     );
 
@@ -164,13 +183,16 @@ export const make = Effect.gen(function* () {
 
   const normalizeExistingDirectory = (value: string) =>
     workspacePaths.normalizeWorkspaceRoot(value).pipe(
-      Effect.mapError((cause) =>
-        workspaceError("path-not-found", cause.message, value, cause),
-      ),
+      Effect.mapError((cause) => workspaceError("path-not-found", cause.message, value, cause)),
       Effect.flatMap((resolved) =>
         realPathOrResolved(resolved).pipe(
           Effect.mapError((cause) =>
-            workspaceError("path-not-found", `Could not resolve worktree path '${value}'.`, value, cause),
+            workspaceError(
+              "path-not-found",
+              `Could not resolve worktree path '${value}'.`,
+              value,
+              cause,
+            ),
           ),
         ),
       ),
@@ -207,7 +229,12 @@ export const make = Effect.gen(function* () {
           commonDir: realPathOrResolved(commonDir),
         }).pipe(
           Effect.mapError((cause) =>
-            workspaceError("git-failed", `Could not inspect Git worktree '${pathForError}'.`, pathForError, cause),
+            workspaceError(
+              "git-failed",
+              `Could not inspect Git worktree '${pathForError}'.`,
+              pathForError,
+              cause,
+            ),
           ),
         );
       }),
@@ -229,7 +256,10 @@ export const make = Effect.gen(function* () {
     const conflict = allWorkspaces(projects).find((workspace) => {
       if (allowWorkspaceId !== undefined && workspace.id === allowWorkspaceId) return false;
       const registered = pathService.resolve(workspace.workspaceRoot);
-      return isInsideOrEqual(pathService, registered, candidate) || isInsideOrEqual(pathService, candidate, registered);
+      return (
+        isInsideOrEqual(pathService, registered, candidate) ||
+        isInsideOrEqual(pathService, candidate, registered)
+      );
     });
     return conflict === undefined
       ? Effect.void
@@ -243,10 +273,14 @@ export const make = Effect.gen(function* () {
   };
 
   const mainWorkspaceFor = (project: AcodeProjectShell) => {
-    const workspace = project.workspaces.find((candidate) => candidate.role === "main") ?? project.workspaces[0];
+    const workspace =
+      project.workspaces.find((candidate) => candidate.role === "main") ?? project.workspaces[0];
     return workspace === undefined
       ? Effect.fail(
-          workspaceError("project-not-found", `ACode Project '${project.id}' has no main Workspace.`),
+          workspaceError(
+            "project-not-found",
+            `ACode Project '${project.id}' has no main Workspace.`,
+          ),
         )
       : Effect.succeed(workspace);
   };
@@ -277,19 +311,19 @@ export const make = Effect.gen(function* () {
       const projectId = ProjectId.make(`acode-workspace:${uuid}`);
       const createdAt = DateTime.formatIso(yield* DateTime.now);
       yield* orchestrationEngine.dispatch({
-          type: "project.create",
-          commandId: CommandId.make(`acode-workspace:create:${uuid}`),
-          projectId,
-          title: input.title,
-          workspaceRoot: input.workspaceRoot,
-          createWorkspaceRootIfMissing: false,
-          acodeWorkspace: {
-            acodeProjectId: input.project.id,
-            role: "worktree",
-            origin: input.origin,
-          },
-          createdAt,
-        });
+        type: "project.create",
+        commandId: CommandId.make(`acode-workspace:create:${uuid}`),
+        projectId,
+        title: input.title,
+        workspaceRoot: input.workspaceRoot,
+        createWorkspaceRootIfMissing: false,
+        acodeWorkspace: {
+          acodeProjectId: input.project.id,
+          role: "worktree",
+          origin: input.origin,
+        },
+        createdAt,
+      });
       return projectId;
     });
 
@@ -371,16 +405,30 @@ export const make = Effect.gen(function* () {
     const mainRoot = pathService.resolve(mainWorkspace.workspaceRoot);
     const mainRepository = yield* resolveRepository(mainRoot);
     const baseRef = input.baseRef?.trim() || "HEAD";
-    const resolvedBase = yield* git.resolveCommit({ cwd: mainRoot, revision: baseRef }).pipe(
-      Effect.mapError((cause) =>
-        workspaceError("invalid-ref", `Base ref '${baseRef}' does not resolve to a commit.`, mainRoot, cause),
-      ),
-    );
-    const mainStatus = yield* git.statusDetails(mainRoot).pipe(
-      Effect.mapError((cause) =>
-        workspaceError("git-failed", `Could not inspect the main worktree '${mainRoot}'.`, mainRoot, cause),
-      ),
-    );
+    const resolvedBase = yield* git
+      .resolveCommit({ cwd: mainRoot, revision: baseRef })
+      .pipe(
+        Effect.mapError((cause) =>
+          workspaceError(
+            "invalid-ref",
+            `Base ref '${baseRef}' does not resolve to a commit.`,
+            mainRoot,
+            cause,
+          ),
+        ),
+      );
+    const mainStatus = yield* git
+      .statusDetails(mainRoot)
+      .pipe(
+        Effect.mapError((cause) =>
+          workspaceError(
+            "git-failed",
+            `Could not inspect the main worktree '${mainRoot}'.`,
+            mainRoot,
+            cause,
+          ),
+        ),
+      );
     if (mainStatus.hasWorkingTreeChanges) {
       return yield* workspaceError(
         "dirty-worktree",
@@ -414,26 +462,52 @@ export const make = Effect.gen(function* () {
     }
     yield* rejectNestedWorkspace(projects, requestedAbsolutePath);
 
-    const destinationExists = yield* fileSystem.exists(requestedAbsolutePath).pipe(
-      Effect.mapError((cause) =>
-        workspaceError("path-conflict", `Could not inspect worktree destination '${requestedAbsolutePath}'.`, requestedAbsolutePath, cause),
-      ),
-    );
+    const destinationExists = yield* fileSystem
+      .exists(requestedAbsolutePath)
+      .pipe(
+        Effect.mapError((cause) =>
+          workspaceError(
+            "path-conflict",
+            `Could not inspect worktree destination '${requestedAbsolutePath}'.`,
+            requestedAbsolutePath,
+            cause,
+          ),
+        ),
+      );
     let worktreeCreated = false;
     let workspaceRoot = requestedAbsolutePath;
     let origin: "associated" | "acode-created" = "acode-created";
     if (destinationExists) {
-      const stat = yield* fileSystem.stat(requestedAbsolutePath).pipe(
-        Effect.mapError((cause) =>
-          workspaceError("path-conflict", `Could not inspect worktree destination '${requestedAbsolutePath}'.`, requestedAbsolutePath, cause),
-        ),
-      );
+      const stat = yield* fileSystem
+        .stat(requestedAbsolutePath)
+        .pipe(
+          Effect.mapError((cause) =>
+            workspaceError(
+              "path-conflict",
+              `Could not inspect worktree destination '${requestedAbsolutePath}'.`,
+              requestedAbsolutePath,
+              cause,
+            ),
+          ),
+        );
       if (stat.type !== "Directory") {
-        return yield* workspaceError("path-conflict", `Worktree destination '${requestedAbsolutePath}' is not a directory.`, requestedAbsolutePath);
+        return yield* workspaceError(
+          "path-conflict",
+          `Worktree destination '${requestedAbsolutePath}' is not a directory.`,
+          requestedAbsolutePath,
+        );
       }
-      const existingRepository = yield* resolveRepository(requestedAbsolutePath, requestedAbsolutePath).pipe(
+      const existingRepository = yield* resolveRepository(
+        requestedAbsolutePath,
+        requestedAbsolutePath,
+      ).pipe(
         Effect.mapError((cause) =>
-          workspaceError("path-conflict", `Worktree destination '${requestedAbsolutePath}' is not a completed Git worktree.`, requestedAbsolutePath, cause),
+          workspaceError(
+            "path-conflict",
+            `Worktree destination '${requestedAbsolutePath}' is not a completed Git worktree.`,
+            requestedAbsolutePath,
+            cause,
+          ),
         ),
       );
       if (existingRepository.commonDir !== mainRepository.commonDir) {
@@ -445,7 +519,11 @@ export const make = Effect.gen(function* () {
       }
       workspaceRoot = existingRepository.rootPath;
       if (!isSamePath(pathService, workspaceRoot, requestedAbsolutePath)) {
-        return yield* workspaceError("path-conflict", `Worktree destination '${requestedAbsolutePath}' is nested inside another worktree.`, requestedAbsolutePath);
+        return yield* workspaceError(
+          "path-conflict",
+          `Worktree destination '${requestedAbsolutePath}' is nested inside another worktree.`,
+          requestedAbsolutePath,
+        );
       }
       // A retry after Git succeeded but ACode registration failed reuses the
       // existing checkout only inside the daemon-managed worktrees root. An
@@ -461,16 +539,25 @@ export const make = Effect.gen(function* () {
       }
       origin = "acode-created";
     } else {
-      yield* fileSystem.makeDirectory(pathService.dirname(requestedAbsolutePath), { recursive: true }).pipe(
-        Effect.mapError((cause) =>
-          workspaceError("path-conflict", `Could not prepare worktree destination '${requestedAbsolutePath}'.`, requestedAbsolutePath, cause),
-        ),
-      );
+      yield* fileSystem
+        .makeDirectory(pathService.dirname(requestedAbsolutePath), { recursive: true })
+        .pipe(
+          Effect.mapError((cause) =>
+            workspaceError(
+              "path-conflict",
+              `Could not prepare worktree destination '${requestedAbsolutePath}'.`,
+              requestedAbsolutePath,
+              cause,
+            ),
+          ),
+        );
       yield* gitWorkflow
         .createWorktree({
           cwd: mainRoot,
           refName: input.newBranch === undefined ? resolvedBase.commitSha : baseRef,
-          ...(input.newBranch === undefined ? { detach: true } : { newRefName: input.newBranch, baseRefName: baseRef }),
+          ...(input.newBranch === undefined
+            ? { detach: true }
+            : { newRefName: input.newBranch, baseRefName: baseRef }),
           path: requestedAbsolutePath,
         })
         .pipe(
@@ -510,105 +597,128 @@ export const make = Effect.gen(function* () {
 
   const remove: AcodeWorkspaceService["Service"]["remove"] = (input) =>
     Effect.gen(function* () {
-    const workspaceOption = yield* readWorkspace(input.workspaceId).pipe(
-      Effect.mapError((cause) =>
-        workspaceError("registration-failed", `Could not read Workspace '${input.workspaceId}'.`, undefined, cause),
-      ),
-    );
-    if (Option.isNone(workspaceOption)) {
-      return { removed: false, deletedDirectory: false };
-    }
-    const workspace = workspaceOption.value;
-    if ((workspace.sessions?.length ?? 0) > 0) {
-      return yield* workspaceError(
-        "workspace-not-empty",
-        `Workspace '${workspace.title}' still has active Sessions. Stop them before removing it.`,
-        workspace.workspaceRoot,
-      );
-    }
-    const shouldDeleteDirectory = input.deleteDirectory === true;
-    if (shouldDeleteDirectory && workspace.role === "main") {
-      return yield* workspaceError(
-        "main-checkout-protected",
-        "The main checkout can be unregistered, but it cannot be deleted by this action.",
-        workspace.workspaceRoot,
-      );
-    }
-    if (shouldDeleteDirectory && workspace.origin !== "acode-created") {
-      return yield* workspaceError(
-        "not-acode-created",
-        "This Workspace was associated from disk; remove its registration without deleting the directory.",
-        workspace.workspaceRoot,
-      );
-    }
-
-    let mainWorkspace: AcodeWorkspaceShell | undefined;
-    if (shouldDeleteDirectory) {
-      const project = yield* readAcodeProject(workspace.projectId);
-      mainWorkspace = yield* mainWorkspaceFor(project);
-      yield* assertSameRepository(mainWorkspace.workspaceRoot, workspace.workspaceRoot);
-      const exists = yield* fileSystem.exists(workspace.workspaceRoot).pipe(
+      const workspaceOption = yield* readWorkspace(input.workspaceId).pipe(
         Effect.mapError((cause) =>
-          workspaceError("git-failed", `Could not inspect Workspace '${workspace.workspaceRoot}'.`, workspace.workspaceRoot, cause),
+          workspaceError(
+            "registration-failed",
+            `Could not read Workspace '${input.workspaceId}'.`,
+            undefined,
+            cause,
+          ),
         ),
       );
-      if (exists) {
-        const status = yield* git.statusDetails(workspace.workspaceRoot).pipe(
-          Effect.mapError((cause) =>
-            workspaceError("git-failed", `Could not inspect Workspace '${workspace.workspaceRoot}'.`, workspace.workspaceRoot, cause),
-          ),
+      if (Option.isNone(workspaceOption)) {
+        return { removed: false, deletedDirectory: false };
+      }
+      const workspace = workspaceOption.value;
+      if ((workspace.sessions?.length ?? 0) > 0) {
+        return yield* workspaceError(
+          "workspace-not-empty",
+          `Workspace '${workspace.title}' still has active Sessions. Stop them before removing it.`,
+          workspace.workspaceRoot,
         );
-        if (status.hasWorkingTreeChanges) {
-          return yield* workspaceError(
-            "dirty-worktree",
-            `Workspace '${workspace.workspaceRoot}' has uncommitted or untracked changes.`,
-            workspace.workspaceRoot,
+      }
+      const shouldDeleteDirectory = input.deleteDirectory === true;
+      if (shouldDeleteDirectory && workspace.role === "main") {
+        return yield* workspaceError(
+          "main-checkout-protected",
+          "The main checkout can be unregistered, but it cannot be deleted by this action.",
+          workspace.workspaceRoot,
+        );
+      }
+      if (shouldDeleteDirectory && workspace.origin !== "acode-created") {
+        return yield* workspaceError(
+          "not-acode-created",
+          "This Workspace was associated from disk; remove its registration without deleting the directory.",
+          workspace.workspaceRoot,
+        );
+      }
+
+      let mainWorkspace: AcodeWorkspaceShell | undefined;
+      if (shouldDeleteDirectory) {
+        const project = yield* readAcodeProject(workspace.projectId);
+        mainWorkspace = yield* mainWorkspaceFor(project);
+        yield* assertSameRepository(mainWorkspace.workspaceRoot, workspace.workspaceRoot);
+        const exists = yield* fileSystem
+          .exists(workspace.workspaceRoot)
+          .pipe(
+            Effect.mapError((cause) =>
+              workspaceError(
+                "git-failed",
+                `Could not inspect Workspace '${workspace.workspaceRoot}'.`,
+                workspace.workspaceRoot,
+                cause,
+              ),
+            ),
           );
+        if (exists) {
+          const status = yield* git
+            .statusDetails(workspace.workspaceRoot)
+            .pipe(
+              Effect.mapError((cause) =>
+                workspaceError(
+                  "git-failed",
+                  `Could not inspect Workspace '${workspace.workspaceRoot}'.`,
+                  workspace.workspaceRoot,
+                  cause,
+                ),
+              ),
+            );
+          if (status.hasWorkingTreeChanges) {
+            return yield* workspaceError(
+              "dirty-worktree",
+              `Workspace '${workspace.workspaceRoot}' has uncommitted or untracked changes.`,
+              workspace.workspaceRoot,
+            );
+          }
         }
       }
-    }
 
-    const commandId = yield* crypto.randomUUIDv4.pipe(
-      Effect.map((uuid) => CommandId.make(`acode-workspace:remove:${uuid}`)),
-    );
-    yield* orchestrationEngine
-      .dispatch({
+      const commandId = yield* crypto.randomUUIDv4.pipe(
+        Effect.map((uuid) => CommandId.make(`acode-workspace:remove:${uuid}`)),
+      );
+      yield* orchestrationEngine
+        .dispatch({
           type: "project.delete",
           commandId,
           projectId: workspace.t3ProjectId,
           force: false,
         })
-      .pipe(
-        Effect.mapError((cause) =>
-          workspaceError(
-            cause instanceof Error && cause.message.toLowerCase().includes("not empty")
-              ? "workspace-not-empty"
-              : "registration-failed",
-            `Could not remove Workspace '${workspace.workspaceRoot}' from ACode.`,
-            workspace.workspaceRoot,
-            cause,
+        .pipe(
+          Effect.mapError((cause) =>
+            workspaceError(
+              cause instanceof Error && cause.message.toLowerCase().includes("not empty")
+                ? "workspace-not-empty"
+                : "registration-failed",
+              `Could not remove Workspace '${workspace.workspaceRoot}' from ACode.`,
+              workspace.workspaceRoot,
+              cause,
+            ),
           ),
-        ),
-      );
+        );
 
-    if (!shouldDeleteDirectory || mainWorkspace === undefined) {
-      return { removed: true, deletedDirectory: false };
-    }
-    const deletion = yield* gitWorkflow
-      .removeWorktree({ cwd: mainWorkspace.workspaceRoot, path: workspace.workspaceRoot })
-      .pipe(Effect.result);
-    if (Result.isFailure(deletion)) {
-      yield* Effect.logWarning("Workspace registration removed but Git directory cleanup failed", {
-        workspaceRoot: workspace.workspaceRoot,
-        cause: deletion.failure,
-      });
-      return {
-        removed: true,
-        deletedDirectory: false,
-        warning: "Workspace registration was removed, but the directory was kept because Git cleanup failed.",
-      };
-    }
-    return { removed: true, deletedDirectory: true };
+      if (!shouldDeleteDirectory || mainWorkspace === undefined) {
+        return { removed: true, deletedDirectory: false };
+      }
+      const deletion = yield* gitWorkflow
+        .removeWorktree({ cwd: mainWorkspace.workspaceRoot, path: workspace.workspaceRoot })
+        .pipe(Effect.result);
+      if (Result.isFailure(deletion)) {
+        yield* Effect.logWarning(
+          "Workspace registration removed but Git directory cleanup failed",
+          {
+            workspaceRoot: workspace.workspaceRoot,
+            cause: deletion.failure,
+          },
+        );
+        return {
+          removed: true,
+          deletedDirectory: false,
+          warning:
+            "Workspace registration was removed, but the directory was kept because Git cleanup failed.",
+        };
+      }
+      return { removed: true, deletedDirectory: true };
     }).pipe(
       Effect.catchCause((cause) => {
         const error = Cause.squash(cause);
@@ -625,7 +735,101 @@ export const make = Effect.gen(function* () {
       }),
     );
 
-  return AcodeWorkspaceService.of({ associate, createWorktree, remove });
+  const rename: AcodeWorkspaceService["Service"]["rename"] = (input) =>
+    Effect.gen(function* () {
+      const workspaceOption = yield* readWorkspace(input.workspaceId).pipe(
+        Effect.mapError((cause) =>
+          workspaceError(
+            "registration-failed",
+            `Could not read Workspace '${input.workspaceId}'.`,
+            undefined,
+            cause,
+          ),
+        ),
+      );
+      if (Option.isNone(workspaceOption)) {
+        return yield* workspaceError(
+          "workspace-not-found",
+          `Workspace '${input.workspaceId}' was not found.`,
+        );
+      }
+      const updateTitle = projectionQuery.updateAcodeWorkspaceTitle;
+      if (updateTitle === undefined) {
+        return yield* workspaceError(
+          "registration-failed",
+          "Workspace rename is unavailable on this server.",
+          workspaceOption.value.workspaceRoot,
+        );
+      }
+      const updatedAt = DateTime.formatIso(yield* DateTime.now);
+      yield* updateTitle({
+        workspaceId: input.workspaceId,
+        title: input.title,
+        updatedAt,
+      }).pipe(
+        Effect.mapError((cause) =>
+          workspaceError(
+            "registration-failed",
+            `Could not rename Workspace '${input.workspaceId}'.`,
+            workspaceOption.value.workspaceRoot,
+            cause,
+          ),
+        ),
+      );
+      const updated = yield* readWorkspace(input.workspaceId).pipe(
+        Effect.mapError((cause) =>
+          workspaceError(
+            "registration-failed",
+            `Could not read Workspace '${input.workspaceId}' after rename.`,
+            workspaceOption.value.workspaceRoot,
+            cause,
+          ),
+        ),
+      );
+      if (Option.isNone(updated)) {
+        return yield* workspaceError(
+          "workspace-not-found",
+          `Workspace '${input.workspaceId}' disappeared after rename.`,
+        );
+      }
+      return { workspace: updated.value };
+    });
+
+  const renameProject: AcodeWorkspaceService["Service"]["renameProject"] = (input) =>
+    Effect.gen(function* () {
+      yield* readAcodeProject(input.projectId);
+      const updateTitle = projectionQuery.updateAcodeProjectTitle;
+      if (updateTitle === undefined) {
+        return yield* workspaceError(
+          "registration-failed",
+          "Project rename is unavailable on this server.",
+        );
+      }
+      const updatedAt = DateTime.formatIso(yield* DateTime.now);
+      yield* updateTitle({
+        acodeProjectId: input.projectId,
+        title: input.title,
+        updatedAt,
+      }).pipe(
+        Effect.mapError((cause) =>
+          workspaceError(
+            "registration-failed",
+            `Could not rename ACode Project '${input.projectId}'.`,
+            undefined,
+            cause,
+          ),
+        ),
+      );
+      return { project: yield* readAcodeProject(input.projectId) };
+    });
+
+  return AcodeWorkspaceService.of({
+    associate,
+    createWorktree,
+    remove,
+    rename,
+    renameProject,
+  });
 });
 
 export const layer = Layer.effect(AcodeWorkspaceService, make);

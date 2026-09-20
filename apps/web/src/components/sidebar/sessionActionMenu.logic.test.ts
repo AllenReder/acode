@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { buildSessionActionMenuItems } from "./sessionActionMenu.logic";
 
 describe("buildSessionActionMenuItems", () => {
-  it("builds active Agent Session menu items with Open, Split, Rename, Copy, Close and Delete", () => {
+  it("builds active Agent Session menu items with Open, Split, Rename, Close and Delete", () => {
     const items = buildSessionActionMenuItems({
       kind: "agent",
       isClosed: false,
@@ -19,7 +19,6 @@ describe("buildSessionActionMenuItems", () => {
       "split:right",
       "split:down",
       "rename",
-      "copy:identity",
       "close-session",
       "delete-session",
     ]);

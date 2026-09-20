@@ -111,6 +111,20 @@ pnpm smoke:desktop-terminal --webkit
 This headless check complements native desktop UI verification; it does not
 launch the Tauri application or establish macOS UI acceptance.
 
+The Workbench cutover E2E starts an isolated daemon and Web client, pairs a
+headless browser, and exercises the real Sidebar, routes, BSP panes, PTY, and
+session lifecycle. It never sends a provider turn:
+
+```bash
+pnpm test:e2e:workbench
+
+# Reuse the installed Chrome instead of Playwright's browser download.
+PLAYWRIGHT_USE_SYSTEM_CHROME=1 pnpm test:e2e:workbench
+
+# Keep the temporary ACODE_HOME and failure screenshot for inspection.
+WORKBENCH_E2E_KEEP_TEMP=1 pnpm test:e2e:workbench
+```
+
 The explicit CLI stop is separate from closing the window:
 
 ```bash

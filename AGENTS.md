@@ -31,7 +31,7 @@ docs: record the token split
 - A breaking change takes `!` before the colon, plus a `BREAKING CHANGE:`
   footer naming what callers must do.
 
-## Computer Use
+## Computer Use （Only for MacOS)
 
 Use Computer Use when correctness depends on the real desktop UI: inspect or
 operate the running app, reproduce a GUI-only bug, or verify menus, window

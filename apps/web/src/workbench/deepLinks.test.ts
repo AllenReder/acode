@@ -11,7 +11,14 @@ import type {
 } from "@t3tools/contracts";
 import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
 
-import { deepLinkInputFromParams, resolveDeepLink, sessionRouteForTarget } from "./deepLinks";
+import {
+  deepLinkInputFromParams,
+  draftIdFromParams,
+  newAgentSessionTargetForDraft,
+  resolveNewAgentSessionTarget,
+  resolveDeepLink,
+  sessionRouteForTarget,
+} from "./deepLinks";
 
 const ENV: EnvironmentId = "env-a" as EnvironmentId;
 const WS: WorkspaceId = "ws-a" as WorkspaceId;
@@ -124,6 +131,55 @@ describe("canonical route helpers", () => {
       }),
     ).toBeNull();
     expect(deepLinkInputFromParams({ environmentId: ENV, workspaceId: WS })).toBeNull();
+  });
+});
+
+describe("New Agent Session recovery", () => {
+  it("recovers a client-local draft target without treating it as an ACode Deep Link", () => {
+    expect(deepLinkInputFromParams({ draftId: "draft-one" })).toBeNull();
+    expect(draftIdFromParams({ draftId: "draft-one" })).toBe("draft-one");
+    expect(
+      newAgentSessionTargetForDraft("draft-one" as Parameters<typeof newAgentSessionTargetForDraft>[0], {
+        environmentId: ENV,
+        workspaceId: WS,
+      }),
+    ).toEqual({
+      kind: "newAgentSession",
+      environmentId: ENV,
+      workspaceId: WS,
+      draftId: "draft-one",
+    });
+  });
+
+  it("binds a worktree draft by checkout path before falling back to its stored Workspace", () => {
+    const worktreeWorkspace = "ws-worktree" as WorkspaceId;
+    const projects = [project([{ id: WS }, { id: worktreeWorkspace }])];
+    const worktreeProject = projects[0]!;
+    projects[0] = {
+      ...worktreeProject,
+      workspaces: worktreeProject.workspaces.map((workspace) =>
+        workspace.id === worktreeWorkspace
+          ? {
+              ...workspace,
+              title: "Worktree",
+              workspaceRoot: "/tmp/worktree",
+              role: "worktree" as const,
+            }
+          : workspace,
+      ),
+    };
+
+    expect(
+      resolveNewAgentSessionTarget(
+        "draft-worktree" as Parameters<typeof resolveNewAgentSessionTarget>[0],
+        {
+          environmentId: ENV,
+          workspaceId: WS,
+          worktreePath: "/tmp/worktree/",
+        },
+        projects,
+      ),
+    ).toMatchObject({ kind: "newAgentSession", workspaceId: worktreeWorkspace });
   });
 });
 

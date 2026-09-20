@@ -6,7 +6,6 @@ export type SessionActionMenuId =
   | "split:right"
   | "split:down"
   | "rename"
-  | "copy:identity"
   | "close-session"
   | "delete-session";
 
@@ -65,8 +64,6 @@ export function buildSessionActionMenuItems(
     },
   );
 
-  let hasSeparatorBeforeNext = true;
-
   if (state.canRename) {
     items.push({
       id: "rename",
@@ -74,15 +71,7 @@ export function buildSessionActionMenuItems(
       icon: "pencil",
       separatorBefore: true,
     });
-    hasSeparatorBeforeNext = false;
   }
-
-  items.push({
-    id: "copy:identity",
-    label: "Copy identity",
-    icon: "copy",
-    separatorBefore: hasSeparatorBeforeNext,
-  });
 
   if (!state.isClosed && state.canClose) {
     items.push({

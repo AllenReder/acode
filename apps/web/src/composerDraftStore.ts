@@ -20,6 +20,8 @@ import {
   type ScopedProjectRef,
   type ScopedThreadRef,
   ThreadId,
+  WorkspaceId,
+  workspaceIdForT3Project,
   SnapShotSource,
 } from "@t3tools/contracts";
 import {
@@ -30,6 +32,7 @@ import {
   scopedThreadKey,
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
+import { normalizeProjectPathForComparison } from "@t3tools/shared/path";
 import * as Schema from "effect/Schema";
 import * as Equal from "effect/Equal";
 import * as Effect from "effect/Effect";
@@ -82,7 +85,9 @@ const isSnapShotSource = Schema.is(SnapShotSource);
 const isPreviewAnnotationPayload = Schema.is(PreviewAnnotationPayloadSchema);
 
 export const COMPOSER_DRAFT_STORAGE_KEY = "t3code:composer-drafts:v1";
-const COMPOSER_DRAFT_STORAGE_VERSION = 9;
+// v10 binds client-local Agent drafts to ACode Workspace identity and records
+// their last-updated time; legacy logical-project drafts migrate in place.
+const COMPOSER_DRAFT_STORAGE_VERSION = 10;
 const DraftThreadEnvModeSchema = Schema.Literals(["local", "worktree"]);
 export type DraftThreadEnvMode = typeof DraftThreadEnvModeSchema.Type;
 
@@ -313,10 +318,12 @@ const PersistedDraftThreadState = Schema.Struct({
   threadId: ThreadId,
   environmentId: Schema.String,
   projectId: ProjectId,
+  workspaceId: Schema.optionalKey(WorkspaceId),
   logicalProjectKey: Schema.optionalKey(Schema.String),
   environmentSelection: Schema.optionalKey(Schema.Literals(["auto", "manual"])),
   loadBalancedEnvironmentId: Schema.optionalKey(Schema.NullOr(Schema.String)),
   createdAt: Schema.String,
+  updatedAt: Schema.optionalKey(Schema.String),
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
   branch: Schema.NullOr(Schema.String),
@@ -440,10 +447,12 @@ export interface DraftSessionState {
   threadId: ThreadId;
   environmentId: EnvironmentId;
   projectId: ProjectId;
+  workspaceId: WorkspaceId;
   logicalProjectKey: string;
   environmentSelection?: "auto" | "manual";
   loadBalancedEnvironmentId?: EnvironmentId | null;
   createdAt: string;
+  updatedAt: string;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
   branch: string | null;
@@ -492,6 +501,11 @@ interface ComposerDraftStoreState {
   /** Looks up the active draft session for a logical project identity. */
   getDraftThreadByLogicalProjectKey: (logicalProjectKey: string) => ProjectDraftSession | null;
   getDraftSessionByLogicalProjectKey: (logicalProjectKey: string) => ProjectDraftSession | null;
+  /** Selects the visible draft session owned by a Workspace. */
+  getDraftSessionByWorkspace: (
+    environmentId: EnvironmentId,
+    workspaceId: WorkspaceId,
+  ) => ProjectDraftSession | null;
   getDraftThreadByProjectRef: (projectRef: ScopedProjectRef) => ProjectDraftSession | null;
   getDraftSessionByProjectRef: (projectRef: ScopedProjectRef) => ProjectDraftSession | null;
   /** Reads mutable draft-session metadata by `DraftId`. */
@@ -504,6 +518,13 @@ interface ComposerDraftStoreState {
   getDraftThread: (threadRef: ComposerThreadTarget) => DraftThreadState | null;
   listDraftThreadKeys: () => string[];
   hasDraftThreadsInEnvironment: (environmentId: EnvironmentId) => boolean;
+  reconcileDraftWorkspaceBindings: (
+    workspaces: ReadonlyArray<{
+      readonly environmentId: EnvironmentId;
+      readonly workspaceId: WorkspaceId;
+      readonly workspaceRoot: string;
+    }>,
+  ) => void;
   /**
    * Creates or updates the draft session tracked for a logical project.
    * Reassigning an existing draft removes its previous logical-project
@@ -524,6 +545,26 @@ interface ComposerDraftStoreState {
       interactionMode?: ProviderInteractionMode;
       environmentSelection?: "auto" | "manual";
       loadBalancedEnvironmentId?: EnvironmentId | null;
+      workspaceId?: WorkspaceId;
+    },
+  ) => void;
+  /** Creates or updates the draft session owned by a Workspace. */
+  setWorkspaceDraftThreadId: (
+    workspaceId: WorkspaceId,
+    projectRef: ScopedProjectRef,
+    draftId: DraftId,
+    options?: {
+      threadId?: ThreadId;
+      branch?: string | null;
+      worktreePath?: string | null;
+      createdAt?: string;
+      envMode?: DraftThreadEnvMode;
+      startFromOrigin?: boolean;
+      runtimeMode?: RuntimeMode;
+      interactionMode?: ProviderInteractionMode;
+      environmentSelection?: "auto" | "manual";
+      loadBalancedEnvironmentId?: EnvironmentId | null;
+      workspaceId?: WorkspaceId;
     },
   ) => void;
   /** Creates or updates the draft session tracked for a concrete project ref. */
@@ -541,6 +582,7 @@ interface ComposerDraftStoreState {
       interactionMode?: ProviderInteractionMode;
       environmentSelection?: "auto" | "manual";
       loadBalancedEnvironmentId?: EnvironmentId | null;
+      workspaceId?: WorkspaceId;
     },
   ) => void;
   /** Updates mutable draft-session metadata without touching composer content. */
@@ -557,6 +599,7 @@ interface ComposerDraftStoreState {
       interactionMode?: ProviderInteractionMode;
       environmentSelection?: "auto" | "manual";
       loadBalancedEnvironmentId?: EnvironmentId | null;
+      workspaceId?: WorkspaceId;
     },
   ) => void;
   clearProjectDraftThreadId: (projectRef: ScopedProjectRef) => void;
@@ -1508,6 +1551,7 @@ function createDraftThreadState(
     interactionMode?: ProviderInteractionMode;
     environmentSelection?: "auto" | "manual";
     loadBalancedEnvironmentId?: EnvironmentId | null;
+    workspaceId?: WorkspaceId;
   },
 ): DraftThreadState {
   // A project change (including switching environments within a logical
@@ -1540,6 +1584,7 @@ function createDraftThreadState(
     threadId,
     environmentId: projectRef.environmentId,
     projectId: projectRef.projectId,
+    workspaceId: options?.workspaceId ?? workspaceIdForT3Project(projectRef.projectId),
     logicalProjectKey,
     ...(environmentSelection ? { environmentSelection } : {}),
     ...(options?.loadBalancedEnvironmentId !== undefined
@@ -1552,6 +1597,7 @@ function createDraftThreadState(
           }
         : {}),
     createdAt: options?.createdAt ?? existingThread?.createdAt ?? new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     runtimeMode: options?.runtimeMode ?? existingThread?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
     interactionMode:
       options?.interactionMode ?? existingThread?.interactionMode ?? DEFAULT_INTERACTION_MODE,
@@ -1584,10 +1630,12 @@ function draftThreadsEqual(left: DraftThreadState | undefined, right: DraftThrea
     left.threadId === right.threadId &&
     left.environmentId === right.environmentId &&
     left.projectId === right.projectId &&
+    left.workspaceId === right.workspaceId &&
     left.logicalProjectKey === right.logicalProjectKey &&
     left.environmentSelection === right.environmentSelection &&
     left.loadBalancedEnvironmentId === right.loadBalancedEnvironmentId &&
     left.createdAt === right.createdAt &&
+    left.updatedAt === right.updatedAt &&
     left.runtimeMode === right.runtimeMode &&
     left.interactionMode === right.interactionMode &&
     left.branch === right.branch &&
@@ -1691,6 +1739,8 @@ function normalizePersistedDraftThreads(
           : environmentIdByThreadId.get(threadKeyOrId as ThreadId));
       const projectId = candidateDraftThread.projectId;
       const createdAt = candidateDraftThread.createdAt;
+      const updatedAt = candidateDraftThread.updatedAt;
+      const workspaceId = candidateDraftThread.workspaceId;
       const branch = candidateDraftThread.branch;
       const worktreePath = candidateDraftThread.worktreePath;
       const startFromOrigin = candidateDraftThread.startFromOrigin === true;
@@ -1719,6 +1769,10 @@ function normalizePersistedDraftThreads(
         threadId,
         environmentId: normalizedEnvironmentId,
         projectId: projectId as ProjectId,
+        workspaceId:
+          typeof workspaceId === "string" && workspaceId.length > 0
+            ? WorkspaceId.make(workspaceId)
+            : workspaceIdForT3Project(projectId as ProjectId),
         logicalProjectKey:
           typeof candidateDraftThread.logicalProjectKey === "string" &&
           candidateDraftThread.logicalProjectKey.length > 0
@@ -1730,6 +1784,12 @@ function normalizePersistedDraftThreads(
           typeof createdAt === "string" && createdAt.length > 0
             ? createdAt
             : new Date().toISOString(),
+        updatedAt:
+          typeof updatedAt === "string" && updatedAt.length > 0
+            ? updatedAt
+            : typeof createdAt === "string" && createdAt.length > 0
+              ? createdAt
+              : new Date().toISOString(),
         runtimeMode: isRuntimeMode(candidateDraftThread.runtimeMode)
           ? candidateDraftThread.runtimeMode
           : DEFAULT_RUNTIME_MODE,
@@ -1796,8 +1856,10 @@ function normalizePersistedDraftThreads(
           threadId: parsedThreadRef?.threadId ?? (threadKey as ThreadId),
           environmentId: projectRef.environmentId,
           projectId: projectRef.projectId,
+          workspaceId: workspaceIdForT3Project(projectRef.projectId),
           logicalProjectKey,
           createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
           runtimeMode: DEFAULT_RUNTIME_MODE,
           interactionMode: DEFAULT_INTERACTION_MODE,
           branch: null,
@@ -2472,6 +2534,9 @@ function toHydratedDraftThreadState(
     threadId: persistedDraftThread.threadId,
     environmentId: persistedDraftThread.environmentId as EnvironmentId,
     projectId: persistedDraftThread.projectId,
+    workspaceId:
+      persistedDraftThread.workspaceId ??
+      workspaceIdForT3Project(persistedDraftThread.projectId),
     logicalProjectKey:
       persistedDraftThread.logicalProjectKey ??
       projectDraftKey(
@@ -2481,6 +2546,7 @@ function toHydratedDraftThreadState(
         ),
       ),
     createdAt: persistedDraftThread.createdAt,
+    updatedAt: persistedDraftThread.updatedAt ?? persistedDraftThread.createdAt,
     runtimeMode: persistedDraftThread.runtimeMode,
     interactionMode: persistedDraftThread.interactionMode,
     branch: persistedDraftThread.branch,
@@ -2537,6 +2603,25 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             return null;
           }
           return toProjectDraftSession(DraftId.make(draftId), draftThread);
+        },
+        getDraftSessionByWorkspace: (environmentId, workspaceId) => {
+          const candidates = Object.entries(get().draftThreadsByThreadKey)
+            .filter(
+              ([, draftThread]) =>
+                draftThread.environmentId === environmentId &&
+                draftThread.workspaceId === workspaceId &&
+                !isDraftThreadPromoting(draftThread),
+            )
+            .sort(([leftId, left], [rightId, right]) => {
+              const updatedOrder = right.updatedAt.localeCompare(left.updatedAt);
+              if (updatedOrder !== 0) return updatedOrder;
+              const createdOrder = right.createdAt.localeCompare(left.createdAt);
+              return createdOrder !== 0 ? createdOrder : leftId.localeCompare(rightId);
+            });
+          const selected = candidates[0];
+          return selected === undefined
+            ? null
+            : toProjectDraftSession(DraftId.make(selected[0]), selected[1]);
         },
         getDraftThreadByProjectRef: (projectRef) => {
           return get().getDraftSessionByProjectRef(projectRef);
@@ -2613,6 +2698,29 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
           Object.values(get().draftThreadsByThreadKey).some(
             (draftThread) => draftThread.environmentId === environmentId,
           ),
+        reconcileDraftWorkspaceBindings: (workspaces) => {
+          const workspaceByCheckout = new Map(
+            workspaces.map((workspace) => [
+              `${workspace.environmentId}\0${normalizeProjectPathForComparison(workspace.workspaceRoot)}`,
+              workspace.workspaceId,
+            ]),
+          );
+          if (workspaceByCheckout.size === 0) return;
+          set((state) => {
+            let changed = false;
+            const draftThreadsByThreadKey = { ...state.draftThreadsByThreadKey };
+            for (const [draftId, draftThread] of Object.entries(state.draftThreadsByThreadKey)) {
+              if (draftThread.worktreePath === null) continue;
+              const workspaceId = workspaceByCheckout.get(
+                `${draftThread.environmentId}\0${normalizeProjectPathForComparison(draftThread.worktreePath)}`,
+              );
+              if (workspaceId === undefined || workspaceId === draftThread.workspaceId) continue;
+              draftThreadsByThreadKey[draftId] = { ...draftThread, workspaceId };
+              changed = true;
+            }
+            return changed ? { draftThreadsByThreadKey } : state;
+          });
+        },
         setLogicalProjectDraftThreadId: (logicalProjectKey, projectRef, draftId, options) => {
           const normalizedLogicalProjectKey = logicalProjectDraftKey(logicalProjectKey);
           if (normalizedLogicalProjectKey.length === 0 || draftId.length === 0) {
@@ -2712,6 +2820,15 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             };
           });
         },
+        setWorkspaceDraftThreadId: (workspaceId, projectRef, draftId, options) => {
+          const existing = get().draftThreadsByThreadKey[draftId];
+          get().setLogicalProjectDraftThreadId(
+            existing?.logicalProjectKey ?? projectDraftKey(projectRef),
+            projectRef,
+            draftId,
+            { ...options, workspaceId },
+          );
+        },
         setProjectDraftThreadId: (projectRef, draftId, options) => {
           get().setLogicalProjectDraftThreadId(
             projectDraftKey(projectRef),
@@ -2771,6 +2888,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               threadId: existing.threadId,
               environmentId: nextProjectRef.environmentId,
               projectId: nextProjectRef.projectId,
+              workspaceId: options.workspaceId ?? existing.workspaceId,
               logicalProjectKey: existing.logicalProjectKey,
               ...(environmentSelection ? { environmentSelection } : {}),
               loadBalancedEnvironmentId:
@@ -2783,6 +2901,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
                 options.createdAt === undefined
                   ? existing.createdAt
                   : options.createdAt || existing.createdAt,
+              updatedAt: new Date().toISOString(),
               runtimeMode: options.runtimeMode ?? existing.runtimeMode,
               interactionMode: options.interactionMode ?? existing.interactionMode,
               branch: nextBranch,
@@ -2795,10 +2914,12 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             const isUnchanged =
               nextDraftThread.environmentId === existing.environmentId &&
               nextDraftThread.projectId === existing.projectId &&
+              nextDraftThread.workspaceId === existing.workspaceId &&
               nextDraftThread.logicalProjectKey === existing.logicalProjectKey &&
               nextDraftThread.environmentSelection === existing.environmentSelection &&
               nextDraftThread.loadBalancedEnvironmentId === existing.loadBalancedEnvironmentId &&
               nextDraftThread.createdAt === existing.createdAt &&
+              nextDraftThread.updatedAt === existing.updatedAt &&
               nextDraftThread.runtimeMode === existing.runtimeMode &&
               nextDraftThread.interactionMode === existing.interactionMode &&
               nextDraftThread.branch === existing.branch &&

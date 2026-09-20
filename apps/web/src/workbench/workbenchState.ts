@@ -57,12 +57,37 @@ function updateTab(snapshot: WorkbenchSnapshot, tab: WorkbenchTab): WorkbenchSna
   };
 }
 
+function findNewAgentSessionPane(
+  snapshot: WorkbenchSnapshot,
+  target: Extract<ViewTarget, { kind: "newAgentSession" }>,
+): { readonly tabId: string; readonly paneId: string } | null {
+  for (const tab of snapshot.tabs) {
+    for (const [paneId, view] of tab.panes) {
+      if (
+        view.target.kind === "newAgentSession" &&
+        view.target.environmentId === target.environmentId &&
+        view.target.workspaceId === target.workspaceId
+      ) {
+        return { tabId: tab.id, paneId };
+      }
+    }
+  }
+  return null;
+}
+
 /** Focus an existing Session View; otherwise replace the focused View. */
 export function applyOpenTarget(
   snapshot: WorkbenchSnapshot,
   target: ViewTarget,
   generateId: () => string,
 ): WorkbenchSnapshot {
+  if (target.kind === "newAgentSession") {
+    const existing = findNewAgentSessionPane(snapshot, target);
+    if (existing !== null) {
+      return applySetFocused(applyActivateTab(snapshot, existing.tabId), existing.paneId);
+    }
+  }
+
   const tab = getActiveTab(snapshot);
   const existingPaneId = findPaneByTarget(tab, target);
   if (existingPaneId !== null) return applySetFocused(snapshot, existingPaneId);
@@ -88,6 +113,13 @@ export function applySplitFocused(
   dir: SplitDir,
   generateId: () => string,
 ): WorkbenchSnapshot {
+  if (target.kind === "newAgentSession") {
+    const existing = findNewAgentSessionPane(snapshot, target);
+    if (existing !== null) {
+      return applySetFocused(applyActivateTab(snapshot, existing.tabId), existing.paneId);
+    }
+  }
+
   const tab = getActiveTab(snapshot);
   if (tab.panes.get(tab.focusedPaneId)?.target.kind === "welcome")
     return applyOpenTarget(snapshot, target, generateId);
@@ -123,6 +155,24 @@ export function applySetFocused(snapshot: WorkbenchSnapshot, paneId: string): Wo
   const tab = getActiveTab(snapshot);
   if (!tab.panes.has(paneId) || tab.focusedPaneId === paneId) return snapshot;
   return updateTab(snapshot, { ...tab, focusedPaneId: paneId });
+}
+
+/** Replace a Pane's target while preserving the ViewInstance identity. */
+export function applyReplacePaneTarget(
+  snapshot: WorkbenchSnapshot,
+  paneId: string,
+  target: ViewTarget,
+): WorkbenchSnapshot {
+  const tab = getActiveTab(snapshot);
+  const view = tab.panes.get(paneId);
+  if (view === undefined) return snapshot;
+  const panes = new Map(tab.panes);
+  panes.set(paneId, {
+    ...view,
+    definitionId: definitionIdForTarget(target),
+    target,
+  });
+  return updateTab(snapshot, { ...tab, panes });
 }
 
 export function applySetSplitRatio(
@@ -198,22 +248,16 @@ export function isSameSessionTarget(a: ViewTarget, b: ViewTarget): boolean {
   return false;
 }
 
-/**
- * Remove every ViewInstance displaying this Session from every Tab.
- *
- * Preserves Tab IDs, activeTabId, and other ViewInstance identities.
- * Cleared Tabs recover Welcome.
- */
-export function applyRemoveSessionViews(
+function applyRemoveMatchingViews(
   snapshot: WorkbenchSnapshot,
-  target: ViewTarget,
+  matches: (target: ViewTarget) => boolean,
   generateId: () => string,
 ): WorkbenchSnapshot {
   let changed = false;
   const tabs = snapshot.tabs.map((tab) => {
     const matchingPaneIds: string[] = [];
     for (const [paneId, view] of tab.panes) {
-      if (isSameSessionTarget(view.target, target)) {
+      if (matches(view.target)) {
         matchingPaneIds.push(paneId);
       }
     }
@@ -242,4 +286,71 @@ export function applyRemoveSessionViews(
   });
 
   return changed ? { ...snapshot, tabs } : snapshot;
+}
+
+/**
+ * Remove every ViewInstance displaying this Session from every Tab.
+ *
+ * Preserves Tab IDs, activeTabId, and other ViewInstance identities.
+ * Cleared Tabs recover Welcome.
+ */
+export function applyRemoveSessionViews(
+  snapshot: WorkbenchSnapshot,
+  target: ViewTarget,
+  generateId: () => string,
+): WorkbenchSnapshot {
+  return applyRemoveMatchingViews(
+    snapshot,
+    (candidate) => isSameSessionTarget(candidate, target),
+    generateId,
+  );
+}
+
+/** Remove the explicit New Agent Session View without deleting its draft payload. */
+export function applyRemoveNewAgentSessionViews(
+  snapshot: WorkbenchSnapshot,
+  target: Extract<ViewTarget, { kind: "newAgentSession" }>,
+  generateId: () => string,
+): WorkbenchSnapshot {
+  return applyRemoveMatchingViews(
+    snapshot,
+    (candidate) =>
+      candidate.kind === "newAgentSession" &&
+      candidate.environmentId === target.environmentId &&
+      candidate.workspaceId === target.workspaceId &&
+      candidate.draftId === target.draftId,
+    generateId,
+  );
+}
+
+export interface KnownWorkspace {
+  readonly environmentId: string;
+  readonly workspaceId: string;
+}
+
+/** Remove Views whose scoped Workspace is no longer present in projections. */
+export function applyPruneWorkspaceViews(
+  snapshot: WorkbenchSnapshot,
+  knownWorkspaces: ReadonlyArray<KnownWorkspace>,
+  generateId: () => string,
+): WorkbenchSnapshot {
+  const known = new Set(
+    knownWorkspaces.map((workspace) => `${workspace.environmentId}:${workspace.workspaceId}`),
+  );
+  return applyRemoveMatchingViews(
+    snapshot,
+    (target) => {
+      switch (target.kind) {
+        case "workspace":
+        case "agentSession":
+        case "newAgentSession":
+        case "workspaceTerminal":
+          return !known.has(`${target.environmentId}:${target.workspaceId}`);
+        case "project":
+        case "welcome":
+          return false;
+      }
+    },
+    generateId,
+  );
 }

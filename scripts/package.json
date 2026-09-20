@@ -5,6 +5,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vp test run",
+    "test:e2e:workbench": "node workbench-e2e.mjs",
     "smoke:desktop-terminal": "node desktop-terminal-smoke.mjs"
   },
   "dependencies": {
