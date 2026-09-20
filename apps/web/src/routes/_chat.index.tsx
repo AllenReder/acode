@@ -23,9 +23,6 @@ function ChatIndexRouteView() {
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden bg-background text-foreground">
-      <WorkspacePageHeader electron={isElectron} className="border-b border-border">
-        <span className="text-sm font-medium">{APP_DISPLAY_NAME}</span>
-      </WorkspacePageHeader>
       <Workbench />
     </SidebarInset>
   );

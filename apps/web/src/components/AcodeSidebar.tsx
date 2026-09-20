@@ -25,7 +25,6 @@ import { useNavigate } from "@tanstack/react-router";
 
 import { useComposerDraftStore } from "../composerDraftStore";
 import { openCommandPalette } from "../commandPaletteBus";
-import { isElectron } from "../env";
 import { newDraftId, newThreadId } from "../lib/utils";
 import { readLocalApi } from "../localApi";
 import { environmentServerConfigsAtom } from "../state/server";
@@ -37,7 +36,6 @@ import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { SessionRow } from "./sidebar/SessionRow";
-import { SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { nextWorkspaceTerminalId } from "./Sidebar.logic";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { SidebarContent, SidebarGroup, SidebarGroupLabel } from "./ui/sidebar";
@@ -416,7 +414,6 @@ export function AcodeSidebar() {
   if (projects.length === 0) {
     return (
       <SidebarContent className="gap-0">
-        <SidebarChromeHeader isElectron={isElectron} />
         <SidebarGroup className="px-2 py-2">
           <button
             type="button"
@@ -433,7 +430,6 @@ export function AcodeSidebar() {
 
   return (
     <SidebarContent className="gap-0">
-      <SidebarChromeHeader isElectron={isElectron} />
       <SidebarGroup className="px-2 py-2">
         <button
           type="button"

@@ -1,15 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useParams } from "@tanstack/react-router";
 
 import { useAcodeProjects, useEnvironmentShellSnapshotPresent } from "../state/entities";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useEnvironmentCatalogSnapshot } from "../state/environmentCatalogSnapshot";
+import { useEnvironments } from "../state/environments";
 import { PaneTree } from "./PaneTree";
+import { WorkbenchWindowChrome } from "./WorkbenchWindowChrome";
 import {
   deepLinkInputFromParams,
   draftIdFromParams,
+  resolveDraftRecoveryTarget,
   resolveDeepLink,
-  resolveNewAgentSessionTarget,
+  sessionRouteForTarget,
   type DeepLinkResolution,
 } from "./deepLinks";
 import { targetKey, type ViewTarget } from "./viewRegistry";
@@ -27,12 +30,20 @@ interface WorkbenchProps {
 /** The Workbench shell: URL recovery input plus Workbench command execution. */
 export function Workbench({ navigate: navigateTo }: WorkbenchProps = {}) {
   const snapshot = useWorkbenchStore();
-  const openTarget = useWorkbenchStore((s) => s.openTarget);
+  const openDeepLinkTarget = useWorkbenchStore((s) => s.openDeepLinkTarget);
   const pruneWorkspaceViews = useWorkbenchStore((s) => s.pruneWorkspaceViews);
   const reconcileDraftWorkspaceBindings = useComposerDraftStore(
     (state) => state.reconcileDraftWorkspaceBindings,
   );
   const projects = useAcodeProjects();
+  const { environments } = useEnvironments();
+  const connectedEnvironmentIds = useMemo(
+    () =>
+      environments
+        .filter((environment) => environment.connection.phase === "connected")
+        .map((environment) => environment.environmentId),
+    [environments],
+  );
   const router = useRouter();
   const navigate =
     navigateTo ??
@@ -54,7 +65,7 @@ export function Workbench({ navigate: navigateTo }: WorkbenchProps = {}) {
   const draftTarget =
     draftId === null || draft === null
       ? null
-      : resolveNewAgentSessionTarget(draftId, draft, projects);
+      : resolveDraftRecoveryTarget(draftId, draft, projects);
   const environmentId = deepLinkInput?.environmentId ?? null;
   const catalog = useEnvironmentCatalogSnapshot(environmentId);
   const environmentSnapshotPresent = useEnvironmentShellSnapshotPresent(environmentId);
@@ -92,9 +103,17 @@ export function Workbench({ navigate: navigateTo }: WorkbenchProps = {}) {
     }
 
     const previous = activeSessionTargetsRef.current;
+    const observedEnvironmentIds = new Set([
+      ...connectedEnvironmentIds,
+      ...projects.map((project) => project.environmentId),
+    ]);
     if (previous.size > 0) {
       for (const [key, target] of previous) {
-        if (!nextActiveTargets.has(key)) {
+        if (
+          target.kind !== "welcome" &&
+          observedEnvironmentIds.has(target.environmentId) &&
+          !nextActiveTargets.has(key)
+        ) {
           useWorkbenchStore.getState().removeSessionViews(target);
         }
       }
@@ -107,8 +126,9 @@ export function Workbench({ navigate: navigateTo }: WorkbenchProps = {}) {
           workspaceId: workspace.id,
         })),
       ),
+      [...observedEnvironmentIds],
     );
-  }, [projects, pruneWorkspaceViews]);
+  }, [connectedEnvironmentIds, projects, pruneWorkspaceViews]);
 
   useEffect(() => {
     const workspaces = projects.flatMap((project) =>
@@ -130,19 +150,23 @@ export function Workbench({ navigate: navigateTo }: WorkbenchProps = {}) {
       navigate({ ...resolution.canonicalRoute, replace: true });
       return;
     }
-    openTarget(resolution.target);
-  }, [deepLinkInput, navigate, openTarget, resolution]);
+    openDeepLinkTarget(resolution.target);
+  }, [deepLinkInput, navigate, openDeepLinkTarget, resolution]);
 
   useEffect(() => {
     if (draftTarget === null) return;
-    const routeKey = `draft:${draftTarget.draftId}:${draftTarget.environmentId}:${draftTarget.workspaceId}`;
+    const routeKey = `draft:${targetKey(draftTarget)}`;
     if (handledRouteKeyRef.current === routeKey) return;
     handledRouteKeyRef.current = routeKey;
-    openTarget(draftTarget);
-  }, [draftTarget, openTarget]);
+    openDeepLinkTarget(draftTarget);
+    if (draftTarget.kind === "agentSession") {
+      navigate({ ...sessionRouteForTarget(draftTarget), replace: true });
+    }
+  }, [draftTarget, openDeepLinkTarget]);
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+      <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
       <DeepLinkStatus
         resolution={resolution}
         dismissed={missingDismissed}

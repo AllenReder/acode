@@ -12,9 +12,12 @@ import {
   getActiveTab,
   applyCreateTab,
   applyActivateTab,
+  applyCloseTab,
   applyClosePane,
+  applyRenameTab,
   applyRemoveSessionViews,
   applyOpenTarget,
+  applyOpenDeepLinkTarget,
   applySetFocused,
   applySetSplitRatio,
   applySplitFocused,
@@ -22,6 +25,7 @@ import {
   applyReplacePaneTarget,
   applyPruneWorkspaceViews,
   emptyWorkbenchSnapshot,
+  tabDisplayTitle,
   type WorkbenchSnapshot,
 } from "./workbenchState";
 import { leafIds } from "./layout";
@@ -88,6 +92,111 @@ describe("emptyWorkbenchSnapshot", () => {
       definitionId: "welcome",
       target: { kind: "welcome" },
     });
+  });
+
+  it("derives an automatic title from the first Pane and follows it when that Pane closes", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    snap = applySplitFocused(snap, terminal("term-1"), "right", ids);
+    const firstPaneId = [...getActiveTab(snap).panes.entries()].find(
+      ([, view]) => view.target.kind === "agentSession",
+    )![0];
+    const resolveTitle = (target: ViewTarget) =>
+      target.kind === "agentSession" ? "Agent title" : "Terminal title";
+
+    expect(tabDisplayTitle(getActiveTab(snap), resolveTitle)).toBe("Agent title");
+    snap = applyClosePane(snap, firstPaneId, ids)!;
+    expect(tabDisplayTitle(getActiveTab(snap), resolveTitle)).toBe("Terminal title");
+  });
+
+  it("keeps a manually renamed Tab title when its first Pane changes", () => {
+    const ids = makeIds();
+    let snap = emptyWorkbenchSnapshot(ids);
+    const tabId = snap.activeTabId;
+    snap = applyRenameTab(snap, tabId, "My workbench");
+    snap = applyOpenTarget(snap, agent(AGENT_X), ids);
+
+    expect(tabDisplayTitle(getActiveTab(snap), () => "Agent title")).toBe("My workbench");
+    expect(getActiveTab(snap).titleMode).toBe("manual");
+  });
+});
+
+describe("applyCloseTab", () => {
+  it("removes one Tab without changing the same Session in another Tab", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const firstTabId = snap.activeTabId;
+    snap = applyCreateTab(snap, ids);
+    snap = applyOpenTarget(snap, agent(AGENT_X), ids);
+    const secondTabId = snap.activeTabId;
+
+    snap = applyCloseTab(snap, secondTabId);
+
+    expect(snap.tabs).toHaveLength(1);
+    expect(snap.activeTabId).toBe(firstTabId);
+    expect([...getActiveTab(snap).panes.values()][0]?.target).toEqual(agent(AGENT_X));
+  });
+
+  it("keeps the final Tab as an explicit Welcome state", () => {
+    const snap = emptyWorkbenchSnapshot(makeIds());
+    expect(applyCloseTab(snap, snap.activeTabId)).toBe(snap);
+  });
+});
+
+describe("applyOpenDeepLinkTarget", () => {
+  it("focuses a target that is already open in another Tab", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const firstTabId = snap.activeTabId;
+    const firstPaneId = getActiveTab(snap).focusedPaneId;
+    snap = applyCreateTab(snap, ids);
+    snap = applyOpenTarget(snap, terminal("term-1"), ids);
+
+    snap = applyOpenDeepLinkTarget(snap, agent(AGENT_X), ids);
+
+    expect(snap.activeTabId).toBe(firstTabId);
+    expect(getActiveTab(snap).focusedPaneId).toBe(firstPaneId);
+    expect(snap.tabs).toHaveLength(2);
+  });
+
+  it("opens a missing deep-link target in a new Tab without replacing restored work", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const firstTabId = snap.activeTabId;
+    snap = applySplitFocused(snap, terminal("term-1"), "right", ids);
+    const firstTabPaneIds = [...getActiveTab(snap).panes.keys()];
+
+    snap = applyOpenDeepLinkTarget(snap, agent(AGENT_Y), ids);
+
+    expect(snap.tabs).toHaveLength(2);
+    expect(snap.tabs[0]?.id).toBe(firstTabId);
+    expect([...snap.tabs[0]!.panes.keys()]).toEqual(firstTabPaneIds);
+    expect([...getActiveTab(snap).panes.values()][0]?.target).toEqual(agent(AGENT_Y));
+  });
+
+  it("replaces a sole Welcome View instead of creating a redundant empty Tab", () => {
+    const snap = applyOpenDeepLinkTarget(
+      emptyWorkbenchSnapshot(makeIds()),
+      agent(AGENT_X),
+      makeIds(),
+    );
+    expect(snap.tabs).toHaveLength(1);
+    expect([...getActiveTab(snap).panes.values()][0]?.target).toEqual(agent(AGENT_X));
+  });
+
+  it("focuses the Workspace's existing draft instead of creating a stray Welcome Tab", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), newAgentSession(DRAFT_X), ids);
+    const firstTabId = snap.activeTabId;
+    const firstPaneId = getActiveTab(snap).focusedPaneId;
+    snap = applyCreateTab(snap, ids);
+
+    snap = applyOpenDeepLinkTarget(snap, newAgentSession("draft-y" as DraftId), ids);
+
+    expect(snap.tabs).toHaveLength(2);
+    expect(snap.activeTabId).toBe(firstTabId);
+    expect(getActiveTab(snap).focusedPaneId).toBe(firstPaneId);
+    expect([...getActiveTab(snap).panes.values()][0]?.target).toEqual(newAgentSession(DRAFT_X));
   });
 });
 
@@ -515,6 +624,20 @@ describe("applyReplacePaneTarget", () => {
     expect(viewAfter.id).toBe(viewBefore.id);
     expect(viewAfter.target).toEqual(agent(AGENT_X));
   });
+
+  it("focuses an existing Session instead of creating a duplicate during promotion", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const agentPaneId = getActiveTab(snap).focusedPaneId;
+    snap = applySplitFocused(snap, terminal("term-1"), "right", ids);
+    const terminalPaneId = getActiveTab(snap).focusedPaneId;
+
+    snap = applyReplacePaneTarget(snap, terminalPaneId, agent(AGENT_X));
+
+    expect(getActiveTab(snap).panes.size).toBe(1);
+    expect(getActiveTab(snap).focusedPaneId).toBe(agentPaneId);
+    expect(getActiveTab(snap).panes.get(agentPaneId)?.target).toEqual(agent(AGENT_X));
+  });
 });
 
 describe("applyPruneWorkspaceViews", () => {
@@ -529,10 +652,24 @@ describe("applyPruneWorkspaceViews", () => {
     let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), draft, ids);
     snap = applySplitFocused(snap, workspaceTarget, "right", ids);
 
-    snap = applyPruneWorkspaceViews(snap, [], ids);
+    snap = applyPruneWorkspaceViews(snap, [], ids, [ENV_A]);
 
     const tab = getActiveTab(snap);
     expect(tab.panes.size).toBe(1);
     expect(tab.panes.get(tab.focusedPaneId)?.target.kind).toBe("welcome");
+  });
+
+  it("keeps Views when their Environment is temporarily unavailable", () => {
+    const ids = makeIds();
+    const remoteTarget: ViewTarget = {
+      ...newAgentSession(),
+      environmentId: ENV_B,
+    };
+    const snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), remoteTarget, ids);
+
+    const after = applyPruneWorkspaceViews(snap, [], ids, [ENV_A]);
+
+    expect(after).toBe(snap);
+    expect([...getActiveTab(after).panes.values()][0]?.target).toEqual(remoteTarget);
   });
 });

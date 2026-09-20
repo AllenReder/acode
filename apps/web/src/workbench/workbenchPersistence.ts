@@ -1,0 +1,212 @@
+import { leafIds, type LayoutNode } from "./layout";
+import { targetKey, type ViewTarget } from "./viewRegistry";
+import type { ViewInstance, WorkbenchSnapshot, WorkbenchTab } from "./workbenchState";
+
+export const WORKBENCH_PERSISTENCE_KEY = "acode:workbench:v1";
+export const WORKBENCH_PERSISTENCE_BACKUP_KEY = "acode:workbench:v1.backup";
+const WORKBENCH_PERSISTENCE_VERSION = 1;
+
+export interface WorkbenchStorage {
+  readonly getItem: (key: string) => string | null;
+  readonly setItem: (key: string, value: string) => void;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isLayoutNode(value: unknown): value is LayoutNode {
+  if (!isRecord(value)) return false;
+  if (value.type === "leaf") return typeof value.id === "string" && value.id.length > 0;
+  if (value.type !== "split") return false;
+  if (
+    typeof value.id !== "string" ||
+    (value.dir !== "right" && value.dir !== "down") ||
+    !Array.isArray(value.children) ||
+    value.children.length < 2 ||
+    !Array.isArray(value.sizes) ||
+    value.sizes.length !== value.children.length ||
+    !value.sizes.every((size) => typeof size === "number" && Number.isFinite(size) && size > 0)
+  ) {
+    return false;
+  }
+  return value.children.every(isLayoutNode);
+}
+
+function isViewTarget(value: unknown): value is ViewTarget {
+  if (!isRecord(value) || typeof value.kind !== "string") return false;
+  const definitionId = value.definitionId;
+  if (definitionId !== undefined && typeof definitionId !== "string") return false;
+  switch (value.kind) {
+    case "welcome":
+      return true;
+    case "project":
+      return typeof value.environmentId === "string" && typeof value.projectId === "string";
+    case "workspace":
+      return typeof value.environmentId === "string" && typeof value.workspaceId === "string";
+    case "agentSession":
+      return (
+        typeof value.environmentId === "string" &&
+        typeof value.workspaceId === "string" &&
+        typeof value.agentSessionId === "string"
+      );
+    case "newAgentSession":
+      return (
+        typeof value.environmentId === "string" &&
+        typeof value.workspaceId === "string" &&
+        typeof value.draftId === "string"
+      );
+    case "workspaceTerminal":
+      return (
+        typeof value.environmentId === "string" &&
+        typeof value.workspaceId === "string" &&
+        typeof value.terminalSessionId === "string"
+      );
+    default:
+      return false;
+  }
+}
+
+function isViewInstance(value: unknown): value is ViewInstance {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    value.id.length > 0 &&
+    typeof value.definitionId === "string" &&
+    value.definitionId.length > 0 &&
+    isViewTarget(value.target)
+  );
+}
+
+function decodeWorkbenchTab(value: unknown): WorkbenchTab | null {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    value.id.length === 0 ||
+    !isLayoutNode(value.layout) ||
+    typeof value.focusedPaneId !== "string" ||
+    (value.titleMode !== "auto" && value.titleMode !== "manual") ||
+    (value.titleOverride !== null && typeof value.titleOverride !== "string") ||
+    !Array.isArray(value.panes)
+  ) {
+    return null;
+  }
+  const panes = new Map<string, ViewInstance>();
+  const sessionTargetKeys = new Set<string>();
+  for (const entry of value.panes) {
+    if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== "string") return null;
+    if (!isViewInstance(entry[1]) || panes.has(entry[0])) return null;
+    if (entry[1].target.kind !== "welcome" && entry[1].target.kind !== "project") {
+      const key = targetKey(entry[1].target);
+      if (sessionTargetKeys.has(key)) return null;
+      sessionTargetKeys.add(key);
+    }
+    panes.set(entry[0], entry[1]);
+  }
+  const ids = leafIds(value.layout);
+  if (ids.length !== panes.size || ids.some((id) => !panes.has(id))) return null;
+  if (!panes.has(value.focusedPaneId)) return null;
+  if (value.titleMode === "manual" && (value.titleOverride ?? "").trim().length === 0) return null;
+  return {
+    id: value.id,
+    layout: value.layout,
+    focusedPaneId: value.focusedPaneId,
+    titleMode: value.titleMode,
+    titleOverride: value.titleOverride,
+    panes,
+  };
+}
+
+function decodeWorkbenchSnapshot(value: unknown): WorkbenchSnapshot | null {
+  if (
+    !isRecord(value) ||
+    value.version !== WORKBENCH_PERSISTENCE_VERSION ||
+    typeof value.activeTabId !== "string" ||
+    !Array.isArray(value.tabs) ||
+    value.tabs.length === 0
+  ) {
+    return null;
+  }
+  const tabs: WorkbenchTab[] = [];
+  const tabIds = new Set<string>();
+  const draftWorkspaceKeys = new Set<string>();
+  for (const candidate of value.tabs) {
+    const tab = decodeWorkbenchTab(candidate);
+    if (tab === null || tabIds.has(tab.id)) return null;
+    for (const view of tab.panes.values()) {
+      if (view.target.kind !== "newAgentSession") continue;
+      const key = `${view.target.environmentId}:${view.target.workspaceId}`;
+      if (draftWorkspaceKeys.has(key)) return null;
+      draftWorkspaceKeys.add(key);
+    }
+    tabIds.add(tab.id);
+    tabs.push(tab);
+  }
+  if (!tabIds.has(value.activeTabId)) return null;
+  return { tabs, activeTabId: value.activeTabId };
+}
+
+export function serializeWorkbenchSnapshot(snapshot: WorkbenchSnapshot): string {
+  return JSON.stringify({
+    version: WORKBENCH_PERSISTENCE_VERSION,
+    activeTabId: snapshot.activeTabId,
+    tabs: snapshot.tabs.map((tab) => ({
+      id: tab.id,
+      layout: tab.layout,
+      focusedPaneId: tab.focusedPaneId,
+      titleMode: tab.titleMode,
+      titleOverride: tab.titleOverride,
+      panes: [...tab.panes.entries()],
+    })),
+  });
+}
+
+export function deserializeWorkbenchSnapshot(raw: string): WorkbenchSnapshot | null {
+  try {
+    return decodeWorkbenchSnapshot(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+function resolveStorage(storage?: WorkbenchStorage): WorkbenchStorage | null {
+  if (storage !== undefined) return storage;
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+export function readWorkbenchSnapshot(storage?: WorkbenchStorage): WorkbenchSnapshot | null {
+  const resolved = resolveStorage(storage);
+  if (resolved === null) return null;
+  try {
+    const raw = resolved.getItem(WORKBENCH_PERSISTENCE_KEY);
+    return raw === null ? null : deserializeWorkbenchSnapshot(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function writeWorkbenchSnapshot(
+  snapshot: WorkbenchSnapshot,
+  storage?: WorkbenchStorage,
+): void {
+  const resolved = resolveStorage(storage);
+  if (resolved === null) return;
+  try {
+    const existing = resolved.getItem(WORKBENCH_PERSISTENCE_KEY);
+    if (
+      existing !== null &&
+      deserializeWorkbenchSnapshot(existing) === null &&
+      resolved.getItem(WORKBENCH_PERSISTENCE_BACKUP_KEY) === null
+    ) {
+      resolved.setItem(WORKBENCH_PERSISTENCE_BACKUP_KEY, existing);
+    }
+    resolved.setItem(WORKBENCH_PERSISTENCE_KEY, serializeWorkbenchSnapshot(snapshot));
+  } catch {
+    // Layout persistence is best-effort; a full or blocked storage must not stop work.
+  }
+}

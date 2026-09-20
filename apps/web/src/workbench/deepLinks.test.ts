@@ -15,6 +15,7 @@ import {
   deepLinkInputFromParams,
   draftIdFromParams,
   newAgentSessionTargetForDraft,
+  resolveDraftRecoveryTarget,
   resolveNewAgentSessionTarget,
   resolveDeepLink,
   sessionRouteForTarget,
@@ -139,10 +140,13 @@ describe("New Agent Session recovery", () => {
     expect(deepLinkInputFromParams({ draftId: "draft-one" })).toBeNull();
     expect(draftIdFromParams({ draftId: "draft-one" })).toBe("draft-one");
     expect(
-      newAgentSessionTargetForDraft("draft-one" as Parameters<typeof newAgentSessionTargetForDraft>[0], {
-        environmentId: ENV,
-        workspaceId: WS,
-      }),
+      newAgentSessionTargetForDraft(
+        "draft-one" as Parameters<typeof newAgentSessionTargetForDraft>[0],
+        {
+          environmentId: ENV,
+          workspaceId: WS,
+        },
+      ),
     ).toEqual({
       kind: "newAgentSession",
       environmentId: ENV,
@@ -180,6 +184,36 @@ describe("New Agent Session recovery", () => {
         projects,
       ),
     ).toMatchObject({ kind: "newAgentSession", workspaceId: worktreeWorkspace });
+  });
+
+  it("recovers a draft route as the Agent Session that already owns its thread", () => {
+    const projects = [
+      project([
+        {
+          id: WS,
+          sessions: [
+            {
+              kind: "agent",
+              id: AGENT,
+              workspaceId: WS,
+              title: "Promoted draft",
+              status: "open",
+              threadId: THREAD,
+              createdAt: "2026-01-01T00:00:00Z",
+              updatedAt: "2026-01-01T00:00:00Z",
+            },
+          ],
+        },
+      ]),
+    ];
+
+    expect(
+      resolveDraftRecoveryTarget(
+        "draft-one" as Parameters<typeof resolveDraftRecoveryTarget>[0],
+        { environmentId: ENV, workspaceId: WS, threadId: THREAD },
+        projects,
+      ),
+    ).toEqual(agentTarget);
   });
 });
 

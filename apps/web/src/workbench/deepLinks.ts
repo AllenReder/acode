@@ -44,6 +44,38 @@ export function newAgentSessionTargetForDraft(
   };
 }
 
+/** Resolve a reloaded draft route to the Agent Session it was promoted into, if any. */
+export function resolveDraftRecoveryTarget(
+  draftId: DraftId,
+  draft: {
+    readonly environmentId: EnvironmentId;
+    readonly workspaceId: WorkspaceId;
+    readonly threadId: ThreadId;
+    readonly worktreePath?: string | null | undefined;
+    readonly promotedTo?: { readonly threadId: ThreadId } | null | undefined;
+  },
+  projects: ReadonlyArray<EnvironmentAcodeProject>,
+): SessionTarget | NewAgentSessionTarget | null {
+  const threadId = draft.promotedTo?.threadId ?? draft.threadId;
+  for (const project of projects) {
+    if (project.environmentId !== draft.environmentId) continue;
+    for (const workspace of project.workspaces) {
+      const session = agentSessionsIn(workspace).find(
+        (candidate) => candidate.threadId === threadId,
+      );
+      if (session !== undefined) {
+        return {
+          kind: "agentSession",
+          environmentId: project.environmentId,
+          workspaceId: workspace.id,
+          agentSessionId: session.id,
+        };
+      }
+    }
+  }
+  return resolveNewAgentSessionTarget(draftId, draft, projects);
+}
+
 export function resolveNewAgentSessionTarget(
   draftId: DraftId,
   draft: {
