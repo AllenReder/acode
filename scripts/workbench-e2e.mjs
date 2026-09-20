@@ -252,6 +252,19 @@ async function main() {
     const separator = page.locator("[data-sash-id]").first();
     const separatorBox = await separator.boundingBox();
     NodeAssert.ok(separatorBox !== null, "Expected a visible BSP separator.");
+    const separatorHit = await separator.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+      );
+      return hit?.closest("[data-sash-id]")?.getAttribute("data-sash-id") ?? null;
+    });
+    NodeAssert.equal(
+      separatorHit,
+      await separator.getAttribute("data-sash-id"),
+      "The BSP separator must render on top of the pane boundary.",
+    );
     await page.mouse.move(separatorBox.x + separatorBox.width / 2, separatorBox.y + 80);
     await page.mouse.down();
     await page.mouse.move(separatorBox.x + separatorBox.width / 2 + 120, separatorBox.y + 80, {

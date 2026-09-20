@@ -313,6 +313,7 @@ function SashHandle({ splitId, index, dir, sizes, style }: SashHandleProps) {
       onMouseLeave={() => setHover(false)}
       onMouseDown={onMouseDown}
       className={
+        "absolute z-10 " +
         (dir === "right" ? "cursor-col-resize " : "cursor-row-resize ") +
         (hover ? "bg-foreground/40" : "bg-foreground/15")
       }
