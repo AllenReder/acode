@@ -64,6 +64,7 @@ const makeTerminalManagerLayer = (overrides: TerminalOverrides) =>
     attachStream: () => Effect.die(new Error("unused")),
     resize: () => Effect.void,
     clear: () => Effect.void,
+    rename: () => Effect.die(new Error("unused")),
     restart: () => Effect.die(new Error("unused")),
     close: () => Effect.void,
     subscribe: () => Effect.succeed(() => undefined),

@@ -43,9 +43,11 @@ import type {
   TerminalCloseInput,
   TerminalMetadataStreamEvent,
   TerminalOpenInput,
+  TerminalRenameInput,
   TerminalResizeInput,
   TerminalRestartInput,
   TerminalSessionSnapshot,
+  TerminalSummary,
   TerminalWriteInput,
 } from "./terminal.ts";
 import * as Schema from "effect/Schema";
@@ -1495,6 +1497,7 @@ export interface EnvironmentApi {
     write: (input: typeof TerminalWriteInput.Encoded) => Promise<void>;
     resize: (input: typeof TerminalResizeInput.Encoded) => Promise<void>;
     clear: (input: typeof TerminalClearInput.Encoded) => Promise<void>;
+    rename: (input: typeof TerminalRenameInput.Encoded) => Promise<TerminalSummary>;
     restart: (input: typeof TerminalRestartInput.Encoded) => Promise<TerminalSessionSnapshot>;
     close: (input: typeof TerminalCloseInput.Encoded) => Promise<void>;
     onMetadata: (

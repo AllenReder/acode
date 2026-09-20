@@ -134,18 +134,12 @@ export function splitPane(
 
   return {
     ...node,
-    children: node.children.map((child) =>
-      splitPane(child, focusedId, dir, newLeafId),
-    ),
+    children: node.children.map((child) => splitPane(child, focusedId, dir, newLeafId)),
   };
 }
 
 /** Swap one leaf id for another, keeping the split tree intact. */
-export function replaceLeafId(
-  node: LayoutNode,
-  fromId: string,
-  toId: string,
-): LayoutNode {
+export function replaceLeafId(node: LayoutNode, fromId: string, toId: string): LayoutNode {
   if (fromId === toId) return node;
   if (node.type === "leaf") {
     return node.id === fromId ? leaf(toId) : node;
@@ -157,10 +151,7 @@ export function replaceLeafId(
 }
 
 /** Drop a leaf. Parent splits collapse to the remaining child. */
-export function removePane(
-  node: LayoutNode,
-  leafId: string,
-): LayoutNode | null {
+export function removePane(node: LayoutNode, leafId: string): LayoutNode | null {
   if (node.type === "leaf") return node.id === leafId ? null : node;
 
   const kept: { child: LayoutNode; size: number }[] = [];
@@ -187,10 +178,7 @@ export function removePane(
  * Close one pane in a tab. Returns null only when this was the last leaf.
  * Focus moves to the closed pane's sibling when the closed pane was focused.
  */
-export function closeLeaf(
-  tab: AcodeTab,
-  leafId: string,
-): AcodeTab | null {
+export function closeLeaf(tab: AcodeTab, leafId: string): AcodeTab | null {
   const nextLayout = removePane(tab.layout, leafId);
   if (!nextLayout) return null;
   const nextFocus =
@@ -211,9 +199,7 @@ export function setSplitRatio(
   if (node.id !== splitId) {
     return {
       ...node,
-      children: node.children.map((child) =>
-        setSplitRatio(child, splitId, index, boundary),
-      ),
+      children: node.children.map((child) => setSplitRatio(child, splitId, index, boundary)),
     };
   }
   if (index < 0 || index >= node.sizes.length - 1) return node;
@@ -221,11 +207,7 @@ export function setSplitRatio(
   return { ...node, sizes: splitSizesAtBoundary(node.sizes, index, boundary) };
 }
 
-export function splitSizesAtBoundary(
-  current: number[],
-  index: number,
-  boundary: number,
-): number[] {
+export function splitSizesAtBoundary(current: number[], index: number, boundary: number): number[] {
   if (index < 0 || index >= current.length - 1) return current;
   const sizes = [...current];
   const before = sizes.slice(0, index).reduce((sum, n) => sum + n, 0);
@@ -316,18 +298,13 @@ function rangeOverlap(a0: number, a1: number, b0: number, b1: number): number {
 }
 
 /** Adjacent leaf in `dir`, preferring panes that share an edge. */
-export function neighborLeafId(
-  node: LayoutNode,
-  focusedId: string,
-  dir: FocusDir,
-): string | null {
+export function neighborLeafId(node: LayoutNode, focusedId: string, dir: FocusDir): string | null {
   const panes = leafRects(node);
   const current = panes.find((p) => p.id === focusedId);
   if (!current) return null;
   const c = current.rect;
 
-  let best: { id: string; hit: number; gap: number; overlap: number } | null =
-    null;
+  let best: { id: string; hit: number; gap: number; overlap: number } | null = null;
   for (const pane of panes) {
     if (pane.id === focusedId) continue;
     const r = pane.rect;
@@ -362,14 +339,9 @@ export function neighborLeafId(
 }
 
 /** Leaf to focus after closing `leafId` — a neighbor's first leaf. */
-export function siblingLeafId(
-  node: LayoutNode,
-  leafId: string,
-): string | null {
+export function siblingLeafId(node: LayoutNode, leafId: string): string | null {
   if (node.type === "leaf") return null;
-  const index = node.children.findIndex(
-    (child) => child.type === "leaf" && child.id === leafId,
-  );
+  const index = node.children.findIndex((child) => child.type === "leaf" && child.id === leafId);
   if (index >= 0) {
     const neighbor = node.children[index - 1] ?? node.children[index + 1];
     if (neighbor === undefined) return null;
@@ -384,6 +356,7 @@ export function siblingLeafId(
 
 export type PanePlace = "before" | "after";
 export type PaneEdge = "left" | "right" | "top" | "bottom";
+export type PaneDropZone = PaneEdge | "replace";
 
 type SplitNode = Extract<LayoutNode, { type: "split" }>;
 
@@ -392,10 +365,32 @@ export function paneEdgeFromPoint(
   y: number,
   rect: { left: number; top: number; width: number; height: number },
 ): PaneEdge {
-  const nx = rect.width <= 0 ? 0 : (x - rect.left) / rect.width - 0.5;
-  const ny = rect.height <= 0 ? 0 : (y - rect.top) / rect.height - 0.5;
-  if (Math.abs(nx) > Math.abs(ny)) return nx < 0 ? "left" : "right";
-  return ny < 0 ? "top" : "bottom";
+  if (rect.width <= 0 || rect.height <= 0) return "left";
+  const nx = (x - rect.left) / rect.width;
+  const ny = (y - rect.top) / rect.height;
+  const candidates: ReadonlyArray<{ edge: PaneEdge; distance: number }> = [
+    { edge: "left", distance: nx },
+    { edge: "right", distance: 1 - nx },
+    { edge: "top", distance: ny },
+    { edge: "bottom", distance: 1 - ny },
+  ];
+  return candidates.reduce((best, candidate) =>
+    candidate.distance < best.distance ? candidate : best,
+  ).edge;
+}
+
+/** Resolve the split edge or central replace zone for a Pane drop. */
+export function paneDropZoneFromPoint(
+  x: number,
+  y: number,
+  rect: { left: number; top: number; width: number; height: number },
+): PaneDropZone {
+  if (rect.width <= 0 || rect.height <= 0) return "replace";
+  const nx = (x - rect.left) / rect.width;
+  const ny = (y - rect.top) / rect.height;
+  const edge = paneEdgeFromPoint(x, y, rect);
+  const distance = edge === "left" ? nx : edge === "right" ? 1 - nx : edge === "top" ? ny : 1 - ny;
+  return distance < 0.3 ? edge : "replace";
 }
 
 function edgeSplit(edge: PaneEdge): { dir: SplitDir; place: PanePlace } {
@@ -515,9 +510,7 @@ function insertBeside(
 ): LayoutNode {
   if (node.type === "leaf") return node;
 
-  const index = node.children.findIndex(
-    (child) => child.type === "leaf" && child.id === targetId,
-  );
+  const index = node.children.findIndex((child) => child.type === "leaf" && child.id === targetId);
   if (index >= 0) {
     const insertAt = place === "before" ? index : index + 1;
     const children = [...node.children];
@@ -531,9 +524,7 @@ function insertBeside(
 
   return {
     ...node,
-    children: node.children.map((child) =>
-      insertBeside(child, targetId, incoming, place),
-    ),
+    children: node.children.map((child) => insertBeside(child, targetId, incoming, place)),
   };
 }
 
@@ -556,9 +547,7 @@ function wrapBeside(
   }
   return {
     ...node,
-    children: node.children.map((child) =>
-      wrapBeside(child, targetId, incoming, dir, place),
-    ),
+    children: node.children.map((child) => wrapBeside(child, targetId, incoming, dir, place)),
   };
 }
 
@@ -581,13 +570,7 @@ export function movePane(
 
   const { dir, place } = edgeSplit(edge);
   if (toAt.dir === dir && fromAt.parentId === toAt.parentId) {
-    return reorderInSplit(
-      node,
-      fromAt.parentId,
-      fromAt.index,
-      toAt.index,
-      place,
-    );
+    return reorderInSplit(node, fromAt.parentId, fromAt.index, toAt.index, place);
   }
 
   const extracted = extractLeaf(node, fromId);
@@ -644,9 +627,7 @@ export function replacePaneWithLayout(
   if (node.type === "leaf") return node.id === targetId ? incoming : node;
   return {
     ...node,
-    children: node.children.map((child) =>
-      replacePaneWithLayout(child, targetId, incoming),
-    ),
+    children: node.children.map((child) => replacePaneWithLayout(child, targetId, incoming)),
   };
 }
 

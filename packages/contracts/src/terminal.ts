@@ -105,6 +105,12 @@ export type TerminalResizeInput = Schema.Codec.Encoded<typeof TerminalResizeInpu
 export const TerminalClearInput = TerminalSessionInput;
 export type TerminalClearInput = Schema.Codec.Encoded<typeof TerminalClearInput>;
 
+export const TerminalRenameInput = Schema.Struct({
+  ...TerminalSessionInput.fields,
+  title: TrimmedNonEmptyStringSchema.check(Schema.isMaxLength(128)),
+}).check(terminalOwnerFilter);
+export type TerminalRenameInput = typeof TerminalRenameInput.Type;
+
 export const TerminalRestartInput = Schema.Struct({
   ...TerminalSessionInput.fields,
   /** Resolved from workspaceId for Workspace-owned sessions. */
@@ -150,6 +156,8 @@ export const TerminalSessionSnapshot = Schema.Struct({
   exitSignal: Schema.NullOr(Schema.Int),
   /** Server-computed display title (idle shell vs subprocess command). */
   label: Schema.String.check(Schema.isMaxLength(128)),
+  /** Persistent user-visible Session title. */
+  title: Schema.optional(TrimmedNonEmptyStringSchema),
   updatedAt: Schema.String,
   sequence: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   /** Increments whenever a new PTY is spawned for this Session. */
@@ -174,6 +182,8 @@ export const TerminalSummary = Schema.Struct({
   hasRunningSubprocess: Schema.Boolean,
   /** Server-computed display title (idle shell vs subprocess command). */
   label: Schema.String.check(Schema.isMaxLength(128)),
+  /** Persistent user-visible Session title. */
+  title: Schema.optional(TrimmedNonEmptyStringSchema),
   updatedAt: Schema.String,
   /** Increments whenever a new PTY is spawned for this Session. */
   generation: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
@@ -257,6 +267,12 @@ const TerminalActivityEvent = Schema.Struct({
   label: Schema.String.check(Schema.isMaxLength(128)),
 });
 
+const TerminalRenamedEvent = Schema.Struct({
+  ...TerminalEventBaseSchema.fields,
+  type: Schema.Literal("renamed"),
+  title: TrimmedNonEmptyString,
+});
+
 export const TerminalEvent = Schema.Union([
   TerminalStartedEvent,
   TerminalOutputEvent,
@@ -266,6 +282,7 @@ export const TerminalEvent = Schema.Union([
   TerminalClearedEvent,
   TerminalRestartedEvent,
   TerminalActivityEvent,
+  TerminalRenamedEvent,
 ]);
 export type TerminalEvent = typeof TerminalEvent.Type;
 

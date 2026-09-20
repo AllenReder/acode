@@ -26,6 +26,9 @@ The matching contracts are in `packages/contracts/src/terminal.ts` and
 - `write` sends input bytes to the running PTY. `resize` forwards settled
   columns and rows to the PTY. The shell can observe the new size through
   `stty`/its native console API.
+- `rename` sets a persistent user-owned title for an existing session.
+  Terminal sessions also follow OSC 0/1/2 title updates emitted by the PTY
+  until the user renames them; a manual title takes precedence thereafter.
 - `clear` clears retained history, `restart` replaces the PTY in place, and
   `close` explicitly releases the session and optionally deletes its history.
 
@@ -55,6 +58,12 @@ The daemon persists the Session index beside terminal history. On daemon
 restart, a former live generation is reported as `exited`; reopening starts a
 new generation rather than pretending the old shell was recovered. Closing an
 Agent or its View does not close a Workspace terminal.
+
+Session identity remains the stable `(workspaceId, terminalId)` pair; title
+changes never alter it. Workspace-created terminals receive creation-order
+defaults (`Terminal 1`, `Terminal 2`, ...). A terminal-provided title is
+persisted and restored until the next PTY publishes a title. A manually
+renamed title takes precedence and is equally durable across that boundary.
 
 Closing a View, Pane, or Tab remains distinct from calling `close`; `close` is
 reserved for explicit terminal termination. The Sidebar can create a terminal

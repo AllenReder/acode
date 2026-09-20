@@ -40,7 +40,8 @@ import { nextWorkspaceTerminalId } from "./Sidebar.logic";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { SidebarContent, SidebarGroup, SidebarGroupLabel } from "./ui/sidebar";
 import { sessionRouteForTarget } from "../workbench/deepLinks";
-import { terminalTargetForRuntime } from "../workbench/sessionTarget";
+import { runtimeTerminalIdForTarget, terminalTargetForRuntime } from "../workbench/sessionTarget";
+import type { ViewTarget } from "../workbench/viewRegistry";
 import { useWorkbenchStore } from "../workbench/workbenchStore";
 
 type ProjectMenuId =
@@ -51,7 +52,6 @@ type ProjectMenuId =
   | "remove-project";
 
 type WorkspaceMenuId =
-  | "open"
   | "new-agent-session"
   | "new-terminal-session"
   | "rename-workspace"
@@ -94,7 +94,6 @@ export function workspaceMenuItems(input: {
   readonly canDeleteDirectory: boolean;
 }): ReadonlyArray<ContextMenuItem<WorkspaceMenuId>> {
   return [
-    { id: "open", label: "Open", icon: "maximize-2" },
     { id: "new-agent-session", label: "New Agent Session", icon: "message-square-plus" },
     { id: "new-terminal-session", label: "New Terminal Session", icon: "terminal" },
     { id: "rename-workspace", label: "Rename", icon: "pencil", separatorBefore: true },
@@ -163,20 +162,19 @@ export function AcodeSidebar() {
   const renameProject = useAtomCommand(workspaceEnvironment.renameProject);
   const deleteProject = useAtomCommand(projectEnvironment.delete);
   const openTerminal = useAtomCommand(terminalEnvironment.open);
+  const renameTerminalSession = useAtomCommand(terminalEnvironment.rename);
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata);
 
   const openAddProject = useCallback(() => openCommandPalette({ open: "add-project" }), []);
 
-  const openWorkspace = useCallback(
-    (project: EnvironmentAcodeProject, workspace: AcodeWorkspaceShell) => {
-      useWorkbenchStore.getState().openTarget({
-        kind: "workspace",
-        environmentId: project.environmentId,
-        workspaceId: workspace.id,
-      });
-    },
-    [],
-  );
+  const toggleWorkspaceExpanded = useCallback((workspaceKey: string) => {
+    setExpandedWorkspaces((current) => {
+      const next = new Set(current);
+      if (next.has(workspaceKey)) next.delete(workspaceKey);
+      else next.add(workspaceKey);
+      return next;
+    });
+  }, []);
 
   const openDraft = useCallback(
     (
@@ -354,7 +352,6 @@ export function AcodeSidebar() {
           position,
         );
         if (clicked === null) return;
-        if (clicked === "open") openWorkspace(project, workspace);
         if (clicked === "new-agent-session") newAgentSession(project, workspace);
         if (clicked === "new-terminal-session") newTerminalSession(project, workspace);
         if (clicked === "rename-workspace") {
@@ -395,7 +392,7 @@ export function AcodeSidebar() {
         }
       })();
     },
-    [newAgentSession, newTerminalSession, openWorkspace, removeWorkspace, renameWorkspace],
+    [newAgentSession, newTerminalSession, removeWorkspace, renameWorkspace],
   );
 
   const renameAgent = useCallback(
@@ -409,6 +406,33 @@ export function AcodeSidebar() {
       });
     },
     [updateThreadMetadata],
+  );
+
+  const renameTerminal = useCallback(
+    (target: Extract<ViewTarget, { kind: "workspaceTerminal" }>, currentTitle: string) => {
+      const title = window.prompt("Session name", currentTitle)?.trim();
+      if (!title) return;
+      const terminalId = runtimeTerminalIdForTarget(target);
+      if (!terminalId) {
+        commandFailureToast(
+          "Could not rename Terminal Session",
+          new Error("Terminal id is unavailable."),
+        );
+        return;
+      }
+      void renameTerminalSession({
+        environmentId: target.environmentId,
+        input: { workspaceId: target.workspaceId, terminalId, title },
+      }).then((result) => {
+        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+          commandFailureToast(
+            "Could not rename Terminal Session",
+            squashAtomCommandFailure(result),
+          );
+        }
+      });
+    },
+    [renameTerminalSession],
   );
 
   if (projects.length === 0) {
@@ -498,14 +522,7 @@ export function AcodeSidebar() {
                                 workspaceExpanded ? "Collapse Workspace" : "Expand Workspace"
                               }
                               className="flex size-5 shrink-0 items-center justify-center rounded hover:bg-sidebar-row-hover"
-                              onClick={() =>
-                                setExpandedWorkspaces((current) => {
-                                  const next = new Set(current);
-                                  if (next.has(workspaceKey)) next.delete(workspaceKey);
-                                  else next.add(workspaceKey);
-                                  return next;
-                                })
-                              }
+                              onClick={() => toggleWorkspaceExpanded(workspaceKey)}
                             >
                               {workspaceExpanded ? (
                                 <ChevronDownIcon className="size-3" />
@@ -521,7 +538,7 @@ export function AcodeSidebar() {
                               )}
                               role="treeitem"
                               className="flex min-h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
-                              onClick={() => openWorkspace(project, workspace)}
+                              onClick={() => toggleWorkspaceExpanded(workspaceKey)}
                               onContextMenu={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
@@ -591,6 +608,17 @@ export function AcodeSidebar() {
                                     }}
                                     navigateTo={(route) =>
                                       void navigate({ ...route, to: route.to as never } as never)
+                                    }
+                                    onStartRename={() =>
+                                      renameTerminal(
+                                        {
+                                          kind: "workspaceTerminal",
+                                          environmentId: project.environmentId,
+                                          workspaceId: workspace.id,
+                                          terminalSessionId: session.id,
+                                        },
+                                        session.title,
+                                      )
                                     }
                                   >
                                     <TerminalIcon className="size-3 shrink-0" />
@@ -676,6 +704,17 @@ export function AcodeSidebar() {
                                             ...route,
                                             to: route.to as never,
                                           } as never)
+                                        }
+                                        onStartRename={() =>
+                                          renameTerminal(
+                                            {
+                                              kind: "workspaceTerminal",
+                                              environmentId: project.environmentId,
+                                              workspaceId: workspace.id,
+                                              terminalSessionId: session.id,
+                                            },
+                                            session.title,
+                                          )
                                         }
                                       >
                                         <TerminalIcon className="size-3 shrink-0" />

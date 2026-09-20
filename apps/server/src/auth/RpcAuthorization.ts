@@ -143,6 +143,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.terminalWrite]: AuthTerminalOperateScope,
   [WS_METHODS.terminalResize]: AuthTerminalOperateScope,
   [WS_METHODS.terminalClear]: AuthTerminalOperateScope,
+  [WS_METHODS.terminalRename]: AuthTerminalOperateScope,
   [WS_METHODS.terminalRestart]: AuthTerminalOperateScope,
   [WS_METHODS.terminalClose]: AuthTerminalOperateScope,
   [WS_METHODS.subscribeTerminalEvents]: AuthTerminalOperateScope,

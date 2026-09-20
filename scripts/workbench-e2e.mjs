@@ -57,6 +57,39 @@ async function openTerminalInSecondTab(page, target) {
   }, target);
 }
 
+async function paneKinds(page) {
+  return page
+    .locator("[data-pane-id]")
+    .evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute("data-pane-target-kind")),
+    );
+}
+
+async function activeWorkbenchTabId(page) {
+  return page.evaluate(async () => {
+    const { useWorkbenchStore } = await import("/src/workbench/workbenchStore.ts");
+    return useWorkbenchStore.getState().activeTabId;
+  });
+}
+
+async function workbenchStateSignature(page) {
+  return page.evaluate(async () => {
+    const { useWorkbenchStore } = await import("/src/workbench/workbenchStore.ts");
+    const state = useWorkbenchStore.getState();
+    return JSON.stringify({
+      activeTabId: state.activeTabId,
+      tabs: state.tabs.map((tab) => ({
+        id: tab.id,
+        panes: [...tab.panes.entries()].map(([paneId, view]) => ({
+          paneId,
+          viewId: view.id,
+          target: view.target,
+        })),
+      })),
+    });
+  });
+}
+
 async function terminalViewCountsByTab(page) {
   return page.evaluate(async () => {
     const { useWorkbenchStore } = await import("/src/workbench/workbenchStore.ts");
@@ -346,11 +379,229 @@ async function main() {
       "The same Terminal Session should be open once in each internal Tab.",
     );
 
+    const mergeTabIds = await page.evaluate(async () => {
+      const { useWorkbenchStore } = await import("/src/workbench/workbenchStore.ts");
+      const tabs = useWorkbenchStore.getState().tabs;
+      return {
+        draftTabId: tabs.find((tab) =>
+          [...tab.panes.values()].some((view) => view.target.kind === "newAgentSession"),
+        )?.id,
+        terminalTabId: tabs.find((tab) =>
+          [...tab.panes.values()].some((view) => view.target.kind === "workspaceTerminal"),
+        )?.id,
+      };
+    });
+    NodeAssert.ok(
+      mergeTabIds.draftTabId !== undefined && mergeTabIds.terminalTabId !== undefined,
+      "Expected separate draft and Terminal tabs.",
+    );
+    await page.evaluate(async (tabId) => {
+      const { useWorkbenchStore } = await import("/src/workbench/workbenchStore.ts");
+      useWorkbenchStore.getState().activateTab(tabId);
+    }, mergeTabIds.draftTabId);
+    const firstTabTerminalPane = page
+      .locator('[data-pane-target-kind="workspaceTerminal"]')
+      .first();
+    const firstTabDraftPane = page.locator('[data-pane-target-kind="newAgentSession"]').first();
+    await firstTabTerminalPane.waitFor({ state: "visible", timeout: timeoutMs });
+    await firstTabDraftPane.waitFor({ state: "visible", timeout: timeoutMs });
+    const stateBeforePreview = await workbenchStateSignature(page);
+
+    const terminalHandle = firstTabTerminalPane.locator("[data-workbench-pane-drag-handle]");
+    const terminalHandleBox = await terminalHandle.boundingBox();
+    const draftBox = await firstTabDraftPane.boundingBox();
+    NodeAssert.ok(terminalHandleBox !== null && draftBox !== null, "Expected draggable panes.");
+    await page.mouse.move(
+      terminalHandleBox.x + terminalHandleBox.width / 2,
+      terminalHandleBox.y + terminalHandleBox.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      draftBox.x + Math.min(12, draftBox.width * 0.1),
+      draftBox.y + draftBox.height / 2,
+      { steps: 12 },
+    );
+    await page.locator("[data-workbench-drop-preview]").waitFor({
+      state: "visible",
+      timeout: timeoutMs,
+    });
+    await page.locator("[data-workbench-drag-ghost]").waitFor({
+      state: "visible",
+      timeout: timeoutMs,
+    });
+    NodeAssert.equal(await workbenchStateSignature(page), stateBeforePreview);
+    NodeAssert.equal(
+      await page.evaluate(() => getComputedStyle(document.documentElement).userSelect),
+      "none",
+      "Dragging must disable text selection across the document.",
+    );
+    const previewDestination = page.locator(
+      '[data-workbench-preview-pane][data-destination="true"]',
+    );
+    NodeAssert.equal(await previewDestination.count(), 1);
+    const previewDestinationBox = await previewDestination.boundingBox();
+    NodeAssert.ok(previewDestinationBox !== null, "Expected a destination preview.");
+    await page.mouse.up();
+    await page.locator("[data-workbench-drop-preview]").waitFor({
+      state: "detached",
+      timeout: timeoutMs,
+    });
+    NodeAssert.deepEqual(await paneKinds(page), [
+      "agentSession",
+      "workspaceTerminal",
+      "newAgentSession",
+    ]);
+    const movedTerminalBox = await page
+      .locator('[data-pane-target-kind="workspaceTerminal"]')
+      .first()
+      .boundingBox();
+    NodeAssert.ok(movedTerminalBox !== null, "Expected the moved Terminal Pane.");
+    NodeAssert.ok(Math.abs(movedTerminalBox.x - previewDestinationBox.x) < 2);
+    NodeAssert.ok(Math.abs(movedTerminalBox.y - previewDestinationBox.y) < 2);
+    NodeAssert.ok(Math.abs(movedTerminalBox.width - previewDestinationBox.width) < 2);
+    NodeAssert.ok(Math.abs(movedTerminalBox.height - previewDestinationBox.height) < 2);
+
+    const draftHandle = firstTabDraftPane.locator("[data-workbench-pane-drag-handle]");
+    const draftHandleBox = await draftHandle.boundingBox();
+    const terminalBox = await firstTabTerminalPane.boundingBox();
+    NodeAssert.ok(draftHandleBox !== null && terminalBox !== null, "Expected draggable panes.");
+    await page.mouse.move(
+      draftHandleBox.x + draftHandleBox.width / 2,
+      draftHandleBox.y + draftHandleBox.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      terminalBox.x + terminalBox.width / 2,
+      terminalBox.y + terminalBox.height / 2,
+      { steps: 12 },
+    );
+    await page.locator("[data-workbench-drop-preview]").waitFor({
+      state: "visible",
+      timeout: timeoutMs,
+    });
+    await page.keyboard.press("Escape");
+    await page.mouse.up();
+    await page.locator("[data-workbench-drag-ghost]").waitFor({
+      state: "detached",
+      timeout: timeoutMs,
+    });
+    NodeAssert.deepEqual(await paneKinds(page), [
+      "agentSession",
+      "workspaceTerminal",
+      "newAgentSession",
+    ]);
+
+    await page.mouse.move(
+      draftHandleBox.x + draftHandleBox.width / 2,
+      draftHandleBox.y + draftHandleBox.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      terminalBox.x + terminalBox.width / 2,
+      terminalBox.y + terminalBox.height / 2,
+      { steps: 12 },
+    );
+    await page.mouse.up();
+    await page.locator("[data-workbench-drop-preview]").waitFor({
+      state: "detached",
+      timeout: timeoutMs,
+    });
+    NodeAssert.deepEqual(await paneKinds(page), ["agentSession", "newAgentSession"]);
+
+    const tabsBeforeDuplicate = await page.locator('[role="tab"]').count();
+    await page
+      .locator('[data-pane-target-kind="agentSession"]')
+      .first()
+      .getByRole("button", { name: "Duplicate pane", exact: true })
+      .click();
+    await page.waitForTimeout(250);
+    NodeAssert.equal(await page.locator('[role="tab"]').count(), tabsBeforeDuplicate + 1);
+    await page
+      .locator('[role="tab"][aria-selected="true"]')
+      .getByRole("button", { name: /^Close / })
+      .click();
+    await page.waitForTimeout(250);
+    NodeAssert.equal(await page.locator('[role="tab"]').count(), tabsBeforeDuplicate);
+    await page.evaluate(async (tabId) => {
+      const { useWorkbenchStore } = await import("/src/workbench/workbenchStore.ts");
+      useWorkbenchStore.getState().activateTab(tabId);
+    }, firstTabId);
+
+    const draftSourceTabId = await page.evaluate(async () => {
+      const { useWorkbenchStore } = await import("/src/workbench/workbenchStore.ts");
+      const tab = useWorkbenchStore
+        .getState()
+        .tabs.find((candidate) =>
+          [...candidate.panes.values()].some((view) => view.target.kind === "newAgentSession"),
+        );
+      if (tab) useWorkbenchStore.getState().activateTab(tab.id);
+      return tab?.id ?? null;
+    });
+    NodeAssert.ok(draftSourceTabId !== null, "Expected a Tab containing the draft View.");
+    const draftPaneInSourceTab = page.locator('[data-pane-target-kind="newAgentSession"]').first();
+    const draftHandleInSourceTab = draftPaneInSourceTab.locator(
+      "[data-workbench-pane-drag-handle]",
+    );
+    const draftHandleInSourceTabBox = await draftHandleInSourceTab.boundingBox();
+    const newTabButton = page.locator("[data-workbench-new-tab-drop]");
+    const newTabButtonBox = await newTabButton.boundingBox();
+    NodeAssert.ok(
+      draftHandleInSourceTabBox !== null && newTabButtonBox !== null,
+      "Expected a draggable Pane and the New tab button.",
+    );
+    await page.mouse.move(
+      draftHandleInSourceTabBox.x + draftHandleInSourceTabBox.width / 2,
+      draftHandleInSourceTabBox.y + draftHandleInSourceTabBox.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      newTabButtonBox.x + newTabButtonBox.width / 2,
+      newTabButtonBox.y + newTabButtonBox.height / 2,
+      { steps: 12 },
+    );
+    await page.locator("[data-workbench-drop-preview]").waitFor({
+      state: "visible",
+      timeout: timeoutMs,
+    });
+    await page.locator("[data-workbench-tab-drop-marker]").waitFor({
+      state: "visible",
+      timeout: timeoutMs,
+    });
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    const dragCreatedTabId = await activeWorkbenchTabId(page);
+    NodeAssert.deepEqual(await paneKinds(page), ["newAgentSession"]);
+    NodeAssert.equal(await page.locator('[role="tab"]').count(), tabsBeforeDuplicate + 1);
+
     await page.getByTestId("sidebar-workspace-disclosure").first().click();
     const terminalSessionRow = page
       .locator('[data-testid="sidebar-session-row"][data-session-kind="terminal"]')
       .first();
     await terminalSessionRow.waitFor({ state: "visible", timeout: timeoutMs });
+    const terminalSessionRowBox = await terminalSessionRow.boundingBox();
+    const sidebarTargetDraft = page.locator('[data-pane-target-kind="newAgentSession"]').first();
+    const sidebarTargetDraftBox = await sidebarTargetDraft.boundingBox();
+    NodeAssert.ok(
+      terminalSessionRowBox !== null && sidebarTargetDraftBox !== null,
+      "Expected a Sidebar Session and a target Pane.",
+    );
+    await page.mouse.move(
+      terminalSessionRowBox.x + terminalSessionRowBox.width / 2,
+      terminalSessionRowBox.y + terminalSessionRowBox.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      sidebarTargetDraftBox.x + sidebarTargetDraftBox.width * 0.9,
+      sidebarTargetDraftBox.y + sidebarTargetDraftBox.height / 2,
+      { steps: 12 },
+    );
+    await page.locator("[data-workbench-drop-preview]").waitFor({
+      state: "visible",
+      timeout: timeoutMs,
+    });
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    NodeAssert.deepEqual(await paneKinds(page), ["newAgentSession", "workspaceTerminal"]);
     await chooseContextMenuItem(page, terminalSessionRow, "Close session");
     await page.locator('[data-pane-target-kind="workspaceTerminal"]').waitFor({
       state: "detached",
@@ -358,13 +609,13 @@ async function main() {
     });
     NodeAssert.deepEqual(
       (await terminalViewCountsByTab(page)).map((tab) => tab.terminalViews),
-      [0, 0],
+      [0, 0, 0],
       "closeSession must remove the Terminal View from every internal Tab.",
     );
     await page.evaluate(async (tabId) => {
       const { useWorkbenchStore } = await import("/src/workbench/workbenchStore.ts");
       useWorkbenchStore.getState().activateTab(tabId);
-    }, firstTabId);
+    }, dragCreatedTabId);
     await page.locator('[data-pane-target-kind="newAgentSession"]').waitFor({
       state: "visible",
       timeout: timeoutMs,
@@ -418,7 +669,7 @@ async function main() {
 
     await addProject.waitFor({ state: "visible", timeout: timeoutMs });
     console.log(
-      "workbench E2E passed: chrome geometry, tabs, draft reload, split/resize, cross-Tab closeSession, Delete, title/persistence, remove project",
+      "workbench E2E passed: chrome geometry, tabs, draft reload, drag preview/move/replace/cancel/new-tab/sidebar-drop, split/resize, cross-Tab closeSession, Delete, title/persistence, remove project",
     );
   } catch (error) {
     console.error(`Browser page errors: ${pageErrors.map(String).join("\n")}`);

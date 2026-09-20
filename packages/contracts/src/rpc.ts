@@ -183,9 +183,11 @@ import {
   TerminalEvent,
   TerminalMetadataStreamEvent,
   TerminalOpenInput,
+  TerminalRenameInput,
   TerminalResizeInput,
   TerminalRestartInput,
   TerminalSessionSnapshot,
+  TerminalSummary,
   TerminalWriteInput,
 } from "./terminal.ts";
 import {
@@ -349,6 +351,7 @@ export const WS_METHODS = {
   terminalWrite: "terminal.write",
   terminalResize: "terminal.resize",
   terminalClear: "terminal.clear",
+  terminalRename: "terminal.rename",
   terminalRestart: "terminal.restart",
   terminalClose: "terminal.close",
 
@@ -1152,6 +1155,12 @@ const WsTerminalClearRpc = Rpc.make(WS_METHODS.terminalClear, {
   error: Schema.Union([TerminalError, EnvironmentAuthorizationError]),
 });
 
+const WsTerminalRenameRpc = Rpc.make(WS_METHODS.terminalRename, {
+  payload: TerminalRenameInput,
+  success: TerminalSummary,
+  error: Schema.Union([TerminalError, EnvironmentAuthorizationError]),
+});
+
 const WsTerminalRestartRpc = Rpc.make(WS_METHODS.terminalRestart, {
   payload: TerminalRestartInput,
   success: TerminalSessionSnapshot,
@@ -1510,6 +1519,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsTerminalWriteRpc,
   WsTerminalResizeRpc,
   WsTerminalClearRpc,
+  WsTerminalRenameRpc,
   WsTerminalRestartRpc,
   WsTerminalCloseRpc,
   WsSubscribeTerminalEventsRpc,

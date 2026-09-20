@@ -11,6 +11,7 @@ import {
   movePane,
   neighborLeafId,
   newTab,
+  paneDropZoneFromPoint,
   paneEdgeFromPoint,
   placeLayout,
   placePane,
@@ -51,9 +52,7 @@ describe("splitSizesAtBoundary", () => {
 describe("layoutLeaves", () => {
   it("keeps a single pane filling the tab", () => {
     const leaves = layoutLeaves(leaf("a"));
-    expect(leaves).toEqual([
-      { id: "a", rect: { x: 0, y: 0, w: 1, h: 1 }, axis: "x" },
-    ]);
+    expect(leaves).toEqual([{ id: "a", rect: { x: 0, y: 0, w: 1, h: 1 }, axis: "x" }]);
   });
 
   it("places a right split side by side without changing leaf ids", () => {
@@ -281,6 +280,32 @@ describe("paneEdgeFromPoint", () => {
     const rect = { left: 0, top: 0, width: 100, height: 100 };
     expect(paneEdgeFromPoint(50, 10, rect)).toBe("top");
     expect(paneEdgeFromPoint(50, 90, rect)).toBe("bottom");
+  });
+});
+
+describe("paneDropZoneFromPoint", () => {
+  const rect = { left: 0, top: 0, width: 100, height: 100 };
+
+  it("uses the outer 30% bands for split edges", () => {
+    expect(paneDropZoneFromPoint(29, 50, rect)).toBe("left");
+    expect(paneDropZoneFromPoint(71, 50, rect)).toBe("right");
+    expect(paneDropZoneFromPoint(50, 29, rect)).toBe("top");
+    expect(paneDropZoneFromPoint(50, 71, rect)).toBe("bottom");
+  });
+
+  it("uses the central 40% by 40% area for replacement", () => {
+    expect(paneDropZoneFromPoint(50, 50, rect)).toBe("replace");
+    expect(paneDropZoneFromPoint(30, 50, rect)).toBe("replace");
+    expect(paneDropZoneFromPoint(70, 50, rect)).toBe("replace");
+    expect(paneDropZoneFromPoint(50, 30, rect)).toBe("replace");
+    expect(paneDropZoneFromPoint(50, 70, rect)).toBe("replace");
+  });
+
+  it("chooses the nearest edge in corner bands", () => {
+    expect(paneDropZoneFromPoint(5, 10, rect)).toBe("left");
+    expect(paneDropZoneFromPoint(10, 5, rect)).toBe("top");
+    expect(paneDropZoneFromPoint(95, 90, rect)).toBe("right");
+    expect(paneDropZoneFromPoint(90, 95, rect)).toBe("bottom");
   });
 });
 

@@ -54,7 +54,6 @@ import { projectActivityPayload } from "../ActivityPayloadProjection.ts";
 import { forkParked } from "../../serverActivation.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
-import { canReplaceThreadTitle } from "../threadTitles.ts";
 
 const providerTurnKey = (threadId: ThreadId, turnId: TurnId) => `${threadId}:${turnId}`;
 const providerTaskKey = (threadId: ThreadId, taskId: string) => `${threadId}:${taskId}`;
@@ -2098,7 +2097,7 @@ const make = Effect.gen(function* () {
       }
 
       if (event.type === "thread.metadata.updated" && event.payload.name) {
-        if (thread.titleState?.source !== "manual" && canReplaceThreadTitle(thread.title)) {
+        if (thread.titleState?.source !== "manual") {
           yield* orchestrationEngine.dispatch({
             type: "thread.title.generate.complete",
             commandId: yield* providerCommandId(event, "thread-meta-update"),

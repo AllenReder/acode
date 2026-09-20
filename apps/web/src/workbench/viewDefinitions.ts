@@ -1,6 +1,4 @@
-import { createWorkspaceViewDefinitions } from "./workspaceViews";
-import { workspaceViewSource } from "./workspaceViewSource";
-import { useWorkbenchStore } from "./workbenchStore";
+import { createWelcomeViewDefinition } from "./welcomeViewDefinition";
 import { AgentSessionView } from "./NewAgentSessionView";
 import { TerminalView } from "./TerminalView";
 import {
@@ -17,9 +15,7 @@ export const agentViewDefinition: ViewDefinition<
 > = {
   id: "agentSession",
   label: "Agent",
-  accepts: (
-    target,
-  ): target is Extract<ViewTarget, { kind: "agentSession" | "newAgentSession" }> =>
+  accepts: (target): target is Extract<ViewTarget, { kind: "agentSession" | "newAgentSession" }> =>
     target.kind === "agentSession" || target.kind === "newAgentSession",
   bind: emptyViewBinding,
   Component: AgentSessionView,
@@ -44,11 +40,7 @@ let registered = false;
  */
 export function registerCoreViewDefinitions(): void {
   if (registered) return;
-  const definitions = createWorkspaceViewDefinitions(workspaceViewSource, (target) =>
-    useWorkbenchStore.getState().openTarget(target),
-  );
-  registerViewDefinition(definitions.welcome);
-  registerViewDefinition(definitions.workspace);
+  registerViewDefinition(createWelcomeViewDefinition());
   registerViewDefinition(agentViewDefinition);
   registerViewDefinition(terminalViewDefinition);
   registered = true;

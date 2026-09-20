@@ -30,7 +30,7 @@ export function projectTerminalSessions(
       kind: "terminal",
       id,
       workspaceId,
-      title: terminal.label.trim() || "Terminal",
+      title: (terminal.title ?? terminal.label).trim() || "Terminal",
       status: isClosed ? "closed" : "open",
       ...(isClosed ? { closedAt: terminal.updatedAt } : {}),
       createdAt: terminal.createdAt ?? terminal.updatedAt,

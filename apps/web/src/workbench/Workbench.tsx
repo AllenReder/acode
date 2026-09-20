@@ -7,6 +7,7 @@ import { useEnvironmentCatalogSnapshot } from "../state/environmentCatalogSnapsh
 import { useEnvironments } from "../state/environments";
 import { PaneTree } from "./PaneTree";
 import { WorkbenchWindowChrome } from "./WorkbenchWindowChrome";
+import { WorkbenchDropOverlay } from "./workbenchDrag";
 import {
   deepLinkInputFromParams,
   draftIdFromParams,
@@ -172,7 +173,10 @@ export function Workbench({ navigate: navigateTo }: WorkbenchProps = {}) {
         dismissed={missingDismissed}
         onDismiss={() => setMissingDismissed(true)}
       />
-      <PaneTree snapshot={snapshot} />
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        <PaneTree snapshot={snapshot} projects={projects} />
+        <WorkbenchDropOverlay />
+      </div>
     </div>
   );
 }

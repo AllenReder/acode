@@ -28,7 +28,7 @@ export interface SessionActionMenuState {
  * - Active rows show Open, Focus (when in tab), Split right/down, Close session, Delete session.
  * - History rows show Open, Focus (when in tab), Split right/down, Delete session (no Close session).
  * - Focus is disabled if already focused; Split focuses existing target if already open.
- * - Rename is only provided when supported by the target kind (Agent).
+ * - Rename is provided when the caller exposes a rename operation.
  * - Delete session is styled as destructive with separator.
  */
 export function buildSessionActionMenuItems(

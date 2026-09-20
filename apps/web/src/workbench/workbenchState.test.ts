@@ -14,6 +14,7 @@ import {
   applyActivateTab,
   applyCloseTab,
   applyClosePane,
+  applyDuplicateToNewTab,
   applyRenameTab,
   applyRemoveSessionViews,
   applyOpenTarget,
@@ -23,6 +24,7 @@ import {
   applySplitFocused,
   applyRemoveNewAgentSessionViews,
   applyReplacePaneTarget,
+  applyViewDrop,
   applyPruneWorkspaceViews,
   emptyWorkbenchSnapshot,
   tabDisplayTitle,
@@ -637,6 +639,280 @@ describe("applyReplacePaneTarget", () => {
     expect(getActiveTab(snap).panes.size).toBe(1);
     expect(getActiveTab(snap).focusedPaneId).toBe(agentPaneId);
     expect(getActiveTab(snap).panes.get(agentPaneId)?.target).toEqual(agent(AGENT_X));
+  });
+});
+
+describe("applyViewDrop", () => {
+  it("replaces the target Pane with a new View instance when Sidebar content is dropped in the center", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const tab = getActiveTab(snap);
+    const targetPaneId = tab.focusedPaneId;
+    const previousView = tab.panes.get(targetPaneId)!;
+
+    const result = applyViewDrop(
+      snap,
+      { kind: "sidebar", target: terminal("term-1") },
+      { kind: "pane", tabId: tab.id, paneId: targetPaneId, zone: "replace" },
+      ids,
+    );
+
+    expect(result).not.toBeNull();
+    const dropped = getActiveTab(result!.snapshot);
+    expect(dropped.id).toBe(tab.id);
+    expect(dropped.panes.get(targetPaneId)?.target).toEqual(terminal("term-1"));
+    expect(dropped.panes.get(targetPaneId)?.id).not.toBe(previousView.id);
+    expect(result!.paneId).toBe(targetPaneId);
+  });
+
+  it("splits the target Pane on the requested edge when Sidebar content is dropped near an edge", () => {
+    const ids = makeIds();
+    const snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const tab = getActiveTab(snap);
+    const targetPaneId = tab.focusedPaneId;
+
+    const result = applyViewDrop(
+      snap,
+      { kind: "sidebar", target: terminal("term-1") },
+      { kind: "pane", tabId: tab.id, paneId: targetPaneId, zone: "right" },
+      ids,
+    );
+
+    expect(result).not.toBeNull();
+    const dropped = getActiveTab(result!.snapshot);
+    expect(dropped.panes.size).toBe(2);
+    expect(dropped.panes.get(targetPaneId)?.target).toEqual(agent(AGENT_X));
+    expect(dropped.panes.get(result!.paneId)?.target).toEqual(terminal("term-1"));
+    expect(leafIds(dropped.layout)).toEqual([targetPaneId, result!.paneId]);
+    expect(dropped.focusedPaneId).toBe(result!.paneId);
+  });
+
+  it("focuses an existing Session View instead of creating a duplicate in the target Tab", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const tab = getActiveTab(snap);
+    const agentPaneId = tab.focusedPaneId;
+    snap = applySplitFocused(snap, terminal("term-1"), "right", ids);
+    const terminalPaneId = getActiveTab(snap).focusedPaneId;
+
+    const result = applyViewDrop(
+      snap,
+      { kind: "sidebar", target: agent(AGENT_X) },
+      { kind: "pane", tabId: tab.id, paneId: terminalPaneId, zone: "replace" },
+      ids,
+    );
+
+    expect(result).not.toBeNull();
+    expect(getActiveTab(result!.snapshot).focusedPaneId).toBe(agentPaneId);
+    expect(getActiveTab(result!.snapshot).panes.size).toBe(2);
+    expect(result).toMatchObject({ tabId: tab.id, paneId: agentPaneId });
+  });
+
+  it("opens Sidebar content into an existing Tab and focuses it there", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    snap = applyCreateTab(snap, ids);
+    const targetTab = getActiveTab(snap);
+    const welcomePaneId = targetTab.focusedPaneId;
+
+    const result = applyViewDrop(
+      snap,
+      { kind: "sidebar", target: terminal("term-1") },
+      { kind: "existingTab", tabId: targetTab.id },
+      ids,
+    );
+
+    expect(result).not.toBeNull();
+    const dropped = result!.snapshot.tabs.find((tab) => tab.id === targetTab.id)!;
+    expect(dropped.panes.size).toBe(1);
+    expect(dropped.panes.get(welcomePaneId)?.target).toEqual(terminal("term-1"));
+    expect(result!.snapshot.activeTabId).toBe(targetTab.id);
+    expect(dropped.focusedPaneId).toBe(welcomePaneId);
+  });
+
+  it("opens Sidebar content into a new Tab at the requested index", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const firstTabId = snap.activeTabId;
+    snap = applyCreateTab(snap, ids);
+    const secondTabId = snap.activeTabId;
+
+    const result = applyViewDrop(
+      snap,
+      { kind: "sidebar", target: terminal("term-1") },
+      { kind: "newTab", index: 1 },
+      ids,
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.snapshot.tabs.map((tab) => tab.id)).toEqual([
+      firstTabId,
+      result!.tabId,
+      secondTabId,
+    ]);
+    const newTab = result!.snapshot.tabs.find((tab) => tab.id === result!.tabId)!;
+    expect(newTab.panes.get(result!.paneId)?.target).toEqual(terminal("term-1"));
+    expect(result!.snapshot.activeTabId).toBe(result!.tabId);
+  });
+
+  it("moves a Pane View instance to another Pane edge without changing its identity", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const tabId = snap.activeTabId;
+    const sourcePaneId = getActiveTab(snap).focusedPaneId;
+    const sourceView = getActiveTab(snap).panes.get(sourcePaneId)!;
+    snap = applySplitFocused(snap, terminal("term-1"), "right", ids);
+    const targetPaneId = getActiveTab(snap).focusedPaneId;
+
+    const result = applyViewDrop(
+      snap,
+      { kind: "pane", tabId, paneId: sourcePaneId },
+      { kind: "pane", tabId, paneId: targetPaneId, zone: "right" },
+      ids,
+    );
+
+    expect(result).not.toBeNull();
+    const dropped = getActiveTab(result!.snapshot);
+    expect(leafIds(dropped.layout)).toEqual([targetPaneId, sourcePaneId]);
+    expect(dropped.panes.get(sourcePaneId)).toBe(sourceView);
+    expect(dropped.focusedPaneId).toBe(sourcePaneId);
+    expect(result).toMatchObject({ tabId, paneId: sourcePaneId });
+  });
+
+  it("moves a Pane View instance into the center of another Pane and drops the source leaf", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const tabId = snap.activeTabId;
+    const sourcePaneId = getActiveTab(snap).focusedPaneId;
+    const sourceView = getActiveTab(snap).panes.get(sourcePaneId)!;
+    snap = applySplitFocused(snap, terminal("term-1"), "right", ids);
+    const targetPaneId = getActiveTab(snap).focusedPaneId;
+
+    const result = applyViewDrop(
+      snap,
+      { kind: "pane", tabId, paneId: sourcePaneId },
+      { kind: "pane", tabId, paneId: targetPaneId, zone: "replace" },
+      ids,
+    );
+
+    expect(result).not.toBeNull();
+    const dropped = getActiveTab(result!.snapshot);
+    expect(leafIds(dropped.layout)).toEqual([targetPaneId]);
+    expect(dropped.panes.has(sourcePaneId)).toBe(false);
+    expect(dropped.panes.get(targetPaneId)).toBe(sourceView);
+    expect(dropped.focusedPaneId).toBe(targetPaneId);
+    expect(result).toMatchObject({ tabId, paneId: targetPaneId });
+  });
+
+  it("moves a Pane View instance into an existing Tab and leaves Welcome behind", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const sourceTabId = snap.activeTabId;
+    const sourcePaneId = getActiveTab(snap).focusedPaneId;
+    const sourceView = getActiveTab(snap).panes.get(sourcePaneId)!;
+    snap = applyCreateTab(snap, ids);
+    const targetTabId = snap.activeTabId;
+    snap = applyOpenTarget(snap, terminal("term-1"), ids);
+    const targetPaneId = getActiveTab(snap).focusedPaneId;
+
+    const result = applyViewDrop(
+      snap,
+      { kind: "pane", tabId: sourceTabId, paneId: sourcePaneId },
+      { kind: "existingTab", tabId: targetTabId },
+      ids,
+    );
+
+    expect(result).not.toBeNull();
+    const sourceTab = result!.snapshot.tabs.find((tab) => tab.id === sourceTabId)!;
+    const targetTab = result!.snapshot.tabs.find((tab) => tab.id === targetTabId)!;
+    expect(sourceTab.panes.size).toBe(1);
+    expect(sourceTab.panes.get(sourceTab.focusedPaneId)?.target).toEqual({ kind: "welcome" });
+    expect(targetTab.panes.get(targetPaneId)?.target).toEqual(terminal("term-1"));
+    expect(targetTab.panes.get(sourcePaneId)).toBe(sourceView);
+    expect(leafIds(targetTab.layout)).toEqual([targetPaneId, sourcePaneId]);
+    expect(result!.snapshot.activeTabId).toBe(targetTabId);
+    expect(targetTab.focusedPaneId).toBe(sourcePaneId);
+  });
+
+  it("refuses to move a View into a Tab that already has the same Session", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const sourceTabId = snap.activeTabId;
+    const sourcePaneId = getActiveTab(snap).focusedPaneId;
+    snap = applyCreateTab(snap, ids);
+    const targetTabId = snap.activeTabId;
+    snap = applyOpenTarget(snap, agent(AGENT_X), ids);
+
+    const result = applyViewDrop(
+      snap,
+      { kind: "pane", tabId: sourceTabId, paneId: sourcePaneId },
+      { kind: "existingTab", tabId: targetTabId },
+      ids,
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it("moves a Pane View instance into a new Tab at the requested index", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const sourceTabId = snap.activeTabId;
+    const sourcePaneId = getActiveTab(snap).focusedPaneId;
+    const sourceView = getActiveTab(snap).panes.get(sourcePaneId)!;
+    snap = applyCreateTab(snap, ids);
+    const secondTabId = snap.activeTabId;
+    snap = applyOpenTarget(snap, terminal("term-1"), ids);
+
+    const result = applyViewDrop(
+      snap,
+      { kind: "pane", tabId: sourceTabId, paneId: sourcePaneId },
+      { kind: "newTab", index: 1 },
+      ids,
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.snapshot.tabs.map((tab) => tab.id)).toEqual([
+      sourceTabId,
+      result!.tabId,
+      secondTabId,
+    ]);
+    const sourceTab = result!.snapshot.tabs.find((tab) => tab.id === sourceTabId)!;
+    const newTab = result!.snapshot.tabs.find((tab) => tab.id === result!.tabId)!;
+    expect(sourceTab.panes.get(sourceTab.focusedPaneId)?.target).toEqual({ kind: "welcome" });
+    expect(newTab.panes.get(result!.paneId)).toBe(sourceView);
+    expect(result!.paneId).toBe(sourcePaneId);
+    expect(result!.snapshot.activeTabId).toBe(result!.tabId);
+  });
+});
+
+describe("applyDuplicateToNewTab", () => {
+  it("duplicates a Session View into a new Tab without changing the source", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    snap = applyCreateTab(snap, ids);
+    snap = applyOpenTarget(snap, terminal("term-1"), ids);
+    const sourceTab = snap.tabs[0]!;
+    const sourcePaneId = sourceTab.focusedPaneId;
+    const sourceView = sourceTab.panes.get(sourcePaneId)!;
+    const sourceBefore = sourceTab;
+
+    const result = applyDuplicateToNewTab(
+      snap,
+      { kind: "pane", tabId: sourceTab.id, paneId: sourcePaneId },
+      1,
+      ids,
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.snapshot.tabs[0]).toBe(sourceBefore);
+    expect(result!.snapshot.tabs).toHaveLength(3);
+    const duplicateTab = result!.snapshot.tabs[1]!;
+    expect(duplicateTab.id).toBe(result!.tabId);
+    expect(duplicateTab.panes.size).toBe(1);
+    const duplicateView = duplicateTab.panes.get(result!.paneId)!;
+    expect(duplicateView.id).not.toBe(sourceView.id);
+    expect(duplicateView.target).toEqual(sourceView.target);
+    expect(result!.snapshot.activeTabId).toBe(duplicateTab.id);
   });
 });
 

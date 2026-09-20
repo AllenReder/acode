@@ -14,6 +14,7 @@ import { createWorkbenchStore } from "./workbenchStore";
 const ENV_A: EnvironmentId = "env-a" as EnvironmentId;
 const WS_A: WorkspaceId = "ws-a" as WorkspaceId;
 const AGENT_A: AgentSessionId = "agent-a" as AgentSessionId;
+const WORKSPACE_A: WorkspaceId = "workspace-a" as WorkspaceId;
 
 function agent(): Extract<ViewTarget, { kind: "agentSession" }> {
   return {
@@ -62,4 +63,67 @@ it("opens a deep link without replacing restored layout", () => {
   expect(store.getState().tabs[0]?.panes).toHaveProperty("size", 1);
   expect([...store.getState().tabs[0]!.panes.keys()]).toEqual(originalPaneIds);
   expect(store.getState().activeTabId).toBe(store.getState().tabs[0]?.id);
+});
+
+it("duplicates presentation into a new Tab without mutating the source", () => {
+  const ids = makeIds();
+  const initial = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids);
+  const sourceTab = getActiveTab(initial);
+  const sourcePaneId = sourceTab.focusedPaneId;
+  const sourceView = sourceTab.panes.get(sourcePaneId)!;
+  const store = createWorkbenchStore({ initialSnapshot: initial, generateId: ids });
+
+  store.getState().duplicateToNewTab({ kind: "pane", tabId: sourceTab.id, paneId: sourcePaneId });
+
+  expect(store.getState().tabs).toHaveLength(2);
+  expect(store.getState().tabs[0]?.panes.get(sourcePaneId)).toBe(sourceView);
+  const duplicate = store.getState().tabs[1]!;
+  expect(duplicate.panes.size).toBe(1);
+  expect([...duplicate.panes.values()][0]?.id).not.toBe(sourceView.id);
+  expect([...duplicate.panes.values()][0]?.target).toEqual(agent());
+});
+
+it("keeps drag preview out of persisted Workbench state until the exact result is committed", () => {
+  const ids = makeIds();
+  const initial = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids);
+  const sourceTab = getActiveTab(initial);
+  const sourcePaneId = sourceTab.focusedPaneId;
+  const writes: WorkbenchSnapshot[] = [];
+  const store = createWorkbenchStore({
+    initialSnapshot: initial,
+    generateId: ids,
+    persist: (snapshot) => writes.push(snapshot),
+  });
+
+  const preview = store
+    .getState()
+    .previewDrop(
+      { kind: "pane", tabId: sourceTab.id, paneId: sourcePaneId },
+      { kind: "newTab", index: 1 },
+    );
+
+  expect(preview).not.toBeNull();
+  expect(store.getState().tabs).toEqual(initial.tabs);
+  expect(writes).toEqual([]);
+
+  store.getState().commitDrop(preview!);
+
+  expect(store.getState().tabs).toEqual(preview!.snapshot.tabs);
+  expect(writes).toHaveLength(1);
+});
+
+it("drops legacy Workspace Views when restoring a Workbench layout", () => {
+  const ids = makeIds();
+  const legacyWorkspace = {
+    kind: "workspace",
+    environmentId: ENV_A,
+    workspaceId: WORKSPACE_A,
+  } as const;
+  const restored = applyOpenTarget(emptyWorkbenchSnapshot(ids), legacyWorkspace, ids);
+
+  const store = createWorkbenchStore({ initialSnapshot: restored, generateId: ids });
+  const tab = getActiveTab(store.getState());
+
+  expect(tab.panes.size).toBe(1);
+  expect(tab.panes.get(tab.focusedPaneId)?.target).toEqual({ kind: "welcome" });
 });
