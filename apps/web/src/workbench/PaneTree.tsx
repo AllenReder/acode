@@ -216,7 +216,7 @@ function PaneHeader({
   readonly paneId: string;
   readonly target: ViewTarget | null;
   readonly focused: boolean;
-  readonly onDragStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  readonly onDragStart: (event: ReactPointerEvent<HTMLElement>) => void;
   readonly onDuplicate: () => void;
   readonly onOpenMenu: (position: { readonly x: number; readonly y: number }) => void;
   readonly onClose: () => void;
@@ -225,8 +225,18 @@ function PaneHeader({
   void focused;
   return (
     <div
-      className="flex h-8 items-center justify-between gap-2 border-b border-border px-3 text-xs text-muted-foreground"
+      className="flex h-8 touch-none cursor-grab items-center justify-between gap-2 border-b border-border px-3 text-xs text-muted-foreground active:cursor-grabbing"
       tabIndex={0}
+      onPointerDown={(event) => {
+        const targetElement = event.target as HTMLElement;
+        if (
+          targetElement.closest("button") !== null &&
+          targetElement.closest("[data-workbench-pane-drag-handle]") === null
+        ) {
+          return;
+        }
+        onDragStart(event);
+      }}
       onContextMenu={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -257,7 +267,6 @@ function PaneHeader({
           aria-label="Move pane"
           data-workbench-pane-drag-handle=""
           className="flex size-5 touch-none cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing"
-          onPointerDown={onDragStart}
         >
           <GripVerticalIcon className="size-3" />
         </button>
