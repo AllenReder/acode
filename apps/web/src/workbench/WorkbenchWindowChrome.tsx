@@ -57,7 +57,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
 
   return (
     <header
-      className="drag-region fixed inset-x-0 top-0 z-50 h-[var(--workspace-topbar-height)] border-b border-border/60 bg-background/95 backdrop-blur"
+      className="drag-region fixed inset-x-0 top-0 z-50 h-[var(--workbench-titlebar-height)] border-b border-border/60 bg-background/95 backdrop-blur"
       data-tauri-drag-region
       data-workbench-window-chrome=""
     >

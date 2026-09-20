@@ -73,5 +73,6 @@ export function resolveWorkbenchTitlebarStyle(input: {
   if (!input.hasDesktopBridge || input.fullscreen || !isMacPlatform(input.platform)) return {};
   return {
     "--workspace-controls-left": "var(--desktop-window-controls-inset, 90px)",
+    "--workbench-titlebar-height": "36px",
   };
 }
