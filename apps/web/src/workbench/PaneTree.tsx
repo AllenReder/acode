@@ -23,7 +23,7 @@ import { MIN_PANE_HEIGHT } from "./scrollingLayout";
 import { resolveViewDefinition, type ViewTarget } from "./viewRegistry";
 import { useWorkbenchStore } from "./workbenchStore";
 import { getActiveTab, type WorkbenchSnapshot } from "./workbenchState";
-import { useWorkbenchDragSource } from "./workbenchDrag";
+import { useWorkbenchDragState, useWorkbenchDragSource } from "./workbenchDrag";
 import { resolveTargetBreadcrumbs } from "./workbenchTitles";
 
 interface PaneTreeProps {
@@ -36,6 +36,11 @@ const EMPTY_PROJECTS: ReadonlyArray<EnvironmentAcodeProject> = [];
 
 export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps) {
   const tab = getActiveTab(snapshot);
+  const dragState = useWorkbenchDragState();
+  const previewTab =
+    dragState?.phase === "dragging" && dragState.valid
+      ? dragState.result?.snapshot.tabs.find((candidate) => candidate.id === tab.id)
+      : undefined;
   const scrolling = tab.layoutMode === "scrolling";
   const viewportRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -87,7 +92,7 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
       '[data-pane-id="' + CSS.escape(tab.focusedPaneId) + '"]',
     );
     if (!viewport || !pane) return;
-    const frame = pane.parentElement;
+    const frame = pane.closest<HTMLElement>(".workbench-pane-frame");
     if (!frame) return;
     const left = frame.offsetLeft;
     const right = left + frame.offsetWidth;
@@ -149,6 +154,36 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
         height: rect.h * height,
       });
   }
+  const previewRects = new Map<
+    string,
+    { left: number; top: number; width: number; height: number }
+  >();
+  if (previewTab?.layoutMode === "scrolling") {
+    let x = 0;
+    const previewHeight = Math.max(
+      size.height,
+      ...(previewTab.columns ?? []).flatMap((column) =>
+        column.shares.map((share) => MIN_PANE_HEIGHT / share),
+      ),
+    );
+    for (const column of previewTab.columns ?? []) {
+      let y = 0;
+      column.paneIds.forEach((id, index) => {
+        const h = column.shares[index]! * previewHeight;
+        previewRects.set(id, { left: x, top: y, width: column.width, height: h });
+        y += h;
+      });
+      x += column.width + 8;
+    }
+  } else if (previewTab) {
+    for (const { id, rect } of layoutLeaves(previewTab.layout))
+      previewRects.set(id, {
+        left: rect.x * size.width,
+        top: rect.y * size.height,
+        width: rect.w * size.width,
+        height: rect.h * size.height,
+      });
+  }
   let columnLeft = 0;
   return (
     <div
@@ -157,16 +192,38 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
       data-layout-mode={scrolling ? "scrolling" : "bsp"}
     >
       <div className="workbench-canvas" style={{ width: Math.max(width, size.width), height }}>
-        {[...tab.panes].map(([paneId, view]) => (
-          <div key={view.id} className="workbench-pane-frame" style={rects.get(paneId)}>
-            <Pane
-              snapshot={snapshot}
-              projects={projects}
-              paneId={paneId}
-              focused={paneId === tab.focusedPaneId}
-            />
-          </div>
-        ))}
+        {[...tab.panes].map(([paneId, view]) => {
+          const current = rects.get(paneId);
+          const preview = previewRects.get(paneId);
+          const transform =
+            preview && current && Number(current.width) > 10 && Number(current.height) > 10
+              ? "translate(" +
+                (preview.left - Number(current.left)) +
+                "px," +
+                (preview.top - Number(current.top)) +
+                "px) scale(" +
+                (preview.width - 10) / (Number(current.width) - 10) +
+                "," +
+                (preview.height - 10) / (Number(current.height) - 10) +
+                ")"
+              : undefined;
+          return (
+            <div key={view.id} className="workbench-pane-frame" style={current}>
+              <div
+                className="workbench-pane-preview"
+                data-previewing={Boolean(previewTab)}
+                style={{ transform, opacity: previewTab && !preview ? 0.2 : undefined }}
+              >
+                <Pane
+                  snapshot={snapshot}
+                  projects={projects}
+                  paneId={paneId}
+                  focused={paneId === tab.focusedPaneId}
+                />
+              </div>
+            </div>
+          );
+        })}
         {scrolling
           ? columns.map((column) => {
               const x = columnLeft;

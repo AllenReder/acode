@@ -184,6 +184,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
   const stabilizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeRef = useRef(false);
+  const cleanupDragRef = useRef<(() => void) | null>(null);
 
   const consumeSuppressedClick = useCallback(() => {
     const suppressed = suppressClickRef.current;
@@ -200,6 +201,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
   const beginDrag = useCallback(
     (source: ViewDragSource, label: string, event: ReactPointerEvent<HTMLElement>) => {
       if (event.button !== 0 || event.defaultPrevented) return;
+      cleanupDragRef.current?.();
       const handle = event.currentTarget;
       const sourceElement =
         source.kind === "pane"
@@ -224,8 +226,38 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
       let lastResult: ViewDropResult | null = null;
       let publishedTarget: ViewDropTarget | null = null;
 
+      // Preview transforms never move the semantic drop regions beneath the pointer.
+      const paneRegions = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-workbench-pane-drop]"),
+      ).map((element) => ({ element, rect: element.getBoundingClientRect() }));
       const resolveTarget = (x: number, y: number) => {
-        lastTarget = resolveWorkbenchDropTargetAtPoint(x, y);
+        const actual = resolveWorkbenchDropTargetAtPoint(x, y);
+        if (actual && actual.kind !== "pane") {
+          lastTarget = actual;
+          return actual;
+        }
+        const viewport = document
+          .querySelector<HTMLElement>(".workbench-viewport")
+          ?.getBoundingClientRect();
+        const inside =
+          viewport &&
+          x >= viewport.left &&
+          x <= viewport.right &&
+          y >= viewport.top &&
+          y <= viewport.bottom;
+        const hit = inside
+          ? paneRegions.find(
+              ({ rect }) => x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom,
+            )
+          : undefined;
+        lastTarget = hit
+          ? {
+              kind: "pane",
+              tabId: hit.element.dataset.workbenchTabId!,
+              paneId: hit.element.dataset.paneId!,
+              zone: paneDropZoneFromPoint(x, y, hit.rect),
+            }
+          : actual;
         return lastTarget;
       };
 
@@ -267,7 +299,9 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         window.removeEventListener("pointercancel", onCancel);
         window.removeEventListener("keydown", onKeyDown);
         delete document.documentElement.dataset.workbenchDragging;
+        cleanupDragRef.current = null;
       };
+      cleanupDragRef.current = cleanup;
 
       const finish = (cancelled: boolean) => {
         const wasActive = activeRef.current;
@@ -275,7 +309,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         if (!wasActive) return;
         activeRef.current = false;
         suppressClickRef.current = true;
-        const liveTarget = cancelled ? null : resolveWorkbenchDropTargetAtPoint(lastX, lastY);
+        const liveTarget = cancelled ? null : resolveTarget(lastX, lastY);
         const target = liveTarget;
         const result =
           target === null ? null : useWorkbenchStore.getState().previewDrop(source, target);
@@ -346,6 +380,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
 
   useEffect(
     () => () => {
+      cleanupDragRef.current?.();
       clearFrame();
       if (finishTimerRef.current !== null) clearTimeout(finishTimerRef.current);
       if (stabilizeTimerRef.current !== null) clearTimeout(stabilizeTimerRef.current);
