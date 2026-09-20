@@ -7,6 +7,7 @@ import {
   applyRemoveSessionViews,
   applyReplacePaneTarget,
   applyOpenTarget,
+  applyPruneWorkspaceViews,
   applySetFocused,
   applySetSplitRatio,
   applySplitFocused,
@@ -25,6 +26,9 @@ export interface WorkbenchStore extends WorkbenchSnapshot {
   removeSessionViews: (target: ViewTarget) => void;
   replaceTarget: (paneId: string, target: ViewTarget) => void;
   openTarget: (target: ViewTarget) => void;
+  pruneWorkspaceViews: (
+    workspaces: ReadonlyArray<{ readonly environmentId: string; readonly workspaceId: string }>,
+  ) => void;
   splitFocused: (target: ViewTarget, dir: SplitDir) => void;
   setFocused: (paneId: string) => void;
   setSplitRatio: (splitId: string, index: number, ratio: number) => void;
@@ -52,6 +56,8 @@ export const useWorkbenchStore = create<WorkbenchStore>((set) => ({
       ...applyOpenTarget(snapshot, target, generateId),
       focusRequestId: snapshot.focusRequestId + 1,
     })),
+  pruneWorkspaceViews: (workspaces) =>
+    set((snapshot) => applyPruneWorkspaceViews(snapshot, workspaces, generateId)),
   splitFocused: (target, dir) =>
     set((snapshot) => ({
       ...applySplitFocused(snapshot, target, dir, generateId),

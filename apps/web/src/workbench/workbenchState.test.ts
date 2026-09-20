@@ -20,6 +20,7 @@ import {
   applySplitFocused,
   applyRemoveNewAgentSessionViews,
   applyReplacePaneTarget,
+  applyPruneWorkspaceViews,
   emptyWorkbenchSnapshot,
   type WorkbenchSnapshot,
 } from "./workbenchState";
@@ -170,9 +171,11 @@ describe("applyOpenTarget", () => {
     snap = applyOpenTarget(snap, newAgentSession("draft-y" as DraftId), ids);
 
     expect(getActiveTab(snap).focusedPaneId).toBe(firstPaneId);
-    expect([...getActiveTab(snap).panes.values()].filter((view) => view.target.kind === "newAgentSession")).toEqual([
-      expect.objectContaining({ target: firstDraft }),
-    ]);
+    expect(
+      [...getActiveTab(snap).panes.values()].filter(
+        (view) => view.target.kind === "newAgentSession",
+      ),
+    ).toEqual([expect.objectContaining({ target: firstDraft })]);
   });
 });
 
@@ -205,12 +208,7 @@ describe("applySplitFocused", () => {
     const ids = makeIds();
     let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), newAgentSession(DRAFT_X), ids);
     const firstPaneId = getActiveTab(snap).focusedPaneId;
-    snap = applySplitFocused(
-      snap,
-      newAgentSession("draft-y" as DraftId),
-      "right",
-      ids,
-    );
+    snap = applySplitFocused(snap, newAgentSession("draft-y" as DraftId), "right", ids);
     expect(getActiveTab(snap).panes.size).toBe(1);
     expect(getActiveTab(snap).focusedPaneId).toBe(firstPaneId);
   });
@@ -516,5 +514,25 @@ describe("applyReplacePaneTarget", () => {
     const viewAfter = getActiveTab(snap).panes.get(paneId)!;
     expect(viewAfter.id).toBe(viewBefore.id);
     expect(viewAfter.target).toEqual(agent(AGENT_X));
+  });
+});
+
+describe("applyPruneWorkspaceViews", () => {
+  it("removes Views whose Workspace no longer exists", () => {
+    const ids = makeIds();
+    const draft = newAgentSession();
+    const workspaceTarget: ViewTarget = {
+      kind: "workspace",
+      environmentId: ENV_A,
+      workspaceId: WS_A,
+    };
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), draft, ids);
+    snap = applySplitFocused(snap, workspaceTarget, "right", ids);
+
+    snap = applyPruneWorkspaceViews(snap, [], ids);
+
+    const tab = getActiveTab(snap);
+    expect(tab.panes.size).toBe(1);
+    expect(tab.panes.get(tab.focusedPaneId)?.target.kind).toBe("welcome");
   });
 });

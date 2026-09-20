@@ -299,7 +299,11 @@ export function applyRemoveSessionViews(
   target: ViewTarget,
   generateId: () => string,
 ): WorkbenchSnapshot {
-  return applyRemoveMatchingViews(snapshot, (candidate) => isSameSessionTarget(candidate, target), generateId);
+  return applyRemoveMatchingViews(
+    snapshot,
+    (candidate) => isSameSessionTarget(candidate, target),
+    generateId,
+  );
 }
 
 /** Remove the explicit New Agent Session View without deleting its draft payload. */
@@ -315,6 +319,38 @@ export function applyRemoveNewAgentSessionViews(
       candidate.environmentId === target.environmentId &&
       candidate.workspaceId === target.workspaceId &&
       candidate.draftId === target.draftId,
+    generateId,
+  );
+}
+
+export interface KnownWorkspace {
+  readonly environmentId: string;
+  readonly workspaceId: string;
+}
+
+/** Remove Views whose scoped Workspace is no longer present in projections. */
+export function applyPruneWorkspaceViews(
+  snapshot: WorkbenchSnapshot,
+  knownWorkspaces: ReadonlyArray<KnownWorkspace>,
+  generateId: () => string,
+): WorkbenchSnapshot {
+  const known = new Set(
+    knownWorkspaces.map((workspace) => `${workspace.environmentId}:${workspace.workspaceId}`),
+  );
+  return applyRemoveMatchingViews(
+    snapshot,
+    (target) => {
+      switch (target.kind) {
+        case "workspace":
+        case "agentSession":
+        case "newAgentSession":
+        case "workspaceTerminal":
+          return !known.has(`${target.environmentId}:${target.workspaceId}`);
+        case "project":
+        case "welcome":
+          return false;
+      }
+    },
     generateId,
   );
 }

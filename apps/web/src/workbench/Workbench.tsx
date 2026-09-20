@@ -28,6 +28,7 @@ interface WorkbenchProps {
 export function Workbench({ navigate: navigateTo }: WorkbenchProps = {}) {
   const snapshot = useWorkbenchStore();
   const openTarget = useWorkbenchStore((s) => s.openTarget);
+  const pruneWorkspaceViews = useWorkbenchStore((s) => s.pruneWorkspaceViews);
   const reconcileDraftWorkspaceBindings = useComposerDraftStore(
     (state) => state.reconcileDraftWorkspaceBindings,
   );
@@ -99,7 +100,15 @@ export function Workbench({ navigate: navigateTo }: WorkbenchProps = {}) {
       }
     }
     activeSessionTargetsRef.current = nextActiveTargets;
-  }, [projects]);
+    pruneWorkspaceViews(
+      projects.flatMap((project) =>
+        project.workspaces.map((workspace) => ({
+          environmentId: project.environmentId,
+          workspaceId: workspace.id,
+        })),
+      ),
+    );
+  }, [projects, pruneWorkspaceViews]);
 
   useEffect(() => {
     const workspaces = projects.flatMap((project) =>
