@@ -9,10 +9,10 @@ import {
 } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 
-import { isElectron } from "../env";
 import { getLocalStorageItem, removeLocalStorageItem } from "../hooks/useLocalStorage";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import { isMacPlatform } from "../lib/utils";
+import { resolveWorkbenchTitlebarStyle } from "../lib/windowControlsOverlay";
 import { primaryServerKeybindingsAtom } from "../state/server";
 import {
   PanelAnimationSuppressionProvider,
@@ -39,8 +39,6 @@ import {
   useSidebarVisibility,
 } from "./ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
-
-const MACOS_TRAFFIC_LIGHTS_LEFT_INSET = "var(--desktop-window-controls-inset, 90px)";
 
 function subscribeToViewportWidth(onChange: () => void): () => void {
   window.addEventListener("resize", onChange);
@@ -130,7 +128,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const panelAnimationsSuppressed = usePanelNavigationSuppression(pathname);
   const routePanelAnimationsActive = panelAnimationsActive && !panelAnimationsSuppressed;
   const isOnSettings = pathname === "/settings" || pathname.startsWith("/settings/");
-  const isMacosDesktop = isElectron && isMacPlatform(navigator.platform);
+  const isMacosDesktop = window.desktopBridge !== undefined && isMacPlatform(navigator.platform);
   const [sidebarWidth, setSidebarWidth] = useState(readInitialThreadSidebarWidth);
   // Subscribed rather than read once: the clamp must track live window size,
   // and a clamped drag ends with an unchanged width, which skips the re-render
@@ -154,9 +152,11 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const sidebarProviderStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
     "--panel-animation-duration": `${panelAnimationDurationMs}ms`,
-    ...(isMacosDesktop && !isWindowFullscreen
-      ? { "--workspace-controls-left": MACOS_TRAFFIC_LIGHTS_LEFT_INSET }
-      : {}),
+    ...resolveWorkbenchTitlebarStyle({
+      hasDesktopBridge: window.desktopBridge !== undefined,
+      platform: navigator.platform,
+      fullscreen: isWindowFullscreen,
+    }),
   } as CSSProperties;
 
   useEffect(() => {

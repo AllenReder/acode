@@ -61,11 +61,11 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
       data-tauri-drag-region
       data-workbench-window-chrome=""
     >
-      <div className="absolute top-1/2 left-[var(--workspace-controls-left)] -translate-y-1/2 [-webkit-app-region:no-drag]">
+      <div className="absolute top-[var(--workbench-titlebar-center)] left-[var(--workspace-controls-left)] -translate-y-1/2 [-webkit-app-region:no-drag]">
         <SidebarTrigger aria-label="Toggle sidebar" />
       </div>
 
-      <div className="absolute inset-y-0 right-3 left-[var(--workspace-titlebar-content-left)] flex min-w-0 items-center gap-2 [-webkit-app-region:no-drag]">
+      <div className="absolute top-[var(--workbench-titlebar-center)] right-3 left-[var(--workspace-titlebar-content-left)] flex h-8 min-w-0 -translate-y-1/2 items-center gap-2 [-webkit-app-region:no-drag]">
         <div
           className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           data-tauri-drag-region
@@ -90,10 +90,10 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
                 data-tab-id={tab.id}
                 data-active-tab={active ? "true" : "false"}
                 className={cn(
-                  "group flex h-9 shrink-0 cursor-pointer items-center overflow-hidden rounded-[var(--control-radius)] border transition-[width,background-color,border-color] duration-150",
+                  "group flex h-8 shrink-0 cursor-pointer items-center gap-2.5 overflow-hidden rounded-[var(--control-radius)] border transition-[width,background-color,border-color] duration-150",
                   active
                     ? "w-64 justify-start border-border bg-muted/70 px-3 text-foreground"
-                    : "w-9 justify-center border-transparent bg-muted/25 text-muted-foreground hover:w-28 hover:justify-start hover:border-border/70 hover:bg-muted/50 hover:px-3",
+                    : "w-8 justify-center border-border bg-background/80 text-muted-foreground shadow-xs hover:w-28 hover:justify-start hover:bg-muted/50 hover:px-3",
                 )}
                 onClick={() => {
                   if (!active) activateTab(tab.id);
