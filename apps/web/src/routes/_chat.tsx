@@ -4,6 +4,7 @@ import { useEffect, useMemo } from "react";
 
 import { isCommandPaletteOpen } from "../commandPaletteBus";
 import { ThreadRouteView } from "../components/ThreadRouteView";
+import { SidebarInset } from "../components/ui/sidebar";
 import { Workbench } from "../workbench/Workbench";
 import { deepLinkInputFromParams } from "../workbench/deepLinks";
 import { resolveThreadRouteTarget } from "../threadRoutes";
@@ -198,7 +199,9 @@ function ChatRouteLayout() {
       ) : deepLink?.kind === "legacyThread" ||
         deepLink?.kind === "agentSession" ||
         deepLink?.kind === "workspaceTerminal" ? (
-        <Workbench />
+        <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground md:h-dvh">
+          <Workbench />
+        </SidebarInset>
       ) : threadTarget === null ? (
         <Outlet />
       ) : (
