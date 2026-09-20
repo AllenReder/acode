@@ -42,3 +42,9 @@ puts T3 Thread access behind Agent data adapters. Terminal metadata must gain a
 typed ACode identity and join the Workspace Session projection. The Workbench
 state must explicitly model Tabs, Panes, and View instances so uniqueness and
 cross-Tab close behavior are enforceable.
+
+Provider-native thread archive, delete, stop, and metadata-update commands may
+implement ACode Close, Delete, Stop, and Rename through an Agent adapter. They
+do not become parallel product actions: the ACode Session command surface owns
+the user-visible lifecycle. Pin, snooze, and settle are not part of that
+boundary unless an explicit ACode Session model decision adds them later.

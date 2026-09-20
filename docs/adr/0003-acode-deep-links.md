@@ -28,4 +28,6 @@ The adapter resolves a Thread to its ACode Agent Session after projection data
 hydrates and redirects once to the canonical route. `ThreadId` is not known to
 the Workbench, Sidebar, or `ViewTarget`. Closed Sessions resolve to their
 read-only history presentation; deleted or nonexistent targets resolve to a
-missing state without changing existing layout.
+missing state without changing existing layout. This is a temporary v1
+migration boundary, not a permanent public API; removing it is a breaking
+change after callers have migrated.

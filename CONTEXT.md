@@ -63,6 +63,13 @@ that Session's current work. A Session View may be opened in multiple Tabs, but
 the same Session has at most one Session View in any one Tab.
 _Avoid_: Session, Runtime panel
 
+**New Agent Session View**:
+A Workbench View for composing the first turn of an Agent session before an
+ACode Session identity exists. It is bound to a Workspace and a client-local
+draft identity, not a Session; promotion replaces it with the Agent Session
+View for the Session created on first send.
+_Avoid_: Draft Session, Provisional Session, Thread
+
 **Workspace View**:
 A View whose target is a Project or Workspace concern rather than a persistent
 Session, such as files, Git state, or plugin-provided workspace content. It
@@ -83,9 +90,9 @@ not one opened occurrence.
 _Avoid_: Panel registration, View instance
 
 **View instance**:
-One client-owned occurrence of a View definition bound to its target Workspace
-or Session and referenced by a Pane. Copying or moving an instance changes
-presentation references, never Session or Workspace work.
+One client-owned occurrence of a View definition bound to its target and
+referenced by a Pane. Copying or moving an instance changes presentation
+references, never Session or Workspace work.
 _Avoid_: Session, process, daemon entity
 
 **Workspace path**:
@@ -225,6 +232,15 @@ _Avoid_: Terminal text, Preformatted output, Agent timeline
   Session View uniqueness rules.
 - A Workbench with no opened Session shows a Welcome View rather than an empty
   Pane.
+- A client-local Agent draft is a New Agent Session View, not a Session; no
+  Session identity exists until promotion.
+- A Workspace has at most one client-local Agent draft, and each draft has at
+  most one New Agent Session View across the Workbench. Different Workspaces
+  may have distinct drafts; the same draft cannot appear in multiple Tabs.
+  Closing its View retains the draft; discarding it is explicit.
+- An ACode Deep Link never targets a New Agent Session View. A draft route is a
+  client-local recovery input, and promotion replaces it with the canonical
+  Agent Session route.
 - A Tab belongs to no Project or Workspace and may display Views from multiple
   Workspaces or Projects.
 - A Pane displays exactly one View instance and is never empty.
@@ -232,7 +248,11 @@ _Avoid_: Terminal text, Preformatted output, Agent timeline
   Session View may appear at most once in any one Tab.
 - Closing one Session View only detaches that View; closing a Session removes
   every Session View for it from every Tab while preserving its History entry.
+- Terminal Sessions are presented only by Terminal Session Views; an Agent
+  Session View does not own or embed a Terminal Session.
 - A View may present a Session or Workspace without owning its work lifecycle.
 - Multiple Views may reference the same Session.
 - Runtime and provider implementation details must not define ACode domain
   identity.
+- Provider-native lifecycle commands may implement ACode Session operations,
+  but they do not add user-visible Session actions or lifecycle states.
