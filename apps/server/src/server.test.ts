@@ -8636,6 +8636,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           id: TerminalSessionId.make("terminal-session:9:workspace:terminal-unique"),
           workspaceId,
           title: "Shell",
+          status: "open",
           createdAt: "2026-09-19T00:00:00Z",
           updatedAt: "2026-09-19T00:00:00Z",
         },

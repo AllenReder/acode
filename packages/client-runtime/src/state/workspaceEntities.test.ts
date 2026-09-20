@@ -140,6 +140,7 @@ it("projects live Terminal Sessions beside Agent Sessions and removes only the t
       id: "terminal-session:25:workspace:shared-local-id:term-1",
       workspaceId: WORKSPACE_ID,
       title: "Shell",
+      status: "open",
       createdAt: workspace.updatedAt,
       updatedAt: workspace.updatedAt,
     },
