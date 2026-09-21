@@ -13,20 +13,25 @@ export const WORKBENCH_TITLEBAR_HEIGHT = 36; // 36px standard titlebar height
  * Minimum sidebar width:
  * macOS: TRAFFIC_LIGHTS_ZONE (64) + S (12) + HideBtn (28) + S (12) + SettingsBtn (28) + S (12) = 156px.
  * When the sidebar is dragged to this minimum width, the gap between the two buttons exactly equals S.
- * Non-macOS: Clamped to 156px to guarantee project trees and settings search maintain readable width.
+ * Non-macOS: Directly aligned to window left boundary: HideBtn (28) + S (12) + SettingsBtn (28) + S (12) = 80px.
  */
 export function resolveSidebarMinimumWidth(options: { readonly isMac: boolean }): number {
-  const calculatedMac =
-    TRAFFIC_LIGHTS_ZONE +
-    BASE_SPACING +
-    TITLEBAR_BUTTON_SIZE +
-    BASE_SPACING +
-    TITLEBAR_BUTTON_SIZE +
-    BASE_SPACING;
   if (options.isMac) {
-    return calculatedMac;
+    return (
+      TRAFFIC_LIGHTS_ZONE +
+      BASE_SPACING +
+      TITLEBAR_BUTTON_SIZE +
+      BASE_SPACING +
+      TITLEBAR_BUTTON_SIZE +
+      BASE_SPACING
+    );
   }
-  return calculatedMac;
+  return (
+    TITLEBAR_BUTTON_SIZE +
+    BASE_SPACING +
+    TITLEBAR_BUTTON_SIZE +
+    BASE_SPACING
+  );
 }
 
 export interface SidebarHeaderInsets {
@@ -41,7 +46,7 @@ export interface SidebarHeaderInsets {
 export function resolveSidebarHeaderInsets(options: { readonly isMac: boolean }): SidebarHeaderInsets {
   return {
     trafficLightsInset: options.isMac ? BASE_SPACING : 0,
-    sidebarTriggerLeft: options.isMac ? TRAFFIC_LIGHTS_ZONE + BASE_SPACING : BASE_SPACING,
+    sidebarTriggerLeft: options.isMac ? TRAFFIC_LIGHTS_ZONE + BASE_SPACING : 0,
     buttonGap: BASE_SPACING,
     buttonSize: TITLEBAR_BUTTON_SIZE,
     rightInset: BASE_SPACING,

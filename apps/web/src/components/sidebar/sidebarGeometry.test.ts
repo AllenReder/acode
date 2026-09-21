@@ -22,9 +22,10 @@ describe("sidebarGeometry", () => {
     expect(minWidth).toBe(156);
   });
 
-  it("calculates non-macOS sidebar minimum width clamped to maintain readable content", () => {
+  it("calculates non-macOS sidebar minimum width aligned directly to left window boundary", () => {
+    // HideBtn (28) + S (12) + SettingsBtn (28) + S (12) = 80
     const minWidth = resolveSidebarMinimumWidth({ isMac: false });
-    expect(minWidth).toBe(156);
+    expect(minWidth).toBe(80);
   });
 
   it("resolves header insets for macOS and non-macOS platforms", () => {
@@ -35,7 +36,7 @@ describe("sidebarGeometry", () => {
     expect(macInsets.titlebarHeight).toBe(36);
 
     const winInsets = resolveSidebarHeaderInsets({ isMac: false });
-    expect(winInsets.sidebarTriggerLeft).toBe(12);
+    expect(winInsets.sidebarTriggerLeft).toBe(0);
     expect(winInsets.buttonGap).toBe(12);
     expect(winInsets.rightInset).toBe(12);
     expect(winInsets.titlebarHeight).toBe(36);

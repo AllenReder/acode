@@ -113,7 +113,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --workspace-titlebar-control-gap: 0.75rem;
   --sidebar-base-spacing: 12px;
   --sidebar-controls-left: 76px;
-  --sidebar-controls-left-win: 12px;
+  --sidebar-controls-left-win: 0px;
   --sidebar-controls-right: 12px;
   --workbench-titlebar-height: 36px;
   --workbench-titlebar-center: calc(var(--workbench-titlebar-height) / 2);
