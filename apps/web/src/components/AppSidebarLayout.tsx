@@ -10,7 +10,9 @@ import {
 import { useCanGoBack, useLocation, useNavigate } from "@tanstack/react-router";
 
 import { getLocalStorageItem, removeLocalStorageItem } from "../hooks/useLocalStorage";
+import { PanelLeftCloseIcon, PanelLeftIcon } from "lucide-react";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
+import { SidebarTitlebarButton } from "./sidebar/SidebarTitlebarControl";
 import { isMacPlatform } from "../lib/utils";
 import { resolveWorkbenchTitlebarStyle } from "../lib/windowControlsOverlay";
 import { primaryServerKeybindingsAtom } from "../state/server";
@@ -64,7 +66,8 @@ function readInitialThreadSidebarWidth(): number {
 function SidebarControl() {
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const { toggleSidebar } = useSidebar();
-  const isSidebarVisible = useSidebarVisibility();
+  const isOpen = useSidebarVisibility();
+  const isMac = typeof navigator !== "undefined" && isMacPlatform(navigator.platform);
   const shortcutLabel = shortcutLabelForCommand(keybindings, "sidebar.toggle");
 
   useEffect(() => {
@@ -89,23 +92,25 @@ function SidebarControl() {
   }, [keybindings, toggleSidebar]);
 
   return (
-    // The right-side layout controls carry mr-px (border compensation inside
-    // the panel), so the trigger mirrors it: both clusters sit one extra pixel
-    // off their edge and the titlebar reads symmetric.
     <div
-      className="pointer-events-none fixed left-[var(--workspace-controls-left)] top-[var(--workspace-controls-top)] z-50 ml-px flex h-[var(--workspace-topbar-height)] items-center"
+      className="pointer-events-none fixed top-0 z-50 flex h-[var(--workbench-titlebar-height,36px)] items-center [-webkit-app-region:no-drag]"
       data-sidebar-control=""
+      style={{
+        left: isMac
+          ? "var(--sidebar-controls-left, 76px)"
+          : "var(--sidebar-controls-left-win, 0px)",
+      }}
     >
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <SidebarTrigger className="pointer-events-auto" aria-label="Toggle main sidebar" />
-          }
-        />
-        <TooltipPopup side="bottom">
-          Toggle main sidebar{shortcutLabel ? ` (${shortcutLabel})` : ""}
-        </TooltipPopup>
-      </Tooltip>
+      <SidebarTitlebarButton
+        icon={isOpen ? <PanelLeftCloseIcon className="size-4" /> : <PanelLeftIcon className="size-4" />}
+        label="Toggle main sidebar"
+        shortcut={shortcutLabel || (isMac ? "⌘B" : "Ctrl+B")}
+        ariaLabel="Toggle main sidebar"
+        ariaPressed={isOpen}
+        onClick={toggleSidebar}
+        className="pointer-events-auto"
+        testId="fixed-sidebar-trigger"
+      />
     </div>
   );
 }

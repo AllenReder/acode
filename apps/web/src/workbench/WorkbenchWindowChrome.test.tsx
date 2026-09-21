@@ -116,7 +116,7 @@ it("does not render window controls in WorkbenchWindowChrome when sidebar is exp
   expect(html).not.toContain('data-testid="workbench-settings-button"');
 });
 
-it("renders traffic-light offset, toggle trigger, and settings button when sidebar is collapsed", () => {
+it("renders traffic-light offset and settings button when sidebar is collapsed", () => {
   const snapshot = createTestSnapshot();
 
   const html = renderToStaticMarkup(
@@ -125,7 +125,6 @@ it("renders traffic-light offset, toggle trigger, and settings button when sideb
     </SidebarProvider>,
   );
 
-  expect(html).toContain('data-testid="workbench-sidebar-trigger"');
   expect(html).toContain('data-testid="workbench-settings-button"');
   expect(html).toContain('data-slot="workbench-titlebar-separator"');
 });

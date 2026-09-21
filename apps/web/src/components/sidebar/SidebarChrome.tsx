@@ -1,7 +1,5 @@
 import {
   ArrowLeftIcon,
-  PanelLeftCloseIcon,
-  PanelLeftIcon,
   SettingsIcon,
 } from "lucide-react";
 import { memo, useCallback } from "react";
@@ -17,8 +15,6 @@ import { Badge } from "../ui/badge";
 import {
   SidebarFooter,
   SidebarHeader,
-  useSidebar,
-  useSidebarVisibility,
 } from "../ui/sidebar";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarTitlebarButton } from "./SidebarTitlebarControl";
@@ -33,8 +29,6 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
 }: SidebarChromeHeaderProps) {
   const navigate = useNavigate();
   const canGoBack = useCanGoBack();
-  const { toggleSidebar } = useSidebar();
-  const isOpen = useSidebarVisibility();
   const stageLabel = useEnvironmentStageLabel();
   const environmentIdentificationMode = useEnvironmentIdentificationMode();
   const pillLabel =
@@ -63,18 +57,14 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
       style={{
         paddingLeft: isMac
           ? "var(--sidebar-controls-left, 76px)"
-          : "var(--sidebar-controls-left-win, 12px)",
+          : "var(--sidebar-controls-left-win, 0px)",
         paddingRight: "var(--sidebar-controls-right, 12px)",
       }}
     >
-      <SidebarTitlebarButton
-        icon={isOpen ? <PanelLeftCloseIcon className="size-4" /> : <PanelLeftIcon className="size-4" />}
-        label="Toggle main sidebar"
-        shortcut={isMac ? "⌘B" : "Ctrl+B"}
-        ariaLabel="Toggle main sidebar"
-        ariaPressed={isOpen}
-        onClick={toggleSidebar}
-        testId="sidebar-toggle-button"
+      <div
+        className="size-7 shrink-0 pointer-events-none"
+        data-slot="sidebar-header-toggle-placeholder"
+        data-testid="sidebar-toggle-placeholder"
       />
       {pillLabel ? (
         <Badge

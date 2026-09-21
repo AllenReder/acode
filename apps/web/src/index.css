@@ -1659,9 +1659,7 @@ html[data-workbench-window-chrome] {
   --workbench-titlebar-height: 36px;
   --workbench-titlebar-center: calc(var(--workbench-titlebar-height) / 2);
 }
-html[data-workbench-window-chrome] [data-sidebar-control] {
-  display: none;
-}
+
 
 
 

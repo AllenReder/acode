@@ -1,10 +1,10 @@
 import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
-import { Columns3Icon, PanelsTopLeftIcon, PanelLeftIcon, PlusIcon, SettingsIcon, XIcon } from "lucide-react";
+import { Columns3Icon, PanelsTopLeftIcon, PlusIcon, SettingsIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { cn, isMacPlatform } from "../lib/utils";
-import { useSidebar, useSidebarVisibility } from "../components/ui/sidebar";
+import { useSidebarVisibility } from "../components/ui/sidebar";
 import { SidebarTitlebarButton } from "../components/sidebar/SidebarTitlebarControl";
 import { firstLeafId } from "./layout";
 import { targetKey, type ViewTarget } from "./viewRegistry";
@@ -40,7 +40,6 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
   const [draftTitle, setDraftTitle] = useState("");
 
   const navigate = useNavigate();
-  const { toggleSidebar } = useSidebar();
   const isSidebarOpen = useSidebarVisibility();
   const isMac = typeof navigator !== "undefined" && isMacPlatform(navigator.platform);
 
@@ -76,23 +75,13 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
     >
       {!isSidebarOpen ? (
         <div
-          className="flex shrink-0 items-center [-webkit-app-region:no-drag] transition-opacity duration-150 ease-out"
+          className="flex shrink-0 items-center [-webkit-app-region:no-drag] transition-opacity duration-200 ease-out"
           style={{
             paddingLeft: isMac
-              ? "var(--sidebar-controls-left, 76px)"
-              : "var(--sidebar-controls-left-win, 12px)",
+              ? "calc(var(--sidebar-controls-left, 76px) + 28px + 12px)"
+              : "calc(var(--sidebar-controls-left-win, 0px) + 28px + 12px)",
           }}
         >
-          <SidebarTitlebarButton
-            icon={<PanelLeftIcon className="size-4" />}
-            label="Toggle main sidebar"
-            shortcut={isMac ? "⌘B" : "Ctrl+B"}
-            ariaLabel="Toggle main sidebar"
-            ariaPressed={false}
-            onClick={toggleSidebar}
-            testId="workbench-sidebar-trigger"
-          />
-          <div className="w-3" />
           <SidebarTitlebarButton
             icon={<SettingsIcon className="size-4" />}
             label="Settings"

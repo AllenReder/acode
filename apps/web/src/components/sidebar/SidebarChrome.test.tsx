@@ -105,14 +105,14 @@ describe("SidebarChromeHeader and SidebarChromeFooter", () => {
     expect(historyBack).toHaveBeenCalled();
   });
 
-  it("renders the toggle button in the header", async () => {
+  it("renders the toggle placeholder in the header to accommodate fixed control", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
     await act(() => {
       renderer = create(<SidebarChromeHeader mode="main" />);
     });
 
-    const toggleButton = renderer.root.findByProps({ "data-testid": "sidebar-toggle-button" });
-    expect(toggleButton.props["aria-label"]).toBe("Toggle main sidebar");
+    const togglePlaceholder = renderer.root.findByProps({ "data-testid": "sidebar-toggle-placeholder" });
+    expect(togglePlaceholder).toBeDefined();
   });
 });
