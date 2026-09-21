@@ -3,20 +3,26 @@
  * S is the standard unit of spacing derived from the macOS window edge to traffic lights offset.
  */
 
-export const BASE_SPACING = 12; // 默认基准间距（红绿灯外边距、控件距右边界）
+export const BASE_SPACING = 12; // 默认基准间距（红绿灯距窗口左边界 12px，控件距窗口/侧边栏右边界 12px）
 export const TRAFFIC_LIGHTS_WIDTH = 52; // 3 circles (12px each) + 2 gaps (8px each)
 export const TRAFFIC_LIGHTS_ZONE = BASE_SPACING + TRAFFIC_LIGHTS_WIDTH; // 64px
-export const TITLEBAR_BUTTON_SIZE = 28; // 28px control size
-export const WORKBENCH_TITLEBAR_HEIGHT = 36; // 36px standard titlebar height
+export const TITLEBAR_BUTTON_SIZE = 28; // 按钮尺寸 28x28
+export const WORKBENCH_TITLEBAR_HEIGHT = 36; // 顶栏高度 36px
 
 /**
- * 侧边栏隐藏按钮与设置按钮之间的间距 (Button Gap)
- * 默认 6px（macOS 原生工具栏按钮标准紧凑间距，可随意调整为 4px、6px、8px 等）。
+ * 1. 红绿灯与最左侧隐藏按钮的间距 (Traffic Light Gap)
+ * 默认 12px（红绿灯右边界 64px + 12px = 隐藏按钮起点 76px）。
+ */
+export const TRAFFIC_LIGHT_GAP = 12;
+
+/**
+ * 2. 隐藏按钮与设置按钮之间的间距 (Button Gap)
+ * 默认 6px（仅控制两枚按钮之间的距离，不影响红绿灯）。
  */
 export const BUTTON_GAP = 6;
 
-/** 侧边栏按钮在 macOS 上的起点坐标（红绿灯右侧） */
-export const SIDEBAR_TRIGGER_LEFT_MAC = TRAFFIC_LIGHTS_ZONE + BASE_SPACING; // 76px
+/** 侧边栏隐藏按钮在 macOS 上的起点坐标（仅由红绿灯宽度 + TRAFFIC_LIGHT_GAP 决定） */
+export const SIDEBAR_TRIGGER_LEFT_MAC = TRAFFIC_LIGHTS_ZONE + TRAFFIC_LIGHT_GAP; // 64 + 12 = 76px
 export const SIDEBAR_TRIGGER_LEFT_WIN = 0; // Windows 上对齐窗口左侧
 
 /** 设置按钮在折叠停靠时的起点坐标（自动根据 BUTTON_GAP 联动计算） */
@@ -25,14 +31,14 @@ export const DOCK_LEFT_WIN = SIDEBAR_TRIGGER_LEFT_WIN + TITLEBAR_BUTTON_SIZE + B
 
 /**
  * Minimum sidebar width:
- * macOS: TRAFFIC_LIGHTS_ZONE (64) + S (12) + HideBtn (28) + BUTTON_GAP (6) + SettingsBtn (28) + S (12) = 150px.
- * Non-macOS: Directly aligned to window left boundary: HideBtn (28) + BUTTON_GAP (6) + SettingsBtn (28) + S (12) = 74px.
+ * macOS: TRAFFIC_LIGHTS_ZONE (64) + TRAFFIC_LIGHT_GAP (12) + HideBtn (28) + BUTTON_GAP (6) + SettingsBtn (28) + BASE_SPACING (12) = 150px.
+ * Non-macOS: Directly aligned to window left boundary: HideBtn (28) + BUTTON_GAP (6) + SettingsBtn (28) + BASE_SPACING (12) = 74px.
  */
 export function resolveSidebarMinimumWidth(options: { readonly isMac: boolean }): number {
   if (options.isMac) {
     return (
       TRAFFIC_LIGHTS_ZONE +
-      BASE_SPACING +
+      TRAFFIC_LIGHT_GAP +
       TITLEBAR_BUTTON_SIZE +
       BUTTON_GAP +
       TITLEBAR_BUTTON_SIZE +

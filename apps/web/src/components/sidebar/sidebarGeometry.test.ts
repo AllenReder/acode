@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   BASE_SPACING,
+  TRAFFIC_LIGHT_GAP,
   BUTTON_GAP,
   TITLEBAR_BUTTON_SIZE,
   TRAFFIC_LIGHTS_WIDTH,
@@ -15,8 +16,9 @@ import {
 } from "./sidebarGeometry";
 
 describe("sidebarGeometry", () => {
-  it("defines the standard spacing and customizable button gap", () => {
+  it("defines independent traffic light gap and button gap", () => {
     expect(BASE_SPACING).toBe(12);
+    expect(TRAFFIC_LIGHT_GAP).toBe(12);
     expect(BUTTON_GAP).toBe(6);
     expect(TRAFFIC_LIGHTS_WIDTH).toBe(52);
     expect(TRAFFIC_LIGHTS_ZONE).toBe(64);
@@ -29,7 +31,7 @@ describe("sidebarGeometry", () => {
   });
 
   it("calculates macOS sidebar minimum width matching the unified formula", () => {
-    // Traffic zone (64) + S (12) + HideBtn (28) + BUTTON_GAP (6) + SettingsBtn (28) + S (12) = 150
+    // Traffic zone (64) + TrafficGap (12) + HideBtn (28) + BUTTON_GAP (6) + SettingsBtn (28) + S (12) = 150
     const minWidth = resolveSidebarMinimumWidth({ isMac: true });
     expect(minWidth).toBe(150);
   });
