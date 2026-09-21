@@ -414,6 +414,52 @@ describe("ClientSettings browser recording frame rate", () => {
   });
 });
 
+describe("ClientSettings window glass and backdrop settings", () => {
+  it("defaults to standard window glass values", () => {
+    const settings = decodeClientSettings({});
+    expect(settings.sidebarOpacity).toBe(85);
+    expect(settings.sidebarBlur).toBe(24);
+    expect(settings.workbenchGlass).toBe(false);
+    expect(settings.workbenchOpacity).toBe(88);
+    expect(settings.chatBackgroundPath).toBeNull();
+    expect(settings.chatBackgroundOpacity).toBe(24);
+    expect(settings.chatBackgroundScope).toBe("all");
+  });
+
+  it("round-trips valid window glass updates", () => {
+    const patch = {
+      sidebarOpacity: 70,
+      sidebarBlur: 32,
+      workbenchGlass: true,
+      workbenchOpacity: 90,
+      chatBackgroundPath: "/path/to/bg.png",
+      chatBackgroundOpacity: 35,
+      chatBackgroundScope: "empty" as const,
+    };
+    expect(decodeClientSettingsPatch(patch)).toEqual(patch);
+    const settings = decodeClientSettings(patch);
+    expect(settings.sidebarOpacity).toBe(70);
+    expect(settings.sidebarBlur).toBe(32);
+    expect(settings.workbenchGlass).toBe(true);
+    expect(settings.workbenchOpacity).toBe(90);
+    expect(settings.chatBackgroundPath).toBe("/path/to/bg.png");
+    expect(settings.chatBackgroundOpacity).toBe(35);
+    expect(settings.chatBackgroundScope).toBe("empty");
+  });
+
+  it("rejects invalid window glass values", () => {
+    expect(() => decodeClientSettingsPatch({ sidebarOpacity: 14 })).toThrow();
+    expect(() => decodeClientSettingsPatch({ sidebarOpacity: 101 })).toThrow();
+    expect(() => decodeClientSettingsPatch({ sidebarBlur: 0 })).toThrow();
+    expect(() => decodeClientSettingsPatch({ sidebarBlur: 65 })).toThrow();
+    expect(() => decodeClientSettingsPatch({ workbenchOpacity: 49 })).toThrow();
+    expect(() => decodeClientSettingsPatch({ workbenchOpacity: 101 })).toThrow();
+    expect(() => decodeClientSettingsPatch({ chatBackgroundOpacity: 4 })).toThrow();
+    expect(() => decodeClientSettingsPatch({ chatBackgroundOpacity: 66 })).toThrow();
+    expect(() => decodeClientSettingsPatch({ chatBackgroundScope: "invalid" as any })).toThrow();
+  });
+});
+
 describe("ClientSettings glass opacity", () => {
   it("defaults to a readable translucent surface", () => {
     expect(decodeClientSettings({}).glassOpacity).toBe(80);

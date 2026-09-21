@@ -13,7 +13,9 @@ import {
   resolveDesktopTheme,
   resolveThemeAppearance,
   resolveThemeHalf,
+  ACODE_DEFAULT_THEME_ID,
   THEME_PREVIEW_ID,
+  THEME_STORAGE_KEY,
   THEME_APPEARANCE_MODE_STORAGE_KEY,
   THEME_FOLLOW_SYSTEM_STORAGE_KEY,
   THEME_HALVES_STORAGE_KEY,
@@ -35,14 +37,14 @@ type ThemeSnapshot = {
 
 type DesktopThemeBridge = Pick<DesktopBridge, "setTheme">;
 
-const STORAGE_KEY = "t3code:theme";
+const STORAGE_KEY = THEME_STORAGE_KEY;
 const MEDIA_QUERY = "(prefers-color-scheme: dark)";
 const DEFAULT_THEME_SNAPSHOT: ThemeSnapshot = {
-  theme: "system",
-  resolvedTheme: "light",
-  systemDark: false,
-  followSystem: true,
-  appearanceMode: "system",
+  theme: ACODE_DEFAULT_THEME_ID,
+  resolvedTheme: "dark",
+  systemDark: true,
+  followSystem: false,
+  appearanceMode: "dark",
   themeHalves: null,
 };
 
@@ -214,7 +216,7 @@ export function readThemePreference(): Theme {
   if (raw !== null && isKnownThemePreference(raw)) {
     return canonicalThemePreference(raw);
   }
-  return DEFAULT_THEME_SNAPSHOT.theme;
+  return ACODE_DEFAULT_THEME_ID;
 }
 
 export function writeThemePreference(theme: Theme): void {

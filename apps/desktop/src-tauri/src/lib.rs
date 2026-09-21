@@ -1,3 +1,6 @@
+#[cfg(target_os = "macos")]
+mod macos;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::env;
@@ -494,14 +497,67 @@ fn navigation_guard<R: Runtime>() -> TauriPlugin<R> {
         .build()
 }
 
+
+#[tauri::command]
+fn set_window_glass_enabled(window: tauri::WebviewWindow, enabled: bool) {
+    #[cfg(target_os = "macos")]
+    {
+        if enabled {
+            let _ = window.set_background_color(Some(tauri::window::Color(0, 0, 0, 3)));
+            macos::enable_glass(&window);
+        } else {
+            macos::disable_glass(&window);
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if enabled {
+            let _ = window.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
+            let _ = window.set_effects(
+                tauri::window::EffectsBuilder::new()
+                    .effect(tauri::window::Effect::Acrylic)
+                    .build(),
+            );
+        } else {
+            let _ = window.set_effects(None);
+            let _ = window.set_background_color(Some(tauri::window::Color(24, 24, 27, 255)));
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = (window, enabled);
+    }
+}
+
+#[tauri::command]
+fn set_window_background_blur(window: tauri::WebviewWindow, radius: u8) {
+    #[cfg(target_os = "macos")]
+    macos::set_background_blur_radius(&window, radius);
+    #[cfg(not(target_os = "macos"))]
+    let _ = (window, radius);
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(navigation_guard())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::Manager;
+                if let Some(window) = app.get_webview_window("main") {
+                    macos::install(&window);
+                }
+            }
+            let _ = app;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             read_desktop_runtime_config,
-            stop_desktop_daemon
+            stop_desktop_daemon,
+            set_window_glass_enabled,
+            set_window_background_blur
         ])
         .run(tauri::generate_context!())
         .expect("error while running ACode desktop");

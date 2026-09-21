@@ -1297,6 +1297,12 @@ export interface DesktopBridge {
    */
   pickThemeFiles?: () => Promise<readonly PickedThemeFile[] | null>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
+  pickFile?: (options?: {
+    readonly filters?: ReadonlyArray<{ readonly name: string; readonly extensions: ReadonlyArray<string> }>;
+    readonly initialPath?: string;
+  }) => Promise<string | null>;
+  setWindowGlassEnabled?: (enabled: boolean) => Promise<void>;
+  setWindowBackgroundBlur?: (radius: number) => Promise<void>;
   showContextMenu: <T extends string>(
     items: readonly ContextMenuItem<T>[],
     position?: { x: number; y: number },

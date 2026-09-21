@@ -1,3 +1,5 @@
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { isTauri } from "../../env";
 import { Spinner } from "~/components/ui/spinner";
 import { NotificationSettings } from "./NotificationSettings";
 import { ArchiveIcon, ArchiveX, ChevronRightIcon, SettingsIcon } from "lucide-react";
@@ -26,6 +28,14 @@ import {
   MAX_APPEARANCE_CONTRAST,
   MAX_CODE_FONT_SIZE,
   MAX_GLASS_OPACITY,
+  MIN_SIDEBAR_OPACITY,
+  MAX_SIDEBAR_OPACITY,
+  MIN_SIDEBAR_BLUR,
+  MAX_SIDEBAR_BLUR,
+  MIN_WORKBENCH_OPACITY,
+  MAX_WORKBENCH_OPACITY,
+  MIN_CHAT_BACKGROUND_OPACITY,
+  MAX_CHAT_BACKGROUND_OPACITY,
   MAX_INTERFACE_FONT_SIZE,
   MAX_PANEL_ANIMATION_DURATION_MS,
   MAX_PROMPT_FONT_SIZE,
@@ -1170,6 +1180,31 @@ export function AppearanceSettingsPanel() {
     "--settings-slider-progress": `${glassOpacityRatio * 100}%`,
     "--settings-slider-fill-offset": `${0.5 - glassOpacityRatio}rem`,
   } as CSSProperties;
+  const sidebarOpacityRatio =
+    (settings.sidebarOpacity - MIN_SIDEBAR_OPACITY) / (MAX_SIDEBAR_OPACITY - MIN_SIDEBAR_OPACITY);
+  const sidebarOpacitySliderStyle = {
+    "--settings-slider-progress": `${sidebarOpacityRatio * 100}%`,
+    "--settings-slider-fill-offset": `${0.5 - sidebarOpacityRatio}rem`,
+  } as CSSProperties;
+  const sidebarBlurRatio =
+    (settings.sidebarBlur - MIN_SIDEBAR_BLUR) / (MAX_SIDEBAR_BLUR - MIN_SIDEBAR_BLUR);
+  const sidebarBlurSliderStyle = {
+    "--settings-slider-progress": `${sidebarBlurRatio * 100}%`,
+    "--settings-slider-fill-offset": `${0.5 - sidebarBlurRatio}rem`,
+  } as CSSProperties;
+  const workbenchOpacityRatio =
+    (settings.workbenchOpacity - MIN_WORKBENCH_OPACITY) / (MAX_WORKBENCH_OPACITY - MIN_WORKBENCH_OPACITY);
+  const workbenchOpacitySliderStyle = {
+    "--settings-slider-progress": `${workbenchOpacityRatio * 100}%`,
+    "--settings-slider-fill-offset": `${0.5 - workbenchOpacityRatio}rem`,
+  } as CSSProperties;
+  const chatBackgroundOpacityRatio =
+    (settings.chatBackgroundOpacity - MIN_CHAT_BACKGROUND_OPACITY) /
+    (MAX_CHAT_BACKGROUND_OPACITY - MIN_CHAT_BACKGROUND_OPACITY);
+  const chatBackgroundOpacitySliderStyle = {
+    "--settings-slider-progress": `${chatBackgroundOpacityRatio * 100}%`,
+    "--settings-slider-fill-offset": `${0.5 - chatBackgroundOpacityRatio}rem`,
+  } as CSSProperties;
   const paneGapRatio =
     (settings.paneGap - MIN_PANE_GAP) / (MAX_PANE_GAP - MIN_PANE_GAP);
   const paneGapSliderStyle = {
@@ -1215,19 +1250,293 @@ export function AppearanceSettingsPanel() {
             onImportOpenChange={setIsImportThemeOpen}
           />
         </div>
+
+        <div className="mt-6 border-t border-border pt-4">
+          <SettingsRow
+            {...searchableSetting("setting-appearance-contrast")}
+            description="Adjust the contrast of colors and borders across the interface."
+            resetAction={
+              settings.appearanceContrast !== DEFAULT_UNIFIED_SETTINGS.appearanceContrast ? (
+                <SettingResetButton
+                  label="contrast"
+                  onClick={() =>
+                    updateSettings({
+                      appearanceContrast: DEFAULT_UNIFIED_SETTINGS.appearanceContrast,
+                    })
+                  }
+                />
+              ) : null
+            }
+            control={
+              <div className="flex w-full items-center gap-3 sm:w-52">
+                <output
+                  className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
+                  htmlFor="appearance-contrast"
+                >
+                  {settings.appearanceContrast}%
+                </output>
+                <input
+                  aria-label="Contrast"
+                  className="settings-slider min-w-0 flex-1"
+                  id="appearance-contrast"
+                  max={MAX_APPEARANCE_CONTRAST}
+                  min={MIN_APPEARANCE_CONTRAST}
+                  onChange={(event) => {
+                    const appearanceContrast = Number(event.currentTarget.value);
+                    if (
+                      Number.isInteger(appearanceContrast) &&
+                      appearanceContrast >= MIN_APPEARANCE_CONTRAST &&
+                      appearanceContrast <= MAX_APPEARANCE_CONTRAST
+                    ) {
+                      updateSettings({ appearanceContrast });
+                    }
+                  }}
+                  step={5}
+                  style={appearanceContrastSliderStyle}
+                  type="range"
+                  value={settings.appearanceContrast}
+                />
+              </div>
+            }
+          />
+        </div>
       </SettingsSection>
 
-      <SettingsSection id="appearance-interface" title="Interface">
+      <SettingsSection id="appearance-window-glass" title="Window & Glass">
         <SettingsRow
-          {...searchableSetting("setting-appearance-contrast")}
-          description="Adjust the contrast of colors and borders across the interface."
+          {...searchableSetting("setting-sidebar-blur")}
+          description="Adjust the intensity of the native desktop background blur."
           resetAction={
-            settings.appearanceContrast !== DEFAULT_UNIFIED_SETTINGS.appearanceContrast ? (
+            settings.sidebarBlur !== DEFAULT_UNIFIED_SETTINGS.sidebarBlur ? (
               <SettingResetButton
-                label="contrast"
+                label="window blur radius"
+                onClick={() =>
+                  updateSettings({ sidebarBlur: DEFAULT_UNIFIED_SETTINGS.sidebarBlur })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="flex w-full items-center gap-3 sm:w-52">
+              <output
+                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
+                htmlFor="sidebar-blur"
+              >
+                {settings.sidebarBlur}px
+              </output>
+              <input
+                aria-label="Window blur radius"
+                className="settings-slider min-w-0 flex-1"
+                id="sidebar-blur"
+                max={MAX_SIDEBAR_BLUR}
+                min={MIN_SIDEBAR_BLUR}
+                onChange={(event) => {
+                  const sidebarBlur = Number(event.currentTarget.value);
+                  if (
+                    Number.isInteger(sidebarBlur) &&
+                    sidebarBlur >= MIN_SIDEBAR_BLUR &&
+                    sidebarBlur <= MAX_SIDEBAR_BLUR
+                  ) {
+                    updateSettings({ sidebarBlur });
+                  }
+                }}
+                step={1}
+                style={sidebarBlurSliderStyle}
+                type="range"
+                value={settings.sidebarBlur}
+              />
+            </div>
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("setting-sidebar-opacity")}
+          description="Translucency of the full-height navigation sidebar."
+          resetAction={
+            settings.sidebarOpacity !== DEFAULT_UNIFIED_SETTINGS.sidebarOpacity ? (
+              <SettingResetButton
+                label="sidebar opacity"
+                onClick={() =>
+                  updateSettings({ sidebarOpacity: DEFAULT_UNIFIED_SETTINGS.sidebarOpacity })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="flex w-full items-center gap-3 sm:w-52">
+              <output
+                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
+                htmlFor="sidebar-opacity"
+              >
+                {settings.sidebarOpacity}%
+              </output>
+              <input
+                aria-label="Sidebar opacity"
+                className="settings-slider min-w-0 flex-1"
+                id="sidebar-opacity"
+                max={MAX_SIDEBAR_OPACITY}
+                min={MIN_SIDEBAR_OPACITY}
+                onChange={(event) => {
+                  const sidebarOpacity = Number(event.currentTarget.value);
+                  if (
+                    Number.isInteger(sidebarOpacity) &&
+                    sidebarOpacity >= MIN_SIDEBAR_OPACITY &&
+                    sidebarOpacity <= MAX_SIDEBAR_OPACITY
+                  ) {
+                    updateSettings({ sidebarOpacity });
+                  }
+                }}
+                step={1}
+                style={sidebarOpacitySliderStyle}
+                type="range"
+                value={settings.sidebarOpacity}
+              />
+            </div>
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("setting-workbench-glass")}
+          description="Apply native frosted glass to the main workspace, editor, and session timeline."
+          resetAction={
+            settings.workbenchGlass !== DEFAULT_UNIFIED_SETTINGS.workbenchGlass ? (
+              <SettingResetButton
+                label="workbench glass"
+                onClick={() =>
+                  updateSettings({ workbenchGlass: DEFAULT_UNIFIED_SETTINGS.workbenchGlass })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              id="workbench-glass"
+              aria-label="Workbench glass"
+              checked={settings.workbenchGlass}
+              onCheckedChange={(checked) => updateSettings({ workbenchGlass: Boolean(checked) })}
+            />
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("setting-workbench-opacity")}
+          description={
+            settings.workbenchGlass
+              ? "Translucency of the workspace when Workbench Glass is enabled."
+              : "Enabled when Workbench Glass is on."
+          }
+          resetAction={
+            settings.workbenchOpacity !== DEFAULT_UNIFIED_SETTINGS.workbenchOpacity ? (
+              <SettingResetButton
+                label="workbench opacity"
+                onClick={() =>
+                  updateSettings({ workbenchOpacity: DEFAULT_UNIFIED_SETTINGS.workbenchOpacity })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="flex w-full items-center gap-3 sm:w-52">
+              <output
+                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
+                htmlFor="workbench-opacity"
+              >
+                {settings.workbenchOpacity}%
+              </output>
+              <input
+                aria-label="Workbench opacity"
+                className="settings-slider min-w-0 flex-1"
+                disabled={!settings.workbenchGlass}
+                id="workbench-opacity"
+                max={MAX_WORKBENCH_OPACITY}
+                min={MIN_WORKBENCH_OPACITY}
+                onChange={(event) => {
+                  const workbenchOpacity = Number(event.currentTarget.value);
+                  if (
+                    Number.isInteger(workbenchOpacity) &&
+                    workbenchOpacity >= MIN_WORKBENCH_OPACITY &&
+                    workbenchOpacity <= MAX_WORKBENCH_OPACITY
+                  ) {
+                    updateSettings({ workbenchOpacity });
+                  }
+                }}
+                step={1}
+                style={workbenchOpacitySliderStyle}
+                type="range"
+                value={settings.workbenchOpacity}
+              />
+            </div>
+          }
+        />
+      </SettingsSection>
+
+      <SettingsSection id="appearance-chat-wallpaper" title="Chat Wallpaper">
+        <SettingsRow
+          {...searchableSetting("setting-chat-wallpaper")}
+          description="Personalize the background behind your conversation transcripts."
+          resetAction={
+            settings.chatBackgroundPath !== DEFAULT_UNIFIED_SETTINGS.chatBackgroundPath ? (
+              <SettingResetButton
+                label="chat wallpaper"
+                onClick={() =>
+                  updateSettings({ chatBackgroundPath: DEFAULT_UNIFIED_SETTINGS.chatBackgroundPath })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="flex items-center gap-2.5">
+              {settings.chatBackgroundPath ? (
+                <div className="flex items-center gap-2">
+                  <img
+                    src={isTauri && typeof window !== "undefined" ? convertFileSrc(settings.chatBackgroundPath) : settings.chatBackgroundPath}
+                    alt="Wallpaper preview"
+                    className="size-9 rounded-md object-cover border border-border shrink-0 shadow-xs"
+                  />
+                  <span className="max-w-28 truncate text-xs text-muted-foreground font-mono">
+                    {settings.chatBackgroundPath.split(/[/\\]/).pop()}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => updateSettings({ chatBackgroundPath: null })}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ) : null}
+              <Button
+                size="sm"
+                variant={settings.chatBackgroundPath ? "ghost" : "outline"}
+                onClick={async () => {
+                  try {
+                    const selected = await window.desktopBridge?.pickFile?.({
+                      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "gif"] }],
+                    });
+                    if (typeof selected === "string") {
+                      updateSettings({ chatBackgroundPath: selected });
+                    }
+                  } catch {
+                    // Dialog cancelled or unsupported
+                  }
+                }}
+              >
+                {settings.chatBackgroundPath ? "Change..." : "Choose image..."}
+              </Button>
+            </div>
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("setting-chat-wallpaper-opacity")}
+          description="Blend level of the wallpaper behind messages."
+          resetAction={
+            settings.chatBackgroundOpacity !== DEFAULT_UNIFIED_SETTINGS.chatBackgroundOpacity ? (
+              <SettingResetButton
+                label="wallpaper opacity"
                 onClick={() =>
                   updateSettings({
-                    appearanceContrast: DEFAULT_UNIFIED_SETTINGS.appearanceContrast,
+                    chatBackgroundOpacity: DEFAULT_UNIFIED_SETTINGS.chatBackgroundOpacity,
                   })
                 }
               />
@@ -1237,34 +1546,80 @@ export function AppearanceSettingsPanel() {
             <div className="flex w-full items-center gap-3 sm:w-52">
               <output
                 className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
-                htmlFor="appearance-contrast"
+                htmlFor="chat-background-opacity"
               >
-                {settings.appearanceContrast}%
+                {settings.chatBackgroundOpacity}%
               </output>
               <input
-                aria-label="Contrast"
+                aria-label="Wallpaper opacity"
                 className="settings-slider min-w-0 flex-1"
-                id="appearance-contrast"
-                max={MAX_APPEARANCE_CONTRAST}
-                min={MIN_APPEARANCE_CONTRAST}
+                disabled={!settings.chatBackgroundPath}
+                id="chat-background-opacity"
+                max={MAX_CHAT_BACKGROUND_OPACITY}
+                min={MIN_CHAT_BACKGROUND_OPACITY}
                 onChange={(event) => {
-                  const appearanceContrast = Number(event.currentTarget.value);
+                  const chatBackgroundOpacity = Number(event.currentTarget.value);
                   if (
-                    Number.isInteger(appearanceContrast) &&
-                    appearanceContrast >= MIN_APPEARANCE_CONTRAST &&
-                    appearanceContrast <= MAX_APPEARANCE_CONTRAST
+                    Number.isInteger(chatBackgroundOpacity) &&
+                    chatBackgroundOpacity >= MIN_CHAT_BACKGROUND_OPACITY &&
+                    chatBackgroundOpacity <= MAX_CHAT_BACKGROUND_OPACITY
                   ) {
-                    updateSettings({ appearanceContrast });
+                    updateSettings({ chatBackgroundOpacity });
                   }
                 }}
-                step={5}
-                style={appearanceContrastSliderStyle}
+                step={1}
+                style={chatBackgroundOpacitySliderStyle}
                 type="range"
-                value={settings.appearanceContrast}
+                value={settings.chatBackgroundOpacity}
               />
             </div>
           }
         />
+
+        <SettingsRow
+          {...searchableSetting("setting-chat-wallpaper-scope")}
+          description="Control where the wallpaper is visible."
+          resetAction={
+            settings.chatBackgroundScope !== DEFAULT_UNIFIED_SETTINGS.chatBackgroundScope ? (
+              <SettingResetButton
+                label="wallpaper scope"
+                onClick={() =>
+                  updateSettings({
+                    chatBackgroundScope: DEFAULT_UNIFIED_SETTINGS.chatBackgroundScope,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              disabled={!settings.chatBackgroundPath}
+              value={settings.chatBackgroundScope}
+              onValueChange={(value) => {
+                if (value === "empty" || value === "all") {
+                  updateSettings({ chatBackgroundScope: value });
+                }
+              }}
+            >
+              <SelectTrigger size="sm" className="w-full sm:w-40" aria-label="Wallpaper scope">
+                <SelectValue>
+                  {settings.chatBackgroundScope === "empty" ? "Empty sessions only" : "All sessions"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                <SelectItem hideIndicator value="empty">
+                  Empty sessions only
+                </SelectItem>
+                <SelectItem hideIndicator value="all">
+                  All sessions
+                </SelectItem>
+              </SelectPopup>
+            </Select>
+          }
+        />
+      </SettingsSection>
+
+      <SettingsSection id="appearance-interface" title="Typography & Layout">
 
         <SettingsRow
           {...searchableSetting("setting-pane-gap")}
@@ -1411,52 +1766,6 @@ export function AppearanceSettingsPanel() {
             </Select>
           }
         />
-        <SettingsRow
-          {...searchableSetting("setting-glass-opacity")}
-          description="Higher values make menus, dialogs, and the composer more solid."
-          resetAction={
-            settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity ? (
-              <SettingResetButton
-                label="glass opacity"
-                onClick={() =>
-                  updateSettings({ glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity })
-                }
-              />
-            ) : null
-          }
-          control={
-            <div className="flex w-full items-center gap-3 sm:w-52">
-              <output
-                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
-                htmlFor="glass-opacity"
-              >
-                {settings.glassOpacity}%
-              </output>
-              <input
-                aria-label="Glass opacity"
-                className="settings-slider min-w-0 flex-1"
-                id="glass-opacity"
-                max={MAX_GLASS_OPACITY}
-                min={MIN_GLASS_OPACITY}
-                onChange={(event) => {
-                  const glassOpacity = Number(event.currentTarget.value);
-                  if (
-                    Number.isInteger(glassOpacity) &&
-                    glassOpacity >= MIN_GLASS_OPACITY &&
-                    glassOpacity <= MAX_GLASS_OPACITY
-                  ) {
-                    updateSettings({ glassOpacity });
-                  }
-                }}
-                step={5}
-                style={glassOpacitySliderStyle}
-                type="range"
-                value={settings.glassOpacity}
-              />
-            </div>
-          }
-        />
-
         {showEnvironmentIdentification ? (
           <SettingsRow
             {...searchableSetting("environment-identification")}

@@ -228,7 +228,35 @@ const createTauriDesktopBridge = (): DesktopBridge => {
       });
       return typeof selected === "string" ? selected : null;
     },
+    pickFile: async (options?: {
+      readonly filters?: ReadonlyArray<{ readonly name: string; readonly extensions: ReadonlyArray<string> }>;
+      readonly initialPath?: string;
+    }): Promise<string | null> => {
+      const selected = await openDialog({
+        directory: false,
+        multiple: false,
+        ...(options?.filters ? { filters: options.filters as any } : {}),
+        ...(options?.initialPath ? { defaultPath: options.initialPath } : {}),
+      });
+      return typeof selected === "string" ? selected : null;
+    },
     setTheme: async (_theme: DesktopTheme): Promise<void> => undefined,
+    setWindowGlassEnabled: async (enabled: boolean): Promise<void> => {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("set_window_glass_enabled", { enabled });
+      } catch {
+        // Desktop IPC unavailable
+      }
+    },
+    setWindowBackgroundBlur: async (radius: number): Promise<void> => {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("set_window_background_blur", { radius });
+      } catch {
+        // Desktop IPC unavailable
+      }
+    },
     showContextMenu: <T extends string>(
       items: readonly ContextMenuItem<T>[],
       position?: { x: number; y: number },

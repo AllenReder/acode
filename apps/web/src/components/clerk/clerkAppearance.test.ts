@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  EMBER_THEME,
-  GROVE_THEME,
-  IRIS_THEME,
+  ACODE_DEFAULT_THEME,
+  FOREST_THEME,
+  MIDNIGHT_THEME,
   OCEAN_THEME,
-  T3_CHAT_THEME,
+  SLATE_THEME,
+  ZINC_THEME,
   themeColorToHex,
   type ThemeColors,
 } from "../../themePalette";
@@ -41,13 +42,14 @@ function mixThemeColors(first: string, second: string, firstWeight: number): str
 }
 
 const builtInThemeModes = [
-  T3_CHAT_THEME,
-  GROVE_THEME,
+  ACODE_DEFAULT_THEME,
+  ZINC_THEME,
+  SLATE_THEME,
+  MIDNIGHT_THEME,
+  FOREST_THEME,
   OCEAN_THEME,
-  EMBER_THEME,
-  IRIS_THEME,
 ].flatMap((theme) =>
-  [theme.colors, theme.variants?.dark].filter((colors): colors is ThemeColors => !!colors),
+  [theme.colors, theme.variants?.dark, theme.variants?.light].filter((colors): colors is ThemeColors => !!colors),
 );
 
 describe("clerkAppearance", () => {

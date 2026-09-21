@@ -1,3 +1,4 @@
+import { applyWindowGlass, applyChatBackground } from "../appearanceSync";
 import { type ServerLifecycleWelcomePayload } from "@t3tools/contracts";
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
@@ -269,6 +270,13 @@ function ContrastAppearanceSync() {
 
 function GlassAppearanceSync() {
   const glassOpacity = useClientSettings((settings) => settings.glassOpacity);
+  const sidebarOpacity = useClientSettings((settings) => settings.sidebarOpacity);
+  const sidebarBlur = useClientSettings((settings) => settings.sidebarBlur);
+  const workbenchGlass = useClientSettings((settings) => settings.workbenchGlass);
+  const workbenchOpacity = useClientSettings((settings) => settings.workbenchOpacity);
+  const chatBackgroundPath = useClientSettings((settings) => settings.chatBackgroundPath);
+  const chatBackgroundOpacity = useClientSettings((settings) => settings.chatBackgroundOpacity);
+  const chatBackgroundScope = useClientSettings((settings) => settings.chatBackgroundScope);
 
   useEffect(() => {
     const style = document.documentElement.style;
@@ -279,6 +287,23 @@ function GlassAppearanceSync() {
       style.removeProperty("--glass-blur");
     }
   }, [glassOpacity]);
+
+  useEffect(() => {
+    applyWindowGlass({
+      sidebarOpacity,
+      sidebarBlur,
+      workbenchGlass,
+      workbenchOpacity,
+    });
+  }, [sidebarOpacity, sidebarBlur, workbenchGlass, workbenchOpacity]);
+
+  useEffect(() => {
+    applyChatBackground({
+      path: chatBackgroundPath,
+      opacity: chatBackgroundOpacity,
+      scope: chatBackgroundScope,
+    });
+  }, [chatBackgroundPath, chatBackgroundOpacity, chatBackgroundScope]);
 
   return null;
 }

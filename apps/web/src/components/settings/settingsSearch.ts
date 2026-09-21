@@ -144,11 +144,46 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["colors borders interface"],
   },
   {
-    // Prefixed because the slider control already owns the `glass-opacity` id.
-    id: "setting-glass-opacity",
-    title: "Glass opacity",
+    id: "setting-sidebar-blur",
+    title: "Window blur radius",
     to: "/settings/appearance",
-    searchTerms: ["transparent transparency solid menus dialogs composer"],
+    searchTerms: ["blur frosted glass window background radius vibrancy acrylic"],
+  },
+  {
+    id: "setting-sidebar-opacity",
+    title: "Sidebar opacity",
+    to: "/settings/appearance",
+    searchTerms: ["sidebar opacity translucent transparency glass"],
+  },
+  {
+    id: "setting-workbench-glass",
+    title: "Workbench glass",
+    to: "/settings/appearance",
+    searchTerms: ["workbench glass editor translucency translucent background"],
+  },
+  {
+    id: "setting-workbench-opacity",
+    title: "Workbench opacity",
+    to: "/settings/appearance",
+    searchTerms: ["workbench opacity editor transparency solid"],
+  },
+  {
+    id: "setting-chat-wallpaper",
+    title: "Chat wallpaper",
+    to: "/settings/appearance",
+    searchTerms: ["wallpaper background image chat transcript session picture"],
+  },
+  {
+    id: "setting-chat-wallpaper-opacity",
+    title: "Wallpaper opacity",
+    to: "/settings/appearance",
+    searchTerms: ["wallpaper opacity blend background"],
+  },
+  {
+    id: "setting-chat-wallpaper-scope",
+    title: "Wallpaper scope",
+    to: "/settings/appearance",
+    searchTerms: ["wallpaper scope empty all sessions"],
   },
   {
     id: "setting-pane-gap",

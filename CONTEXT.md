@@ -232,6 +232,26 @@ screen with ANSI styling, cursor state, alternate-screen behavior, selection,
 scrollback, and responsive dimensions.
 _Avoid_: Terminal text, Preformatted output, Agent timeline
 
+**Appearance**:
+The client presentation preferences governing color scheme, interface contrast,
+typography, and desktop window translucency.
+_Avoid_: Display settings, Styling preferences
+
+**Theme**:
+A coherent set of semantic color tokens mapping canonical UI roles to concrete
+color values for light or dark modes.
+_Avoid_: Skin, Palette file, CSS style
+
+**Window Glass**:
+The desktop-translucent frosted glass effect achieved through native OS window
+composition (macOS WindowServer blur or Windows Acrylic/Mica) and client tinting.
+_Avoid_: CSS blur, Backdrop filter, Translucency hack
+
+**Workbench Glass**:
+The presentation toggle determining whether the Workbench main pane adopts
+Window Glass translucency or stays opaque.
+_Avoid_: Body glass, Main pane glass
+
 ## Core invariants
 
 - A Project owns zero or more Workspaces.
