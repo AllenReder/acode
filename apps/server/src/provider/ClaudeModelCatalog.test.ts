@@ -218,17 +218,20 @@ describe("Claude model catalog", () => {
       enriched.models.map((m) => m.model.slug),
       ["default", "deepseek-v4.1-flash[1M]"],
     );
-    assert.strictEqual(enriched.models[0].model.isDefault, true);
+    assert.strictEqual(enriched.models[0]?.model.isDefault, true);
     assert.strictEqual(normalizeClaudeCatalogEffort(enriched, "extreme", "default"), "high");
 
-    const custom = enriched.models[1].model;
-    assert.strictEqual(custom.isCustom, true);
-    const effortDesc = custom.capabilities?.optionDescriptors.find((d) => d.id === "effort");
+    const custom = enriched.models[1]?.model;
+    assert.isDefined(custom);
+    assert.strictEqual(custom?.isCustom, true);
+    const effortDesc = custom?.capabilities?.optionDescriptors?.find((d) => d.id === "effort");
     assert.isDefined(effortDesc);
-    assert.deepStrictEqual(effortDesc?.options.map((o) => o.id), ["low", "high"]);
-    const fastModeDesc = custom.capabilities?.optionDescriptors.find((d) => d.id === "fastMode");
+    if (effortDesc && effortDesc.type === "select") {
+      assert.deepStrictEqual(effortDesc.options.map((o) => o.id), ["low", "high"]);
+    }
+    const fastModeDesc = custom?.capabilities?.optionDescriptors?.find((d) => d.id === "fastMode");
     assert.isDefined(fastModeDesc);
-    const thinkingDesc = custom.capabilities?.optionDescriptors.find((d) => d.id === "thinking");
+    const thinkingDesc = custom?.capabilities?.optionDescriptors?.find((d) => d.id === "thinking");
     assert.isDefined(thinkingDesc);
   });
 });
