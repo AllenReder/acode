@@ -37,7 +37,10 @@ import {
   probeClaudeCapabilities,
 } from "../Layers/ClaudeProvider.ts";
 import { ProviderEventLoggers } from "../Layers/ProviderEventLoggers.ts";
-import { resolveClaudeModelCatalog } from "../ClaudeModelCatalog.ts";
+import {
+  buildDiscoveredClaudeModelCatalog,
+  resolveClaudeModelCatalog,
+} from "../ClaudeModelCatalog.ts";
 import { makeManagedServerProvider } from "../makeManagedServerProvider.ts";
 import * as ModelManifest from "../ModelManifest.ts";
 import {
@@ -114,7 +117,6 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
       const serverSettings = yield* ServerSettingsService;
       const eventLoggers = yield* ProviderEventLoggers;
       const modelManifest = yield* ModelManifest.ModelManifest;
-      const modelCatalog = modelManifest.current.pipe(Effect.map(resolveClaudeModelCatalog));
       const processEnv = mergeProviderInstanceEnvironment(environment);
       const fallbackContinuationIdentity = defaultProviderContinuationIdentity({
         driverKind: DRIVER_KIND,
@@ -144,6 +146,28 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
         continuationGroupKey,
       });
 
+      // Per-instance capabilities cache: keyed on binary + resolved HOME so
+      // account-specific probes never share auth metadata across instances.
+      const capabilitiesProbeCache = yield* Cache.make({
+        capacity: 1,
+        timeToLive: CAPABILITIES_PROBE_TTL,
+        lookup: () =>
+          probeClaudeCapabilities(effectiveConfig, processEnv, cwd).pipe(
+            Effect.provideService(Path.Path, path),
+          ),
+      });
+      const capabilitiesCacheKey = yield* makeClaudeCapabilitiesCacheKey(effectiveConfig, cwd);
+
+      const modelCatalog = modelManifest.current.pipe(
+        Effect.map(resolveClaudeModelCatalog),
+        Effect.flatMap((baseCatalog) =>
+          Cache.get(capabilitiesProbeCache, capabilitiesCacheKey).pipe(
+            Effect.map((caps) => buildDiscoveredClaudeModelCatalog(baseCatalog, caps?.models)),
+            Effect.orElseSucceed(() => baseCatalog),
+          ),
+        ),
+      );
+
       // One per instance: the status probe writes the model-scoped bucket
       // names it saw, the adapter reads them to place turn-driven events.
       const scopedLimitNames = yield* makeClaudeScopedLimitNames;
@@ -160,18 +184,6 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv> = {
         processEnv,
         modelCatalog,
       );
-
-      // Per-instance capabilities cache: keyed on binary + resolved HOME so
-      // account-specific probes never share auth metadata across instances.
-      const capabilitiesProbeCache = yield* Cache.make({
-        capacity: 1,
-        timeToLive: CAPABILITIES_PROBE_TTL,
-        lookup: () =>
-          probeClaudeCapabilities(effectiveConfig, processEnv, cwd).pipe(
-            Effect.provideService(Path.Path, path),
-          ),
-      });
-      const capabilitiesCacheKey = yield* makeClaudeCapabilitiesCacheKey(effectiveConfig, cwd);
 
       // Start the TTL-gated refresh without delaying provider readiness. The
       // next check observes a remote manifest after the background fetch lands.
