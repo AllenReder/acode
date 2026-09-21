@@ -21,6 +21,11 @@ import { useWorkbenchStore } from "./workbenchStore";
 import { getActiveTab, type WorkbenchSnapshot } from "./workbenchState";
 import { useWorkbenchDragState, useWorkbenchDragSource } from "./workbenchDrag";
 import { resolveTargetBreadcrumbs } from "./workbenchTitles";
+import {
+  animateScrollTo,
+  cancelActiveScrollAnimation,
+  computeScrollingRevealTarget,
+} from "./scrollingAnimation";
 
 interface PaneTreeProps {
   readonly snapshot: WorkbenchSnapshot;
@@ -55,6 +60,7 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
   const viewportRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const changeColumn = useWorkbenchStore((s) => s.changeColumn);
+  const setFocused = useWorkbenchStore((s) => s.setFocused);
   const previousRects = useRef(new Map<string, DOMRect>());
 
   const paneGap = usePrimarySettings((s) => s.paneGap);
@@ -62,6 +68,7 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
   const paneShadow = usePrimarySettings((s) => s.paneShadow);
 
   useLayoutEffect(() => {
+    if (scrolling) return;
     const viewport = viewportRef.current;
     if (!viewport?.querySelectorAll) return;
     const frames = viewport.querySelectorAll<HTMLElement>(".workbench-pane-frame");
@@ -103,32 +110,6 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
   }, []);
 
   useEffect(() => {
-    if (!scrolling) return;
-    const viewport = viewportRef.current;
-    const pane = viewport?.querySelector<HTMLElement>(
-      '[data-pane-id="' + CSS.escape(tab.focusedPaneId) + '"]',
-    );
-    if (!viewport || !pane) return;
-    const frame = pane.closest<HTMLElement>(".workbench-pane-frame");
-    if (!frame) return;
-    const left = frame.offsetLeft;
-    const right = left + frame.offsetWidth;
-    const delta =
-      left < viewport.scrollLeft || frame.offsetWidth > viewport.clientWidth
-        ? left - viewport.scrollLeft
-        : right > viewport.scrollLeft + viewport.clientWidth
-          ? right - viewport.scrollLeft - viewport.clientWidth
-          : 0;
-    if (delta)
-      viewport.scrollBy({
-        left: delta,
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "instant"
-          : "smooth",
-      });
-  }, [scrolling, tab.id, tab.focusedPaneId, tab.columns, size.width]);
-
-  useEffect(() => {
     const viewport = viewportRef.current;
     if (!scrolling || !viewport) return;
     const wheel = (event: WheelEvent) => {
@@ -143,12 +124,80 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
     return () => viewport.removeEventListener("wheel", wheel, true);
   }, [scrolling]);
 
-  const layout = useMemo(() => computePaneLayoutRects(tab, size, paneGap), [tab, size, paneGap]);
+  const previousTabIdRef = useRef(tab.id);
+  const previousSizeRef = useRef(size);
+  const isInitialMountRef = useRef(true);
+
+  const layout = useMemo(
+    () => computePaneLayoutRects(tab, size, paneGap),
+    [tab, size, paneGap],
+  );
 
   const previewLayout = useMemo(
     () => (previewTab ? computePaneLayoutRects(previewTab, size, paneGap) : undefined),
     [previewTab, size, paneGap],
   );
+
+  useEffect(() => {
+    if (!scrolling) return;
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    if (dragState?.phase === "dragging" || document.documentElement.dataset.workbenchResizing) {
+      return;
+    }
+
+    const rect = layout.rects.get(tab.focusedPaneId);
+    if (!rect) return;
+
+    const target = computeScrollingRevealTarget({
+      isSingleColumn: (tab.columns ?? []).length <= 1,
+      rect,
+      paneGap,
+      canvasWidth: layout.canvasWidth,
+      canvasHeight: layout.canvasHeight,
+      viewportWidth: viewport.clientWidth,
+      viewportHeight: viewport.clientHeight,
+      currentScrollLeft: viewport.scrollLeft,
+      currentScrollTop: viewport.scrollTop,
+    });
+
+    const isTabSwitch = previousTabIdRef.current !== tab.id;
+    previousTabIdRef.current = tab.id;
+
+    const isWindowResize =
+      previousSizeRef.current.width !== size.width ||
+      previousSizeRef.current.height !== size.height;
+    previousSizeRef.current = size;
+
+    const isInitialMount = isInitialMountRef.current;
+    isInitialMountRef.current = false;
+
+    if (!target.needsScroll) return;
+
+    if (
+      isInitialMount ||
+      isTabSwitch ||
+      isWindowResize ||
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+    ) {
+      cancelActiveScrollAnimation(viewport);
+      viewport.scrollLeft = target.targetLeft;
+      viewport.scrollTop = target.targetTop;
+      return;
+    }
+
+    return animateScrollTo(viewport, target.targetLeft, target.targetTop);
+  }, [
+    scrolling,
+    tab.id,
+    tab.focusedPaneId,
+    tab.columns,
+    layout,
+    size,
+    paneGap,
+    dragState?.phase,
+  ]);
 
   const canvasStyle = {
     width: Math.max(layout.canvasWidth, size.width),
@@ -170,7 +219,42 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
           const preview = previewLayout?.rects.get(paneId);
           const targetRect = preview ?? current;
           return (
-            <div key={view.id} className="workbench-pane-frame" style={targetRect}>
+            <div
+              key={view.id}
+              className="workbench-pane-frame"
+              style={targetRect}
+              onMouseDownCapture={(event) => {
+                if (paneId !== tab.focusedPaneId) {
+                  setFocused(paneId);
+                  if (typeof document !== "undefined") {
+                    const activeEl = document.activeElement;
+                    if (
+                      activeEl &&
+                      typeof (activeEl as { blur?: unknown }).blur === "function" &&
+                      typeof (activeEl as { closest?: unknown }).closest === "function"
+                    ) {
+                      const activePane = (activeEl as HTMLElement).closest<HTMLElement>(".workbench-pane");
+                      if (activePane && activePane.dataset.paneId !== paneId) {
+                        (activeEl as HTMLElement).blur();
+                        if (typeof window !== "undefined") {
+                          window.getSelection()?.removeAllRanges();
+                        }
+                      }
+                    }
+                  }
+                  const targetElement = event?.target as HTMLElement | null | undefined;
+                  const isInteractive = Boolean(
+                    targetElement?.closest?.(
+                      'input, textarea, [contenteditable="true"], button, a, select, [role="button"], [role="menuitem"]',
+                    ),
+                  );
+                  if (!isInteractive && event?.currentTarget?.querySelector) {
+                    const pane = event.currentTarget.querySelector<HTMLElement>(".workbench-pane");
+                    pane?.focus({ preventScroll: true });
+                  }
+                }
+              }}
+            >
               <div
                 className="workbench-pane-preview"
                 data-previewing={Boolean(previewTab)}
@@ -289,6 +373,22 @@ function Pane({ snapshot, projects, paneId, focused }: PaneProps) {
     if (!focused) setFocused(paneId);
   }, [focused, paneId, setFocused]);
 
+  const onPaneFocus = useCallback(
+    (event?: React.FocusEvent<HTMLDivElement>) => {
+      if (focused) return;
+      if (
+        !event?.currentTarget ||
+        typeof document === "undefined" ||
+        (document.activeElement &&
+          event.currentTarget.contains(document.activeElement) &&
+          (document.activeElement as HTMLElement).closest<HTMLElement>(".workbench-pane")?.dataset.paneId === paneId)
+      ) {
+        setFocused(paneId);
+      }
+    },
+    [focused, paneId, setFocused],
+  );
+
   const onDuplicate = () => {
     duplicateToNewTab({ kind: "pane", tabId: activeTab.id, paneId });
   };
@@ -328,9 +428,10 @@ function Pane({ snapshot, projects, paneId, focused }: PaneProps) {
     <div
       role="region"
       aria-label={target !== null ? `Pane ${target.kind}` : "Unavailable View"}
+      tabIndex={-1}
       onMouseDown={onClick}
-      onFocus={onClick}
-      className={"workbench-pane flex h-full min-h-0 min-w-0 flex-1 flex-col"}
+      onFocus={onPaneFocus}
+      className={"workbench-pane flex h-full min-h-0 min-w-0 flex-1 flex-col outline-none"}
       data-pane-id={paneId}
       data-workbench-pane-drop=""
       data-workbench-tab-id={activeTab.id}
@@ -391,6 +492,13 @@ function PaneHeader({
       data-pane-header-focused={focused}
       data-workbench-pane-drag-handle=""
       className="flex select-none items-center justify-between border-b border-border/70 px-3 py-1.5 text-xs touch-none cursor-grab active:cursor-grabbing"
+      onMouseDown={(event) => {
+        const targetElement = event.target as HTMLElement;
+        if (targetElement.closest("button") === null) {
+          event.preventDefault();
+          (event?.currentTarget?.closest?.<HTMLElement>(".workbench-pane"))?.focus({ preventScroll: true });
+        }
+      }}
       onPointerDown={(event) => {
         const targetElement = event.target as HTMLElement;
         if (targetElement.closest("button") !== null) {

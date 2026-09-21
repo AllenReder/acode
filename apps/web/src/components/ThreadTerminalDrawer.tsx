@@ -972,7 +972,11 @@ export function TerminalViewport({
     if (!autoFocus || !visible) return;
     // Claim focus when requested, then hand it to the terminal once ready only
     // if the user has not focused something else in the meantime.
-    (terminalRef.current ?? containerRef.current)?.focus();
+    if (terminalRef.current) {
+      terminalRef.current.focus();
+    } else {
+      containerRef.current?.focus({ preventScroll: true });
+    }
   }, [autoFocus, focusRequestId, visible]);
 
   useEffect(() => {

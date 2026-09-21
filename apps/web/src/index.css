@@ -2166,14 +2166,13 @@ html[data-workbench-window-chrome] {
 .workbench-pane-frame {
   position: absolute;
   padding: 0;
+}
+html[data-workbench-dragging="active"] .workbench-pane-frame {
   transition:
     left 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
     top 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
     width 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
     height 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-html[data-workbench-resizing] .workbench-pane-frame {
-  transition: none;
 }
 @media (prefers-reduced-motion: reduce) {
   .workbench-pane-frame {
