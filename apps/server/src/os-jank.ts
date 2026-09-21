@@ -105,6 +105,14 @@ export const expandHomePath = Effect.fn(function* (input: string) {
 export const resolveBaseDir = Effect.fn(function* (raw: string | undefined) {
   const { join, resolve } = yield* Path.Path;
   if (!raw || raw.trim().length === 0) {
+    const acodeHome = process.env.ACODE_HOME?.trim();
+    if (acodeHome) {
+      return resolve(yield* expandHomePath(acodeHome));
+    }
+    const t3Home = process.env.T3CODE_HOME?.trim();
+    if (t3Home) {
+      return resolve(yield* expandHomePath(t3Home));
+    }
     return join(NodeOS.homedir(), ".t3");
   }
   return resolve(yield* expandHomePath(raw.trim()));

@@ -16,6 +16,7 @@ build/
 .logs/
 release/
 release-mock/
+release-server/
 .t3
 .acode
 .idea/

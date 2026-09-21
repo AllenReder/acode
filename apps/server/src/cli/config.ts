@@ -111,7 +111,13 @@ const EnvServerConfig = Config.all({
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  port: Config.port("T3CODE_PORT").pipe(Config.option, Config.map(Option.getOrUndefined)),
+  port: Config.port("ACODE_DAEMON_PORT").pipe(
+    Config.orElse(() => Config.port("ACODE_PORT")),
+    Config.orElse(() => Config.port("T3CODE_DAEMON_PORT")),
+    Config.orElse(() => Config.port("T3CODE_PORT")),
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
   host: Config.string("T3CODE_HOST").pipe(Config.option, Config.map(Option.getOrUndefined)),
   daemonId: Config.string("T3CODE_DAEMON_ID").pipe(
     Config.option,
@@ -130,6 +136,7 @@ const EnvServerConfig = Config.all({
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
+  acodeHome: Config.string("ACODE_HOME").pipe(Config.option, Config.map(Option.getOrUndefined)),
   t3Home: Config.string("T3CODE_HOME").pipe(Config.option, Config.map(Option.getOrUndefined)),
   devUrl: Config.url("VITE_DEV_SERVER_URL").pipe(Config.option, Config.map(Option.getOrUndefined)),
   devAllowedOrigins: Config.string("T3CODE_DEV_ALLOWED_ORIGINS").pipe(
@@ -318,6 +325,7 @@ export const resolveServerConfig = (
       mode === "web" && devUrl !== undefined ? yield* DevAuthTokenConfig : undefined;
     const explicitBaseDir = resolveOptionPrecedence(
       normalizedFlags.baseDir,
+      Option.fromUndefinedOr(env.acodeHome),
       Option.fromUndefinedOr(env.t3Home),
     ).pipe(Option.filter((value) => value.trim().length > 0));
     const baseDir = yield* resolveBaseDir(
