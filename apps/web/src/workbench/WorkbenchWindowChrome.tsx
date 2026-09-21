@@ -8,6 +8,7 @@ import {
   COLLAPSED_TABS_INSET_MAC,
   COLLAPSED_TABS_INSET_WIN,
   EXPANDED_TABS_INSET,
+  SEPARATOR_RIGHT_GAP,
 } from "../components/sidebar/sidebarGeometry";
 import { firstLeafId } from "./layout";
 import { targetKey, type ViewTarget } from "./viewRegistry";
@@ -85,7 +86,10 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
         }}
       >
         {!isSidebarOpen ? (
-          <div className="flex h-full w-full items-center justify-end pr-3 transition-opacity duration-200 ease-out">
+          <div
+            className="flex h-full w-full items-center justify-end transition-opacity duration-200 ease-out"
+            style={{ paddingRight: `${SEPARATOR_RIGHT_GAP}px` }}
+          >
             <div
               className="h-3.5 w-px bg-border/60 shrink-0"
               data-slot="workbench-titlebar-separator"

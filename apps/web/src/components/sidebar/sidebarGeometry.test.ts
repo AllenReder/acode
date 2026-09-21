@@ -3,9 +3,13 @@ import {
   BASE_SPACING,
   TRAFFIC_LIGHT_GAP,
   BUTTON_GAP,
+  SEPARATOR_LEFT_GAP,
+  SEPARATOR_RIGHT_GAP,
   TITLEBAR_BUTTON_SIZE,
   TRAFFIC_LIGHTS_WIDTH,
   TRAFFIC_LIGHTS_ZONE,
+  SIDEBAR_TRIGGER_LEFT_MAC,
+  SIDEBAR_TRIGGER_LEFT_WIN,
   DOCK_LEFT_MAC,
   DOCK_LEFT_WIN,
   COLLAPSED_TABS_INSET_MAC,
@@ -16,43 +20,53 @@ import {
 } from "./sidebarGeometry";
 
 describe("sidebarGeometry", () => {
-  it("defines independent traffic light gap and button gap", () => {
-    expect(BASE_SPACING).toBe(12);
-    expect(TRAFFIC_LIGHT_GAP).toBe(12);
-    expect(BUTTON_GAP).toBe(6);
+  it("defines independent gaps for traffic lights, buttons, and separator", () => {
     expect(TRAFFIC_LIGHTS_WIDTH).toBe(52);
-    expect(TRAFFIC_LIGHTS_ZONE).toBe(64);
+    expect(TRAFFIC_LIGHTS_ZONE).toBe(BASE_SPACING + TRAFFIC_LIGHTS_WIDTH);
     expect(TITLEBAR_BUTTON_SIZE).toBe(28);
-    expect(DOCK_LEFT_MAC).toBe(110); // 76 + 28 + 6
-    expect(DOCK_LEFT_WIN).toBe(34);  // 0 + 28 + 6
-    expect(COLLAPSED_TABS_INSET_MAC).toBe(162);
-    expect(COLLAPSED_TABS_INSET_WIN).toBe(86);
-    expect(EXPANDED_TABS_INSET).toBe(12);
+    expect(SIDEBAR_TRIGGER_LEFT_MAC).toBe(TRAFFIC_LIGHTS_ZONE + TRAFFIC_LIGHT_GAP);
+    expect(DOCK_LEFT_MAC).toBe(SIDEBAR_TRIGGER_LEFT_MAC + TITLEBAR_BUTTON_SIZE + BUTTON_GAP);
+    expect(DOCK_LEFT_WIN).toBe(SIDEBAR_TRIGGER_LEFT_WIN + TITLEBAR_BUTTON_SIZE + BUTTON_GAP);
+    expect(COLLAPSED_TABS_INSET_MAC).toBe(
+      DOCK_LEFT_MAC + TITLEBAR_BUTTON_SIZE + SEPARATOR_LEFT_GAP + 1 + SEPARATOR_RIGHT_GAP,
+    );
+    expect(COLLAPSED_TABS_INSET_WIN).toBe(
+      DOCK_LEFT_WIN + TITLEBAR_BUTTON_SIZE + SEPARATOR_LEFT_GAP + 1 + SEPARATOR_RIGHT_GAP,
+    );
+    expect(EXPANDED_TABS_INSET).toBe(BASE_SPACING);
   });
 
   it("calculates macOS sidebar minimum width matching the unified formula", () => {
-    // Traffic zone (64) + TrafficGap (12) + HideBtn (28) + BUTTON_GAP (6) + SettingsBtn (28) + S (12) = 150
-    const minWidth = resolveSidebarMinimumWidth({ isMac: true });
-    expect(minWidth).toBe(150);
+    const expected =
+      TRAFFIC_LIGHTS_ZONE +
+      TRAFFIC_LIGHT_GAP +
+      TITLEBAR_BUTTON_SIZE +
+      BUTTON_GAP +
+      TITLEBAR_BUTTON_SIZE +
+      BASE_SPACING;
+    expect(resolveSidebarMinimumWidth({ isMac: true })).toBe(expected);
   });
 
   it("calculates non-macOS sidebar minimum width aligned directly to left window boundary", () => {
-    // HideBtn (28) + BUTTON_GAP (6) + SettingsBtn (28) + S (12) = 74
-    const minWidth = resolveSidebarMinimumWidth({ isMac: false });
-    expect(minWidth).toBe(74);
+    const expected =
+      TITLEBAR_BUTTON_SIZE +
+      BUTTON_GAP +
+      TITLEBAR_BUTTON_SIZE +
+      BASE_SPACING;
+    expect(resolveSidebarMinimumWidth({ isMac: false })).toBe(expected);
   });
 
   it("resolves header insets for macOS and non-macOS platforms", () => {
     const macInsets = resolveSidebarHeaderInsets({ isMac: true });
-    expect(macInsets.sidebarTriggerLeft).toBe(76); // 64 + 12
-    expect(macInsets.buttonGap).toBe(6);
-    expect(macInsets.rightInset).toBe(12);
+    expect(macInsets.sidebarTriggerLeft).toBe(SIDEBAR_TRIGGER_LEFT_MAC);
+    expect(macInsets.buttonGap).toBe(BUTTON_GAP);
+    expect(macInsets.rightInset).toBe(BASE_SPACING);
     expect(macInsets.titlebarHeight).toBe(36);
 
     const winInsets = resolveSidebarHeaderInsets({ isMac: false });
-    expect(winInsets.sidebarTriggerLeft).toBe(0);
-    expect(winInsets.buttonGap).toBe(6);
-    expect(winInsets.rightInset).toBe(12);
+    expect(winInsets.sidebarTriggerLeft).toBe(SIDEBAR_TRIGGER_LEFT_WIN);
+    expect(winInsets.buttonGap).toBe(BUTTON_GAP);
+    expect(winInsets.rightInset).toBe(BASE_SPACING);
     expect(winInsets.titlebarHeight).toBe(36);
   });
 });

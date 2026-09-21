@@ -4,15 +4,17 @@ import {
   resolveInitialThreadSidebarWidth,
   resolveThreadSidebarMaximumWidth,
 } from "./threadSidebarWidth";
+import { resolveSidebarMinimumWidth } from "./sidebar/sidebarGeometry";
 
 describe("threadSidebarWidth", () => {
   it("resolves minimum sidebar width dynamically based on titlebar geometry", () => {
-    expect(THREAD_SIDEBAR_MIN_WIDTH).toBe(150);
+    expect(THREAD_SIDEBAR_MIN_WIDTH).toBe(resolveSidebarMinimumWidth({ isMac: true }));
   });
 
   it("clamps initial width to minimum width", () => {
-    const width = resolveInitialThreadSidebarWidth(100, 1200);
-    expect(width).toBe(150);
+    const minWidth = resolveSidebarMinimumWidth({ isMac: true });
+    const width = resolveInitialThreadSidebarWidth(10, 1200);
+    expect(width).toBe(minWidth);
   });
 
   it("respects stored width when greater than minimum", () => {
