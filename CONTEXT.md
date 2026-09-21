@@ -155,7 +155,9 @@ _Avoid_: Pane layout, Shell, Global panel
 
 **Sidebar**:
 The client-owned navigation tree that exposes Projects, their Workspaces, and
-each Workspace's Sessions.
+each Workspace's Sessions. It is a full-height column ("贯通式") running from
+the top of the window to the bottom, and houses primary window and settings
+controls when expanded.
 It is a navigator for work and references, not another Tab or Pane.
 _Avoid_: Rail, Workspace panel
 

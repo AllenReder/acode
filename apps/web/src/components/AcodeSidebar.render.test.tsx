@@ -35,6 +35,7 @@ vi.mock("./ui/sidebar", () => ({
   SidebarContent: ({ children }: any) => <div data-sidebar="content">{children}</div>,
   SidebarGroup: ({ children }: any) => <div data-sidebar="group">{children}</div>,
   SidebarGroupLabel: ({ children }: any) => <div data-sidebar="group-label">{children}</div>,
+  SidebarHeader: ({ children }: any) => <header data-sidebar="header">{children}</header>,
   SidebarFooter: ({ children, className, ...props }: any) => (
     <footer className={className} data-sidebar="footer" {...props}>
       {children}
@@ -47,7 +48,8 @@ vi.mock("./ui/sidebar", () => ({
       {children}
     </button>
   ),
-  useSidebar: () => ({ isMobile: false, setOpenMobile: vi.fn() }),
+  useSidebar: () => ({ isMobile: false, setOpenMobile: vi.fn(), toggleSidebar: vi.fn() }),
+  useSidebarVisibility: () => true,
 }));
 
 vi.mock("./ui/tooltip", () => ({
@@ -63,6 +65,15 @@ vi.mock("./sidebar/SidebarProviderUpdatePill", () => ({
 vi.mock("./sidebar/SidebarUpdatePill", () => ({
   SidebarUpdateArchitectureWarning: () => null,
   SidebarUpdatePill: () => null,
+}));
+
+vi.mock("./SidebarStageBackdrop", () => ({
+  useEnvironmentStageLabel: () => null,
+  resolveEnvironmentIdentificationPillLabel: () => null,
+}));
+
+vi.mock("../hooks/useSettings", () => ({
+  useEnvironmentIdentificationMode: () => "none",
 }));
 
 import { AcodeSidebar } from "./AcodeSidebar";

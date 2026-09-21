@@ -36,7 +36,7 @@ import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { SessionRow } from "./sidebar/SessionRow";
-import { SidebarChromeFooter } from "./sidebar/SidebarChrome";
+import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { nextWorkspaceTerminalId } from "./Sidebar.logic";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { SidebarContent, SidebarGroup, SidebarGroupLabel } from "./ui/sidebar";
@@ -439,6 +439,7 @@ export function AcodeSidebar() {
   if (projects.length === 0) {
     return (
       <>
+        <SidebarChromeHeader mode="main" />
         <SidebarContent className="gap-0">
           <SidebarGroup className="px-2 py-2">
             <button
@@ -458,6 +459,7 @@ export function AcodeSidebar() {
 
   return (
     <>
+      <SidebarChromeHeader mode="main" />
       <SidebarContent className="gap-0">
       <SidebarGroup className="px-2 py-2">
         <button

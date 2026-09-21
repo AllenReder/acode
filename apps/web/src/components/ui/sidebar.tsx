@@ -28,7 +28,7 @@ const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 const SIDEBAR_WIDTH = "16rem";
 const SIDEBAR_WIDTH_MOBILE = "calc(100vw - var(--spacing(3)))";
 const SIDEBAR_WIDTH_ICON = "3rem";
-const SIDEBAR_RESIZE_DEFAULT_MIN_WIDTH = 16 * 16;
+const SIDEBAR_RESIZE_DEFAULT_MIN_WIDTH = 156;
 
 type SidebarContextProps = {
   state: ResponsiveSidebarState;
@@ -326,7 +326,7 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
   return (
     <Button
       className={cn(
-        "size-[var(--workspace-titlebar-control-size)]! [-webkit-app-region:no-drag]",
+        "size-[var(--workspace-titlebar-control-size)]! rounded-[var(--control-radius)] text-muted-foreground hover:bg-sidebar-row-hover hover:text-foreground active:scale-[0.98] active:bg-sidebar-row-active transition-all duration-150 ease-out [-webkit-app-region:no-drag]",
         className,
       )}
       data-sidebar="trigger"
@@ -340,7 +340,7 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
       variant="ghost"
       {...props}
     >
-      {isOpen ? <PanelLeftCloseIcon /> : <PanelLeftIcon />}
+      {isOpen ? <PanelLeftCloseIcon className="size-4" /> : <PanelLeftIcon className="size-4" />}
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   );

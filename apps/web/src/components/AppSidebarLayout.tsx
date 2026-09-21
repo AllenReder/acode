@@ -22,7 +22,6 @@ import {
 import { AcodeSidebar } from "./AcodeSidebar";
 import { WorkbenchDragProvider } from "../workbench/workbenchDrag";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
-import { SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { useProjects } from "../state/entities";
 import {
   resolveInitialThreadSidebarWidth,
@@ -258,10 +257,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
             }}
           >
             {isOnSettings ? (
-              <>
-                <SidebarChromeHeader />
-                <SettingsSidebarNav pathname={pathname} />
-              </>
+              <SettingsSidebarNav pathname={pathname} />
             ) : (
               <AcodeSidebar />
             )}

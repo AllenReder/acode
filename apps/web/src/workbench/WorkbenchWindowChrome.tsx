@@ -1,9 +1,11 @@
 import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
-import { Columns3Icon, PanelsTopLeftIcon, PlusIcon, XIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Columns3Icon, PanelsTopLeftIcon, PanelLeftIcon, PlusIcon, SettingsIcon, XIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 
-import { cn } from "../lib/utils";
-import { SidebarTrigger } from "../components/ui/sidebar";
+import { cn, isMacPlatform } from "../lib/utils";
+import { useSidebar, useSidebarVisibility } from "../components/ui/sidebar";
+import { SidebarTitlebarButton } from "../components/sidebar/SidebarTitlebarControl";
 import { firstLeafId } from "./layout";
 import { targetKey, type ViewTarget } from "./viewRegistry";
 import { tabDisplayTitle, type WorkbenchSnapshot, type WorkbenchTab } from "./workbenchState";
@@ -37,6 +39,15 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
 
+  const navigate = useNavigate();
+  const { toggleSidebar } = useSidebar();
+  const isSidebarOpen = useSidebarVisibility();
+  const isMac = typeof navigator !== "undefined" && isMacPlatform(navigator.platform);
+
+  const handleSettingsClick = useCallback(() => {
+    void navigate({ to: "/settings" });
+  }, [navigate]);
+
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.workbenchWindowChrome = "true";
@@ -59,19 +70,44 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
 
   return (
     <header
-      className="drag-region fixed inset-x-0 top-0 z-50 flex h-[var(--workbench-titlebar-height)] items-center border-b border-border/60 bg-background/95 backdrop-blur"
+      className="drag-region flex h-[var(--workbench-titlebar-height,36px)] w-full shrink-0 items-center border-b border-border/60 bg-background/95 backdrop-blur z-30"
       data-tauri-drag-region
       data-workbench-window-chrome=""
     >
-      <div
-        className="flex shrink-0 items-center [-webkit-app-region:no-drag]"
-        style={{
-          paddingLeft: "var(--workspace-controls-left)",
-          marginRight: "var(--workspace-titlebar-control-gap)",
-        }}
-      >
-        <SidebarTrigger aria-label="Toggle sidebar" />
-      </div>
+      {!isSidebarOpen ? (
+        <div
+          className="flex shrink-0 items-center [-webkit-app-region:no-drag] transition-opacity duration-150 ease-out"
+          style={{
+            paddingLeft: isMac
+              ? "var(--sidebar-controls-left, 76px)"
+              : "var(--sidebar-controls-left-win, 12px)",
+          }}
+        >
+          <SidebarTitlebarButton
+            icon={<PanelLeftIcon className="size-4" />}
+            label="Toggle main sidebar"
+            shortcut={isMac ? "⌘B" : "Ctrl+B"}
+            ariaLabel="Toggle main sidebar"
+            ariaPressed={false}
+            onClick={toggleSidebar}
+            testId="workbench-sidebar-trigger"
+          />
+          <div className="w-3" />
+          <SidebarTitlebarButton
+            icon={<SettingsIcon className="size-4" />}
+            label="Settings"
+            shortcut={isMac ? "⌘," : "Ctrl+,"}
+            onClick={handleSettingsClick}
+            testId="workbench-settings-button"
+          />
+          <div
+            className="mx-3 h-3.5 w-px bg-border/60 shrink-0"
+            data-slot="workbench-titlebar-separator"
+          />
+        </div>
+      ) : (
+        <div className="w-3 shrink-0" />
+      )}
 
       <div className="flex min-w-0 flex-1 items-center gap-2 pr-3 [-webkit-app-region:no-drag]">
         <div
