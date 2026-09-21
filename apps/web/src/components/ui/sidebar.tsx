@@ -21,6 +21,7 @@ import { useResizeDrag } from "~/hooks/useResizeDrag";
 import { useIsMobile } from "~/hooks/useMediaQuery";
 import { getLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorage";
 import { resolveSidebarState, type ResponsiveSidebarState } from "./sidebarState";
+import { resolveSidebarMinimumWidth } from "../sidebar/sidebarGeometry";
 import * as Schema from "effect/Schema";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
@@ -28,7 +29,7 @@ const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 const SIDEBAR_WIDTH = "16rem";
 const SIDEBAR_WIDTH_MOBILE = "calc(100vw - var(--spacing(3)))";
 const SIDEBAR_WIDTH_ICON = "3rem";
-const SIDEBAR_RESIZE_DEFAULT_MIN_WIDTH = 16 * 16;
+const SIDEBAR_RESIZE_DEFAULT_MIN_WIDTH = resolveSidebarMinimumWidth({ isMac: true });
 
 type SidebarContextProps = {
   state: ResponsiveSidebarState;
@@ -326,7 +327,7 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
   return (
     <Button
       className={cn(
-        "size-[var(--workspace-titlebar-control-size)]! [-webkit-app-region:no-drag]",
+        "size-[var(--workspace-titlebar-control-size)]! rounded-[var(--control-radius)] text-muted-foreground hover:bg-sidebar-row-hover hover:text-foreground active:scale-[0.98] active:bg-sidebar-row-active transition-all duration-150 ease-out [-webkit-app-region:no-drag]",
         className,
       )}
       data-sidebar="trigger"
@@ -340,7 +341,7 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
       variant="ghost"
       {...props}
     >
-      {isOpen ? <PanelLeftCloseIcon /> : <PanelLeftIcon />}
+      {isOpen ? <PanelLeftCloseIcon className="size-4" /> : <PanelLeftIcon className="size-4" />}
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   );
@@ -387,9 +388,15 @@ function SidebarRail({
       sidebarContainer.getBoundingClientRect().width,
       resolvedResizable,
     );
+    if (typeof document !== "undefined") {
+      document.documentElement.dataset.sidebarResizing = "true";
+    }
     const transitionTargets = [
       sidebarRoot.querySelector<HTMLElement>("[data-slot='sidebar-gap']"),
       sidebarContainer,
+      typeof document !== "undefined"
+        ? document.querySelector<HTMLElement>("[data-sidebar-action-control]")
+        : null,
     ].filter((element): element is HTMLElement => element !== null);
     transitionTargets.forEach((element) => {
       element.style.setProperty("transition-duration", "0ms");
@@ -431,6 +438,9 @@ function SidebarRail({
         options?.onResize?.(finalWidth);
       },
       cleanup() {
+        if (typeof document !== "undefined") {
+          delete document.documentElement.dataset.sidebarResizing;
+        }
         transitionTargets.forEach((element) => {
           element.style.removeProperty("transition-duration");
         });

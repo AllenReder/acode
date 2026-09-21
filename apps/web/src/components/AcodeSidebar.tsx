@@ -24,6 +24,7 @@ import { useCallback, useMemo, useState, type KeyboardEvent, type MouseEvent } f
 import { useNavigate } from "@tanstack/react-router";
 
 import { useComposerDraftStore } from "../composerDraftStore";
+import { useUiStateStore } from "../uiStateStore";
 import { openCommandPalette } from "../commandPaletteBus";
 import { newDraftId, newThreadId } from "../lib/utils";
 import { readLocalApi } from "../localApi";
@@ -36,10 +37,11 @@ import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { SessionRow } from "./sidebar/SessionRow";
-import { SidebarChromeFooter } from "./sidebar/SidebarChrome";
+import { AddWorkspaceDialog, NewWorkspaceDialog } from "./sidebar/WorkspaceDialogs";
+import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { nextWorkspaceTerminalId } from "./Sidebar.logic";
 import { stackedThreadToast, toastManager } from "./ui/toast";
-import { SidebarContent, SidebarGroup, SidebarGroupLabel } from "./ui/sidebar";
+import { SidebarContent, SidebarGroup } from "./ui/sidebar";
 import { sessionRouteForTarget } from "../workbench/deepLinks";
 import { runtimeTerminalIdForTarget, terminalTargetForRuntime } from "../workbench/sessionTarget";
 import type { ViewTarget } from "../workbench/viewRegistry";
@@ -47,6 +49,8 @@ import { useWorkbenchStore } from "../workbench/workbenchStore";
 
 type ProjectMenuId =
   | "new-project"
+  | "add-workspace"
+  | "new-workspace"
   | "associate-worktree"
   | "new-worktree"
   | "rename-project"
@@ -56,6 +60,7 @@ type WorkspaceMenuId =
   | "new-agent-session"
   | "new-terminal-session"
   | "rename-workspace"
+  | "remove-workspace"
   | "remove-registration"
   | "delete-directory";
 
@@ -73,14 +78,18 @@ export function projectMenuItems(input: {
   readonly canManageWorkspaces: boolean;
 }): ReadonlyArray<ContextMenuItem<ProjectMenuId>> {
   return [
-    { id: "new-project", label: "New project", icon: "folder-plus" },
     ...(input.canManageWorkspaces
       ? ([
-          { id: "associate-worktree", label: "Associate Workspace", icon: "folder-input" },
-          { id: "new-worktree", label: "New Worktree", icon: "git-branch" },
+          { id: "add-workspace", label: "Add Workspace", icon: "folder-input" },
+          { id: "new-workspace", label: "New Workspace", icon: "git-branch" },
         ] satisfies ContextMenuItem<ProjectMenuId>[])
       : []),
-    { id: "rename-project", label: "Rename project", icon: "pencil", separatorBefore: true },
+    {
+      id: "rename-project",
+      label: "Rename project",
+      icon: "pencil",
+      separatorBefore: input.canManageWorkspaces,
+    },
     {
       id: "remove-project",
       label: "Remove project",
@@ -99,9 +108,10 @@ export function workspaceMenuItems(input: {
     { id: "new-terminal-session", label: "New Terminal Session", icon: "terminal" },
     { id: "rename-workspace", label: "Rename", icon: "pencil", separatorBefore: true },
     {
-      id: "remove-registration",
-      label: "Remove registration",
-      icon: "unlink",
+      id: "remove-workspace",
+      label: "Remove workspace",
+      icon: "trash",
+      destructive: true,
       separatorBefore: true,
     },
     ...(input.canDeleteDirectory
@@ -152,9 +162,14 @@ export function AcodeSidebar() {
     [environments],
   );
   const serverConfigs = useAtomValue(environmentServerConfigsAtom);
+  const [addWorkspaceProject, setAddWorkspaceProject] =
+    useState<EnvironmentAcodeProject | null>(null);
+  const [newWorkspaceProject, setNewWorkspaceProject] =
+    useState<EnvironmentAcodeProject | null>(null);
   const [collapsedProjects, setCollapsedProjects] = useState<ReadonlySet<string>>(new Set());
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<ReadonlySet<string>>(new Set());
   const [historyExpanded, setHistoryExpanded] = useState<ReadonlySet<string>>(new Set());
+  const workspaceSessionOrderById = useUiStateStore((state) => state.workspaceSessionOrderById);
 
   const associateWorkspace = useAtomCommand(workspaceEnvironment.associate);
   const createWorktree = useAtomCommand(workspaceEnvironment.createWorktree);
@@ -240,45 +255,43 @@ export function AcodeSidebar() {
     [navigate, openTerminal],
   );
 
-  const associateExisting = useCallback(
-    (project: EnvironmentAcodeProject) => {
-      const path = window.prompt("Path of an existing Git worktree");
-      if (!path?.trim()) return;
-      void associateWorkspace({
-        environmentId: project.environmentId,
-        input: { projectId: project.id, path },
-      }).then((result) => {
-        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-          commandFailureToast("Could not associate Workspace", squashAtomCommandFailure(result));
-        }
+  const handleAssociateWorkspace = useCallback(
+    async (path: string) => {
+      if (!addWorkspaceProject) return;
+      const result = await associateWorkspace({
+        environmentId: addWorkspaceProject.environmentId,
+        input: { projectId: addWorkspaceProject.id, path },
       });
+      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        commandFailureToast("Could not add Workspace", error);
+        throw error;
+      }
+      setAddWorkspaceProject(null);
     },
-    [associateWorkspace],
+    [addWorkspaceProject, associateWorkspace],
   );
 
-  const addWorktree = useCallback(
-    (project: EnvironmentAcodeProject) => {
-      const newBranch = window.prompt("New branch name (leave blank for detached HEAD)");
-      if (newBranch === null) return;
-      const baseRef = window.prompt("Base branch, tag, or commit", "HEAD");
-      if (baseRef === null) return;
-      const path = window.prompt("Destination path (leave blank for the managed worktrees folder)");
-      if (path === null) return;
-      void createWorktree({
-        environmentId: project.environmentId,
+  const handleCreateWorkspace = useCallback(
+    async (input: { readonly newBranch?: string | undefined; readonly baseRef?: string | undefined; readonly path?: string | undefined }) => {
+      if (!newWorkspaceProject) return;
+      const result = await createWorktree({
+        environmentId: newWorkspaceProject.environmentId,
         input: {
-          projectId: project.id,
-          ...(newBranch.trim() ? { newBranch } : {}),
-          ...(baseRef.trim() ? { baseRef } : {}),
-          ...(path.trim() ? { path } : {}),
+          projectId: newWorkspaceProject.id,
+          ...(input.newBranch ? { newBranch: input.newBranch } : {}),
+          ...(input.baseRef ? { baseRef: input.baseRef } : {}),
+          ...(input.path ? { path: input.path } : {}),
         },
-      }).then((result) => {
-        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-          commandFailureToast("Could not create Worktree", squashAtomCommandFailure(result));
-        }
       });
+      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        commandFailureToast("Could not create Workspace", error);
+        throw error;
+      }
+      setNewWorkspaceProject(null);
     },
-    [createWorktree],
+    [createWorktree, newWorkspaceProject],
   );
 
   const removeAcodeProject = useCallback(
@@ -311,9 +324,12 @@ export function AcodeSidebar() {
           position,
         );
         if (clicked === null) return;
-        if (clicked === "new-project") openAddProject();
-        if (clicked === "associate-worktree") associateExisting(project);
-        if (clicked === "new-worktree") addWorktree(project);
+        if (clicked === "add-workspace" || (clicked as string) === "associate-worktree") {
+          setAddWorkspaceProject(project);
+        }
+        if (clicked === "new-workspace" || (clicked as string) === "new-worktree") {
+          setNewWorkspaceProject(project);
+        }
         if (clicked === "rename-project") {
           const title = window.prompt("Project name", project.title)?.trim();
           if (!title) return;
@@ -330,9 +346,6 @@ export function AcodeSidebar() {
       })();
     },
     [
-      addWorktree,
-      associateExisting,
-      openAddProject,
       removeAcodeProject,
       renameProject,
       serverConfigs,
@@ -367,7 +380,7 @@ export function AcodeSidebar() {
             }
           });
         }
-        if (clicked === "remove-registration") {
+        if (clicked === "remove-workspace" || (clicked as string) === "remove-registration") {
           if (!window.confirm(`Remove Workspace "${workspace.title}" from this project?`)) return;
           void removeWorkspace({
             environmentId: project.environmentId,
@@ -436,42 +449,34 @@ export function AcodeSidebar() {
     [renameTerminalSession],
   );
 
-  if (projects.length === 0) {
-    return (
-      <>
-        <SidebarContent className="gap-0">
-          <SidebarGroup className="px-2 py-2">
+  return (
+    <>
+      <SidebarChromeHeader />
+      <SidebarContent className="gap-0">
+        {/* 最上面区域：可以放置若干按钮，每个一行，目前先只放 Add Project */}
+        <SidebarGroup
+          data-testid="sidebar-top-section"
+          className="shrink-0 px-2 pt-2 pb-1"
+        >
+          <div className="flex flex-col gap-1 w-full">
             <button
               type="button"
               data-testid="sidebar-add-project"
-              className="flex h-8 items-center gap-2 rounded-md px-2 text-xs hover:bg-sidebar-row-hover"
+              className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-sidebar-row-hover"
               onClick={openAddProject}
             >
-              <PlusIcon className="size-3.5" /> Add Project
+              <PlusIcon className="size-3.5 shrink-0" />
+              <span className="min-w-0 flex-1 truncate">Add Project</span>
             </button>
-          </SidebarGroup>
-        </SidebarContent>
-        <SidebarChromeFooter />
-      </>
-    );
-  }
+          </div>
+        </SidebarGroup>
 
-  return (
-    <>
-      <SidebarContent className="gap-0">
-      <SidebarGroup className="px-2 py-2">
-        <button
-          type="button"
-          data-testid="sidebar-add-project"
-          className="flex h-8 items-center gap-2 rounded-md px-2 text-xs hover:bg-sidebar-row-hover"
-          onClick={openAddProject}
+        {/* 中间区域：紧贴着上面区域，放置实际 sidebar 的三级菜单（project/workspace/session），并且这里去掉 Projects 字样，直接显示三级树状菜单 */}
+        <SidebarGroup
+          data-testid="sidebar-middle-section"
+          className="min-h-0 flex-1 overflow-auto px-2 pb-2 pt-0"
         >
-          <PlusIcon className="size-3.5" /> Add Project
-        </button>
-      </SidebarGroup>
-      <SidebarGroup className="min-h-0 flex-1 overflow-auto px-2 pb-2">
-        <SidebarGroupLabel>Projects</SidebarGroupLabel>
-        <div
+          <div
           role="tree"
           aria-label="Projects, Workspaces, and Sessions"
           className="flex flex-col gap-px"
@@ -515,7 +520,18 @@ export function AcodeSidebar() {
                     {project.workspaces.map((workspace) => {
                       const workspaceKey = `${project.environmentId}:${workspace.id}`;
                       const workspaceExpanded = expandedWorkspaces.has(workspaceKey);
-                      const activeSessions = workspace.sessions ?? [];
+                      const sessionOrder = workspaceSessionOrderById[workspaceKey];
+                      const rawSessions = workspace.sessions ?? [];
+                      const activeSessions = sessionOrder && sessionOrder.length > 0
+                        ? (() => {
+                            const rank = new Map(sessionOrder.map((id, index) => [id, index]));
+                            return [...rawSessions].sort((a, b) => {
+                              const rankA = rank.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+                              const rankB = rank.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+                              return rankA - rankB;
+                            });
+                          })()
+                        : rawSessions;
                       const historySessions = workspace.historySessions ?? [];
                       return (
                         <div key={workspaceKey} className="flex flex-col gap-px">
@@ -741,9 +757,33 @@ export function AcodeSidebar() {
             );
           })}
         </div>
-      </SidebarGroup>
-    </SidebarContent>
+        </SidebarGroup>
+      </SidebarContent>
+
+      {/* 下面区域：向下对齐，贴着底边，目前先什么都不放 */}
+      <div
+        data-testid="sidebar-bottom-section"
+        className="mt-auto shrink-0 px-2 py-2 empty:min-h-0 empty:p-0"
+      />
+
       <SidebarChromeFooter />
+
+      <AddWorkspaceDialog
+        project={addWorkspaceProject}
+        open={addWorkspaceProject !== null}
+        onOpenChange={(open) => {
+          if (!open) setAddWorkspaceProject(null);
+        }}
+        onAssociate={handleAssociateWorkspace}
+      />
+      <NewWorkspaceDialog
+        project={newWorkspaceProject}
+        open={newWorkspaceProject !== null}
+        onOpenChange={(open) => {
+          if (!open) setNewWorkspaceProject(null);
+        }}
+        onCreate={handleCreateWorkspace}
+      />
     </>
   );
 }

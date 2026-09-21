@@ -30,6 +30,7 @@ const child = NodeChildProcess.spawn("pnpm", tauriArgs, {
     ACODE_HOME: developmentHome,
     T3CODE_HOME: process.env.T3CODE_HOME?.trim() || developmentHome,
     T3CODE_PORT_OFFSET: process.env.T3CODE_PORT_OFFSET?.trim() || "0",
+    T3CODE_PORT: process.env.T3CODE_PORT?.trim() || "13773",
   },
   stdio: "inherit",
 });

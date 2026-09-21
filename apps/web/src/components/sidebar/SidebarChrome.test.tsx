@@ -15,10 +15,6 @@ vi.mock("@tanstack/react-router", () => ({
     select({ pathname: routerState.pathname }),
 }));
 
-vi.mock("../../state/environments", () => ({
-  useEnvironments: () => ({ environments: [] }),
-}));
-
 vi.mock("../../hooks/useSettings", () => ({
   useEnvironmentIdentificationMode: () => "none",
 }));
@@ -35,15 +31,8 @@ vi.mock("../ui/sidebar", () => ({
     </footer>
   ),
   SidebarHeader: ({ children, ...props }: any) => <header {...props}>{children}</header>,
-  SidebarMenu: ({ children, ...props }: any) => <ul {...props}>{children}</ul>,
-  SidebarMenuItem: ({ children, ...props }: any) => <li {...props}>{children}</li>,
-  SidebarMenuButton: ({ children, onClick, ...props }: any) => (
-    <button type="button" onClick={onClick} {...props}>
-      {children}
-    </button>
-  ),
-  SidebarTrigger: () => null,
-  useSidebar: () => ({ isMobile: false, setOpenMobile: vi.fn() }),
+  useSidebar: () => ({ isMobile: false, toggleSidebar: vi.fn(), open: true }),
+  useSidebarVisibility: () => true,
 }));
 
 vi.mock("../ui/tooltip", () => ({
@@ -65,9 +54,9 @@ vi.mock("./SidebarUpdatePill", () => ({
   SidebarUpdatePill: () => null,
 }));
 
-import { SidebarChromeFooter, SidebarUtilityMenu } from "./SidebarChrome";
+import { SidebarChromeHeader, SidebarChromeFooter, SidebarActionControl } from "./SidebarChrome";
 
-describe("SidebarChromeFooter and SidebarUtilityMenu", () => {
+describe("SidebarChromeHeader and SidebarActionControl", () => {
   let renderer: ReactTestRenderer;
 
   afterEach(async () => {
@@ -79,14 +68,10 @@ describe("SidebarChromeFooter and SidebarUtilityMenu", () => {
 
   it("renders the settings button on standard routes and navigates to /settings when clicked", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    routerState.pathname = "/";
 
     await act(() => {
-      renderer = create(<SidebarChromeFooter />);
+      renderer = create(<SidebarActionControl mode="main" />);
     });
-
-    const footer = renderer.root.findByProps({ "data-testid": "sidebar-footer" });
-    expect(footer.props.className).toContain("border-t");
 
     const settingsButton = renderer.root.findByProps({ "data-testid": "sidebar-settings-button" });
     expect(settingsButton.props["aria-label"]).toBe("Settings");
@@ -98,28 +83,39 @@ describe("SidebarChromeFooter and SidebarUtilityMenu", () => {
     expect(routerState.navigate).toHaveBeenCalledWith({ to: "/settings" });
   });
 
-  it("renders a Back button when on the /settings route and handles back navigation", async () => {
+  it("renders a Back button when on the settings route and handles back navigation", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    routerState.pathname = "/settings/general";
 
     const historyBack = vi.fn();
     vi.stubGlobal("window", { history: { back: historyBack } });
 
     await act(() => {
-      renderer = create(<SidebarUtilityMenu />);
+      renderer = create(<SidebarActionControl mode="settings" />);
     });
 
-    // In settings, settings button should not be present
     expect(renderer.root.findAllByProps({ "data-testid": "sidebar-settings-button" })).toHaveLength(0);
 
-    // Back button should be present
-    const backButton = renderer.root.findByType("button");
-    expect(backButton.props.children[1].props.children).toBe("Back");
+    const backButton = renderer.root.findByProps({ "data-testid": "sidebar-back-button" });
+    expect(backButton.props["aria-label"]).toBe("Back to workspace");
 
     await act(() => {
       backButton.props.onClick();
     });
 
     expect(historyBack).toHaveBeenCalled();
+  });
+
+  it("renders placeholders in the header to accommodate fixed titlebar controls", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+
+    await act(() => {
+      renderer = create(<SidebarChromeHeader />);
+    });
+
+    const togglePlaceholder = renderer.root.findByProps({ "data-testid": "sidebar-toggle-placeholder" });
+    expect(togglePlaceholder).toBeDefined();
+
+    const actionPlaceholder = renderer.root.findByProps({ "data-testid": "sidebar-action-placeholder" });
+    expect(actionPlaceholder).toBeDefined();
   });
 });

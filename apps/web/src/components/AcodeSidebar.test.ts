@@ -44,9 +44,8 @@ describe("ACode Sidebar menus", () => {
 
   it("exposes project management and Workspace creation actions", () => {
     expect(projectMenuItems({ canManageWorkspaces: true }).map((item) => item.id)).toEqual([
-      "new-project",
-      "associate-worktree",
-      "new-worktree",
+      "add-workspace",
+      "new-workspace",
       "rename-project",
       "remove-project",
     ]);
@@ -54,7 +53,7 @@ describe("ACode Sidebar menus", () => {
       "new-agent-session",
       "new-terminal-session",
       "rename-workspace",
-      "remove-registration",
+      "remove-workspace",
       "delete-directory",
     ]);
   });

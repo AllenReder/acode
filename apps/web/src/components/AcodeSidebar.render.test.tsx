@@ -17,10 +17,13 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("@effect/atom-react", () => ({
   useAtomValue: () => new Map(),
+  useAtomRefresh: () => vi.fn(),
 }));
 
 vi.mock("../state/entities", () => ({
   useAcodeProjects: () => mockState.projects,
+  useAcodeAgentSessionShell: () => null,
+  readThreadShell: () => null,
 }));
 
 vi.mock("../state/environments", () => ({
@@ -35,6 +38,7 @@ vi.mock("./ui/sidebar", () => ({
   SidebarContent: ({ children }: any) => <div data-sidebar="content">{children}</div>,
   SidebarGroup: ({ children }: any) => <div data-sidebar="group">{children}</div>,
   SidebarGroupLabel: ({ children }: any) => <div data-sidebar="group-label">{children}</div>,
+  SidebarHeader: ({ children }: any) => <header data-sidebar="header">{children}</header>,
   SidebarFooter: ({ children, className, ...props }: any) => (
     <footer className={className} data-sidebar="footer" {...props}>
       {children}
@@ -47,7 +51,8 @@ vi.mock("./ui/sidebar", () => ({
       {children}
     </button>
   ),
-  useSidebar: () => ({ isMobile: false, setOpenMobile: vi.fn() }),
+  useSidebar: () => ({ isMobile: false, setOpenMobile: vi.fn(), toggleSidebar: vi.fn(), open: true }),
+  useSidebarVisibility: () => true,
 }));
 
 vi.mock("./ui/tooltip", () => ({
@@ -65,9 +70,18 @@ vi.mock("./sidebar/SidebarUpdatePill", () => ({
   SidebarUpdatePill: () => null,
 }));
 
+vi.mock("./SidebarStageBackdrop", () => ({
+  useEnvironmentStageLabel: () => null,
+  resolveEnvironmentIdentificationPillLabel: () => null,
+}));
+
+vi.mock("../hooks/useSettings", () => ({
+  useEnvironmentIdentificationMode: () => "none",
+}));
+
 import { AcodeSidebar } from "./AcodeSidebar";
 
-describe("AcodeSidebar with footer", () => {
+describe("AcodeSidebar", () => {
   let renderer: ReactTestRenderer;
 
   afterEach(async () => {
@@ -76,7 +90,7 @@ describe("AcodeSidebar with footer", () => {
     mockState.projects = [];
   });
 
-  it("renders the sidebar footer with settings button when there are no projects", async () => {
+  it("renders the sidebar header and add project button when there are no projects", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     mockState.projects = [];
 
@@ -84,20 +98,14 @@ describe("AcodeSidebar with footer", () => {
       renderer = create(<AcodeSidebar />);
     });
 
-    const footer = renderer.root.findByProps({ "data-testid": "sidebar-footer" });
-    expect(footer).toBeDefined();
+    const addProjectBtn = renderer.root.findByProps({ "data-testid": "sidebar-add-project" });
+    expect(addProjectBtn).toBeDefined();
 
-    const settingsButton = renderer.root.findByProps({ "data-testid": "sidebar-settings-button" });
-    expect(settingsButton).toBeDefined();
-
-    await act(() => {
-      settingsButton.props.onClick();
-    });
-
-    expect(mockState.navigate).toHaveBeenCalledWith({ to: "/settings" });
+    const header = renderer.root.findByProps({ "data-sidebar": "header" });
+    expect(header).toBeDefined();
   });
 
-  it("renders the sidebar footer with settings button when projects exist", async () => {
+  it("renders the sidebar header and project list when projects exist", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     mockState.projects = [
       {
@@ -112,10 +120,62 @@ describe("AcodeSidebar with footer", () => {
       renderer = create(<AcodeSidebar />);
     });
 
-    const footer = renderer.root.findByProps({ "data-testid": "sidebar-footer" });
-    expect(footer).toBeDefined();
+    const projectRow = renderer.root.findByProps({ "data-testid": "sidebar-project-row" });
+    expect(projectRow).toBeDefined();
 
-    const settingsButton = renderer.root.findByProps({ "data-testid": "sidebar-settings-button" });
-    expect(settingsButton).toBeDefined();
+    const header = renderer.root.findByProps({ "data-sidebar": "header" });
+    expect(header).toBeDefined();
+  });
+
+  it("renders active sessions sorted according to workspaceSessionOrderById", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const { useUiStateStore } = await import("../uiStateStore");
+
+    mockState.projects = [
+      {
+        id: "p1",
+        environmentId: "local",
+        title: "Test Project",
+        workspaces: [
+          {
+            id: "w1",
+            title: "Main Workspace",
+            role: "main",
+            sessions: [
+              { kind: "agent", id: "s1", title: "Session One" },
+              { kind: "agent", id: "s2", title: "Session Two" },
+              { kind: "agent", id: "s3", title: "Session Three" },
+            ],
+          },
+        ],
+      },
+    ];
+
+    // Set custom order: s3, s1, s2
+    act(() => {
+      useUiStateStore.setState({
+        workspaceSessionOrderById: {
+          "local:w1": ["s3", "s1", "s2"],
+        },
+      });
+    });
+
+    await act(() => {
+      renderer = create(<AcodeSidebar />);
+    });
+
+    // Expand workspace
+    const workspaceRow = renderer.root.findByProps({ "data-testid": "sidebar-workspace-row" });
+    await act(() => {
+      workspaceRow.props.onClick();
+    });
+
+    const sessionRows = renderer.root.findAllByProps({ "data-sidebar-session-row": "true" });
+    expect(sessionRows).toHaveLength(3);
+    expect(sessionRows.map((r) => r.props["data-session-id"])).toEqual([
+      "s3",
+      "s1",
+      "s2",
+    ]);
   });
 });

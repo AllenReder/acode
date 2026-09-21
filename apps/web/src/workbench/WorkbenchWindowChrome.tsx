@@ -2,8 +2,14 @@ import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/mode
 import { Columns3Icon, PanelsTopLeftIcon, PlusIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { cn } from "../lib/utils";
-import { SidebarTrigger } from "../components/ui/sidebar";
+import { cn, isMacPlatform } from "../lib/utils";
+import { useSidebarVisibility } from "../components/ui/sidebar";
+import {
+  COLLAPSED_TABS_INSET_MAC,
+  COLLAPSED_TABS_INSET_WIN,
+  EXPANDED_TABS_INSET,
+  SEPARATOR_RIGHT_GAP,
+} from "../components/sidebar/sidebarGeometry";
 import { firstLeafId } from "./layout";
 import { targetKey, type ViewTarget } from "./viewRegistry";
 import { tabDisplayTitle, type WorkbenchSnapshot, type WorkbenchTab } from "./workbenchState";
@@ -37,6 +43,9 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
 
+  const isSidebarOpen = useSidebarVisibility();
+  const isMac = typeof navigator !== "undefined" && isMacPlatform(navigator.platform);
+
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.workbenchWindowChrome = "true";
@@ -57,25 +66,41 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
     setDraftTitle("");
   };
 
+  const tabsInsetWidth = isSidebarOpen
+    ? EXPANDED_TABS_INSET
+    : isMac
+      ? COLLAPSED_TABS_INSET_MAC
+      : COLLAPSED_TABS_INSET_WIN;
+
   return (
     <header
-      className="drag-region fixed inset-x-0 top-0 z-50 flex h-[var(--workbench-titlebar-height)] items-center border-b border-border/60 bg-background/95 backdrop-blur"
+      className="drag-region flex h-[var(--workbench-titlebar-height,36px)] w-full shrink-0 items-center border-b border-border/60 bg-background/95 backdrop-blur z-30"
       data-tauri-drag-region
       data-workbench-window-chrome=""
     >
       <div
-        className="flex shrink-0 items-center [-webkit-app-region:no-drag]"
+        className="flex shrink-0 items-center overflow-hidden transition-[width] duration-200 ease-out [-webkit-app-region:no-drag]"
+        data-slot="workbench-tabs-inset-spacer"
         style={{
-          paddingLeft: "var(--workspace-controls-left)",
-          marginRight: "var(--workspace-titlebar-control-gap)",
+          width: `${tabsInsetWidth}px`,
         }}
       >
-        <SidebarTrigger aria-label="Toggle sidebar" />
+        {!isSidebarOpen ? (
+          <div
+            className="flex h-full w-full items-center justify-end transition-opacity duration-200 ease-out"
+            style={{ paddingRight: `${SEPARATOR_RIGHT_GAP}px` }}
+          >
+            <div
+              className="h-3.5 w-px bg-border/60 shrink-0"
+              data-slot="workbench-titlebar-separator"
+            />
+          </div>
+        ) : null}
       </div>
 
-      <div className="flex min-w-0 flex-1 items-center gap-2 pr-3 [-webkit-app-region:no-drag]">
+      <div className="flex h-full min-w-0 flex-1 items-center pr-3 [-webkit-app-region:no-drag]">
         <div
-          className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex h-full min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           data-tauri-drag-region
           data-workbench-tab-strip-drop=""
           role="tablist"
@@ -99,10 +124,10 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
                 data-workbench-tab-drop={tab.id}
                 data-active-tab={active ? "true" : "false"}
                 className={cn(
-                  "group flex h-7 shrink-0 cursor-pointer items-center gap-2.5 overflow-hidden rounded-[var(--control-radius)] border transition-[width,background-color,border-color] duration-150",
+                  "group relative flex h-full w-44 min-w-28 shrink cursor-pointer items-center gap-2 border-r border-border/60 px-3 text-left transition-colors duration-150 select-none",
                   active
-                    ? "w-48 justify-start border-border/60 bg-background px-2.5 text-foreground shadow-xs"
-                    : "w-32 justify-start border-transparent bg-transparent px-2.5 text-muted-foreground hover:bg-muted/50",
+                    ? "bg-background text-foreground font-medium"
+                    : "bg-muted/15 text-muted-foreground hover:bg-muted/40 hover:text-foreground",
                 )}
                 onClick={() => {
                   if (!active) activateTab(tab.id);
@@ -155,18 +180,18 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
                     }}
                   />
                 ) : (
-                  <div className={cn("min-w-0 flex-1", "block")}>
-                    <div className="truncate text-xs font-medium leading-none">{title}</div>
+                  <div className="min-w-0 flex-1 block">
+                    <div className="truncate text-xs leading-none">{title}</div>
                     <div className="truncate text-[9px] text-muted-foreground leading-none mt-0.5">
                       {resolveTargetContext(target, projects)}
                     </div>
                   </div>
                 )}
-                {active && snapshot.tabs.length > 1 ? (
+                {snapshot.tabs.length > 1 ? (
                   <button
                     type="button"
                     aria-label={`Close ${title}`}
-                    className="flex size-5 shrink-0 items-center justify-center rounded hover:bg-accent"
+                    className="opacity-0 group-hover:opacity-100 flex size-5 shrink-0 items-center justify-center rounded hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-opacity duration-150"
                     onClick={(event) => {
                       event.stopPropagation();
                       closeTab(tab.id);
@@ -180,7 +205,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
           })}
         </div>
 
-        <div className="workbench-layout-switch" role="group" aria-label="Tab layout">
+        <div className="workbench-layout-switch ml-2" role="group" aria-label="Tab layout">
           <button
             type="button"
             aria-label="BSP layout"

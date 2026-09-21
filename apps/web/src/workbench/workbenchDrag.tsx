@@ -1,4 +1,4 @@
-import { GripVerticalIcon } from "lucide-react";
+import { MessageSquarePlusIcon, TerminalIcon, CopyPlusIcon } from "lucide-react";
 import {
   createContext,
   useCallback,
@@ -16,6 +16,7 @@ import { createPortal } from "react-dom";
 import { paneDropZoneFromPoint } from "./layout";
 import { computePaneLayoutRects } from "./layoutGeometry";
 import { usePrimarySettings } from "../hooks/useSettings";
+import { useUiStateStore } from "../uiStateStore";
 import { type ViewDragSource, type ViewDropTarget, type ViewDropResult } from "./workbenchState";
 import { useWorkbenchStore } from "./workbenchStore";
 
@@ -33,14 +34,23 @@ export interface WorkbenchDropResolver {
   readonly tabCount: () => number;
 }
 
+export interface SidebarDropTarget {
+  readonly workspaceKey: string;
+  readonly sessionId: string;
+  readonly position: "before" | "after";
+}
+
 export interface WorkbenchDragState {
   readonly phase: WorkbenchDragPhase;
   readonly label: string;
+  readonly source: ViewDragSource;
   readonly pointer: { readonly x: number; readonly y: number };
   readonly startRect: WorkbenchRect;
   readonly target: ViewDropTarget | null;
   readonly result: ViewDropResult | null;
   readonly valid: boolean;
+  readonly isOverSidebar: boolean;
+  readonly sidebarDropTarget: SidebarDropTarget | null;
 }
 
 interface WorkbenchDragControllerValue {
@@ -178,6 +188,63 @@ function sameTarget(a: ViewDropTarget | null, b: ViewDropTarget | null): boolean
   return false;
 }
 
+export function resolveSidebarDropTargetAtPoint(
+  x: number,
+  y: number,
+  sourceWorkspaceKey: string,
+  sourceSessionId: string,
+  resolver?: {
+    readonly isOverSidebar: (x: number, y: number) => boolean;
+    readonly elementFromPoint: (x: number, y: number) => Element | null;
+  },
+): { readonly isOverSidebar: boolean; readonly sidebarDropTarget: SidebarDropTarget | null } {
+  const isOver =
+    resolver?.isOverSidebar(x, y) ??
+    (() => {
+      if (typeof document === "undefined") return false;
+      const sidebarElement =
+        document.querySelector<HTMLElement>("[data-app-sidebar]") ??
+        document.querySelector<HTMLElement>('[data-slot="sidebar"]');
+      const rect = sidebarElement?.getBoundingClientRect();
+      return (
+        rect !== undefined &&
+        x >= rect.left &&
+        x <= rect.right &&
+        y >= rect.top &&
+        y <= rect.bottom
+      );
+    })();
+
+  if (!isOver) return { isOverSidebar: false, sidebarDropTarget: null };
+
+  const element =
+    resolver?.elementFromPoint(x, y) ??
+    (typeof document === "undefined" ? null : document.elementFromPoint(x, y));
+  const rowElement = element?.closest<HTMLElement>("[data-sidebar-session-row]");
+  if (rowElement) {
+    const rowWorkspaceKey = rowElement.dataset.workspaceKey;
+    const rowSessionId = rowElement.dataset.sessionId;
+    if (
+      rowWorkspaceKey === sourceWorkspaceKey &&
+      rowSessionId &&
+      rowSessionId !== sourceSessionId
+    ) {
+      const rowRect = rowElement.getBoundingClientRect();
+      const position = y < rowRect.top + rowRect.height / 2 ? "before" : "after";
+      return {
+        isOverSidebar: true,
+        sidebarDropTarget: {
+          workspaceKey: rowWorkspaceKey,
+          sessionId: rowSessionId,
+          position,
+        },
+      };
+    }
+  }
+
+  return { isOverSidebar: true, sidebarDropTarget: null };
+}
+
 export function WorkbenchDragProvider({ children }: { readonly children: ReactNode }) {
   const [state, setState] = useState<WorkbenchDragState | null>(null);
   const suppressClickRef = useRef(false);
@@ -225,6 +292,8 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
       let lastY = event.clientY;
       let lastTarget: ViewDropTarget | null = null;
       let lastResult: ViewDropResult | null = null;
+      let lastIsOverSidebar = false;
+      let lastSidebarDropTarget: SidebarDropTarget | null = null;
       let publishedTarget: ViewDropTarget | null = null;
 
       // Preview transforms never move the semantic drop regions beneath the pointer.
@@ -270,10 +339,10 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
 
       const publishPointer = () => {
         frameRef.current = null;
-        const target = lastTarget;
+        const target = lastIsOverSidebar ? null : lastTarget;
         setState((current) => {
           if (current === null) return current;
-          if (sameTarget(current.target, target)) {
+          if (sameTarget(current.target, target) && current.isOverSidebar === lastIsOverSidebar && current.sidebarDropTarget === lastSidebarDropTarget) {
             return current.pointer.x === lastX && current.pointer.y === lastY
               ? current
               : { ...current, pointer: { x: lastX, y: lastY } };
@@ -285,6 +354,8 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
             target,
             result,
             valid: target !== null && result !== null,
+            isOverSidebar: lastIsOverSidebar,
+            sidebarDropTarget: lastSidebarDropTarget,
           };
         });
       };
@@ -306,11 +377,39 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
 
       const finish = (cancelled: boolean) => {
         const wasActive = activeRef.current;
+        const currentSidebarDropTarget = lastSidebarDropTarget;
+        const currentIsOverSidebar = lastIsOverSidebar;
         cleanup();
         if (!wasActive) return;
         activeRef.current = false;
         suppressClickRef.current = true;
-        const liveTarget = cancelled ? null : resolveTarget(lastX, lastY);
+
+        if (!cancelled && source.kind === "sidebar" && currentIsOverSidebar && currentSidebarDropTarget) {
+          const sourceSessionId =
+            source.target.kind === "agentSession"
+              ? source.target.agentSessionId
+              : source.target.terminalSessionId;
+          const workspaceKey = `${source.target.environmentId}:${source.target.workspaceId}`;
+          const allSessionRows = Array.from(
+            document.querySelectorAll<HTMLElement>(
+              `[data-sidebar-session-row][data-workspace-key="${CSS.escape(workspaceKey)}"]`,
+            ),
+          )
+            .map((el) => el.dataset.sessionId)
+            .filter((id): id is string => Boolean(id));
+
+          useUiStateStore.getState().reorderWorkspaceSessions(
+            workspaceKey,
+            allSessionRows,
+            sourceSessionId,
+            currentSidebarDropTarget.sessionId,
+            currentSidebarDropTarget.position,
+          );
+          setState(null);
+          return;
+        }
+
+        const liveTarget = cancelled || currentIsOverSidebar ? null : resolveTarget(lastX, lastY);
         const target = liveTarget;
         const result =
           target === null ? null : useWorkbenchStore.getState().previewDrop(source, target);
@@ -321,7 +420,17 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         }
         const phase: WorkbenchDragPhase = cancelled ? "canceling" : "rejected";
         setState((current) =>
-          current === null ? current : { ...current, phase, target, result: null, valid: false },
+          current === null
+            ? current
+            : {
+                ...current,
+                phase,
+                target,
+                result: null,
+                valid: false,
+                isOverSidebar: currentIsOverSidebar,
+                sidebarDropTarget: null,
+              },
         );
         finishTimerRef.current = setTimeout(() => {
           finishTimerRef.current = null;
@@ -329,9 +438,26 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         }, CANCEL_DURATION_MS);
       };
 
+      const checkSidebarState = (x: number, y: number) => {
+        if (source.kind !== "sidebar") {
+          return { isOverSidebar: false, sidebarDropTarget: null };
+        }
+        const sourceWorkspaceKey = `${source.target.environmentId}:${source.target.workspaceId}`;
+        const sourceSessionId =
+          source.target.kind === "agentSession"
+            ? source.target.agentSessionId
+            : source.target.terminalSessionId;
+        const res = resolveSidebarDropTargetAtPoint(x, y, sourceWorkspaceKey, sourceSessionId);
+        lastIsOverSidebar = res.isOverSidebar;
+        lastSidebarDropTarget = res.sidebarDropTarget;
+        return res;
+      };
+
       const onMove = (moveEvent: PointerEvent) => {
         lastX = moveEvent.clientX;
         lastY = moveEvent.clientY;
+        const { isOverSidebar, sidebarDropTarget } = checkSidebarState(lastX, lastY);
+
         if (!activeRef.current) {
           if (Math.hypot(lastX - event.clientX, lastY - event.clientY) < DRAG_THRESHOLD) {
             return;
@@ -339,27 +465,31 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           activeRef.current = true;
           document.documentElement.dataset.workbenchDragging = "true";
           window.getSelection()?.removeAllRanges();
-          const target = resolveTarget(lastX, lastY);
-          const result = previewFor(target);
+          const target = isOverSidebar ? null : resolveTarget(lastX, lastY);
+          const result = isOverSidebar ? null : previewFor(target);
           publishedTarget = target;
           setState({
             phase: "dragging",
             label,
+            source,
             pointer: { x: lastX, y: lastY },
             startRect,
             target,
             result,
             valid: target !== null && result !== null,
+            isOverSidebar,
+            sidebarDropTarget,
           });
           return;
         }
-        const target = resolveTarget(lastX, lastY);
+
+        const target = isOverSidebar ? null : resolveTarget(lastX, lastY);
         if (!sameTarget(publishedTarget, target)) publishedTarget = target;
         if (frameRef.current === null) frameRef.current = requestAnimationFrame(publishPointer);
         if (stabilizeTimerRef.current !== null) clearTimeout(stabilizeTimerRef.current);
         stabilizeTimerRef.current = setTimeout(() => {
           stabilizeTimerRef.current = null;
-          resolveTarget(lastX, lastY);
+          if (!lastIsOverSidebar) resolveTarget(lastX, lastY);
           publishPointer();
         }, 180);
       };
@@ -449,9 +579,46 @@ function tabInsertionMarker(target: ViewDropTarget): WorkbenchRect | null {
   };
 }
 
+function dragGhostInfo(source: ViewDragSource): { readonly icon: ReactNode; readonly typeLabel: string } {
+  if (source.kind === "sidebar") {
+    if (source.target.kind === "agentSession") {
+      return {
+        icon: <MessageSquarePlusIcon className="size-5 text-primary" />,
+        typeLabel: "Agent Session",
+      };
+    }
+    if (source.target.kind === "workspaceTerminal") {
+      return {
+        icon: <TerminalIcon className="size-5 text-primary" />,
+        typeLabel: "Terminal Session",
+      };
+    }
+  } else if (source.kind === "pane") {
+    const tab = useWorkbenchStore.getState().tabs.find((t) => t.id === source.tabId);
+    const pane = tab?.panes.get(source.paneId);
+    if (pane?.target.kind === "agentSession") {
+      return {
+        icon: <MessageSquarePlusIcon className="size-5 text-primary" />,
+        typeLabel: "Agent Session",
+      };
+    }
+    if (pane?.target.kind === "workspaceTerminal") {
+      return {
+        icon: <TerminalIcon className="size-5 text-primary" />,
+        typeLabel: "Terminal Session",
+      };
+    }
+  }
+  return {
+    icon: <CopyPlusIcon className="size-5 text-primary" />,
+    typeLabel: "View",
+  };
+}
+
 export function WorkbenchDropOverlay() {
   const state = useWorkbenchDragState();
   const paneGap = usePrimarySettings((s) => s.paneGap);
+  const paneRadius = usePrimarySettings((s) => s.paneRadius);
   const isDragging = state !== null;
   const surfaceRef = useRef<HTMLDivElement>(null);
   const [surfaceRect, setSurfaceRect] = useState<WorkbenchRect | null>(null);
@@ -481,7 +648,7 @@ export function WorkbenchDropOverlay() {
     return computePaneLayoutRects(previewTab, surfaceRect, paneGap);
   }, [previewTab, surfaceRect, paneGap]);
 
-  if (state === null) return null;
+  if (state === null || state.isOverSidebar) return null;
 
   let destinationRect: WorkbenchRect | null = null;
   if (preview && previewLayout && surfaceRect) {
@@ -502,18 +669,25 @@ export function WorkbenchDropOverlay() {
     destinationRect = targetFallbackRect(state.target);
   }
 
+  const GHOST_WIDTH = 156;
+  const GHOST_HEIGHT = 84;
   const ghostRect =
     state.phase === "canceling"
-      ? state.startRect
-      : (destinationRect ?? {
-          left: state.pointer.x - 84,
-          top: state.pointer.y - 22,
-          width: 168,
-          height: 44,
-        });
-  const hasDestination = destinationRect !== null;
+      ? {
+          left: state.startRect.left,
+          top: state.startRect.top,
+          width: GHOST_WIDTH,
+          height: GHOST_HEIGHT,
+        }
+      : {
+          left: state.pointer.x - GHOST_WIDTH / 2,
+          top: state.pointer.y - GHOST_HEIGHT / 2,
+          width: GHOST_WIDTH,
+          height: GHOST_HEIGHT,
+        };
   const invalid = state.phase === "rejected" || (state.target !== null && !state.valid);
   const tabMarker = state.target === null ? null : tabInsertionMarker(state.target);
+  const ghostInfo = dragGhostInfo(state.source);
 
   return (
     <>
@@ -539,16 +713,17 @@ export function WorkbenchDropOverlay() {
                   data-pane-id={paneId}
                   data-destination={destination ? "true" : "false"}
                   className={
-                    "absolute rounded-md border transition-[left,top,width,height,background-color,border-color,opacity] duration-200 ease-out motion-reduce:transition-none " +
+                    "absolute border transition-[left,top,width,height,background-color,border-color,opacity] duration-200 ease-out motion-reduce:transition-none " +
                     (destination
-                      ? "border-primary bg-primary/15 shadow-[0_0_0_1px_var(--color-primary)]"
-                      : "border-border/80 bg-background/55")
+                      ? "border-2 border-primary bg-primary/15 shadow-[0_0_0_1px_var(--color-primary)]"
+                      : "border border-border/80 bg-background/55")
                   }
                   style={{
                     left: `${rect.left}px`,
                     top: `${rect.top}px`,
                     width: `${rect.width}px`,
                     height: `${rect.height}px`,
+                    borderRadius: `${paneRadius}px`,
                   }}
                 />
               );
@@ -574,24 +749,32 @@ export function WorkbenchDropOverlay() {
             data-phase={state.phase}
             data-valid={invalid ? "false" : "true"}
             className={
-              "pointer-events-none fixed z-[100] flex items-center gap-2 overflow-hidden rounded-lg border bg-background/95 px-3 shadow-xl backdrop-blur-sm will-change-transform " +
-              "transition-[transform,width,height,border-color,opacity] ease-out motion-reduce:transition-none " +
+              "pointer-events-none fixed z-[100] flex flex-col items-center justify-center overflow-hidden rounded-xl border p-2.5 shadow-2xl backdrop-blur-md will-change-transform " +
+              "transition-[opacity,border-color] ease-out motion-reduce:transition-none " +
               (invalid
-                ? "border-destructive text-destructive "
-                : "border-primary text-foreground ") +
-              (state.phase === "canceling" ? "opacity-0" : "opacity-100")
+                ? "border-destructive/80 bg-destructive/15 text-destructive "
+                : "border-border/80 bg-background/85 text-foreground ") +
+              (state.phase === "canceling" ? "opacity-0 duration-180" : "opacity-100 duration-75")
             }
             style={{
               left: 0,
               top: 0,
-              width: ghostRect.width,
-              height: ghostRect.height,
+              width: `${ghostRect.width}px`,
+              height: `${ghostRect.height}px`,
               transform: `translate3d(${ghostRect.left}px, ${ghostRect.top}px, 0)`,
-              transitionDuration: hasDestination ? "200ms" : "80ms",
             }}
           >
-            <GripVerticalIcon className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1 truncate text-xs font-medium">{state.label}</span>
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              {ghostInfo.icon}
+            </div>
+            <div className="flex flex-col items-center min-w-0 max-w-full mt-1.5">
+              <span className="truncate max-w-[136px] text-xs font-semibold text-foreground leading-tight text-center">
+                {state.label}
+              </span>
+              <span className="text-[10px] text-muted-foreground font-medium leading-tight mt-0.5 text-center">
+                {ghostInfo.typeLabel}
+              </span>
+            </div>
           </div>
         </>,
         document.body,

@@ -186,9 +186,11 @@ it("removes closed Session across multiple tabs while closeView detaches only th
   store.openTarget(targetA);
   store.splitFocused(targetB, "right");
   const tab1Id = getActiveTab(useWorkbenchStore.getState()).id;
+  const targetAPaneId = [...getActiveTab(useWorkbenchStore.getState()).panes.entries()].find(
+    ([_, v]) => v.target === targetA,
+  )![0];
 
-  store.createTab();
-  store.openTarget(targetA);
+  store.duplicateToNewTab({ kind: "pane", tabId: tab1Id, paneId: targetAPaneId });
   const tab2Id = getActiveTab(useWorkbenchStore.getState()).id;
 
   expect(useWorkbenchStore.getState().tabs).toHaveLength(2);

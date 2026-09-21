@@ -77,17 +77,21 @@ const projects: ReadonlyArray<EnvironmentAcodeProject> = [
   },
 ];
 
-it("renders the selected compact tab strip with real titles and a new-tab action", () => {
+function createTestSnapshot() {
   const ids = (() => {
     let n = 0;
     return () => `id-${++n}`;
   })();
   let snapshot = applyOpenTarget(emptyWorkbenchSnapshot(ids), agentTarget, ids);
   snapshot = applyCreateTab(snapshot, ids);
-  snapshot = applyOpenTarget(snapshot, terminalTarget, ids);
+  return applyOpenTarget(snapshot, terminalTarget, ids);
+}
+
+it("renders the selected compact tab strip with real titles and a new-tab action", () => {
+  const snapshot = createTestSnapshot();
 
   const html = renderToStaticMarkup(
-    <SidebarProvider>
+    <SidebarProvider defaultOpen>
       <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
     </SidebarProvider>,
   );
@@ -98,4 +102,44 @@ it("renders the selected compact tab strip with real titles and a new-tab action
   expect(html).toContain('aria-label="Open Implement tabs"');
   expect(html).toContain('aria-label="New tab"');
   expect(html).not.toContain("T3 Code");
+});
+
+it("does not render titlebar separator in WorkbenchWindowChrome when sidebar is expanded", () => {
+  const snapshot = createTestSnapshot();
+
+  const html = renderToStaticMarkup(
+    <SidebarProvider defaultOpen={true}>
+      <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+    </SidebarProvider>,
+  );
+
+  expect(html).not.toContain('data-slot="workbench-titlebar-separator"');
+});
+
+it("renders separator and offset for docked controls when sidebar is collapsed", () => {
+  const snapshot = createTestSnapshot();
+
+  const html = renderToStaticMarkup(
+    <SidebarProvider defaultOpen={false}>
+      <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+    </SidebarProvider>,
+  );
+
+  expect(html).toContain('data-slot="workbench-titlebar-separator"');
+});
+
+it("renders flat tiling tabs with uniform width and hover-only close buttons", () => {
+  const snapshot = createTestSnapshot();
+
+  const html = renderToStaticMarkup(
+    <SidebarProvider defaultOpen>
+      <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+    </SidebarProvider>,
+  );
+
+  // Flat tiling width w-44 and border-r divider
+  expect(html).toContain("w-44");
+  expect(html).toContain("border-r");
+  // Close button with hover opacity
+  expect(html).toContain("opacity-0 group-hover:opacity-100");
 });

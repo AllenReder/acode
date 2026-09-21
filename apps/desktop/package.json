@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/run-tauri.mjs dev",
-    "dev:app": "node scripts/run-tauri-dev-app.mjs",
+    "dev:app": "node scripts/run-tauri.mjs dev",
+    "build:app": "node scripts/run-tauri-dev-app.mjs",
     "build": "node scripts/run-tauri.mjs build",
     "tauri": "tauri",
     "check": "node scripts/run-tauri.mjs info"

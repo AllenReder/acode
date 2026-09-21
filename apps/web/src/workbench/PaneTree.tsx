@@ -171,16 +171,13 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
         {[...tab.panes].map(([paneId, view]) => {
           const current = layout.rects.get(paneId);
           const preview = previewLayout?.rects.get(paneId);
-          const transform =
-            preview && current && current.width > 10 && current.height > 10
-              ? `translate(${preview.left - current.left}px, ${preview.top - current.top}px) scale(${preview.width / current.width}, ${preview.height / current.height})`
-              : undefined;
+          const targetRect = preview ?? current;
           return (
-            <div key={view.id} className="workbench-pane-frame" style={current}>
+            <div key={view.id} className="workbench-pane-frame" style={targetRect}>
               <div
                 className="workbench-pane-preview"
                 data-previewing={Boolean(previewTab)}
-                style={{ transform, opacity: previewTab && !preview ? 0.2 : undefined }}
+                style={{ opacity: previewTab && !preview ? 0.2 : undefined }}
               >
                 <Pane
                   snapshot={snapshot}

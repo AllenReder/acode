@@ -31,6 +31,7 @@ export interface PersistedUiState {
   threadChangedFilesExpansionVersion?: number;
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
   pullRequestMergeMethod?: string;
+  workspaceSessionOrderById?: Record<string, string[]>;
 }
 
 export interface UiProjectState {
@@ -55,8 +56,16 @@ export interface UiPullRequestState {
   pullRequestMergeMethod: PullRequestMergeMethod;
 }
 
+export interface UiWorkspaceSessionOrderState {
+  workspaceSessionOrderById: Record<string, string[]>;
+}
+
 export interface UiState
-  extends UiProjectState, UiThreadState, UiEndpointState, UiPullRequestState {}
+  extends UiProjectState,
+    UiThreadState,
+    UiEndpointState,
+    UiPullRequestState,
+    UiWorkspaceSessionOrderState {}
 
 const initialState: UiState = {
   projectExpandedById: {},
@@ -66,6 +75,7 @@ const initialState: UiState = {
   threadChangedFilesExpandedById: {},
   defaultAdvertisedEndpointKey: null,
   pullRequestMergeMethod: "merge",
+  workspaceSessionOrderById: {},
 };
 
 const LEGACY_PROJECT_CWD_PREFERENCE_PREFIX = "legacy-project-cwd:";
@@ -74,6 +84,19 @@ let legacyKeysCleanedUp = false;
 
 export function legacyProjectCwdPreferenceKey(cwd: string): string {
   return `${LEGACY_PROJECT_CWD_PREFERENCE_PREFIX}${normalizeProjectPathForComparison(cwd)}`;
+}
+
+function sanitizeStringArrayRecord(value: unknown): Record<string, string[]> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+  const result: Record<string, string[]> = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (typeof k === "string" && Array.isArray(v)) {
+      result[k] = sanitizeStringArray(v);
+    }
+  }
+  return result;
 }
 
 function sanitizeStringArray(value: unknown): string[] {
@@ -158,6 +181,7 @@ export function parsePersistedState(parsed: PersistedUiState): UiState {
     pullRequestMergeMethod: isPullRequestMergeMethod(parsed.pullRequestMergeMethod)
       ? parsed.pullRequestMergeMethod
       : initialState.pullRequestMergeMethod,
+    workspaceSessionOrderById: sanitizeStringArrayRecord(parsed.workspaceSessionOrderById),
   };
 }
 
@@ -423,6 +447,45 @@ export function reorderProjects(
   };
 }
 
+export function reorderWorkspaceSessions(
+  state: UiState,
+  workspaceKey: string,
+  allSessionIds: readonly string[],
+  sourceId: string,
+  targetId: string,
+  position: "before" | "after" = "before",
+): UiState {
+  if (sourceId === targetId || allSessionIds.length === 0) {
+    return state;
+  }
+  const existingOrder = state.workspaceSessionOrderById[workspaceKey] ?? allSessionIds;
+  const currentList = [...allSessionIds].sort((a, b) => {
+    const idxA = existingOrder.indexOf(a);
+    const idxB = existingOrder.indexOf(b);
+    const rankA = idxA >= 0 ? idxA : Number.MAX_SAFE_INTEGER;
+    const rankB = idxB >= 0 ? idxB : Number.MAX_SAFE_INTEGER;
+    return rankA - rankB;
+  });
+
+  const fromIndex = currentList.indexOf(sourceId);
+  if (fromIndex < 0) return state;
+  currentList.splice(fromIndex, 1);
+
+  const toIndex = currentList.indexOf(targetId);
+  if (toIndex < 0) return state;
+
+  const insertIndex = position === "before" ? toIndex : toIndex + 1;
+  currentList.splice(insertIndex, 0, sourceId);
+
+  return {
+    ...state,
+    workspaceSessionOrderById: {
+      ...state.workspaceSessionOrderById,
+      [workspaceKey]: currentList,
+    },
+  };
+}
+
 interface UiStateStore extends UiState {
   markThreadVisited: (threadId: string, visitedAt: string) => void;
   markThreadUnread: (threadId: string, latestTurnCompletedAt: string | null | undefined) => void;
@@ -435,6 +498,13 @@ interface UiStateStore extends UiState {
     currentProjectOrder: readonly string[],
     draggedProjectIds: readonly string[],
     targetProjectIds: readonly string[],
+  ) => void;
+  reorderWorkspaceSessions: (
+    workspaceKey: string,
+    allSessionIds: readonly string[],
+    sourceId: string,
+    targetId: string,
+    position?: "before" | "after",
   ) => void;
 }
 
@@ -456,6 +526,10 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
   reorderProjects: (currentProjectOrder, draggedProjectIds, targetProjectIds) =>
     set((state) =>
       reorderProjects(state, currentProjectOrder, draggedProjectIds, targetProjectIds),
+    ),
+  reorderWorkspaceSessions: (workspaceKey, allSessionIds, sourceId, targetId, position) =>
+    set((state) =>
+      reorderWorkspaceSessions(state, workspaceKey, allSessionIds, sourceId, targetId, position),
     ),
 }));
 
