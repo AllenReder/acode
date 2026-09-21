@@ -58,7 +58,14 @@ import FileBrowserPanel from "./FileBrowserPanel";
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
 import { FileMarkdownPreview } from "./FileMarkdownPreview";
 import { Button } from "~/components/ui/button";
-import { Dialog, DialogPopup, DialogTitle, DialogDescription } from "~/components/ui/dialog";
+import {
+  Dialog,
+  DialogPopup,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "~/components/ui/dialog";
 import { useWorkbenchStore } from "~/workbench/workbenchStore";
 import { projectEnvironment } from "~/state/projects";
 import {
@@ -1498,14 +1505,16 @@ export default function FilePreviewPanel({
             }
           }}
         >
-          <DialogPopup showCloseButton={false}>
-            <DialogTitle>Unsaved Changes</DialogTitle>
-            <DialogDescription>
-              Do you want to save the changes you made to {relativePath} before switching?
-            </DialogDescription>
-            <div className="flex justify-end gap-2 pt-4">
+          <DialogPopup showCloseButton={false} className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Unsaved Changes</DialogTitle>
+              <DialogDescription>
+                Do you want to save the changes you made to {relativePath} before switching?
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter variant="bare">
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={() => {
                   setShowSwitchModal(false);
@@ -1540,7 +1549,7 @@ export default function FilePreviewPanel({
               >
                 Save
               </Button>
-            </div>
+            </DialogFooter>
           </DialogPopup>
         </Dialog>
       ) : null}
@@ -1555,14 +1564,16 @@ export default function FilePreviewPanel({
             }
           }}
         >
-          <DialogPopup showCloseButton={false}>
-            <DialogTitle>Unsaved Changes</DialogTitle>
-            <DialogDescription>
-              Do you want to save the changes you made to {relativePath} before closing?
-            </DialogDescription>
-            <div className="flex justify-end gap-2 pt-4">
+          <DialogPopup showCloseButton={false} className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Unsaved Changes</DialogTitle>
+              <DialogDescription>
+                Do you want to save the changes you made to {relativePath} before closing?
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter variant="bare">
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={() => {
                   setShowCloseModal(false);
@@ -1595,7 +1606,7 @@ export default function FilePreviewPanel({
               >
                 Save
               </Button>
-            </div>
+            </DialogFooter>
           </DialogPopup>
         </Dialog>
       ) : null}
