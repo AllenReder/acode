@@ -317,7 +317,10 @@ function findNewAgentSessionPane(
   return null;
 }
 
-/** Focus an existing Session View; otherwise replace the focused View. */
+/**
+ * Focus an existing Session View across tabs (leftmost tab if multiple, or current tab if open in active tab);
+ * otherwise replace an active Welcome View or create a new Tab next to the active Tab.
+ */
 export function applyOpenTarget(
   snapshot: WorkbenchSnapshot,
   target: ViewTarget,
@@ -330,23 +333,42 @@ export function applyOpenTarget(
     }
   }
 
-  const tab = getActiveTab(snapshot);
-  const existingPaneId = findPaneByTarget(tab, target);
-  if (existingPaneId !== null) return applySetFocused(snapshot, existingPaneId);
-  if (tab.panes.get(tab.focusedPaneId)?.target.kind !== "welcome") {
-    const paneId = generateId();
-    const panes = new Map(tab.panes);
-    panes.set(paneId, viewInstance(target, generateId));
-    return updateTab(snapshot, {
-      ...tab,
-      panes,
-      ...placedLayout(tab, paneId, tab.focusedPaneId, "right"),
-      focusedPaneId: paneId,
-    });
+  // 1. If already open in the active Tab, focus it directly.
+  const activeTab = getActiveTab(snapshot);
+  const existingInActive = findPaneByTarget(activeTab, target);
+  if (existingInActive !== null) return applySetFocused(snapshot, existingInActive);
+
+  // 2. If already open in another Tab, activate the leftmost Tab containing it and focus.
+  for (const tab of snapshot.tabs) {
+    if (tab.id === activeTab.id) continue;
+    const existingPaneId = findPaneByTarget(tab, target);
+    if (existingPaneId !== null) {
+      return applySetFocused(applyActivateTab(snapshot, tab.id), existingPaneId);
+    }
   }
-  const panes = new Map(tab.panes);
-  panes.set(tab.focusedPaneId, viewInstance(target, generateId));
-  return updateTab(snapshot, { ...tab, panes });
+
+  // 3. Not open in any Tab:
+  // 3a. If the active Tab is an empty Welcome Tab, replace it in-place.
+  const isSoleWelcome =
+    activeTab.panes.size === 1 &&
+    [...activeTab.panes.values()][0]?.target.kind === "welcome";
+
+  if (isSoleWelcome) {
+    const paneId = activeTab.focusedPaneId;
+    const panes = new Map(activeTab.panes);
+    panes.set(paneId, viewInstance(target, generateId));
+    return updateTab(snapshot, { ...activeTab, panes });
+  }
+
+  // 3b. Otherwise, create a new Tab immediately to the right of the active Tab.
+  const activeIndex = snapshot.tabs.findIndex((tab) => tab.id === snapshot.activeTabId);
+  const insertIndex = activeIndex >= 0 ? activeIndex + 1 : snapshot.tabs.length;
+  return insertPresentationTab(
+    snapshot,
+    viewInstance(target, generateId),
+    insertIndex,
+    generateId,
+  ).snapshot;
 }
 
 /**
@@ -358,26 +380,7 @@ export function applyOpenDeepLinkTarget(
   target: ViewTarget,
   generateId: () => string,
 ): WorkbenchSnapshot {
-  if (target.kind === "newAgentSession") {
-    const existingDraft = findNewAgentSessionPane(snapshot, target);
-    if (existingDraft !== null) {
-      return applySetFocused(applyActivateTab(snapshot, existingDraft.tabId), existingDraft.paneId);
-    }
-  }
-  for (const tab of snapshot.tabs) {
-    const paneId = findPaneByTarget(tab, target);
-    if (paneId !== null) {
-      return applySetFocused(applyActivateTab(snapshot, tab.id), paneId);
-    }
-  }
-
-  const activeTab = getActiveTab(snapshot);
-  const onlyWelcome =
-    snapshot.tabs.length === 1 &&
-    activeTab.panes.size === 1 &&
-    activeTab.panes.get(activeTab.focusedPaneId)?.target.kind === "welcome";
-  if (onlyWelcome) return applyOpenTarget(snapshot, target, generateId);
-  return applyOpenTarget(applyCreateTab(snapshot, generateId), target, generateId);
+  return applyOpenTarget(snapshot, target, generateId);
 }
 
 export function applySplitFocused(

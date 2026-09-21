@@ -61,7 +61,7 @@ it("restores resized columns after switching and restart without resurrecting cl
   store.getState().setLayoutMode("bsp");
   expect(getActiveTab(store.getState()).layout).toEqual(bsp);
   store.getState().closeView(b);
-  store.getState().openTarget(agent("c"));
+  store.getState().splitFocused(agent("c"), "down");
   const c = getActiveTab(store.getState()).focusedPaneId;
   store.getState().setLayoutMode("scrolling");
   const restored = deserializeWorkbenchSnapshot(serializeWorkbenchSnapshot(store.getState()))!;

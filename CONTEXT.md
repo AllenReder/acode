@@ -268,6 +268,9 @@ _Avoid_: Terminal text, Preformatted output, Agent timeline
   Session View does not own or embed a Terminal Session.
 - A View may present a Session or Workspace without owning its work lifecycle.
 - Multiple Views may reference the same Session.
+- Opening an unopened Session or draft from the Sidebar opens it as the sole View in a new Tab (or replaces an active Welcome Tab), rather than adding a Pane to the current Tab.
+- Activating a Session that already has an opened Session View focuses that existing View and activates its Tab.
+- Splitting within an active Tab is explicit through keyboard modifiers or drag-and-drop.
 - Runtime and provider implementation details must not define ACode domain
   identity.
 - Provider-native lifecycle commands may implement ACode Session operations,

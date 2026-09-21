@@ -128,9 +128,15 @@ describe("applyCloseTab", () => {
     const ids = makeIds();
     let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
     const firstTabId = snap.activeTabId;
-    snap = applyCreateTab(snap, ids);
-    snap = applyOpenTarget(snap, agent(AGENT_X), ids);
-    const secondTabId = snap.activeTabId;
+    const firstPaneId = getActiveTab(snap).focusedPaneId;
+    const duplicate = applyDuplicateToNewTab(
+      snap,
+      { kind: "pane", tabId: firstTabId, paneId: firstPaneId },
+      1,
+      ids,
+    )!;
+    snap = duplicate.snapshot;
+    const secondTabId = duplicate.tabId;
 
     snap = applyCloseTab(snap, secondTabId);
 
@@ -213,18 +219,7 @@ describe("applyOpenTarget", () => {
     );
   });
 
-  it("replaces the focused pane's target when no pane shares the target", () => {
-    const ids = makeIds();
-    let snap = emptyWorkbenchSnapshot(ids);
-    snap = applyOpenTarget(snap, agent(AGENT_X), ids);
-    const focusBefore = getActiveTab(snap).focusedPaneId;
-    snap = applyOpenTarget(snap, terminal("term-1"), ids);
-    expect(getActiveTab(snap).panes.size).toBe(2);
-    expect(getActiveTab(snap).panes.get(focusBefore)?.target).toEqual(agent(AGENT_X));
-    expect(getActiveTab(snap).focusedPaneId).not.toBe(focusBefore);
-  });
-
-  it("focuses the existing pane when the target is already open", () => {
+  it("focuses the existing pane when the target is already open in the active Tab", () => {
     const ids = makeIds();
     let snap = emptyWorkbenchSnapshot(ids);
     snap = applyOpenTarget(snap, agent(AGENT_X), ids);
@@ -235,20 +230,98 @@ describe("applyOpenTarget", () => {
     snap = applyOpenTarget(snap, agent(AGENT_X), ids);
     expect(getActiveTab(snap).focusedPaneId).toBe(firstFocus);
     expect(getActiveTab(snap).panes.size).toBe(2);
+    expect(snap.tabs).toHaveLength(1);
   });
 
-  it("adds a right-side pane for a second distinct target while preserving the first", () => {
+  it("switches to the existing Tab and focuses the pane when the target is open in an inactive Tab", () => {
     const ids = makeIds();
     let snap = emptyWorkbenchSnapshot(ids);
     snap = applyOpenTarget(snap, agent(AGENT_X), ids);
-    const firstPaneId = getActiveTab(snap).focusedPaneId;
-    snap = applyOpenTarget(snap, agent(AGENT_Y), ids);
-    const secondPaneId = getActiveTab(snap).focusedPaneId;
+    const tab1Id = snap.activeTabId;
+    const tab1PaneId = getActiveTab(snap).focusedPaneId;
 
-    expect(getActiveTab(snap).panes.size).toBe(2);
-    expect(getActiveTab(snap).panes.get(firstPaneId)?.target).toEqual(agent(AGENT_X));
-    expect(getActiveTab(snap).panes.get(secondPaneId)?.target).toEqual(agent(AGENT_Y));
-    expect(getActiveTab(snap).layout).toMatchObject({ type: "split", dir: "right" });
+    snap = applyCreateTab(snap, ids);
+    snap = applyOpenTarget(snap, terminal("term-1"), ids);
+    expect(snap.activeTabId).not.toBe(tab1Id);
+
+    snap = applyOpenTarget(snap, agent(AGENT_X), ids);
+    expect(snap.activeTabId).toBe(tab1Id);
+    expect(getActiveTab(snap).focusedPaneId).toBe(tab1PaneId);
+    expect(snap.tabs).toHaveLength(2);
+  });
+
+  it("switches to the leftmost Tab when the target is present in multiple inactive Tabs", () => {
+    const ids = makeIds();
+    let snap = emptyWorkbenchSnapshot(ids);
+    snap = applyOpenTarget(snap, agent(AGENT_X), ids);
+    const tab1Id = snap.activeTabId;
+    const tab1PaneId = getActiveTab(snap).focusedPaneId;
+
+    snap = applyCreateTab(snap, ids);
+    snap = applyOpenTarget(snap, terminal("term-1"), ids);
+
+    snap = applyDuplicateToNewTab(
+      snap,
+      { kind: "pane", tabId: tab1Id, paneId: tab1PaneId },
+      2,
+      ids,
+    )!.snapshot;
+    const tab3Id = snap.activeTabId;
+
+    snap = applyActivateTab(snap, snap.tabs[1]!.id);
+    expect(snap.activeTabId).not.toBe(tab1Id);
+    expect(snap.activeTabId).not.toBe(tab3Id);
+
+    snap = applyOpenTarget(snap, agent(AGENT_X), ids);
+    expect(snap.activeTabId).toBe(tab1Id);
+    expect(getActiveTab(snap).focusedPaneId).toBe(tab1PaneId);
+  });
+
+  it("opens an unopened target in a new Tab next to the active Tab when active Tab has work", () => {
+    const ids = makeIds();
+    let snap = emptyWorkbenchSnapshot(ids);
+    snap = applyOpenTarget(snap, agent(AGENT_X), ids);
+    const tab1Id = snap.activeTabId;
+    const tab1PaneId = getActiveTab(snap).focusedPaneId;
+
+    snap = applyCreateTab(snap, ids);
+    snap = applyOpenTarget(snap, terminal("term-1"), ids);
+    const tab2Id = snap.activeTabId;
+
+    snap = applyActivateTab(snap, tab1Id);
+
+    snap = applyOpenTarget(snap, agent(AGENT_Y), ids);
+    expect(snap.tabs).toHaveLength(3);
+    expect(snap.tabs[0]?.id).toBe(tab1Id);
+    expect(snap.tabs[1]?.id).toBe(snap.activeTabId);
+    expect(snap.tabs[2]?.id).toBe(tab2Id);
+    expect(getActiveTab(snap).panes.size).toBe(1);
+    expect(getActiveTab(snap).panes.get(getActiveTab(snap).focusedPaneId)?.target).toEqual(
+      agent(AGENT_Y),
+    );
+    expect(snap.tabs[0]!.panes.size).toBe(1);
+    expect(snap.tabs[0]!.panes.get(tab1PaneId)?.target).toEqual(agent(AGENT_X));
+  });
+
+  it("replaces the active Tab in-place if it is an empty Welcome Tab among multiple Tabs", () => {
+    const ids = makeIds();
+    let snap = emptyWorkbenchSnapshot(ids);
+    snap = applyOpenTarget(snap, agent(AGENT_X), ids);
+
+    snap = applyCreateTab(snap, ids);
+    const tab2Id = snap.activeTabId;
+    expect(snap.tabs).toHaveLength(2);
+    expect(getActiveTab(snap).panes.get(getActiveTab(snap).focusedPaneId)?.target.kind).toBe(
+      "welcome",
+    );
+
+    snap = applyOpenTarget(snap, terminal("term-1"), ids);
+    expect(snap.tabs).toHaveLength(2);
+    expect(snap.activeTabId).toBe(tab2Id);
+    expect(getActiveTab(snap).panes.size).toBe(1);
+    expect(getActiveTab(snap).panes.get(getActiveTab(snap).focusedPaneId)?.target).toEqual(
+      terminal("term-1"),
+    );
   });
 
   it("focuses the existing New Agent Session draft instead of duplicating it in another Tab", () => {
@@ -448,8 +521,13 @@ it("keeps Session Views and closeView local to each Tab", () => {
   const ids = makeIds();
   let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
   const firstTab = getActiveTab(snap);
-  snap = applyCreateTab(snap, ids);
-  snap = applyOpenTarget(snap, agent(AGENT_X), ids);
+  const duplicate = applyDuplicateToNewTab(
+    snap,
+    { kind: "pane", tabId: firstTab.id, paneId: firstTab.focusedPaneId },
+    1,
+    ids,
+  )!;
+  snap = duplicate.snapshot;
   const secondTab = getActiveTab(snap);
   expect(snap.tabs).toHaveLength(2);
   expect(secondTab.panes.get(secondTab.focusedPaneId)?.id).not.toBe(
@@ -494,18 +572,30 @@ describe("applyRemoveSessionViews", () => {
     const ids = makeIds();
     // Tab 1: Agent X + Terminal 1
     let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const agentXPaneId = getActiveTab(snap).focusedPaneId;
     snap = applySplitFocused(snap, terminal("term-1"), "right", ids);
     const tab1Id = snap.activeTabId;
 
     // Tab 2: Agent X + Agent Y
-    snap = applyCreateTab(snap, ids);
-    snap = applyOpenTarget(snap, agent(AGENT_X), ids);
+    const duplicate = applyDuplicateToNewTab(
+      snap,
+      { kind: "pane", tabId: tab1Id, paneId: agentXPaneId },
+      1,
+      ids,
+    )!;
+    snap = duplicate.snapshot;
     snap = applySplitFocused(snap, agent(AGENT_Y), "right", ids);
     const tab2Id = snap.activeTabId;
 
     // Tab 3: Agent Y + Terminal 1 (unrelated to Agent X)
-    snap = applyCreateTab(snap, ids);
-    snap = applyOpenTarget(snap, agent(AGENT_Y), ids);
+    const agentYPaneId = getActiveTab(snap).focusedPaneId;
+    const duplicate3 = applyDuplicateToNewTab(
+      snap,
+      { kind: "pane", tabId: tab2Id, paneId: agentYPaneId },
+      2,
+      ids,
+    )!;
+    snap = duplicate3.snapshot;
     snap = applySplitFocused(snap, terminal("term-1"), "right", ids);
     const tab3Id = snap.activeTabId;
 
@@ -839,9 +929,14 @@ describe("applyViewDrop", () => {
     let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
     const sourceTabId = snap.activeTabId;
     const sourcePaneId = getActiveTab(snap).focusedPaneId;
-    snap = applyCreateTab(snap, ids);
-    const targetTabId = snap.activeTabId;
-    snap = applyOpenTarget(snap, agent(AGENT_X), ids);
+    const duplicate = applyDuplicateToNewTab(
+      snap,
+      { kind: "pane", tabId: sourceTabId, paneId: sourcePaneId },
+      1,
+      ids,
+    )!;
+    snap = duplicate.snapshot;
+    const targetTabId = duplicate.tabId;
 
     const result = applyViewDrop(
       snap,

@@ -114,10 +114,13 @@ it("mixes Agent and Terminal Views, splits down and reopens the same Terminal Se
   await act(() => row.props.onClick({ altKey: false }));
   tab = getActiveTab(useWorkbenchStore.getState());
   expect(tab.panes.get(tab.focusedPaneId)?.target).toEqual(target);
-  await act(() => useWorkbenchStore.getState().createTab());
-  await act(() => row.props.onClick({ altKey: false }));
-  expect(getActiveTab(useWorkbenchStore.getState()).panes.size).toBe(1);
   expect(useWorkbenchStore.getState().tabs.length).toBe(2);
+  await act(() => useWorkbenchStore.getState().createTab());
+  expect(useWorkbenchStore.getState().tabs.length).toBe(3);
+  await act(() => row.props.onClick({ altKey: false }));
+  expect(getActiveTab(useWorkbenchStore.getState()).id).toBe(tab.id);
+  expect(getActiveTab(useWorkbenchStore.getState()).panes.size).toBe(1);
+  expect(useWorkbenchStore.getState().tabs.length).toBe(3);
 });
 
 it("requests keyboard focus again when the already-focused Session row is clicked", async () => {
