@@ -25,3 +25,4 @@ Adopt the self-contained File View:
 3. **Sidebar entry**: Workspace context menu provides "Browse Files", opening or focusing the Workspace's File View.
 4. **Safe save**: `ProjectReadFileResult` returns `contentHash`; `ProjectWriteFileInput` verifies `expectedContentHash`. Conflict triggers explicit diff/overwrite/reload options without losing drafts.
 5. **Dirty guards**: Unsaved edits trigger modal confirmation on file switch and on Workbench Pane close.
+6. **Editor lifecycle & comment isolation**: In the standalone Workspace File View, code review comment annotations and gutter line utilities are disabled because there is no attached chat session target (`composerDraftTarget`). The editor instance is bound strictly to file identity and isolated from debounced auto-save coordinators, with in-memory draft tracking that does not re-render or invalidate the editor's live DOM and caret.

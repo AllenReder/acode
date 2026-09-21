@@ -14,6 +14,7 @@ interface FileSaveOptions {
   cwd: string;
   relativePath: string;
   onPendingChange: (relativePath: string, pending: boolean) => void;
+  enabled?: boolean | undefined;
 }
 
 export function useFileSaveCoordinator({
@@ -21,9 +22,16 @@ export function useFileSaveCoordinator({
   cwd,
   relativePath,
   onPendingChange,
+  enabled = true,
 }: FileSaveOptions): Pick<FileSaveCoordinator, "change"> {
   const writeFile = useAtomCommand(projectEnvironment.writeFile);
   const session = useMemo(() => {
+    if (!enabled) {
+      return {
+        change: (_contents: string) => {},
+        setup: () => () => {},
+      };
+    }
     const coordinatorRef = createRef<FileSaveCoordinator>();
     return {
       change: (contents: string) => coordinatorRef.current?.change(contents),
@@ -47,7 +55,7 @@ export function useFileSaveCoordinator({
         };
       },
     };
-  }, [cwd, environmentId, onPendingChange, relativePath, writeFile]);
+  }, [cwd, enabled, environmentId, onPendingChange, relativePath, writeFile]);
 
   // StrictMode replays effect setup. Retired file sessions stay inert, while the
   // replay gets a fresh coordinator instead of reusing a disposed one.

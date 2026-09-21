@@ -17,7 +17,7 @@ import { useFileSaveCoordinator } from "./useFileSaveCoordinator";
 
 const environmentId = EnvironmentId.make("save-lifecycle-audit");
 const onPendingChange = vi.fn();
-const defaultProps = {
+const defaultProps: Parameters<typeof useFileSaveCoordinator>[0] = {
   environmentId,
   cwd: "/workspace",
   relativePath: "file.txt",
@@ -170,5 +170,13 @@ describe("file-save React lifecycle", () => {
     await vi.runAllTimersAsync();
     expect(writeFile).toHaveBeenCalledTimes(1);
     expect(writeFile.mock.calls[0]![0].input.contents).toBe("current contents");
+  });
+
+  it("stays inert and does not schedule writes when enabled is false", async () => {
+    mount({ ...defaultProps, enabled: false });
+    changeHandler()("should not save");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(writeFile).not.toHaveBeenCalled();
+    expect(onPendingChange).not.toHaveBeenCalled();
   });
 });
