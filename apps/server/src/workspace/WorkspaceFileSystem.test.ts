@@ -69,12 +69,15 @@ it.layer(TestLayer, { excludeTestServices: true })("WorkspaceFileSystemLive", (i
           relativePath: "src/index.ts",
         });
 
-        expect(result).toEqual({
-          relativePath: "src/index.ts",
-          contents: "export const answer = 42;\n",
-          byteLength: 26,
-          truncated: false,
-        });
+        expect(result).toEqual(
+          expect.objectContaining({
+            relativePath: "src/index.ts",
+            contents: "export const answer = 42;\n",
+            byteLength: 26,
+            truncated: false,
+            contentHash: expect.any(String),
+          }),
+        );
       }),
     );
 
@@ -92,12 +95,15 @@ it.layer(TestLayer, { excludeTestServices: true })("WorkspaceFileSystemLive", (i
           relativePath: absolutePath,
         });
 
-        expect(result).toEqual({
-          relativePath: absolutePath,
-          contents: "# Report\n",
-          byteLength: 9,
-          truncated: false,
-        });
+        expect(result).toEqual(
+          expect.objectContaining({
+            relativePath: absolutePath,
+            contents: "# Report\n",
+            byteLength: 9,
+            truncated: false,
+            contentHash: expect.any(String),
+          }),
+        );
       }),
     );
 
@@ -264,7 +270,12 @@ it.layer(TestLayer, { excludeTestServices: true })("WorkspaceFileSystemLive", (i
           .readFileString(path.join(cwd, "plans/effect-rpc.md"))
           .pipe(Effect.orDie);
 
-        expect(result).toEqual({ relativePath: "plans/effect-rpc.md" });
+        expect(result).toEqual(
+          expect.objectContaining({
+            relativePath: "plans/effect-rpc.md",
+            contentHash: expect.any(String),
+          }),
+        );
         expect(saved).toBe("# Plan\n");
       }),
     );
@@ -335,6 +346,52 @@ it.layer(TestLayer, { excludeTestServices: true })("WorkspaceFileSystemLive", (i
           .stat(escapedPath)
           .pipe(Effect.orElseSucceed(() => null));
         expect(escapedStat).toBeNull();
+      }),
+    );
+
+    it.effect("readFile returns contentHash and writeFile verifies expectedContentHash", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        yield* writeTextFile(cwd, "src/hello.ts", "const x = 1;\n");
+
+        const readResult = yield* workspaceFileSystem.readFile({
+          cwd,
+          relativePath: "src/hello.ts",
+        });
+        expect(readResult.contentHash).toBeDefined();
+        expect(typeof readResult.contentHash).toBe("string");
+        const originalHash = readResult.contentHash!;
+
+        // Writing with mismatched expectedContentHash should fail with WorkspaceFileConflictError
+        const conflictError = yield* workspaceFileSystem
+          .writeFile({
+            cwd,
+            relativePath: "src/hello.ts",
+            contents: "const x = 2;\n",
+            expectedContentHash: "wrong-hash",
+          })
+          .pipe(Effect.flip);
+
+        expect(conflictError).toBeInstanceOf(WorkspaceFileSystem.WorkspaceFileConflictError);
+
+        // Writing with matching expectedContentHash should succeed
+        const writeResult = yield* workspaceFileSystem.writeFile({
+          cwd,
+          relativePath: "src/hello.ts",
+          contents: "const x = 2;\n",
+          expectedContentHash: originalHash,
+        });
+        expect(writeResult.contentHash).toBeDefined();
+        expect(writeResult.contentHash).not.toBe(originalHash);
+
+        // Reading back verifies new content and hash
+        const readBack = yield* workspaceFileSystem.readFile({
+          cwd,
+          relativePath: "src/hello.ts",
+        });
+        expect(readBack.contents).toBe("const x = 2;\n");
+        expect(readBack.contentHash).toBe(writeResult.contentHash);
       }),
     );
   });

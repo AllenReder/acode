@@ -143,10 +143,7 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
     return () => viewport.removeEventListener("wheel", wheel, true);
   }, [scrolling]);
 
-  const layout = useMemo(
-    () => computePaneLayoutRects(tab, size, paneGap),
-    [tab, size, paneGap],
-  );
+  const layout = useMemo(() => computePaneLayoutRects(tab, size, paneGap), [tab, size, paneGap]);
 
   const previewLayout = useMemo(
     () => (previewTab ? computePaneLayoutRects(previewTab, size, paneGap) : undefined),
@@ -275,6 +272,7 @@ function Pane({ snapshot, projects, paneId, focused }: PaneProps) {
   const setFocused = useWorkbenchStore((s) => s.setFocused);
   const focusRequestId = useWorkbenchStore((s) => s.focusRequestId);
   const closeView = useWorkbenchStore((s) => s.closeView);
+  const requestClosePane = useWorkbenchStore((s) => s.requestClosePane);
   const duplicateToNewTab = useWorkbenchStore((s) => s.duplicateToNewTab);
   const activeTab = getActiveTab(snapshot);
   const view = activeTab.panes.get(paneId);
@@ -347,7 +345,7 @@ function Pane({ snapshot, projects, paneId, focused }: PaneProps) {
         onDragStart={drag.onPointerDown}
         onDuplicate={onDuplicate}
         onOpenMenu={openPaneMenu}
-        onClose={() => closeView(paneId)}
+        onClose={() => void requestClosePane(paneId)}
       />
       <div ref={contentRef} className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">

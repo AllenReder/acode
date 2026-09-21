@@ -89,6 +89,22 @@ describe("resolveTargetTitle", () => {
     expect(resolveTargetTitle(target, projects)).toBe(expected);
   });
 
+  it("resolves titles and breadcrumbs for workspace fileView", () => {
+    const fileViewTarget = {
+      kind: "workspace",
+      definitionId: "fileView",
+      environmentId,
+      workspaceId,
+    } satisfies ViewTarget;
+
+    expect(resolveTargetTitle(fileViewTarget, projects)).toBe("Main checkout: Files");
+    expect(resolveTargetBreadcrumbs(fileViewTarget, projects)).toEqual([
+      "ACode",
+      "Main checkout",
+      "Files",
+    ]);
+  });
+
   it("uses a stable fallback when the target is offline or not present", () => {
     expect(
       resolveTargetTitle(

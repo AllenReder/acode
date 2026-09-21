@@ -34,6 +34,7 @@ interface FileBreadcrumbsProps {
   readonly projectName: string;
   readonly relativePath: string;
   readonly workspaceMutationId: string | null;
+  readonly isDirty?: boolean;
 }
 
 function pathLabel(path: string, projectName: string): string {
@@ -77,6 +78,7 @@ function BreadcrumbMenuContent(props: {
   readonly projectName: string;
   readonly rootPath: string;
   readonly workspaceMutationId: string | null;
+  readonly isDirty?: boolean;
 }) {
   const entriesQuery = useProjectEntriesQuery(props.environmentId, props.cwd, props.directoryPath);
   useWorkspaceMutationRefresh({
@@ -266,8 +268,21 @@ export function FileBreadcrumbs(props: FileBreadcrumbsProps) {
         <ChevronRightIcon className="mx-1 size-3.5 shrink-0 text-muted-foreground/60" />
       ) : null}
       {crumb.kind === "file" ? (
-        <span aria-current="page">
+        <span aria-current="page" className="inline-flex items-center gap-1.5">
           <BreadcrumbLabel current label={crumb.label} pathLabel={crumb.path} />
+          {props.isDirty ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span
+                    data-testid="file-dirty-indicator"
+                    className="size-1.5 shrink-0 rounded-full bg-primary"
+                  />
+                }
+              />
+              <TooltipPopup side="top">Unsaved changes</TooltipPopup>
+            </Tooltip>
+          ) : null}
         </span>
       ) : hostPath ? (
         <BreadcrumbLabel label={crumb.label} pathLabel={crumb.path} />

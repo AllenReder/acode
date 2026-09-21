@@ -2707,11 +2707,13 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
           assert.isDefined(deepseek);
           assert.strictEqual(deepseek?.name, "DeepSeek V4.1 Flash");
           assert.strictEqual(deepseek?.isCustom, true);
-          const effortDesc = deepseek?.capabilities?.optionDescriptors.find(
+          const effortDesc = deepseek?.capabilities?.optionDescriptors?.find(
             (d) => d.id === "effort",
           );
           assert.isDefined(effortDesc);
-          assert.deepStrictEqual(effortDesc?.options.map((o) => o.id), ["low", "high"]);
+          if (effortDesc && effortDesc.type === "select") {
+            assert.deepStrictEqual(effortDesc.options.map((o) => o.id), ["low", "high"]);
+          }
         }).pipe(
           Effect.provide(
             mockSpawnerLayer((args) => {

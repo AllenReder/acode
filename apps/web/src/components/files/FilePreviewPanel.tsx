@@ -21,7 +21,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { mediaFileReference } from "@t3tools/client-runtime/media-reference";
-import { Code2, Eye, FolderTree, Globe2, Table2, WrapTextIcon } from "lucide-react";
+import { Code2, Eye, FolderTree, Globe2, Save, Table2, WrapTextIcon } from "lucide-react";
 import * as Schema from "effect/Schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -57,6 +57,17 @@ import { DelimitedTablePreview } from "./DelimitedTablePreview";
 import FileBrowserPanel from "./FileBrowserPanel";
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
 import { FileMarkdownPreview } from "./FileMarkdownPreview";
+import { Button } from "~/components/ui/button";
+import {
+  Dialog,
+  DialogPopup,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "~/components/ui/dialog";
+import { useWorkbenchStore } from "~/workbench/workbenchStore";
+import { projectEnvironment } from "~/state/projects";
 import {
   type FileCommentAnnotationEntry,
   type FileCommentAnnotationGroup,
@@ -96,19 +107,23 @@ interface FilePreviewPanelProps {
   cwd: string;
   projectName: string;
   relativePath: string | null;
-  attachment?: ChatFileAttachment;
-  threadRef: ScopedThreadRef;
-  composerDraftTarget: ScopedThreadRef | DraftId;
-  keybindings: ResolvedKeybindingsConfig;
-  availableEditors: ReadonlyArray<EditorId>;
-  revealLine: number | null;
-  revealRequestId: number;
-  onOpenFile: (relativePath: string) => void;
-  onPendingChange: (relativePath: string, pending: boolean) => void;
-  selectedFilePending: boolean;
+  attachment?: ChatFileAttachment | undefined;
+  threadRef?: ScopedThreadRef | undefined;
+  composerDraftTarget?: ScopedThreadRef | DraftId | undefined;
+  keybindings?: ResolvedKeybindingsConfig | undefined;
+  availableEditors?: ReadonlyArray<EditorId> | undefined;
+  revealLine?: number | null | undefined;
+  revealRequestId?: number | undefined;
+  onOpenFile?: ((relativePath: string) => void) | undefined;
+  onPendingChange?: ((relativePath: string, pending: boolean) => void) | undefined;
+  selectedFilePending?: boolean | undefined;
   workspaceMutationId: string | null;
+  explicitSave?: boolean | undefined;
+  paneId?: string | undefined;
 }
 
+const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
+const EMPTY_EDITORS: ReadonlyArray<EditorId> = [];
 const FILE_EXPLORER_STORAGE_KEY = "t3code.fileExplorerOpen";
 const RENDER_MARKDOWN_STORAGE_KEY = "t3code.renderMarkdown";
 const RENDER_BROWSER_FILE_STORAGE_KEY = "t3code.renderBrowserFile";
@@ -547,13 +562,15 @@ interface EditableFileSurfaceProps {
   environmentId: EnvironmentId;
   cwd: string;
   relativePath: string;
-  composerDraftTarget: ScopedThreadRef | DraftId;
+  composerDraftTarget?: ScopedThreadRef | DraftId | undefined;
   contents: string;
   resolvedTheme: "light" | "dark";
   revealRequestId: number;
   wordWrap: boolean;
   onPostRender: FilePostRender;
-  onPendingChange: (relativePath: string, pending: boolean) => void;
+  onPendingChange?: ((relativePath: string, pending: boolean) => void) | undefined;
+  explicitSave?: boolean | undefined;
+  onDraftChange?: ((contents: string) => void) | undefined;
 }
 
 interface FileSelectionOverride {
@@ -572,6 +589,8 @@ function EditableFileSurface({
   wordWrap,
   onPostRender,
   onPendingChange,
+  explicitSave = false,
+  onDraftChange,
 }: EditableFileSurfaceProps) {
   const addReviewComment = useComposerDraftStore((store) => store.addReviewComment);
   const removeReviewComment = useComposerDraftStore((store) => store.removeReviewComment);
@@ -591,7 +610,7 @@ function EditableFileSurface({
     environmentId,
     cwd,
     relativePath,
-    onPendingChange,
+    onPendingChange: onPendingChange ?? (() => {}),
   });
   const editor = useMemo(
     () =>
@@ -599,9 +618,13 @@ function EditableFileSurface({
         persistState: true,
         persistStateStorage: "inMemory",
         onChange: (file, nextLineAnnotations) => {
-          setProjectFileQueryData(environmentId, cwd, relativePath, file.contents);
-          saveCoordinator.change(file.contents);
-          if (nextLineAnnotations) {
+          if (explicitSave) {
+            onDraftChange?.(file.contents);
+          } else {
+            setProjectFileQueryData(environmentId, cwd, relativePath, file.contents);
+            saveCoordinator.change(file.contents);
+          }
+          if (nextLineAnnotations && composerDraftTarget) {
             const remapped = remapFileCommentAnnotations(
               nextLineAnnotations as FileCommentLineAnnotation[],
             );
@@ -638,7 +661,9 @@ function EditableFileSurface({
   const removeAnnotationEntry = useCallback(
     (entryId: string) => {
       setSelectedRange(null);
-      removeReviewComment(composerDraftTarget, entryId);
+      if (composerDraftTarget) {
+        removeReviewComment(composerDraftTarget, entryId);
+      }
       setLineAnnotations((current) => {
         return current.flatMap((annotation) => {
           const entries = annotation.metadata.entries.filter((entry) => entry.id !== entryId);
@@ -655,7 +680,7 @@ function EditableFileSurface({
       const entry = lineAnnotations
         .flatMap((annotation) => annotation.metadata.entries)
         .find((candidate) => candidate.id === entryId);
-      if (entry) {
+      if (entry && composerDraftTarget) {
         addReviewComment(
           composerDraftTarget,
           buildFileReviewComment({
@@ -860,7 +885,7 @@ function RenderedMarkdownSurface({
     environmentId,
     cwd,
     relativePath,
-    onPendingChange,
+    onPendingChange: onPendingChange ?? (() => {}),
   });
 
   return (
@@ -911,15 +936,31 @@ export default function FilePreviewPanel({
   attachment,
   threadRef,
   composerDraftTarget,
-  keybindings,
-  availableEditors,
-  revealLine,
-  revealRequestId,
+  keybindings = EMPTY_KEYBINDINGS,
+  availableEditors = EMPTY_EDITORS,
+  revealLine = null,
+  revealRequestId = 0,
   onOpenFile,
   onPendingChange,
-  selectedFilePending,
+  selectedFilePending = false,
   workspaceMutationId,
+  explicitSave = false,
+  paneId,
 }: FilePreviewPanelProps) {
+  const effectiveThreadRef = useMemo<ScopedThreadRef>(
+    () => threadRef ?? ({ environmentId, threadId: "workspace-files" as any } as ScopedThreadRef),
+    [environmentId, threadRef],
+  );
+  const [draftContents, setDraftContents] = useState<string | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [conflict, setConflict] = useState<{
+    readonly actualHash?: string | undefined;
+    readonly diskContents?: string | undefined;
+  } | null>(null);
+  const [pendingSwitchPath, setPendingSwitchPath] = useState<string | null>(null);
+  const [showSwitchModal, setShowSwitchModal] = useState(false);
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const closeResolverRef = useRef<((allowed: boolean) => void) | null>(null);
   const { resolvedTheme } = useTheme();
   const wordWrap = useClientSettings((settings) => settings.wordWrap);
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -1054,7 +1095,7 @@ export default function FilePreviewPanel({
     if (!absolutePath || !environmentHttpBaseUrl) return;
     void (async () => {
       const result = await openFileInPreview({
-        threadRef,
+        threadRef: effectiveThreadRef,
         filePath: absolutePath,
         workspaceRoot: cwd,
         httpBaseUrl: environmentHttpBaseUrl,
@@ -1075,6 +1116,115 @@ export default function FilePreviewPanel({
     })();
   }, [absolutePath, createAssetUrl, cwd, environmentHttpBaseUrl, openPreview, threadRef]);
 
+  useEffect(() => {
+    setDraftContents(null);
+    setIsDirty(false);
+    setConflict(null);
+  }, [relativePath]);
+
+  useEffect(() => {
+    if (!isDirty && file.data) {
+      setDraftContents(file.data.contents);
+    }
+  }, [file.data, isDirty]);
+
+  const writeFileCommand = useAtomCommand(projectEnvironment.writeFile);
+  const readFileCommand = useAtomQueryRunner(projectEnvironment.readFile, { reportFailure: false });
+
+  const handleSave = useCallback(
+    async (force = false): Promise<boolean> => {
+      if (!relativePath || draftContents === null) return true;
+      const result = await writeFileCommand({
+        environmentId,
+        input: {
+          cwd,
+          relativePath,
+          contents: draftContents,
+          expectedContentHash: force ? undefined : (file.data?.contentHash ?? undefined),
+        },
+      });
+
+      if (result._tag === "Success") {
+        setIsDirty(false);
+        setConflict(null);
+        file.refresh();
+        toastManager.add(
+          stackedThreadToast({
+            type: "success",
+            title: "File saved",
+            description: relativePath,
+          }),
+        );
+        return true;
+      }
+
+      const err = (result as any).error;
+      const isConflict =
+        err?.failure === "conflict" ||
+        err?._tag === "WorkspaceFileConflictError" ||
+        (err instanceof Error && err.message.includes("conflict"));
+
+      if (isConflict) {
+        const latest = await readFileCommand({
+          environmentId,
+          input: { cwd, relativePath },
+        });
+        setConflict({
+          diskContents: latest._tag === "Success" ? latest.value.contents : undefined,
+          actualHash: latest._tag === "Success" ? latest.value.contentHash : undefined,
+        });
+        return false;
+      }
+
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Save failed",
+          description: err instanceof Error ? err.message : "Failed to save file.",
+        }),
+      );
+      return false;
+    },
+    [cwd, draftContents, environmentId, file, readFileCommand, relativePath, writeFileCommand],
+  );
+
+  useEffect(() => {
+    if (!explicitSave) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        e.stopPropagation();
+        void handleSave();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [explicitSave, handleSave]);
+
+  useEffect(() => {
+    if (!paneId || !explicitSave) return;
+    return useWorkbenchStore.getState().registerCloseGuard(paneId, {
+      isDirty: () => isDirty,
+      confirmClose: () =>
+        new Promise<boolean>((resolve) => {
+          closeResolverRef.current = resolve;
+          setShowCloseModal(true);
+        }),
+    });
+  }, [paneId, explicitSave, isDirty]);
+
+  const handleOpenFileWithGuard = useCallback(
+    (path: string) => {
+      if (explicitSave && isDirty) {
+        setPendingSwitchPath(path);
+        setShowSwitchModal(true);
+      } else {
+        onOpenFile?.(path);
+      }
+    },
+    [explicitSave, isDirty, onOpenFile],
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       {relativePath && attachment === undefined ? (
@@ -1090,7 +1240,8 @@ export default function FilePreviewPanel({
               <FileBreadcrumbs
                 cwd={cwd}
                 environmentId={environmentId}
-                onOpenFile={onOpenFile}
+                onOpenFile={handleOpenFileWithGuard}
+                isDirty={isDirty}
                 projectName={projectName}
                 relativePath={relativePath}
                 workspaceMutationId={workspaceMutationId}
@@ -1131,6 +1282,17 @@ export default function FilePreviewPanel({
               )}
             </FileSurfaceAction>
           ) : null}
+          {explicitSave && relativePath && showsRawText ? (
+            <FileSurfaceAction
+              label={isDirty ? "Save file (Cmd+S)" : "Saved"}
+              pressed={isDirty}
+              onPress={() => void handleSave()}
+            >
+              <Save
+                className={cn("size-3.5", isDirty ? "text-primary" : "text-muted-foreground")}
+              />
+            </FileSurfaceAction>
+          ) : null}
           {showsRawText ? (
             <FileSurfaceAction
               label={wordWrap ? "Disable word wrap" : "Enable word wrap"}
@@ -1154,6 +1316,34 @@ export default function FilePreviewPanel({
               <FolderTree className="size-3.5" />
             </FileSurfaceAction>
           ) : null}
+        </div>
+      ) : null}
+      {conflict ? (
+        <div
+          role="alert"
+          data-testid="file-conflict-banner"
+          className="flex shrink-0 items-center justify-between border-b border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs text-destructive"
+        >
+          <span>Conflict: This file was modified externally on disk.</span>
+          <div className="flex items-center gap-2">
+            <Button size="xs" variant="destructive" onClick={() => void handleSave(true)}>
+              Overwrite
+            </Button>
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => {
+                if (conflict.diskContents !== undefined) {
+                  setDraftContents(conflict.diskContents);
+                }
+                setConflict(null);
+                setIsDirty(false);
+                file.refresh();
+              }}
+            >
+              Discard & Reload
+            </Button>
+          </div>
         </div>
       ) : null}
       {relativePath &&
@@ -1182,9 +1372,9 @@ export default function FilePreviewPanel({
             />
           ) : relativePath && isVideo && absolutePath ? (
             <WorkspaceVideoPreview
-              key={`${environmentId}:${threadRef.threadId}:${absolutePath}`}
+              key={`${environmentId}:${effectiveThreadRef.threadId}:${absolutePath}`}
               environmentId={environmentId}
-              threadRef={threadRef}
+              threadRef={effectiveThreadRef}
               absolutePath={absolutePath}
               workspaceRoot={cwd}
               name={relativePath}
@@ -1192,9 +1382,9 @@ export default function FilePreviewPanel({
             />
           ) : relativePath && isAudio && absolutePath ? (
             <WorkspaceAudioPreview
-              key={`${environmentId}:${threadRef.threadId}:${absolutePath}`}
+              key={`${environmentId}:${effectiveThreadRef.threadId}:${absolutePath}`}
               environmentId={environmentId}
-              threadRef={threadRef}
+              threadRef={effectiveThreadRef}
               absolutePath={absolutePath}
               name={relativePath}
               workspaceMutationId={workspaceMutationId}
@@ -1203,7 +1393,7 @@ export default function FilePreviewPanel({
             <WorkspaceImagePreview
               key={absolutePath}
               environmentId={environmentId}
-              threadRef={threadRef}
+              threadRef={effectiveThreadRef}
               absolutePath={absolutePath}
               workspaceRoot={cwd}
               alt={relativePath}
@@ -1213,7 +1403,7 @@ export default function FilePreviewPanel({
             <WorkspaceBrowserPreview
               key={absolutePath}
               environmentId={environmentId}
-              threadRef={threadRef}
+              threadRef={effectiveThreadRef}
               absolutePath={absolutePath}
               workspaceRoot={cwd}
               title={relativePath}
@@ -1237,7 +1427,7 @@ export default function FilePreviewPanel({
                 environmentId={environmentId}
                 cwd={cwd}
                 relativePath={relativePath}
-                threadRef={threadRef}
+                threadRef={effectiveThreadRef}
                 contents={file.data.contents}
                 readOnly={isHostFile}
                 onPendingChange={onPendingChange}
@@ -1264,12 +1454,17 @@ export default function FilePreviewPanel({
                   cwd={cwd}
                   relativePath={relativePath}
                   composerDraftTarget={composerDraftTarget}
-                  contents={file.data.contents}
+                  contents={draftContents ?? file.data.contents}
                   resolvedTheme={resolvedTheme}
                   revealRequestId={revealRequestId}
                   wordWrap={wordWrap}
                   onPostRender={onFilePostRender}
                   onPendingChange={onPendingChange}
+                  explicitSave={explicitSave}
+                  onDraftChange={(next) => {
+                    setDraftContents(next);
+                    setIsDirty(next !== file.data?.contents);
+                  }}
                 />
               </DiffWorkerPoolProvider>
             )
@@ -1291,7 +1486,7 @@ export default function FilePreviewPanel({
               projectName={projectName}
               selectedPath={relativePath}
               selectedPathRevealId={revealRequestId}
-              onOpenFile={onOpenFile}
+              onOpenFile={handleOpenFileWithGuard}
               workspaceMutationId={workspaceMutationId}
               {...(relativePath && !isMedia && !isPdf
                 ? { onRefreshSelectedFile: file.refresh }
@@ -1300,6 +1495,121 @@ export default function FilePreviewPanel({
           </aside>
         ) : null}
       </div>
+      {showSwitchModal ? (
+        <Dialog
+          open={showSwitchModal}
+          onOpenChange={(open) => {
+            if (!open) {
+              setShowSwitchModal(false);
+              setPendingSwitchPath(null);
+            }
+          }}
+        >
+          <DialogPopup showCloseButton={false} className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Unsaved Changes</DialogTitle>
+              <DialogDescription>
+                Do you want to save the changes you made to {relativePath} before switching?
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter variant="bare">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowSwitchModal(false);
+                  setPendingSwitchPath(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setIsDirty(false);
+                  setShowSwitchModal(false);
+                  if (pendingSwitchPath) onOpenFile?.(pendingSwitchPath);
+                  setPendingSwitchPath(null);
+                }}
+              >
+                Don't Save
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={async () => {
+                  const saved = await handleSave();
+                  if (saved) {
+                    setShowSwitchModal(false);
+                    if (pendingSwitchPath) onOpenFile?.(pendingSwitchPath);
+                    setPendingSwitchPath(null);
+                  }
+                }}
+              >
+                Save
+              </Button>
+            </DialogFooter>
+          </DialogPopup>
+        </Dialog>
+      ) : null}
+
+      {showCloseModal ? (
+        <Dialog
+          open={showCloseModal}
+          onOpenChange={(open) => {
+            if (!open) {
+              setShowCloseModal(false);
+              closeResolverRef.current?.(false);
+            }
+          }}
+        >
+          <DialogPopup showCloseButton={false} className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Unsaved Changes</DialogTitle>
+              <DialogDescription>
+                Do you want to save the changes you made to {relativePath} before closing?
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter variant="bare">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowCloseModal(false);
+                  closeResolverRef.current?.(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setIsDirty(false);
+                  setShowCloseModal(false);
+                  closeResolverRef.current?.(true);
+                }}
+              >
+                Don't Save
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={async () => {
+                  const saved = await handleSave();
+                  if (saved) {
+                    setShowCloseModal(false);
+                    closeResolverRef.current?.(true);
+                  }
+                }}
+              >
+                Save
+              </Button>
+            </DialogFooter>
+          </DialogPopup>
+        </Dialog>
+      ) : null}
     </div>
   );
 }

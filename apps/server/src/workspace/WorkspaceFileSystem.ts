@@ -10,6 +10,7 @@
  * @module WorkspaceFileSystem
  */
 import * as NodeFS from "node:fs";
+import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 
 import type {
@@ -29,6 +30,10 @@ import * as WorkspaceEntries from "./WorkspaceEntries.ts";
 import * as WorkspacePaths from "./WorkspacePaths.ts";
 
 const PROJECT_READ_FILE_MAX_BYTES = 1024 * 1024;
+
+function computeContentHash(bytes: Uint8Array | string): string {
+  return NodeCrypto.createHash("sha256").update(bytes).digest("hex");
+}
 
 export class WorkspaceFileSystemOperationError extends Schema.TaggedError<WorkspaceFileSystemOperationError>()(
   "WorkspaceFileSystemOperationError",
@@ -95,7 +100,23 @@ export class WorkspaceBinaryFileError extends Schema.TaggedError<WorkspaceBinary
   }
 }
 
+export class WorkspaceFileConflictError extends Schema.TaggedError<WorkspaceFileConflictError>()(
+  "WorkspaceFileConflictError",
+  {
+    workspaceRoot: Schema.String,
+    relativePath: Schema.String,
+    resolvedPath: Schema.String,
+    expectedContentHash: Schema.optional(Schema.String),
+    actualContentHash: Schema.optional(Schema.String),
+  },
+) {
+  override get message(): string {
+    return `Workspace file '${this.relativePath}' in '${this.workspaceRoot}' has been modified externally (conflict).`;
+  }
+}
+
 export const WorkspaceFileSystemError = Schema.Union([
+  WorkspaceFileConflictError,
   WorkspaceFileSystemOperationError,
   WorkspaceFilePathEscapeError,
   WorkspacePathNotFileError,
@@ -279,11 +300,13 @@ export const make = Effect.gen(function* () {
             });
           }
 
+          const contentHash = computeContentHash(fileBytes);
           return {
             relativePath: target.relativePath,
             contents: new TextDecoder("utf-8").decode(fileBytes),
             byteLength: stat.size,
             truncated: stat.size > PROJECT_READ_FILE_MAX_BYTES,
+            contentHash,
           };
         }),
       (handle) =>
@@ -309,6 +332,44 @@ export const make = Effect.gen(function* () {
       workspaceRoot: input.cwd,
       relativePath: input.relativePath,
     });
+
+    if (input.expectedContentHash !== undefined) {
+      const exists = yield* fileSystem
+        .exists(target.absolutePath)
+        .pipe(Effect.orElseSucceed(() => false));
+      if (!exists) {
+        return yield* new WorkspaceFileConflictError({
+          workspaceRoot: input.cwd,
+          relativePath: input.relativePath,
+          resolvedPath: target.absolutePath,
+          expectedContentHash: input.expectedContentHash,
+          actualContentHash: undefined,
+        });
+      }
+      const currentBytes = yield* fileSystem.readFile(target.absolutePath).pipe(
+        Effect.mapError(
+          (cause) =>
+            new WorkspaceFileSystemOperationError({
+              workspaceRoot: input.cwd,
+              relativePath: input.relativePath,
+              resolvedPath: target.absolutePath,
+              operationPath: target.absolutePath,
+              operation: "read",
+              cause,
+            }),
+        ),
+      );
+      const currentHash = computeContentHash(currentBytes);
+      if (currentHash !== input.expectedContentHash) {
+        return yield* new WorkspaceFileConflictError({
+          workspaceRoot: input.cwd,
+          relativePath: input.relativePath,
+          resolvedPath: target.absolutePath,
+          expectedContentHash: input.expectedContentHash,
+          actualContentHash: currentHash,
+        });
+      }
+    }
 
     yield* fileSystem.makeDirectory(path.dirname(target.absolutePath), { recursive: true }).pipe(
       Effect.mapError(
@@ -337,7 +398,8 @@ export const make = Effect.gen(function* () {
       ),
     );
     yield* workspaceEntries.refresh(input.cwd);
-    return { relativePath: target.relativePath };
+    const newHash = computeContentHash(new TextEncoder().encode(input.contents));
+    return { relativePath: target.relativePath, contentHash: newHash };
   });
 
   return WorkspaceFileSystem.of({ readFile, writeFile });

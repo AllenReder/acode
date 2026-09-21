@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   ProjectReadFileError,
+  ProjectWriteFileInput,
   ProjectSearchContentsError,
   ProjectSearchContentsInput,
   ProjectSearchEntriesError,
@@ -105,5 +106,30 @@ describe("project RPC errors", () => {
     expect(writeError.message).toBe("Legacy project write failure.");
     expect(writeError.relativePath).toBeUndefined();
     expect(writeError.failure).toBeUndefined();
+  });
+});
+
+describe("project write with conflict", () => {
+  it("supports expectedContentHash on write input and conflict failure on error", () => {
+    const decodeWriteInput = Schema.decodeUnknownSync(ProjectWriteFileInput);
+    const input = decodeWriteInput({
+      cwd: "/workspace",
+      relativePath: "src/file.ts",
+      contents: "hello",
+      expectedContentHash: "hash-123",
+    });
+    expect(input.expectedContentHash).toBe("hash-123");
+
+    const writeError = new ProjectWriteFileError({
+      cwd: "/workspace",
+      relativePath: "src/file.ts",
+      failure: "conflict",
+      expectedContentHash: "hash-123",
+      actualContentHash: "hash-456",
+    });
+    expect(writeError.failure).toBe("conflict");
+    expect(writeError.expectedContentHash).toBe("hash-123");
+    expect(writeError.actualContentHash).toBe("hash-456");
+    expect(writeError.message).toContain("conflict");
   });
 });
