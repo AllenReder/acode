@@ -199,7 +199,8 @@ describe("WorkspaceDialogs", () => {
       expect(branchInput.props.value).toBe("");
 
       const baseRefInput = renderer.root.findByProps({ "data-testid": "new-workspace-base-ref-input" });
-      expect(baseRefInput.props.value).toBe("HEAD");
+      expect(baseRefInput.props.value).toBe("");
+      expect(baseRefInput.props.placeholder).toBe("HEAD");
     });
 
     it("opens refs dropdown on click and filters refs by input", async () => {
@@ -271,7 +272,6 @@ describe("WorkspaceDialogs", () => {
 
       expect(onCreate).toHaveBeenCalledWith({
         newBranch: "feat-test",
-        baseRef: "HEAD",
       });
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });

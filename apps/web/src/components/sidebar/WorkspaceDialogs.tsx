@@ -278,7 +278,7 @@ export function NewWorkspaceDialog({
   onCreate,
 }: NewWorkspaceDialogProps) {
   const [newBranch, setNewBranch] = useState("");
-  const [baseRef, setBaseRef] = useState("HEAD");
+  const [baseRef, setBaseRef] = useState("");
   const [path, setPath] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -322,7 +322,7 @@ export function NewWorkspaceDialog({
   useEffect(() => {
     if (!open) return;
     setNewBranch("");
-    setBaseRef("HEAD");
+    setBaseRef("");
     setPath("");
     setPending(false);
     setError(null);
@@ -440,7 +440,7 @@ export function NewWorkspaceDialog({
               </p>
             </div>
 
-            <div className="relative space-y-1.5" ref={baseRefContainerRef}>
+            <div className="space-y-1.5" ref={baseRefContainerRef}>
               <Label htmlFor="new-workspace-base-ref">Base Ref</Label>
               <div className="relative">
                 <Input
@@ -469,16 +469,12 @@ export function NewWorkspaceDialog({
                 >
                   <ChevronDownIcon className="size-3.5 opacity-60" />
                 </button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Branch, tag, or commit the new worktree starts from (defaults to HEAD). Click to select from repository refs.
-              </p>
 
-              {isBaseRefDropdownOpen && filteredRefs.length > 0 ? (
-                <div
-                  className="absolute left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
-                  data-testid="new-workspace-base-ref-dropdown"
-                >
+                {isBaseRefDropdownOpen && filteredRefs.length > 0 ? (
+                  <div
+                    className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+                    data-testid="new-workspace-base-ref-dropdown"
+                  >
                   {filteredRefs.map((refItem, index) => {
                     const isHighlighted = index === highlightedIndex;
                     const isSelected = baseRef.trim() === refItem;
@@ -512,8 +508,12 @@ export function NewWorkspaceDialog({
                       </button>
                     );
                   })}
-                </div>
-              ) : null}
+                  </div>
+                ) : null}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Branch, tag, or commit the new worktree starts from (defaults to HEAD). Click to select from repository refs.
+              </p>
             </div>
 
             <div className="space-y-1.5">
