@@ -2285,3 +2285,7 @@ html[data-workbench-resizing] .workbench-pane-preview {
     transition: none;
   }
 }
+
+html[data-sidebar-resizing] [data-sidebar-action-control] {
+  transition: none !important;
+}

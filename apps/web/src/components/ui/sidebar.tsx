@@ -388,9 +388,15 @@ function SidebarRail({
       sidebarContainer.getBoundingClientRect().width,
       resolvedResizable,
     );
+    if (typeof document !== "undefined") {
+      document.documentElement.dataset.sidebarResizing = "true";
+    }
     const transitionTargets = [
       sidebarRoot.querySelector<HTMLElement>("[data-slot='sidebar-gap']"),
       sidebarContainer,
+      typeof document !== "undefined"
+        ? document.querySelector<HTMLElement>("[data-sidebar-action-control]")
+        : null,
     ].filter((element): element is HTMLElement => element !== null);
     transitionTargets.forEach((element) => {
       element.style.setProperty("transition-duration", "0ms");
@@ -432,6 +438,9 @@ function SidebarRail({
         options?.onResize?.(finalWidth);
       },
       cleanup() {
+        if (typeof document !== "undefined") {
+          delete document.documentElement.dataset.sidebarResizing;
+        }
         transitionTargets.forEach((element) => {
           element.style.removeProperty("transition-duration");
         });
