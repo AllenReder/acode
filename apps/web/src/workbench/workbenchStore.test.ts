@@ -127,3 +127,29 @@ it("drops legacy Workspace Views when restoring a Workbench layout", () => {
   expect(tab.panes.size).toBe(1);
   expect(tab.panes.get(tab.focusedPaneId)?.target).toEqual({ kind: "welcome" });
 });
+
+it("intercepts pane closure with registered close guard when dirty", async () => {
+  const ids = makeIds();
+  const initial = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids);
+  const tab = getActiveTab(initial);
+  const paneId = tab.focusedPaneId;
+  const store = createWorkbenchStore({ initialSnapshot: initial, generateId: ids });
+
+  let isDirty = true;
+  let confirmResult = false;
+  const unregister = store.getState().registerCloseGuard(paneId, {
+    isDirty: () => isDirty,
+    confirmClose: async () => confirmResult,
+  });
+
+  // When dirty and user cancels confirmation -> pane is NOT closed
+  const closed1 = await store.getState().requestClosePane(paneId);
+  expect(closed1).toBe(false);
+  expect(getActiveTab(store.getState()).panes.has(paneId)).toBe(true);
+
+  // When dirty and user confirms -> pane IS closed
+  confirmResult = true;
+  const closed2 = await store.getState().requestClosePane(paneId);
+  expect(closed2).toBe(true);
+  expect(getActiveTab(store.getState()).panes.has(paneId)).toBe(false);
+});

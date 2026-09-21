@@ -21,6 +21,8 @@ export type ViewTarget = (
       readonly kind: "workspace";
       readonly environmentId: EnvironmentId;
       readonly workspaceId: WorkspaceId;
+      readonly initialPath?: string | undefined;
+      readonly revealLine?: number | undefined;
     }
   | {
       readonly kind: "agentSession";

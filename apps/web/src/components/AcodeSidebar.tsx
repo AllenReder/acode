@@ -57,6 +57,7 @@ type ProjectMenuId =
   | "remove-project";
 
 type WorkspaceMenuId =
+  | "browse-files"
   | "new-agent-session"
   | "new-terminal-session"
   | "rename-workspace"
@@ -104,6 +105,7 @@ export function workspaceMenuItems(input: {
   readonly canDeleteDirectory: boolean;
 }): ReadonlyArray<ContextMenuItem<WorkspaceMenuId>> {
   return [
+    { id: "browse-files", label: "Browse Files", icon: "folder" },
     { id: "new-agent-session", label: "New Agent Session", icon: "message-square-plus" },
     { id: "new-terminal-session", label: "New Terminal Session", icon: "terminal" },
     { id: "rename-workspace", label: "Rename", icon: "pencil", separatorBefore: true },
@@ -366,6 +368,14 @@ export function AcodeSidebar() {
           position,
         );
         if (clicked === null) return;
+        if (clicked === "browse-files") {
+          useWorkbenchStore.getState().openTarget({
+            kind: "workspace",
+            definitionId: "fileView",
+            environmentId: project.environmentId,
+            workspaceId: workspace.id,
+          });
+        }
         if (clicked === "new-agent-session") newAgentSession(project, workspace);
         if (clicked === "new-terminal-session") newTerminalSession(project, workspace);
         if (clicked === "rename-workspace") {

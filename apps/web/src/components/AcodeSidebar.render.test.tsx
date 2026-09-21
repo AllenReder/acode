@@ -51,7 +51,12 @@ vi.mock("./ui/sidebar", () => ({
       {children}
     </button>
   ),
-  useSidebar: () => ({ isMobile: false, setOpenMobile: vi.fn(), toggleSidebar: vi.fn(), open: true }),
+  useSidebar: () => ({
+    isMobile: false,
+    setOpenMobile: vi.fn(),
+    toggleSidebar: vi.fn(),
+    open: true,
+  }),
   useSidebarVisibility: () => true,
 }));
 
@@ -79,7 +84,7 @@ vi.mock("../hooks/useSettings", () => ({
   useEnvironmentIdentificationMode: () => "none",
 }));
 
-import { AcodeSidebar } from "./AcodeSidebar";
+import { AcodeSidebar, workspaceMenuItems } from "./AcodeSidebar";
 
 describe("AcodeSidebar", () => {
   let renderer: ReactTestRenderer;
@@ -172,10 +177,13 @@ describe("AcodeSidebar", () => {
 
     const sessionRows = renderer.root.findAllByProps({ "data-sidebar-session-row": "true" });
     expect(sessionRows).toHaveLength(3);
-    expect(sessionRows.map((r) => r.props["data-session-id"])).toEqual([
-      "s3",
-      "s1",
-      "s2",
-    ]);
+    expect(sessionRows.map((r) => r.props["data-session-id"])).toEqual(["s3", "s1", "s2"]);
+  });
+
+  it("includes browse-files in workspace menu items", () => {
+    const items = workspaceMenuItems({ canDeleteDirectory: false });
+    const browseFilesItem = items.find((item) => item.id === "browse-files");
+    expect(browseFilesItem).toBeDefined();
+    expect(browseFilesItem?.label).toBe("Browse Files");
   });
 });

@@ -209,6 +209,7 @@ export const ProjectReadFileResult = Schema.Struct({
   contents: Schema.String,
   byteLength: NonNegativeInt,
   truncated: Schema.Boolean,
+  contentHash: Schema.optional(TrimmedNonEmptyString),
 });
 export type ProjectReadFileResult = typeof ProjectReadFileResult.Type;
 
@@ -218,6 +219,7 @@ export const ProjectFileFailure = Schema.Literals([
   "path_not_file",
   "binary_file",
   "operation_failed",
+  "conflict",
 ]);
 export type ProjectFileFailure = typeof ProjectFileFailure.Type;
 
@@ -237,10 +239,12 @@ type ProjectFileFailureContext = {
   readonly cwd: string;
   readonly relativePath: string;
   readonly failure: ProjectFileFailure;
-  readonly resolvedPath?: string;
-  readonly resolvedWorkspaceRoot?: string;
-  readonly operation?: ProjectFileOperation;
-  readonly operationPath?: string;
+  readonly resolvedPath?: string | undefined;
+  readonly resolvedWorkspaceRoot?: string | undefined;
+  readonly operation?: ProjectFileOperation | undefined;
+  readonly operationPath?: string | undefined;
+  readonly expectedContentHash?: string | undefined;
+  readonly actualContentHash?: string | undefined;
   readonly cause?: unknown;
 };
 
@@ -273,11 +277,13 @@ export const ProjectWriteFileInput = Schema.Struct({
   cwd: TrimmedNonEmptyString,
   relativePath: TrimmedNonEmptyString.check(Schema.isMaxLength(PROJECT_WRITE_FILE_PATH_MAX_LENGTH)),
   contents: Schema.String,
+  expectedContentHash: Schema.optional(TrimmedNonEmptyString),
 });
 export type ProjectWriteFileInput = typeof ProjectWriteFileInput.Type;
 
 export const ProjectWriteFileResult = Schema.Struct({
   relativePath: TrimmedNonEmptyString,
+  contentHash: Schema.optional(TrimmedNonEmptyString),
 });
 export type ProjectWriteFileResult = typeof ProjectWriteFileResult.Type;
 
@@ -291,6 +297,8 @@ export class ProjectWriteFileError extends Schema.TaggedError<ProjectWriteFileEr
     resolvedWorkspaceRoot: Schema.optional(TrimmedNonEmptyString),
     operation: Schema.optional(ProjectFileOperation),
     operationPath: Schema.optional(TrimmedNonEmptyString),
+    expectedContentHash: Schema.optional(TrimmedNonEmptyString),
+    actualContentHash: Schema.optional(TrimmedNonEmptyString),
     message: TrimmedNonEmptyString,
     cause: Schema.optional(Schema.Defect()),
   },
@@ -301,7 +309,9 @@ export class ProjectWriteFileError extends Schema.TaggedError<ProjectWriteFileEr
       ...props,
       message:
         decodedProjectErrorMessage(props) ??
-        `Failed to write workspace file '${props.relativePath}' in '${props.cwd}'.`,
+        (props.failure === "conflict"
+          ? `Workspace file '${props.relativePath}' in '${props.cwd}' was modified externally (conflict).`
+          : `Failed to write workspace file '${props.relativePath}' in '${props.cwd}'.`),
     } as any);
   }
 }

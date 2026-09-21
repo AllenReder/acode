@@ -43,7 +43,10 @@ export function resolveTargetBreadcrumbs(
   const location = locationFor(target, projects);
   const projectTitle = location?.project.title ?? "Project";
   const workspaceTitle = location?.workspace.title ?? "Workspace";
-  if (target.kind === "workspace") return [projectTitle, workspaceTitle];
+  if (target.kind === "workspace") {
+    if (target.definitionId === "fileView") return [projectTitle, workspaceTitle, "Files"];
+    return [projectTitle, workspaceTitle];
+  }
   return [projectTitle, workspaceTitle, resolveTargetTitle(target, projects)];
 }
 
@@ -63,7 +66,7 @@ export function fallbackTargetTitle(target: ViewTarget): string {
     case "project":
       return "Project";
     case "workspace":
-      return "Workspace";
+      return target.definitionId === "fileView" ? "Files" : "Workspace";
     case "agentSession":
       return "Agent";
     case "newAgentSession":
@@ -95,6 +98,7 @@ export function resolveTargetTitle(
 
   switch (target.kind) {
     case "workspace":
+      if (target.definitionId === "fileView") return `${workspace.title}: Files`;
       return workspace.title;
     case "newAgentSession":
       return "New Agent Session";

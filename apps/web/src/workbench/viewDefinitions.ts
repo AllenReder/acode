@@ -1,3 +1,4 @@
+import { WorkspaceFileView } from "./WorkspaceFileView";
 import { createWelcomeViewDefinition } from "./welcomeViewDefinition";
 import { AgentSessionView } from "./NewAgentSessionView";
 import { TerminalView } from "./TerminalView";
@@ -21,6 +22,17 @@ export const agentViewDefinition: ViewDefinition<
   Component: AgentSessionView,
 };
 
+export const workspaceFileViewDefinition: ViewDefinition<
+  Extract<ViewTarget, { kind: "workspace" }>
+> = {
+  id: "fileView",
+  label: "Files",
+  accepts: (target): target is Extract<ViewTarget, { kind: "workspace" }> =>
+    target.kind === "workspace" && target.definitionId === "fileView",
+  bind: emptyViewBinding,
+  Component: WorkspaceFileView,
+};
+
 export const terminalViewDefinition: ViewDefinition<
   Extract<ViewTarget, { kind: "workspaceTerminal" }>
 > = {
@@ -38,11 +50,12 @@ let registered = false;
  * Idempotent module-load registration. Calling more than once is a no-op so
  * HMR and concurrent imports stay safe.
  */
-export function registerCoreViewDefinitions(): void {
-  if (registered) return;
+export function registerCoreViewDefinitions(options: { force?: boolean } = {}): void {
+  if (registered && !options.force) return;
   registerViewDefinition(createWelcomeViewDefinition());
   registerViewDefinition(agentViewDefinition);
   registerViewDefinition(terminalViewDefinition);
+  registerViewDefinition(workspaceFileViewDefinition);
   registered = true;
 }
 

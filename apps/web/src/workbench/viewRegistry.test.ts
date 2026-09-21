@@ -127,6 +127,31 @@ describe("registerViewDefinition / resolveViewDefinition", () => {
     expect(resolveViewDefinition(terminalTarget())?.id).toBe("workspaceTerminal");
   });
 
+  it("resolves registered workspace fileView definition", () => {
+    const fileViewDefinition: ViewDefinition<Extract<ViewTarget, { kind: "workspace" }>> = {
+      id: "fileView",
+      label: "Files",
+      accepts: (target): target is Extract<ViewTarget, { kind: "workspace" }> =>
+        target.kind === "workspace" && target.definitionId === "fileView",
+      bind: emptyViewBinding,
+      Component: StubComponent as unknown as ViewDefinition<
+        Extract<ViewTarget, { kind: "workspace" }>
+      >["Component"],
+    };
+    registerViewDefinition(fileViewDefinition);
+
+    const target: ViewTarget = {
+      kind: "workspace",
+      definitionId: "fileView",
+      environmentId: FIX_ENV,
+      workspaceId: FIX_WORKSPACE,
+    };
+    expect(resolveViewDefinition(target)?.id).toBe("fileView");
+    expect(targetKey(target)).toBe(
+      JSON.stringify(["workspace", "fileView", FIX_ENV, FIX_WORKSPACE]),
+    );
+  });
+
   it("clearViewRegistry removes all registrations", () => {
     registerViewDefinition(agentDefinition);
     clearViewRegistry();

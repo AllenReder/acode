@@ -1,3 +1,7 @@
+export interface PaneCloseGuard {
+  readonly isDirty: () => boolean;
+  readonly confirmClose: () => Promise<boolean>;
+}
 import { type LayoutMode } from "./scrollingLayout";
 import { create } from "zustand";
 
@@ -60,6 +64,8 @@ export interface WorkbenchStore extends WorkbenchSnapshot {
   splitFocused: (target: ViewTarget, dir: SplitDir) => void;
   setFocused: (paneId: string) => void;
   setSplitRatio: (splitId: string, index: number, ratio: number) => void;
+  registerCloseGuard: (paneId: string, guard: PaneCloseGuard) => () => void;
+  requestClosePane: (paneId: string) => Promise<boolean>;
 }
 
 const defaultGenerateId = (): string => {
@@ -82,6 +88,7 @@ export function createWorkbenchStore(options: WorkbenchStoreOptions = {}) {
     generateId,
   );
   const previews = new WeakMap<ViewDropResult, WorkbenchSnapshot>();
+  const closeGuards = new Map<string, PaneCloseGuard>();
   const store = create<WorkbenchStore>((set, get) => ({
     ...initialSnapshot,
     focusRequestId: 0,
@@ -96,6 +103,23 @@ export function createWorkbenchStore(options: WorkbenchStoreOptions = {}) {
     activateTab: (tabId) => set((snapshot) => applyActivateTab(snapshot, tabId)),
     closeTab: (tabId) => set((snapshot) => applyCloseTab(snapshot, tabId)),
     renameTab: (tabId, title) => set((snapshot) => applyRenameTab(snapshot, tabId, title)),
+    registerCloseGuard: (paneId, guard) => {
+      closeGuards.set(paneId, guard);
+      return () => {
+        if (closeGuards.get(paneId) === guard) {
+          closeGuards.delete(paneId);
+        }
+      };
+    },
+    requestClosePane: async (paneId) => {
+      const guard = closeGuards.get(paneId);
+      if (guard && guard.isDirty()) {
+        const allowed = await guard.confirmClose();
+        if (!allowed) return false;
+      }
+      get().closeView(paneId);
+      return true;
+    },
     closeView: (paneId) =>
       set((snapshot) => applyClosePane(snapshot, paneId, generateId) ?? snapshot),
     removeSessionViews: (target) =>
