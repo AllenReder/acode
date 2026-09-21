@@ -104,7 +104,7 @@ it("renders the selected compact tab strip with real titles and a new-tab action
   expect(html).not.toContain("T3 Code");
 });
 
-it("does not render window controls in WorkbenchWindowChrome when sidebar is expanded", () => {
+it("does not render titlebar separator in WorkbenchWindowChrome when sidebar is expanded", () => {
   const snapshot = createTestSnapshot();
 
   const html = renderToStaticMarkup(
@@ -113,10 +113,10 @@ it("does not render window controls in WorkbenchWindowChrome when sidebar is exp
     </SidebarProvider>,
   );
 
-  expect(html).not.toContain('data-testid="workbench-settings-button"');
+  expect(html).not.toContain('data-slot="workbench-titlebar-separator"');
 });
 
-it("renders traffic-light offset and settings button when sidebar is collapsed", () => {
+it("renders separator and offset for docked controls when sidebar is collapsed", () => {
   const snapshot = createTestSnapshot();
 
   const html = renderToStaticMarkup(
@@ -125,6 +125,5 @@ it("renders traffic-light offset and settings button when sidebar is collapsed",
     </SidebarProvider>,
   );
 
-  expect(html).toContain('data-testid="workbench-settings-button"');
   expect(html).toContain('data-slot="workbench-titlebar-separator"');
 });

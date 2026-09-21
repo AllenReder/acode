@@ -15,6 +15,7 @@ import { Badge } from "../ui/badge";
 import {
   SidebarFooter,
   SidebarHeader,
+  useSidebar,
 } from "../ui/sidebar";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarTitlebarButton } from "./SidebarTitlebarControl";
@@ -29,6 +30,7 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
 }: SidebarChromeHeaderProps) {
   const navigate = useNavigate();
   const canGoBack = useCanGoBack();
+  const { open } = useSidebar();
   const stageLabel = useEnvironmentStageLabel();
   const environmentIdentificationMode = useEnvironmentIdentificationMode();
   const pillLabel =
@@ -48,6 +50,9 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
     }
     void navigate({ to: "/" });
   }, [canGoBack, navigate]);
+
+  const dockLeft = isMac ? "116px" : "40px";
+  const expandedLeft = "calc(var(--sidebar-width) - 40px)";
 
   return (
     <SidebarHeader
@@ -77,23 +82,31 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
         </Badge>
       ) : null}
       <div className="flex-1 min-w-0 h-full pointer-events-none" data-tauri-drag-region />
-      {mode === "settings" ? (
-        <SidebarTitlebarButton
-          icon={<ArrowLeftIcon className="size-4" />}
-          label="Back to workspace"
-          shortcut={isMac ? "⌘, / Esc" : "Ctrl+, / Esc"}
-          onClick={handleBackClick}
-          testId="sidebar-back-button"
-        />
-      ) : (
-        <SidebarTitlebarButton
-          icon={<SettingsIcon className="size-4" />}
-          label="Settings"
-          shortcut={isMac ? "⌘," : "Ctrl+,"}
-          onClick={handleSettingsClick}
-          testId="sidebar-settings-button"
-        />
-      )}
+      <div
+        className="fixed top-0 z-50 flex h-[var(--workbench-titlebar-height,36px)] items-center transition-[left] duration-200 ease-out in-data-[workbench-resizing]:transition-none in-data-[sidebar-resizing]:transition-none [-webkit-app-region:no-drag]"
+        data-sidebar-docking-action=""
+        style={{
+          left: open ? expandedLeft : dockLeft,
+        }}
+      >
+        {mode === "settings" ? (
+          <SidebarTitlebarButton
+            icon={<ArrowLeftIcon className="size-4" />}
+            label="Back to workspace"
+            shortcut={isMac ? "⌘, / Esc" : "Ctrl+, / Esc"}
+            onClick={handleBackClick}
+            testId="sidebar-back-button"
+          />
+        ) : (
+          <SidebarTitlebarButton
+            icon={<SettingsIcon className="size-4" />}
+            label="Settings"
+            shortcut={isMac ? "⌘," : "Ctrl+,"}
+            onClick={handleSettingsClick}
+            testId="sidebar-settings-button"
+          />
+        )}
+      </div>
     </SidebarHeader>
   );
 });

@@ -1,11 +1,9 @@
 import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
-import { Columns3Icon, PanelsTopLeftIcon, PlusIcon, SettingsIcon, XIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { Columns3Icon, PanelsTopLeftIcon, PlusIcon, XIcon } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 import { cn, isMacPlatform } from "../lib/utils";
 import { useSidebarVisibility } from "../components/ui/sidebar";
-import { SidebarTitlebarButton } from "../components/sidebar/SidebarTitlebarControl";
 import { firstLeafId } from "./layout";
 import { targetKey, type ViewTarget } from "./viewRegistry";
 import { tabDisplayTitle, type WorkbenchSnapshot, type WorkbenchTab } from "./workbenchState";
@@ -39,13 +37,8 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
 
-  const navigate = useNavigate();
   const isSidebarOpen = useSidebarVisibility();
   const isMac = typeof navigator !== "undefined" && isMacPlatform(navigator.platform);
-
-  const handleSettingsClick = useCallback(() => {
-    void navigate({ to: "/settings" });
-  }, [navigate]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -78,17 +71,10 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
           className="flex shrink-0 items-center [-webkit-app-region:no-drag] transition-opacity duration-200 ease-out"
           style={{
             paddingLeft: isMac
-              ? "calc(var(--sidebar-controls-left, 76px) + 28px + 12px)"
-              : "calc(var(--sidebar-controls-left-win, 0px) + 28px + 12px)",
+              ? "calc(var(--sidebar-controls-left, 76px) + 28px + 12px + 28px)"
+              : "calc(var(--sidebar-controls-left-win, 0px) + 28px + 12px + 28px)",
           }}
         >
-          <SidebarTitlebarButton
-            icon={<SettingsIcon className="size-4" />}
-            label="Settings"
-            shortcut={isMac ? "⌘," : "Ctrl+,"}
-            onClick={handleSettingsClick}
-            testId="workbench-settings-button"
-          />
           <div
             className="mx-3 h-3.5 w-px bg-border/60 shrink-0"
             data-slot="workbench-titlebar-separator"
