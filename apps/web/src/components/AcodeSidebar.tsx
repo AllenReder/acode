@@ -77,14 +77,18 @@ export function projectMenuItems(input: {
   readonly canManageWorkspaces: boolean;
 }): ReadonlyArray<ContextMenuItem<ProjectMenuId>> {
   return [
-    { id: "new-project", label: "New project", icon: "folder-plus" },
     ...(input.canManageWorkspaces
       ? ([
           { id: "add-workspace", label: "Add Workspace", icon: "folder-input" },
           { id: "new-workspace", label: "New Workspace", icon: "git-branch" },
         ] satisfies ContextMenuItem<ProjectMenuId>[])
       : []),
-    { id: "rename-project", label: "Rename project", icon: "pencil", separatorBefore: true },
+    {
+      id: "rename-project",
+      label: "Rename project",
+      icon: "pencil",
+      separatorBefore: input.canManageWorkspaces,
+    },
     {
       id: "remove-project",
       label: "Remove project",
@@ -318,7 +322,6 @@ export function AcodeSidebar() {
           position,
         );
         if (clicked === null) return;
-        if (clicked === "new-project") openAddProject();
         if (clicked === "add-workspace" || (clicked as string) === "associate-worktree") {
           setAddWorkspaceProject(project);
         }
@@ -341,7 +344,6 @@ export function AcodeSidebar() {
       })();
     },
     [
-      openAddProject,
       removeAcodeProject,
       renameProject,
       serverConfigs,
