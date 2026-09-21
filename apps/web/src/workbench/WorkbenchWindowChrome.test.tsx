@@ -127,3 +127,19 @@ it("renders separator and offset for docked controls when sidebar is collapsed",
 
   expect(html).toContain('data-slot="workbench-titlebar-separator"');
 });
+
+it("renders flat tiling tabs with uniform width and hover-only close buttons", () => {
+  const snapshot = createTestSnapshot();
+
+  const html = renderToStaticMarkup(
+    <SidebarProvider defaultOpen>
+      <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+    </SidebarProvider>,
+  );
+
+  // Flat tiling width w-44 and border-r divider
+  expect(html).toContain("w-44");
+  expect(html).toContain("border-r");
+  // Close button with hover opacity
+  expect(html).toContain("opacity-0 group-hover:opacity-100");
+});

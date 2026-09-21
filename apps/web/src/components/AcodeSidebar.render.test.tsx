@@ -22,6 +22,8 @@ vi.mock("@effect/atom-react", () => ({
 
 vi.mock("../state/entities", () => ({
   useAcodeProjects: () => mockState.projects,
+  useAcodeAgentSessionShell: () => null,
+  readThreadShell: () => null,
 }));
 
 vi.mock("../state/environments", () => ({
@@ -123,5 +125,57 @@ describe("AcodeSidebar", () => {
 
     const header = renderer.root.findByProps({ "data-sidebar": "header" });
     expect(header).toBeDefined();
+  });
+
+  it("renders active sessions sorted according to workspaceSessionOrderById", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const { useUiStateStore } = await import("../uiStateStore");
+
+    mockState.projects = [
+      {
+        id: "p1",
+        environmentId: "local",
+        title: "Test Project",
+        workspaces: [
+          {
+            id: "w1",
+            title: "Main Workspace",
+            role: "main",
+            sessions: [
+              { kind: "agent", id: "s1", title: "Session One" },
+              { kind: "agent", id: "s2", title: "Session Two" },
+              { kind: "agent", id: "s3", title: "Session Three" },
+            ],
+          },
+        ],
+      },
+    ];
+
+    // Set custom order: s3, s1, s2
+    act(() => {
+      useUiStateStore.setState({
+        workspaceSessionOrderById: {
+          "local:w1": ["s3", "s1", "s2"],
+        },
+      });
+    });
+
+    await act(() => {
+      renderer = create(<AcodeSidebar />);
+    });
+
+    // Expand workspace
+    const workspaceRow = renderer.root.findByProps({ "data-testid": "sidebar-workspace-row" });
+    await act(() => {
+      workspaceRow.props.onClick();
+    });
+
+    const sessionRows = renderer.root.findAllByProps({ "data-sidebar-session-row": "true" });
+    expect(sessionRows).toHaveLength(3);
+    expect(sessionRows.map((r) => r.props["data-session-id"])).toEqual([
+      "s3",
+      "s1",
+      "s2",
+    ]);
   });
 });

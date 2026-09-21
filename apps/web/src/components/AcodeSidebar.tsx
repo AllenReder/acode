@@ -24,6 +24,7 @@ import { useCallback, useMemo, useState, type KeyboardEvent, type MouseEvent } f
 import { useNavigate } from "@tanstack/react-router";
 
 import { useComposerDraftStore } from "../composerDraftStore";
+import { useUiStateStore } from "../uiStateStore";
 import { openCommandPalette } from "../commandPaletteBus";
 import { newDraftId, newThreadId } from "../lib/utils";
 import { readLocalApi } from "../localApi";
@@ -168,6 +169,7 @@ export function AcodeSidebar() {
   const [collapsedProjects, setCollapsedProjects] = useState<ReadonlySet<string>>(new Set());
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<ReadonlySet<string>>(new Set());
   const [historyExpanded, setHistoryExpanded] = useState<ReadonlySet<string>>(new Set());
+  const workspaceSessionOrderById = useUiStateStore((state) => state.workspaceSessionOrderById);
 
   const associateWorkspace = useAtomCommand(workspaceEnvironment.associate);
   const createWorktree = useAtomCommand(workspaceEnvironment.createWorktree);
@@ -518,7 +520,18 @@ export function AcodeSidebar() {
                     {project.workspaces.map((workspace) => {
                       const workspaceKey = `${project.environmentId}:${workspace.id}`;
                       const workspaceExpanded = expandedWorkspaces.has(workspaceKey);
-                      const activeSessions = workspace.sessions ?? [];
+                      const sessionOrder = workspaceSessionOrderById[workspaceKey];
+                      const rawSessions = workspace.sessions ?? [];
+                      const activeSessions = sessionOrder && sessionOrder.length > 0
+                        ? (() => {
+                            const rank = new Map(sessionOrder.map((id, index) => [id, index]));
+                            return [...rawSessions].sort((a, b) => {
+                              const rankA = rank.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+                              const rankB = rank.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+                              return rankA - rankB;
+                            });
+                          })()
+                        : rawSessions;
                       const historySessions = workspace.historySessions ?? [];
                       return (
                         <div key={workspaceKey} className="flex flex-col gap-px">

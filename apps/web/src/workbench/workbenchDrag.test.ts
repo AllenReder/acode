@@ -1,6 +1,6 @@
 import { expect, it } from "vite-plus/test";
 
-import { resolveWorkbenchDropTargetAtPoint } from "./workbenchDrag";
+import { resolveWorkbenchDropTargetAtPoint, resolveSidebarDropTargetAtPoint } from "./workbenchDrag";
 
 function fakeElement(input: {
   readonly dataset?: Record<string, string>;
@@ -82,5 +82,66 @@ it("resolves existing Tabs and blank tab-strip drops", () => {
   expect(resolveWorkbenchDropTargetAtPoint(240, 16, resolver)).toEqual({
     kind: "newTab",
     index: 2,
+  });
+});
+
+it("resolves sidebar session reorder target when dragging inside sidebar within same workspace", () => {
+  const rowA = fakeElement({
+    dataset: {
+      sidebarSessionRow: "true",
+      workspaceKey: "local:ws1",
+      sessionId: "s1",
+    },
+    rect: { left: 10, top: 50, width: 200, height: 30 },
+  });
+  rowA.closest = ((selector: string) =>
+    selector === "[data-sidebar-session-row]" ? rowA : null) as Element["closest"];
+
+  const resolver = {
+    isOverSidebar: (x: number, y: number) => x >= 0 && x <= 250 && y >= 0 && y <= 600,
+    elementFromPoint: (x: number, y: number) => (y >= 50 && y <= 80 ? rowA : null),
+  };
+
+  // Dragging s2 over top half of s1 (y = 55, top is 50, height is 30 -> 55 < 65 -> before)
+  const beforeRes = resolveSidebarDropTargetAtPoint(50, 55, "local:ws1", "s2", resolver);
+  expect(beforeRes).toEqual({
+    isOverSidebar: true,
+    sidebarDropTarget: {
+      workspaceKey: "local:ws1",
+      sessionId: "s1",
+      position: "before",
+    },
+  });
+
+  // Dragging s2 over bottom half of s1 (y = 70 -> 70 >= 65 -> after)
+  const afterRes = resolveSidebarDropTargetAtPoint(50, 70, "local:ws1", "s2", resolver);
+  expect(afterRes).toEqual({
+    isOverSidebar: true,
+    sidebarDropTarget: {
+      workspaceKey: "local:ws1",
+      sessionId: "s1",
+      position: "after",
+    },
+  });
+
+  // Dragging s1 over itself: no reorder target
+  const selfRes = resolveSidebarDropTargetAtPoint(50, 55, "local:ws1", "s1", resolver);
+  expect(selfRes).toEqual({
+    isOverSidebar: true,
+    sidebarDropTarget: null,
+  });
+
+  // Dragging s2 from different workspace: no reorder target
+  const otherWsRes = resolveSidebarDropTargetAtPoint(50, 55, "local:ws2", "s2", resolver);
+  expect(otherWsRes).toEqual({
+    isOverSidebar: true,
+    sidebarDropTarget: null,
+  });
+
+  // Dragging outside sidebar: isOverSidebar is false
+  const outsideRes = resolveSidebarDropTargetAtPoint(300, 55, "local:ws1", "s2", resolver);
+  expect(outsideRes).toEqual({
+    isOverSidebar: false,
+    sidebarDropTarget: null,
   });
 });

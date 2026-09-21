@@ -10,6 +10,7 @@ import {
   type PersistedUiState,
   persistState,
   reorderProjects,
+  reorderWorkspaceSessions,
   resolveProjectExpanded,
   setDefaultAdvertisedEndpointKey,
   setProjectExpanded,
@@ -27,6 +28,7 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
     threadChangedFilesExpandedById: {},
     defaultAdvertisedEndpointKey: null,
     pullRequestMergeMethod: "merge",
+    workspaceSessionOrderById: {},
     ...overrides,
   };
 }
@@ -119,6 +121,20 @@ describe("uiStateStore pure functions", () => {
     );
   });
 
+  it("reorders sessions within a workspace before or after target session", () => {
+    const state = makeUiState();
+    const workspaceKey = "env-local:ws-1";
+    const all = ["s1", "s2", "s3"];
+
+    // move s3 before s2 -> ["s1", "s3", "s2"]
+    const next1 = reorderWorkspaceSessions(state, workspaceKey, all, "s3", "s2", "before");
+    expect(next1.workspaceSessionOrderById[workspaceKey]).toEqual(["s1", "s3", "s2"]);
+
+    // move s1 after s3 in that existing order -> ["s3", "s1", "s2"]
+    const next2 = reorderWorkspaceSessions(next1, workspaceKey, all, "s1", "s3", "after");
+    expect(next2.workspaceSessionOrderById[workspaceKey]).toEqual(["s3", "s1", "s2"]);
+  });
+
   it("stores explicit changed-file expansion choices", () => {
     const threadId = ThreadId.make("thread-1");
     const collapsed = setThreadChangedFilesExpanded(makeUiState(), threadId, "turn-1", false);
@@ -190,6 +206,7 @@ describe("parsePersistedState", () => {
           "turn-2": true,
         },
       },
+      workspaceSessionOrderById: {},
     });
 
     expect(parsed).toEqual({
@@ -209,6 +226,7 @@ describe("parsePersistedState", () => {
           "turn-2": true,
         },
       },
+      workspaceSessionOrderById: {},
     });
   });
 

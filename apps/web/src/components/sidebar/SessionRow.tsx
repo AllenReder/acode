@@ -5,7 +5,7 @@ import { useWorkbenchStore } from "../../workbench/workbenchStore";
 import { targetsEqual, type ViewTarget } from "../../workbench/viewRegistry";
 import { sessionRouteForTarget } from "../../workbench/deepLinks";
 import { useSessionActionMenu } from "../../hooks/useSessionActionMenu";
-import { useWorkbenchDragSource } from "../../workbench/workbenchDrag";
+import { useWorkbenchDragSource, useWorkbenchDragState } from "../../workbench/workbenchDrag";
 
 export type SessionTarget = Extract<ViewTarget, { kind: "agentSession" | "workspaceTerminal" }>;
 
@@ -50,6 +50,32 @@ export function SessionRow({
     return false;
   });
 
+  const workspaceKey = `${target.environmentId}:${target.workspaceId}`;
+  const sessionId =
+    target.kind === "agentSession" ? target.agentSessionId : target.terminalSessionId;
+
+  const dragState = useWorkbenchDragState();
+  const draggedTarget = dragState?.source.kind === "sidebar" ? dragState.source.target : null;
+  const isBeingDragged =
+    draggedTarget !== null &&
+    draggedTarget.kind === target.kind &&
+    draggedTarget.environmentId === target.environmentId &&
+    draggedTarget.workspaceId === target.workspaceId &&
+    (draggedTarget.kind === "agentSession" && target.kind === "agentSession"
+      ? draggedTarget.agentSessionId === target.agentSessionId
+      : draggedTarget.kind === "workspaceTerminal" && target.kind === "workspaceTerminal"
+        ? draggedTarget.terminalSessionId === target.terminalSessionId
+        : false);
+
+  const isReorderTarget =
+    dragState !== null &&
+    dragState.isOverSidebar &&
+    dragState.sidebarDropTarget !== null &&
+    dragState.sidebarDropTarget.workspaceKey === workspaceKey &&
+    dragState.sidebarDropTarget.sessionId === sessionId;
+
+  const dropPosition = isReorderTarget ? dragState.sidebarDropTarget?.position : null;
+
   const { openMenu } = useSessionActionMenu({
     target,
     isClosed,
@@ -81,8 +107,12 @@ export function SessionRow({
       role="treeitem"
       aria-level={3}
       data-workbench-drag-source="sidebar"
+      data-sidebar-session-row="true"
+      data-workspace-key={workspaceKey}
+      data-session-id={sessionId}
       className={cn(
-        "flex min-h-6 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+        "relative flex min-h-6 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+        isBeingDragged && "opacity-40",
         isFocused
           ? "bg-sidebar-row-active font-medium text-sidebar-foreground"
           : isOpenInActiveTab
@@ -132,6 +162,19 @@ export function SessionRow({
         drag.onPointerDown(event);
         onPointerDown?.(event);
       }}
-    />
+    >
+      {props.children}
+      {dropPosition === "before" ? (
+        <span
+          data-sidebar-reorder-indicator="before"
+          className="pointer-events-none absolute -top-px inset-x-1 h-0.5 rounded-full bg-primary z-20 shadow-[0_0_4px_var(--color-primary)]"
+        />
+      ) : dropPosition === "after" ? (
+        <span
+          data-sidebar-reorder-indicator="after"
+          className="pointer-events-none absolute -bottom-px inset-x-1 h-0.5 rounded-full bg-primary z-20 shadow-[0_0_4px_var(--color-primary)]"
+        />
+      ) : null}
+    </button>
   );
 }

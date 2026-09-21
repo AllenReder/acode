@@ -16,6 +16,7 @@ import { createPortal } from "react-dom";
 import { paneDropZoneFromPoint } from "./layout";
 import { computePaneLayoutRects } from "./layoutGeometry";
 import { usePrimarySettings } from "../hooks/useSettings";
+import { useUiStateStore } from "../uiStateStore";
 import { type ViewDragSource, type ViewDropTarget, type ViewDropResult } from "./workbenchState";
 import { useWorkbenchStore } from "./workbenchStore";
 
@@ -33,6 +34,12 @@ export interface WorkbenchDropResolver {
   readonly tabCount: () => number;
 }
 
+export interface SidebarDropTarget {
+  readonly workspaceKey: string;
+  readonly sessionId: string;
+  readonly position: "before" | "after";
+}
+
 export interface WorkbenchDragState {
   readonly phase: WorkbenchDragPhase;
   readonly label: string;
@@ -42,6 +49,8 @@ export interface WorkbenchDragState {
   readonly target: ViewDropTarget | null;
   readonly result: ViewDropResult | null;
   readonly valid: boolean;
+  readonly isOverSidebar: boolean;
+  readonly sidebarDropTarget: SidebarDropTarget | null;
 }
 
 interface WorkbenchDragControllerValue {
@@ -179,6 +188,63 @@ function sameTarget(a: ViewDropTarget | null, b: ViewDropTarget | null): boolean
   return false;
 }
 
+export function resolveSidebarDropTargetAtPoint(
+  x: number,
+  y: number,
+  sourceWorkspaceKey: string,
+  sourceSessionId: string,
+  resolver?: {
+    readonly isOverSidebar: (x: number, y: number) => boolean;
+    readonly elementFromPoint: (x: number, y: number) => Element | null;
+  },
+): { readonly isOverSidebar: boolean; readonly sidebarDropTarget: SidebarDropTarget | null } {
+  const isOver =
+    resolver?.isOverSidebar(x, y) ??
+    (() => {
+      if (typeof document === "undefined") return false;
+      const sidebarElement =
+        document.querySelector<HTMLElement>("[data-app-sidebar]") ??
+        document.querySelector<HTMLElement>('[data-slot="sidebar"]');
+      const rect = sidebarElement?.getBoundingClientRect();
+      return (
+        rect !== undefined &&
+        x >= rect.left &&
+        x <= rect.right &&
+        y >= rect.top &&
+        y <= rect.bottom
+      );
+    })();
+
+  if (!isOver) return { isOverSidebar: false, sidebarDropTarget: null };
+
+  const element =
+    resolver?.elementFromPoint(x, y) ??
+    (typeof document === "undefined" ? null : document.elementFromPoint(x, y));
+  const rowElement = element?.closest<HTMLElement>("[data-sidebar-session-row]");
+  if (rowElement) {
+    const rowWorkspaceKey = rowElement.dataset.workspaceKey;
+    const rowSessionId = rowElement.dataset.sessionId;
+    if (
+      rowWorkspaceKey === sourceWorkspaceKey &&
+      rowSessionId &&
+      rowSessionId !== sourceSessionId
+    ) {
+      const rowRect = rowElement.getBoundingClientRect();
+      const position = y < rowRect.top + rowRect.height / 2 ? "before" : "after";
+      return {
+        isOverSidebar: true,
+        sidebarDropTarget: {
+          workspaceKey: rowWorkspaceKey,
+          sessionId: rowSessionId,
+          position,
+        },
+      };
+    }
+  }
+
+  return { isOverSidebar: true, sidebarDropTarget: null };
+}
+
 export function WorkbenchDragProvider({ children }: { readonly children: ReactNode }) {
   const [state, setState] = useState<WorkbenchDragState | null>(null);
   const suppressClickRef = useRef(false);
@@ -226,6 +292,8 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
       let lastY = event.clientY;
       let lastTarget: ViewDropTarget | null = null;
       let lastResult: ViewDropResult | null = null;
+      let lastIsOverSidebar = false;
+      let lastSidebarDropTarget: SidebarDropTarget | null = null;
       let publishedTarget: ViewDropTarget | null = null;
 
       // Preview transforms never move the semantic drop regions beneath the pointer.
@@ -271,10 +339,10 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
 
       const publishPointer = () => {
         frameRef.current = null;
-        const target = lastTarget;
+        const target = lastIsOverSidebar ? null : lastTarget;
         setState((current) => {
           if (current === null) return current;
-          if (sameTarget(current.target, target)) {
+          if (sameTarget(current.target, target) && current.isOverSidebar === lastIsOverSidebar && current.sidebarDropTarget === lastSidebarDropTarget) {
             return current.pointer.x === lastX && current.pointer.y === lastY
               ? current
               : { ...current, pointer: { x: lastX, y: lastY } };
@@ -286,6 +354,8 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
             target,
             result,
             valid: target !== null && result !== null,
+            isOverSidebar: lastIsOverSidebar,
+            sidebarDropTarget: lastSidebarDropTarget,
           };
         });
       };
@@ -307,11 +377,39 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
 
       const finish = (cancelled: boolean) => {
         const wasActive = activeRef.current;
+        const currentSidebarDropTarget = lastSidebarDropTarget;
+        const currentIsOverSidebar = lastIsOverSidebar;
         cleanup();
         if (!wasActive) return;
         activeRef.current = false;
         suppressClickRef.current = true;
-        const liveTarget = cancelled ? null : resolveTarget(lastX, lastY);
+
+        if (!cancelled && source.kind === "sidebar" && currentIsOverSidebar && currentSidebarDropTarget) {
+          const sourceSessionId =
+            source.target.kind === "agentSession"
+              ? source.target.agentSessionId
+              : source.target.terminalSessionId;
+          const workspaceKey = `${source.target.environmentId}:${source.target.workspaceId}`;
+          const allSessionRows = Array.from(
+            document.querySelectorAll<HTMLElement>(
+              `[data-sidebar-session-row][data-workspace-key="${CSS.escape(workspaceKey)}"]`,
+            ),
+          )
+            .map((el) => el.dataset.sessionId)
+            .filter((id): id is string => Boolean(id));
+
+          useUiStateStore.getState().reorderWorkspaceSessions(
+            workspaceKey,
+            allSessionRows,
+            sourceSessionId,
+            currentSidebarDropTarget.sessionId,
+            currentSidebarDropTarget.position,
+          );
+          setState(null);
+          return;
+        }
+
+        const liveTarget = cancelled || currentIsOverSidebar ? null : resolveTarget(lastX, lastY);
         const target = liveTarget;
         const result =
           target === null ? null : useWorkbenchStore.getState().previewDrop(source, target);
@@ -322,7 +420,17 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         }
         const phase: WorkbenchDragPhase = cancelled ? "canceling" : "rejected";
         setState((current) =>
-          current === null ? current : { ...current, phase, target, result: null, valid: false },
+          current === null
+            ? current
+            : {
+                ...current,
+                phase,
+                target,
+                result: null,
+                valid: false,
+                isOverSidebar: currentIsOverSidebar,
+                sidebarDropTarget: null,
+              },
         );
         finishTimerRef.current = setTimeout(() => {
           finishTimerRef.current = null;
@@ -330,9 +438,26 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         }, CANCEL_DURATION_MS);
       };
 
+      const checkSidebarState = (x: number, y: number) => {
+        if (source.kind !== "sidebar") {
+          return { isOverSidebar: false, sidebarDropTarget: null };
+        }
+        const sourceWorkspaceKey = `${source.target.environmentId}:${source.target.workspaceId}`;
+        const sourceSessionId =
+          source.target.kind === "agentSession"
+            ? source.target.agentSessionId
+            : source.target.terminalSessionId;
+        const res = resolveSidebarDropTargetAtPoint(x, y, sourceWorkspaceKey, sourceSessionId);
+        lastIsOverSidebar = res.isOverSidebar;
+        lastSidebarDropTarget = res.sidebarDropTarget;
+        return res;
+      };
+
       const onMove = (moveEvent: PointerEvent) => {
         lastX = moveEvent.clientX;
         lastY = moveEvent.clientY;
+        const { isOverSidebar, sidebarDropTarget } = checkSidebarState(lastX, lastY);
+
         if (!activeRef.current) {
           if (Math.hypot(lastX - event.clientX, lastY - event.clientY) < DRAG_THRESHOLD) {
             return;
@@ -340,8 +465,8 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           activeRef.current = true;
           document.documentElement.dataset.workbenchDragging = "true";
           window.getSelection()?.removeAllRanges();
-          const target = resolveTarget(lastX, lastY);
-          const result = previewFor(target);
+          const target = isOverSidebar ? null : resolveTarget(lastX, lastY);
+          const result = isOverSidebar ? null : previewFor(target);
           publishedTarget = target;
           setState({
             phase: "dragging",
@@ -352,16 +477,19 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
             target,
             result,
             valid: target !== null && result !== null,
+            isOverSidebar,
+            sidebarDropTarget,
           });
           return;
         }
-        const target = resolveTarget(lastX, lastY);
+
+        const target = isOverSidebar ? null : resolveTarget(lastX, lastY);
         if (!sameTarget(publishedTarget, target)) publishedTarget = target;
         if (frameRef.current === null) frameRef.current = requestAnimationFrame(publishPointer);
         if (stabilizeTimerRef.current !== null) clearTimeout(stabilizeTimerRef.current);
         stabilizeTimerRef.current = setTimeout(() => {
           stabilizeTimerRef.current = null;
-          resolveTarget(lastX, lastY);
+          if (!lastIsOverSidebar) resolveTarget(lastX, lastY);
           publishPointer();
         }, 180);
       };
@@ -520,7 +648,7 @@ export function WorkbenchDropOverlay() {
     return computePaneLayoutRects(previewTab, surfaceRect, paneGap);
   }, [previewTab, surfaceRect, paneGap]);
 
-  if (state === null) return null;
+  if (state === null || state.isOverSidebar) return null;
 
   let destinationRect: WorkbenchRect | null = null;
   if (preview && previewLayout && surfaceRect) {
