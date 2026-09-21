@@ -3,7 +3,7 @@ import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import type { EnvironmentId, WorkspaceId } from "@t3tools/contracts";
 import { EMPTY_TERMINAL_SESSION_STATE } from "@t3tools/client-runtime/state/terminal";
-import type { GhosttyTerminalSurfaceOptions } from "../terminal/ghostty/surface";
+import type { XtermTerminalSurfaceOptions } from "../terminal/xterm/surface";
 import { TerminalView } from "./TerminalView";
 import { terminalTargetForRuntime } from "./sessionTarget";
 
@@ -34,8 +34,8 @@ vi.mock("../hooks/useSettings", () => ({
       fontSizeTerminal: 13,
     }),
 }));
-vi.mock("../terminal/ghostty/surface", () => ({
-  GhosttyTerminalSurface: { create: (...args: unknown[]) => boundary.create(...args) },
+vi.mock("~/terminal/xterm/surface", () => ({
+  XtermTerminalSurface: { create: (...args: unknown[]) => boundary.create(...args) },
 }));
 let renderer: ReactTestRenderer;
 afterEach(async () => {
@@ -97,7 +97,7 @@ it("keeps terminal history and identity across reopen, fits measured size, and g
     dispose: vi.fn(),
     clearSelection: vi.fn(),
   };
-  let options: GhosttyTerminalSurfaceOptions;
+  let options: XtermTerminalSurfaceOptions;
   boundary.create.mockImplementation(async (_mount, supplied) => {
     options = supplied;
     return terminal;

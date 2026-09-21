@@ -87,9 +87,11 @@ describe("terminalThemeFromApp", () => {
 
     const theme = terminalThemeFromApp();
 
-    expect(theme.background).toEqual({ r: 0, g: 0, b: 0 });
-    expect(theme.foreground).toEqual({ r: 255, g: 255, b: 255 });
-    expect(theme.cursor).toEqual({ r: 221, g: 221, b: 221 });
+    expect(theme.background).toBe("#000");
+    expect(theme.foreground).toBe("#fff");
+    expect(theme.cursor).toBe("#ddd");
+    expect(theme.black).toBe("#18181b");
+    expect(theme.brightBlack).toBe("#434645");
   });
 });
 

@@ -7,10 +7,11 @@ typed contracts and client-runtime; there is no mock server in this checkout.
 ## Scope
 
 This ticket imports the Web, server, client-runtime, contracts, shared modules,
-SSH helpers, provider helpers, build configuration, and the Ghostty WebAssembly
-assets needed by the runtime. Only the Web and server applications are part of
-the workspace build. Marketing, mobile, and desktop product entrypoints are
-deferred to later ACode tickets.
+SSH helpers, provider helpers, and build configuration. Only the Web and server
+applications are part of the workspace build. The terminal renders with
+xterm.js; the vendored libghostty-vt WebAssembly adapter is retained in the tree
+but is no longer loaded by the shipped client. Marketing, mobile, and desktop
+product entrypoints are deferred to later ACode tickets.
 
 The ACode guidance files (`AGENTS.md`, `CONTEXT.md`, and `docs/agents/`) remain
 authoritative and were not replaced by upstream guidance.
@@ -93,12 +94,12 @@ and this checkout's `.acode` directory by default:
 pnpm dev:desktop
 ```
 
-The bundled Ghostty terminal fetches same-origin WASM assets. Desktop CSP must
-allow `'self'` in `connect-src` and `'wasm-unsafe-eval'` in production
-`script-src`; permitting the daemon's localhost endpoint alone does not permit
-bundled terminal assets. The browser smoke checks both desktop policies with
-the production Ghostty loader and ensures packaged JavaScript `eval` stays
-blocked:
+Desktop CSP must allow `'self'` in `connect-src`, and `'wasm-unsafe-eval'` stays
+in production `script-src` for the retained WebAssembly adapter. Permitting the
+daemon's localhost endpoint alone does not permit bundled assets. The browser
+smoke drives the shipped xterm renderer under both desktop policies, checks that
+it answers terminal color and status queries, and ensures packaged JavaScript
+`eval` stays blocked:
 
 ```bash
 pnpm --filter @t3tools/scripts exec playwright install chromium
@@ -166,8 +167,9 @@ uses its own temporary base directory. Provider credentials remain on the
 machine where the daemon runs; this checkout does not copy them.
 
 The local provider CLIs and their authentication are external prerequisites.
-`tailscale` is only needed for `pnpm dev:share`; Zig and a Ghostty source
-checkout are only needed when rebuilding the vendored terminal WebAssembly.
+`tailscale` is only needed for `pnpm dev:share`. Zig and a Ghostty source
+checkout are only needed to rebuild the retained libghostty-vt WebAssembly, which
+the shipped client no longer loads.
 
 ## Codex worktree hooks
 

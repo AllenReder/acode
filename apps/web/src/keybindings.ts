@@ -314,7 +314,7 @@ export function shouldShowThreadJumpHintsForModifiers(
   keybindings: ResolvedKeybindingsConfig,
   options?: ShortcutMatchOptions,
 ): boolean {
-  // The embedded terminal owns keystrokes while it has focus: the Ghostty
+  // The embedded terminal owns keystrokes while it has focus: the terminal
   // surface encodes the keydown and can write the pressed key into the shell
   // before our window-level shortcut handling ever runs, regardless of any
   // configured `when` clause on the jump command. Advertising jump hints

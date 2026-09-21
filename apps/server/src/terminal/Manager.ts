@@ -1487,8 +1487,19 @@ function createTerminalSpawnEnv(
   for (const [key, value] of Object.entries(baseEnv)) {
     if (value === undefined) continue;
     if (shouldExcludeTerminalEnvKey(key)) continue;
+    // The daemon cannot know the renderer's appearance, so an inherited
+    // COLORFGBG only ever guesses at a theme it does not control — the stale
+    // light-background value that made CLIs paint black text on a dark pane.
+    // The renderer answers OSC 10/11/12 from its real theme instead.
+    if (key === "COLORFGBG") continue;
     spawnEnv[key] = value;
   }
+  // A child of this PTY talks to the renderer, not to the terminal the daemon
+  // itself was launched from, so its identity is ours to declare. An explicit
+  // per-session value from the client still wins, because the overrides are
+  // applied below.
+  spawnEnv.TERM = "xterm-256color";
+  spawnEnv.TERM_PROGRAM = "acode";
   if (runtimeEnv) {
     for (const [key, value] of Object.entries(runtimeEnv)) {
       spawnEnv[key] =

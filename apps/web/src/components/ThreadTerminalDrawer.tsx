@@ -54,10 +54,11 @@ import {
   type SelectionActionPoint,
 } from "~/lib/selectionActions";
 import {
-  GhosttyTerminalSurface,
-  type GhosttyTerminalSurfaceOptions,
-} from "~/terminal/ghostty/surface";
-import { type GhosttyColor, type GhosttyTheme } from "~/terminal/ghostty/core";
+  XtermTerminalSurface,
+  type XtermTerminalSurfaceOptions,
+} from "~/terminal/xterm/surface";
+import { buildXtermTheme } from "~/terminal/xterm/theme";
+import type { ITheme } from "@xterm/xterm";
 import { useOpenInPreferredEditor } from "../editorPreferences";
 import { isTerminalUrl, resolvePathLinkTarget } from "../terminal-links";
 import {
@@ -106,12 +107,12 @@ function clampDrawerHeight(height: number): number {
   return Math.min(Math.max(Math.round(safeHeight), MIN_DRAWER_HEIGHT), maxHeight);
 }
 
-function writeSystemMessage(terminal: GhosttyTerminalSurface, message: string): void {
+function writeSystemMessage(terminal: Pick<XtermTerminalSurface, "write">, message: string): void {
   terminal.write(`\r\n[terminal] ${message}\r\n`);
 }
 
 export function writeTerminalOutputUpdate(
-  terminal: Pick<GhosttyTerminalSurface, "resetAndWrite" | "write">,
+  terminal: Pick<XtermTerminalSurface, "resetAndWrite" | "write">,
   update: TerminalOutputUpdate,
 ): void {
   if (update.type === "reset") {
@@ -119,28 +120,6 @@ export function writeTerminalOutputUpdate(
   } else if (update.type === "append") {
     terminal.write(update.data);
   }
-}
-
-function parseTerminalColor(value: string, fallback: GhosttyColor): GhosttyColor {
-  if (typeof document === "undefined") return fallback;
-
-  const canvas = document.createElement("canvas");
-  canvas.width = 1;
-  canvas.height = 1;
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  if (!context) return fallback;
-
-  context.clearRect(0, 0, 1, 1);
-  context.fillStyle = value;
-  context.fillRect(0, 0, 1, 1);
-  const [red, green, blue, alpha] = context.getImageData(0, 0, 1, 1).data;
-  if (alpha === 0) return fallback;
-
-  return {
-    r: red ?? fallback.r,
-    g: green ?? fallback.g,
-    b: blue ?? fallback.b,
-  };
 }
 
 function runtimeEnvSignature(runtimeEnv: Record<string, string> | undefined): string {
@@ -175,13 +154,14 @@ function terminalFontOptions(family: string, size: number): { family?: string; s
   return trimmed.length > 0 ? { family: trimmed, size } : { size };
 }
 
-export function terminalThemeFromApp(mountElement?: HTMLElement | null): GhosttyTheme {
-  const drawerSurface =
+export function terminalThemeFromApp(mountElement?: HTMLElement | null): ITheme {
+  const container =
     mountElement?.closest(".thread-terminal-drawer") ??
+    mountElement?.closest(".workbench-pane") ??
     document.querySelector(".thread-terminal-drawer") ??
     document.body;
-  const drawerStyles = getComputedStyle(drawerSurface);
-  const themeStyles = mountElement ? getComputedStyle(mountElement) : drawerStyles;
+  const containerStyles = getComputedStyle(container);
+  const themeStyles = mountElement ? getComputedStyle(mountElement) : containerStyles;
   const colorScheme = themeStyles.colorScheme;
   const isDark =
     colorScheme === "dark"
@@ -189,53 +169,54 @@ export function terminalThemeFromApp(mountElement?: HTMLElement | null): Ghostty
       : colorScheme === "light"
         ? false
         : document.documentElement.classList.contains("dark");
-  const fallbackBackground = isDark ? "rgb(14, 18, 24)" : "rgb(255, 255, 255)";
-  const fallbackForeground = isDark ? "rgb(237, 241, 247)" : "rgb(28, 33, 41)";
-  const bodyStyles = getComputedStyle(document.body);
+  const fallbackBackground = isDark ? "#0a0a0a" : "#ffffff";
+  const fallbackForeground = isDark ? "#f5f5f5" : "#1a1a1e";
   const rootThemeStyles = getComputedStyle(document.documentElement);
+
   const background = normalizeComputedColor(
-    drawerStyles.backgroundColor,
-    normalizeComputedColor(bodyStyles.backgroundColor, fallbackBackground),
+    readThemeColor(
+      themeStyles,
+      "--terminal-background",
+      readThemeColor(rootThemeStyles, "--terminal-background", containerStyles.backgroundColor),
+    ),
+    fallbackBackground,
   );
   const foreground = normalizeComputedColor(
-    drawerStyles.color,
-    normalizeComputedColor(bodyStyles.color, fallbackForeground),
-  );
-  const terminalBackground = readThemeColor(
-    themeStyles,
-    "--terminal-background",
-    readThemeColor(rootThemeStyles, "--terminal-background", background),
-  );
-  const terminalForeground = readThemeColor(
-    themeStyles,
-    "--terminal-foreground",
-    readThemeColor(rootThemeStyles, "--terminal-foreground", foreground),
-  );
-  const terminalCursor = readThemeColor(
-    themeStyles,
-    "--terminal-cursor",
-    isDark ? "rgb(180, 203, 255)" : "rgb(38, 56, 78)",
-  );
-  const terminalSelection = readThemeColor(
-    themeStyles,
-    "--terminal-selection-background",
-    isDark ? "rgba(180, 203, 255, 0.25)" : "rgba(37, 63, 99, 0.2)",
-  );
-  return {
-    background: parseTerminalColor(
-      terminalBackground,
-      isDark ? { r: 14, g: 18, b: 24 } : { r: 255, g: 255, b: 255 },
+    readThemeColor(
+      themeStyles,
+      "--terminal-foreground",
+      readThemeColor(rootThemeStyles, "--terminal-foreground", containerStyles.color),
     ),
-    foreground: parseTerminalColor(
-      terminalForeground,
-      isDark ? { r: 237, g: 241, b: 247 } : { r: 28, g: 33, b: 41 },
+    fallbackForeground,
+  );
+  const cursor = normalizeComputedColor(
+    readThemeColor(
+      themeStyles,
+      "--terminal-cursor",
+      readThemeColor(rootThemeStyles, "--terminal-cursor", isDark ? "#b4cbff" : "#26384e"),
     ),
-    cursor: parseTerminalColor(
-      terminalCursor,
-      isDark ? { r: 180, g: 203, b: 255 } : { r: 38, g: 56, b: 78 },
+    isDark ? "#b4cbff" : "#26384e",
+  );
+  const selectionBackground = normalizeComputedColor(
+    readThemeColor(
+      themeStyles,
+      "--terminal-selection-background",
+      readThemeColor(
+        rootThemeStyles,
+        "--terminal-selection-background",
+        isDark ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.15)",
+      ),
     ),
-    selectionBackground: terminalSelection,
-  };
+    isDark ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.15)",
+  );
+
+  return buildXtermTheme({
+    background,
+    foreground,
+    cursor,
+    selectionBackground,
+    isDark,
+  });
 }
 
 export function terminalSelectionLineRange(position: {
@@ -362,7 +343,7 @@ export function TerminalViewport({
   keybindings,
 }: TerminalViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const terminalRef = useRef<GhosttyTerminalSurface | null>(null);
+  const terminalRef = useRef<XtermTerminalSurface | null>(null);
   const visibleRef = useRef(visible);
   const focusedRef = useRef(focused);
   useLayoutEffect(() => {
@@ -460,7 +441,7 @@ export function TerminalViewport({
   const outputCursorRef = useRef<TerminalOutputCursor>(INITIAL_TERMINAL_OUTPUT_CURSOR);
   const synchronizedStatusRef = useRef<TerminalSessionState["status"]>("closed");
   const synchronizeTerminalStatus = useEffectEvent(
-    (terminal: GhosttyTerminalSurface, status: TerminalSessionState["status"]) => {
+    (terminal: XtermTerminalSurface, status: TerminalSessionState["status"]) => {
       const synchronized = synchronizedStatusRef.current;
       if (status === "running") {
         hasHandledExitRef.current = false;
@@ -514,13 +495,13 @@ export function TerminalViewport({
     const localApi = readLocalApi();
     let cancelled = false;
     let teardown: (() => void) | null = null;
-    let setupTerminal: GhosttyTerminalSurface | null = null;
+    let setupTerminal: XtermTerminalSurface | null = null;
     let setupCleanups: Array<() => void> = [];
     let selectionActions: ReturnType<typeof observeSelectionActions> | null = null;
 
     const setup = async (): Promise<(() => void) | null> => {
       const setupFont = terminalFontRef.current;
-      const terminalOptions: GhosttyTerminalSurfaceOptions = {
+      const terminalOptions: XtermTerminalSurfaceOptions = {
         theme: terminalThemeFromApp(mount),
         font: terminalFontOptions(setupFont.family, setupFont.size),
         get visible() {
@@ -538,7 +519,7 @@ export function TerminalViewport({
           if (terminalRef.current) void showTerminalContextMenu(event);
         },
       };
-      const terminal = await GhosttyTerminalSurface.create(mount, terminalOptions);
+      const terminal = await XtermTerminalSurface.create(mount, terminalOptions);
       if (cancelled) {
         terminal.dispose();
         return null;
@@ -944,7 +925,7 @@ export function TerminalViewport({
         setupTerminal = null;
         if (cancelled) return;
         const message =
-          error instanceof Error ? error.message : "Unable to initialize libghostty-vt";
+          error instanceof Error ? error.message : "Unable to initialize terminal emulator";
         mount.textContent = `${message} — close and reopen the terminal to retry.`;
       });
 

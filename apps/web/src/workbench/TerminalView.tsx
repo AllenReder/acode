@@ -15,7 +15,7 @@ interface TerminalViewProps {
  * View definition rendering one ACode Workspace-owned Terminal Session inside
  * a Pane.
  *
- * Reuses the existing `<TerminalViewport>` (the Ghostty-backed emulator that
+ * Reuses the existing `<TerminalViewport>` (the xterm.js-backed emulator that
  * already handles ANSI, alternate-screen, resize, and selection). The View
  * passes the Workspace's cwd and the pane's focus flag through without
  * re-implementing the emulator.

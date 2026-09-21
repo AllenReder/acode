@@ -2,7 +2,7 @@
 
 Issue #5 keeps the donor terminal chain intact: the server owns the real PTY
 and bounded history, the typed WebSocket contracts expose lifecycle operations,
-and the web client renders the stream with Ghostty's virtual-terminal ABI.
+and the web client renders the stream with xterm.js (`@xterm/xterm`).
 There is one terminal identity per `(workspaceId, terminalId)` pair. The
 `terminalId` is always chosen by the client; `term-1` is only the conventional
 first id. The old `(threadId, terminalId)` shape remains a decode-compatible
@@ -33,21 +33,44 @@ The matching contracts are in `packages/contracts/src/terminal.ts` and
   `close` explicitly releases the session and optionally deletes its history.
 
 The server retains up to 5,000 lines and 8 MiB per terminal. The client keeps a
-separate bounded output buffer and replays the snapshot into Ghostty without
-sending historical terminal replies back to the live shell.
+separate bounded output buffer and replays the snapshot into the renderer with
+replies suppressed, so restored history never answers a query against the live
+shell.
 
 ## Renderer and resize behavior
 
 `ThreadTerminalDrawer` attaches through `useAttachedTerminalSession` and sends
-input and resize through `terminalEnvironment`. `GhosttyTerminalSurface` owns
-the canvas, ANSI state, cursor, selection, alternate screen, and terminal
-replies; React does not interpret terminal frames.
+input and resize through `terminalEnvironment`. `XtermTerminalSurface` owns the
+screen, ANSI state, cursor, selection, alternate screen, and terminal replies;
+React does not interpret terminal frames.
 
-Hidden drawers remain mounted so their PTY can continue running, but
-`GhosttyTerminalSurface.setVisible(false)` stops fitting and painting. The
-drawer also suppresses its fit/resize effects while hidden, so a hidden view
-does not continuously send meaningless resize RPCs. Re-showing the drawer fits
-once and reports the settled grid.
+Hidden drawers remain mounted so their PTY can continue running. The drawer
+suppresses its fit/resize effects while hidden, so a hidden view does not
+continuously send meaningless resize RPCs. Re-showing the drawer fits once and
+reports the settled grid.
+
+### Who answers terminal protocol queries
+
+The renderer answers them, because it is the only component holding the state
+they describe. Its replies reach the PTY through `onData`, the same path as
+typed input:
+
+- OSC 10/11/12 (foreground/background/cursor) come back with the colors the
+  surface was told to paint, so the answer is right in both light and dark
+  themes. While this went unanswered, Claude Code fell back to an inherited
+  `COLORFGBG`, chose the light theme, and painted black text onto a dark pane.
+- DSR 5/6 and DA1 come back with this screen's status, cursor position, and
+  device attributes.
+
+The daemon deliberately answers none of these. It runs no emulator, so it could
+only invent a cursor position, and it cannot know which theme the client is
+painting. Paseo answers them in its daemon because that daemon hosts a headless
+xterm; ACode's daemon does not.
+
+`createTerminalSpawnEnv` therefore drops an inherited `COLORFGBG` rather than
+guessing an appearance, and declares the PTY it actually provides:
+`TERM=xterm-256color`, `TERM_PROGRAM=acode`, `COLORTERM=truecolor`. An explicit
+per-session `env` from the client still overrides those defaults.
 
 ## Workspace ownership
 
@@ -93,11 +116,15 @@ Related regression commands:
 ```bash
 pnpm --filter t3 exec vp test run src/terminal/Manager.test.ts src/terminal/NodePtyAdapter.test.ts src/terminal/OutputProtocol.test.ts
 pnpm --filter @t3tools/client-runtime exec vp test run src/state/terminalSession.test.ts
-pnpm --filter @t3tools/web exec vp test run --project unit src/terminal/ghostty/core.test.ts src/terminal/ghostty/keyCodes.test.ts src/terminal/ghostty/renderer.test.ts src/terminal/ghostty/runtimeAbi.test.ts src/terminal/ghostty/surface.test.ts
+pnpm --filter @t3tools/web exec vp test run --project unit src/terminal/xterm/surface.test.ts
+pnpm smoke:desktop-terminal
 ```
 
 The smoke is intentionally separate from the fake-PTY unit tests: a passing
-string replay cannot substitute for a real shell and native PTY.
+string replay cannot substitute for a real shell and native PTY. The desktop
+smoke is the opposite kind of check: it drives the shipped renderer in a real
+browser, because "the surface answers a color query" is a DOM behaviour that no
+node-side test can observe.
 
 ## Recorded evidence
 
@@ -112,10 +139,10 @@ Observed on 2026-09-18 in this checkout:
   `ACODE_UI` and `ACODE_UI_RED 中文`, and restored both lines after the drawer
   was hidden and shown again. This exercised the typed client path named above;
   no agent turn was sent during this check.
-- The existing Ghostty ABI/surface suite covered selection/copy isolation,
-  alternate-screen state, cursor/input handling, and hidden-surface behavior;
-  the smoke validates the PTY wire and the UI check validates the visible
-  renderer rather than claiming raw escape bytes alone prove canvas rendering.
+- `pnpm smoke:desktop-terminal` failed on Chromium when the renderer's protocol
+  replies were suppressed and passed once they were restored, so the check is
+  load-bearing rather than decorative. It also fails if a replayed snapshot
+  answers a query.
 - The structured startup-failure case is covered by
   `reports every attempted shell when terminal startup cannot succeed` in
   `apps/server/src/terminal/Manager.test.ts`.
