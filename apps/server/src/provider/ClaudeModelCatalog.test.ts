@@ -4,6 +4,7 @@ import { ProviderInstanceId } from "@t3tools/contracts";
 import { hasValidClaudeManifestAdapters } from "./ClaudeModelManifest.ts";
 import type { ModelManifestData } from "./ModelManifest.ts";
 import {
+  buildDiscoveredClaudeModelCatalog,
   formatClaudeVersionUpgradeMessage,
   normalizeClaudeCatalogEffort,
   resolveClaudeCatalogApiModelId,
@@ -189,5 +190,45 @@ describe("Claude model catalog", () => {
       resolveClaudeModelsForVersion(catalog, "3.2.0").map((model) => model.slug),
       ["claude-synthetic-next", "claude-custom-tuned"],
     );
+  });
+
+  it("merges dynamically discovered models from Claude CLI, honoring aliases and custom models", () => {
+    const base = manifest();
+    const catalog = resolveClaudeModelCatalog(base);
+    const discovered = [
+      {
+        value: "default",
+        resolvedModel: "claude-synthetic-next",
+        displayName: "Default Model",
+        description: "Default synthetic model",
+        supportsEffort: true,
+      },
+      {
+        value: "deepseek-v4.1-flash[1M]",
+        displayName: "DeepSeek V4.1 Flash",
+        description: "Custom model",
+        supportsEffort: true,
+        supportedEffortLevels: ["low" as const, "high" as const],
+        supportsAdaptiveThinking: true,
+        supportsFastMode: true,
+      },
+    ];
+    const enriched = buildDiscoveredClaudeModelCatalog(catalog, discovered);
+    assert.deepStrictEqual(
+      enriched.models.map((m) => m.model.slug),
+      ["default", "deepseek-v4.1-flash[1M]"],
+    );
+    assert.strictEqual(enriched.models[0].model.isDefault, true);
+    assert.strictEqual(normalizeClaudeCatalogEffort(enriched, "extreme", "default"), "high");
+
+    const custom = enriched.models[1].model;
+    assert.strictEqual(custom.isCustom, true);
+    const effortDesc = custom.capabilities?.optionDescriptors.find((d) => d.id === "effort");
+    assert.isDefined(effortDesc);
+    assert.deepStrictEqual(effortDesc?.options.map((o) => o.id), ["low", "high"]);
+    const fastModeDesc = custom.capabilities?.optionDescriptors.find((d) => d.id === "fastMode");
+    assert.isDefined(fastModeDesc);
+    const thinkingDesc = custom.capabilities?.optionDescriptors.find((d) => d.id === "thinking");
+    assert.isDefined(thinkingDesc);
   });
 });

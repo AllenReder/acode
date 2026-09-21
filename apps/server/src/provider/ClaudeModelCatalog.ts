@@ -2,9 +2,11 @@ import {
   type CustomModelSetting,
   type ModelCapabilities,
   type ModelSelection,
+  type ProviderOptionDescriptor,
   ProviderDriverKind,
   type ServerProviderModel,
 } from "@t3tools/contracts";
+import type { ModelInfo as ClaudeModelInfo } from "@anthropic-ai/claude-agent-sdk";
 import * as Option from "effect/Option";
 import {
   getModelSelectionStringOptionValue,
@@ -70,6 +72,136 @@ export function resolveClaudeModelCatalog(manifest: ModelManifestData): ClaudeMo
 }
 
 export const BUNDLED_CLAUDE_MODEL_CATALOG = resolveClaudeModelCatalog(BUNDLED_MODEL_MANIFEST);
+
+export const DEFAULT_CLAUDE_CUSTOM_CONTEXT_WINDOW_TOKENS = 200_000;
+
+const REASONING_EFFORT_LABELS: Readonly<Record<string, string>> = {
+  none: "None",
+  minimal: "Minimal",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "Extra High",
+  max: "Max",
+  ultra: "Ultra",
+};
+
+function formatReasoningEffortLabel(level: string): string {
+  return REASONING_EFFORT_LABELS[level] ?? (level.length > 0 ? level[0]!.toUpperCase() + level.slice(1) : level);
+}
+
+function makeBooleanDescriptor(id: string, label: string): ProviderOptionDescriptor {
+  return {
+    id,
+    label,
+    type: "boolean",
+    currentValue: false,
+  };
+}
+
+function buildModelCapabilitiesFromModelInfo(info: ClaudeModelInfo): ModelCapabilities {
+  const descriptors: ProviderOptionDescriptor[] = [];
+  if (info.supportsEffort) {
+    const levels =
+      info.supportedEffortLevels && info.supportedEffortLevels.length > 0
+        ? info.supportedEffortLevels
+        : ["low", "medium", "high", "xhigh", "max"];
+    const defaultLevel = levels.includes("medium")
+      ? "medium"
+      : levels.includes("high")
+        ? "high"
+        : levels[0];
+    descriptors.push({
+      id: "effort",
+      label: "Reasoning",
+      type: "select",
+      options: levels.map((lvl) => ({
+        id: lvl,
+        label: formatReasoningEffortLabel(lvl),
+        ...(lvl === defaultLevel ? { isDefault: true } : {}),
+      })),
+      currentValue: defaultLevel,
+    });
+  }
+  if (info.supportsFastMode) {
+    descriptors.push(makeBooleanDescriptor("fastMode", "Fast Mode"));
+  }
+  if (info.supportsAdaptiveThinking) {
+    descriptors.push(makeBooleanDescriptor("thinking", "Thinking"));
+  }
+  return {
+    optionDescriptors: descriptors,
+  };
+}
+
+/**
+ * Builds a ClaudeModelCatalog using models discovered directly from the Claude CLI/SDK
+ * (e.g. initializationResult.models). Models that match known catalog models retain
+ * declarative adapter profiles (effortMap, suffixes), while unknown/custom models
+ * derive their capabilities from runtime flags.
+ */
+export function buildDiscoveredClaudeModelCatalog(
+  catalog: ClaudeModelCatalog,
+  discoveredModels?: ReadonlyArray<ClaudeModelInfo>,
+): ClaudeModelCatalog {
+  if (!discoveredModels || discoveredModels.length === 0) {
+    return catalog;
+  }
+
+  const resultModels: Array<ClaudeCatalogModel> = [];
+  for (const info of discoveredModels) {
+    const existing =
+      resolveClaudeCatalogModel(catalog, info.value) ??
+      (info.resolvedModel ? resolveClaudeCatalogModel(catalog, info.resolvedModel) : undefined);
+
+    if (existing) {
+      const isDefault = info.value === "default";
+      const existingAliases = existing.model.aliases ?? [];
+      const aliases = [
+        ...new Set([
+          ...existingAliases,
+          ...(info.resolvedModel && info.resolvedModel !== info.value ? [info.resolvedModel] : []),
+        ]),
+      ];
+
+      resultModels.push({
+        model: {
+          ...existing.model,
+          slug: info.value,
+          name: info.displayName || existing.model.name,
+          ...(isDefault ? { isDefault: true } : {}),
+          ...(aliases.length > 0 ? { aliases } : {}),
+        },
+        runtime: existing.runtime,
+        compatibility: existing.compatibility,
+      });
+    } else {
+      resultModels.push({
+        model: {
+          slug: info.value,
+          name: info.displayName || info.value,
+          isCustom: true,
+          ...(info.value === "default" ? { isDefault: true } : {}),
+          capabilities: buildModelCapabilitiesFromModelInfo(info),
+        },
+        runtime: { fixedContextWindowTokens: DEFAULT_CLAUDE_CUSTOM_CONTEXT_WINDOW_TOKENS },
+        compatibility: {},
+      });
+    }
+  }
+
+  if (resultModels.length > 0 && !resultModels.some((m) => m.model.isDefault)) {
+    resultModels[0] = {
+      ...resultModels[0]!,
+      model: {
+        ...resultModels[0]!.model,
+        isDefault: true,
+      },
+    };
+  }
+
+  return { models: resultModels };
+}
 
 /**
  * Scope the catalog to one instance's settings: custom model slugs stay opaque

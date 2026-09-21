@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import type { ModelInfo as ClaudeModelInfo } from "@anthropic-ai/claude-agent-sdk";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
@@ -143,6 +144,7 @@ type TestClaudeCapabilities = {
   readonly tokenSource: string | undefined;
   readonly apiProvider: string | undefined;
   readonly slashCommands: ReadonlyArray<ServerProviderSlashCommand>;
+  readonly models?: ReadonlyArray<ClaudeModelInfo>;
 };
 
 function claudeCapabilities(overrides: Partial<TestClaudeCapabilities> = {}) {
@@ -2678,6 +2680,43 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
                   stderr: "",
                   code: 0,
                 };
+              throw new Error(`Unexpected args: ${joined}`);
+            }),
+          ),
+        ),
+      );
+
+      it.effect("surfaces dynamically discovered Claude models when reported by CLI probe", () =>
+        Effect.gen(function* () {
+          const status = yield* checkClaudeProviderStatus(
+            defaultClaudeSettings,
+            claudeCapabilities({
+              models: [
+                {
+                  value: "deepseek-v4.1-flash",
+                  displayName: "DeepSeek V4.1 Flash",
+                  description: "Custom model",
+                  supportsEffort: true,
+                  supportedEffortLevels: ["low", "high"],
+                },
+              ],
+            }),
+          );
+          assert.strictEqual(status.status, "ready");
+          const deepseek = status.models.find((m) => m.slug === "deepseek-v4.1-flash");
+          assert.isDefined(deepseek);
+          assert.strictEqual(deepseek?.name, "DeepSeek V4.1 Flash");
+          assert.strictEqual(deepseek?.isCustom, true);
+          const effortDesc = deepseek?.capabilities?.optionDescriptors.find(
+            (d) => d.id === "effort",
+          );
+          assert.isDefined(effortDesc);
+          assert.deepStrictEqual(effortDesc?.options.map((o) => o.id), ["low", "high"]);
+        }).pipe(
+          Effect.provide(
+            mockSpawnerLayer((args) => {
+              const joined = args.join(" ");
+              if (joined === "--version") return { stdout: "2.1.0\n", stderr: "", code: 0 };
               throw new Error(`Unexpected args: ${joined}`);
             }),
           ),
