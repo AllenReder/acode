@@ -446,6 +446,32 @@ describe("ClientSettings appearance contrast", () => {
   });
 });
 
+describe("ClientSettings pane appearance", () => {
+  it("defaults gap to 0, radius to 0, and shadow to none", () => {
+    const settings = decodeClientSettings({});
+    expect(settings.paneGap).toBe(0);
+    expect(settings.paneRadius).toBe(0);
+    expect(settings.paneShadow).toBe("none");
+  });
+
+  it("round-trips valid pane appearance settings", () => {
+    const patch = { paneGap: 12, paneRadius: 8, paneShadow: "medium" as const };
+    expect(decodeClientSettingsPatch(patch)).toEqual(patch);
+    const settings = decodeClientSettings(patch);
+    expect(settings.paneGap).toBe(12);
+    expect(settings.paneRadius).toBe(8);
+    expect(settings.paneShadow).toBe("medium");
+  });
+
+  it("rejects out-of-range or invalid values", () => {
+    expect(() => decodeClientSettingsPatch({ paneGap: -1 })).toThrow();
+    expect(() => decodeClientSettingsPatch({ paneGap: 33 })).toThrow();
+    expect(() => decodeClientSettingsPatch({ paneRadius: -1 })).toThrow();
+    expect(() => decodeClientSettingsPatch({ paneRadius: 25 })).toThrow();
+    expect(() => decodeClientSettingsPatch({ paneShadow: "invalid" as any })).toThrow();
+  });
+});
+
 describe("ClientSettings panel animations", () => {
   it("defaults to instant changes", () => {
     expect(decodeClientSettings({}).panelAnimationDurationMs).toBe(0);

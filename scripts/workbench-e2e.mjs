@@ -341,6 +341,18 @@ async function main() {
     await page.locator('[data-layout-mode="scrolling"]').waitFor({ state: "visible" });
     NodeAssert.equal(await workbenchStateSignature(page), beforeLayoutSwitch);
     NodeAssert.equal(
+      await page.locator(".workbench-column-controls").count(),
+      0,
+      "Scrolling mode must not render extra Column or Stack control bars.",
+    );
+    const canvas = page.locator(".workbench-canvas");
+    const initialGap = await canvas.evaluate((el) => getComputedStyle(el).getPropertyValue("--pane-gap").trim());
+    const initialRadius = await canvas.evaluate((el) => getComputedStyle(el).getPropertyValue("--pane-radius").trim());
+    const initialShadow = await canvas.evaluate((el) => getComputedStyle(el).getPropertyValue("--pane-shadow").trim());
+    NodeAssert.equal(initialGap, "0px");
+    NodeAssert.equal(initialRadius, "0px");
+    NodeAssert.equal(initialShadow, "none");
+    NodeAssert.equal(
       await terminalCanvas.evaluate((element) => element.isConnected),
       true,
       "Switching must retain the terminal emulator mount.",

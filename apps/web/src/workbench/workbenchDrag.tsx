@@ -13,8 +13,9 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import { MIN_PANE_HEIGHT } from "./scrollingLayout";
-import { layoutLeaves, paneDropZoneFromPoint } from "./layout";
+import { paneDropZoneFromPoint } from "./layout";
+import { computePaneLayoutRects } from "./layoutGeometry";
+import { usePrimarySettings } from "../hooks/useSettings";
 import { type ViewDragSource, type ViewDropTarget, type ViewDropResult } from "./workbenchState";
 import { useWorkbenchStore } from "./workbenchStore";
 
@@ -450,6 +451,7 @@ function tabInsertionMarker(target: ViewDropTarget): WorkbenchRect | null {
 
 export function WorkbenchDropOverlay() {
   const state = useWorkbenchDragState();
+  const paneGap = usePrimarySettings((s) => s.paneGap);
   const isDragging = state !== null;
   const surfaceRef = useRef<HTMLDivElement>(null);
   const [surfaceRect, setSurfaceRect] = useState<WorkbenchRect | null>(null);
@@ -462,11 +464,9 @@ export function WorkbenchDropOverlay() {
     setSurfaceRect(rectFromElement(surfaceRef.current));
   }, [isDragging]);
 
-  if (state === null) return null;
-
-  const preview = state.phase === "canceling" ? null : state.result;
+  const preview = state === null || state.phase === "canceling" ? null : state.result;
   const previewTabId =
-    preview === null || state.target === null
+    state === null || preview === null || state.target === null
       ? null
       : state.target.kind === "newTab"
         ? preview.tabId
@@ -475,50 +475,32 @@ export function WorkbenchDropOverlay() {
     previewTabId === null
       ? null
       : (preview?.snapshot.tabs.find((tab) => tab.id === previewTabId) ?? null);
-  const previewLeaves =
-    previewTab === null || previewTab.layoutMode === "scrolling"
-      ? []
-      : layoutLeaves(previewTab.layout);
-  const destinationLeaf =
-    preview === null ? null : (previewLeaves.find((leaf) => leaf.id === preview.paneId) ?? null);
 
-  let scrollingDestination: WorkbenchRect | null = null;
-  if (previewTab?.layoutMode === "scrolling" && preview && surfaceRect) {
-    const viewport = document.querySelector<HTMLElement>(".workbench-viewport");
-    let left = surfaceRect.left - (viewport?.scrollLeft ?? 0);
-    for (const column of previewTab.columns ?? []) {
-      const index = column.paneIds.indexOf(preview.paneId);
-      if (index >= 0) {
-        const height = Math.max(
-          surfaceRect.height,
-          ...(previewTab.columns ?? []).flatMap((c) =>
-            c.shares.map((share) => MIN_PANE_HEIGHT / share),
-          ),
-        );
-        const before = column.shares.slice(0, index).reduce((a, b) => a + b, 0);
-        scrollingDestination = {
-          left: left + 5,
-          top: surfaceRect.top + before * height - (viewport?.scrollTop ?? 0) + 5,
-          width: column.width - 10,
-          height: column.shares[index]! * height - 10,
-        };
-        break;
-      }
-      left += column.width + 8;
+  const previewLayout = useMemo(() => {
+    if (!previewTab || !surfaceRect) return null;
+    return computePaneLayoutRects(previewTab, surfaceRect, paneGap);
+  }, [previewTab, surfaceRect, paneGap]);
+
+  if (state === null) return null;
+
+  let destinationRect: WorkbenchRect | null = null;
+  if (preview && previewLayout && surfaceRect) {
+    const rect = previewLayout.rects.get(preview.paneId);
+    if (rect) {
+      const viewport = document.querySelector<HTMLElement>(".workbench-viewport");
+      const scrollLeft = previewTab?.layoutMode === "scrolling" ? (viewport?.scrollLeft ?? 0) : 0;
+      const scrollTop = viewport?.scrollTop ?? 0;
+      destinationRect = {
+        left: surfaceRect.left + rect.left - scrollLeft,
+        top: surfaceRect.top + rect.top - scrollTop,
+        width: rect.width,
+        height: rect.height,
+      };
     }
   }
-  const destinationRect =
-    scrollingDestination ??
-    (destinationLeaf !== null && surfaceRect !== null
-      ? {
-          left: surfaceRect.left + destinationLeaf.rect.x * surfaceRect.width + 5,
-          top: surfaceRect.top + destinationLeaf.rect.y * surfaceRect.height + 5,
-          width: destinationLeaf.rect.w * surfaceRect.width - 10,
-          height: destinationLeaf.rect.h * surfaceRect.height - 10,
-        }
-      : state.target === null
-        ? null
-        : targetFallbackRect(state.target));
+  if (!destinationRect && state.target !== null) {
+    destinationRect = targetFallbackRect(state.target);
+  }
 
   const ghostRect =
     state.phase === "canceling"
@@ -547,29 +529,31 @@ export function WorkbenchDropOverlay() {
             : undefined
         }
       >
-        {previewLeaves.map((leaf) => {
-          const destination = destinationLeaf?.id === leaf.id;
-          return (
-            <div
-              key={leaf.id}
-              data-workbench-preview-pane
-              data-pane-id={leaf.id}
-              data-destination={destination ? "true" : "false"}
-              className={
-                "absolute rounded-md border transition-[left,top,width,height,background-color,border-color,opacity] duration-200 ease-out motion-reduce:transition-none " +
-                (destination
-                  ? "border-primary bg-primary/15 shadow-[0_0_0_1px_var(--color-primary)]"
-                  : "border-border/80 bg-background/55")
-              }
-              style={{
-                left: `calc(${leaf.rect.x * 100}% + 5px)`,
-                top: `calc(${leaf.rect.y * 100}% + 5px)`,
-                width: `calc(${leaf.rect.w * 100}% - 10px)`,
-                height: `calc(${leaf.rect.h * 100}% - 10px)`,
-              }}
-            />
-          );
-        })}
+        {previewLayout
+          ? [...previewLayout.rects.entries()].map(([paneId, rect]) => {
+              const destination = preview?.paneId === paneId;
+              return (
+                <div
+                  key={paneId}
+                  data-workbench-preview-pane
+                  data-pane-id={paneId}
+                  data-destination={destination ? "true" : "false"}
+                  className={
+                    "absolute rounded-md border transition-[left,top,width,height,background-color,border-color,opacity] duration-200 ease-out motion-reduce:transition-none " +
+                    (destination
+                      ? "border-primary bg-primary/15 shadow-[0_0_0_1px_var(--color-primary)]"
+                      : "border-border/80 bg-background/55")
+                  }
+                  style={{
+                    left: `${rect.left}px`,
+                    top: `${rect.top}px`,
+                    width: `${rect.width}px`,
+                    height: `${rect.height}px`,
+                  }}
+                />
+              );
+            })
+          : null}
       </div>
       {createPortal(
         <>

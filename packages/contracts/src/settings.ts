@@ -103,6 +103,26 @@ export const AppearanceContrast = Schema.Int.check(
 );
 export type AppearanceContrast = typeof AppearanceContrast.Type;
 const DEFAULT_APPEARANCE_CONTRAST: AppearanceContrast = 100;
+
+export const MIN_PANE_GAP = 0;
+export const MAX_PANE_GAP = 32;
+export const PaneGap = Schema.Int.check(
+  Schema.isBetween({ minimum: MIN_PANE_GAP, maximum: MAX_PANE_GAP }),
+);
+export type PaneGap = typeof PaneGap.Type;
+export const DEFAULT_PANE_GAP: PaneGap = 0;
+
+export const MIN_PANE_RADIUS = 0;
+export const MAX_PANE_RADIUS = 24;
+export const PaneRadius = Schema.Int.check(
+  Schema.isBetween({ minimum: MIN_PANE_RADIUS, maximum: MAX_PANE_RADIUS }),
+);
+export type PaneRadius = typeof PaneRadius.Type;
+export const DEFAULT_PANE_RADIUS: PaneRadius = 0;
+
+export const PaneShadow = Schema.Literals(["none", "subtle", "medium", "elevated"]);
+export type PaneShadow = typeof PaneShadow.Type;
+export const DEFAULT_PANE_SHADOW: PaneShadow = "none";
 export const MIN_PANEL_ANIMATION_DURATION_MS = 0;
 export const MAX_PANEL_ANIMATION_DURATION_MS = 400;
 export const PanelAnimationDurationMs = Schema.Int.check(
@@ -300,6 +320,9 @@ export const ClientSettingsSchema = Schema.Struct({
   appearanceContrast: AppearanceContrast.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_APPEARANCE_CONTRAST)),
   ),
+  paneGap: PaneGap.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_PANE_GAP))),
+  paneRadius: PaneRadius.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_PANE_RADIUS))),
+  paneShadow: PaneShadow.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_PANE_SHADOW))),
   // Panel motion defaults to zero because width and height transitions cause
   // layout work on every frame, which is noticeable on lower-power clients.
   panelAnimationDurationMs: PanelAnimationDurationMs.pipe(
@@ -1442,6 +1465,9 @@ export const ClientSettingsPatch = Schema.Struct({
   loadBalancingEnabled: Schema.optionalKey(Schema.Boolean),
   loadBalancingWeights: Schema.optionalKey(LoadBalancingWeights),
   appearanceContrast: Schema.optionalKey(AppearanceContrast),
+  paneGap: Schema.optionalKey(PaneGap),
+  paneRadius: Schema.optionalKey(PaneRadius),
+  paneShadow: Schema.optionalKey(PaneShadow),
   panelAnimationDurationMs: Schema.optionalKey(PanelAnimationDurationMs),
   browserDefaultViewport: Schema.optionalKey(PreviewViewportSetting),
   browserDefaultZoomFactor: Schema.optionalKey(PreviewZoomFactor),

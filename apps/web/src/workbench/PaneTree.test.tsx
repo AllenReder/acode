@@ -144,3 +144,58 @@ it("keeps View content mounted through layout switches, stacking and column move
   expect(mounts).toBe(2);
   expect(renderer!.root.findAllByType("input")[0]!.props.value).toBe("unfinished draft");
 });
+
+it("does not render extra column or stack headers in scrolling mode", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  registerViewDefinition({
+    id: "workspace",
+    label: "Workspace",
+    accepts: (target): target is Extract<ViewTarget, { kind: "workspace" }> =>
+      target.kind === "workspace",
+    bind: emptyViewBinding,
+    Component: () => <div>View Content</div>,
+  });
+  const target = {
+    kind: "workspace",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "s1" as WorkspaceId,
+  } as const;
+  useWorkbenchStore.getState().openTarget(target);
+  useWorkbenchStore.getState().splitFocused({ ...target, workspaceId: "s2" as WorkspaceId }, "down");
+  useWorkbenchStore.getState().setLayoutMode("scrolling");
+
+  await act(() => {
+    renderer = create(<Harness />);
+  });
+
+  const textNodes = renderer!.root.findAll((node) => typeof node.children?.[0] === "string");
+  const texts = textNodes.map((n) => n.children.join(""));
+  expect(texts.some((t) => t.includes("Column 1") || t.includes("Stack"))).toBe(false);
+});
+
+it("applies pane gap, radius, and shadow CSS variables to the canvas", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  registerViewDefinition({
+    id: "workspace",
+    label: "Workspace",
+    accepts: (target): target is Extract<ViewTarget, { kind: "workspace" }> =>
+      target.kind === "workspace",
+    bind: emptyViewBinding,
+    Component: () => <div>Test</div>,
+  });
+  const target = {
+    kind: "workspace",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "w1" as WorkspaceId,
+  } as const;
+  useWorkbenchStore.getState().openTarget(target);
+
+  await act(() => {
+    renderer = create(<Harness />);
+  });
+
+  const canvas = renderer!.root.findByProps({ className: "workbench-canvas" });
+  expect(canvas.props.style["--pane-gap"]).toBe("0px");
+  expect(canvas.props.style["--pane-radius"]).toBe("0px");
+  expect(canvas.props.style["--pane-shadow"]).toBe("none");
+});

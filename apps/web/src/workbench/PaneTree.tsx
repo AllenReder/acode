@@ -2,23 +2,19 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  ArrowUpIcon,
-  ArrowDownIcon,
-  PlusIcon,
-  CopyPlusIcon,
-  GripVerticalIcon,
-} from "lucide-react";
+import { CopyPlusIcon, GripVerticalIcon } from "lucide-react";
 
 import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
+import type { PaneShadow } from "@t3tools/contracts/settings";
+import { usePrimarySettings } from "../hooks/useSettings";
 import { readLocalApi } from "../localApi";
-import { layoutLeaves, layoutSashes, type SplitDir } from "./layout";
+import type { SplitDir } from "./layout";
+import { computePaneLayoutRects } from "./layoutGeometry";
 import { MIN_PANE_HEIGHT } from "./scrollingLayout";
 import { resolveViewDefinition, type ViewTarget } from "./viewRegistry";
 import { useWorkbenchStore } from "./workbenchStore";
@@ -31,8 +27,22 @@ interface PaneTreeProps {
   readonly projects?: ReadonlyArray<EnvironmentAcodeProject>;
 }
 
-/** Stable sibling keys preserve View mounts across every layout mutation. */
 const EMPTY_PROJECTS: ReadonlyArray<EnvironmentAcodeProject> = [];
+
+function resolvePaneBoxShadow(paneGap: number, paneShadow: PaneShadow): string {
+  if (paneGap === 0) return "none";
+  switch (paneShadow) {
+    case "subtle":
+      return "0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04)";
+    case "medium":
+      return "0 4px 14px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.06)";
+    case "elevated":
+      return "0 14px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08)";
+    case "none":
+    default:
+      return "none";
+  }
+}
 
 export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps) {
   const tab = getActiveTab(snapshot);
@@ -46,6 +56,11 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
   const [size, setSize] = useState({ width: 0, height: 0 });
   const changeColumn = useWorkbenchStore((s) => s.changeColumn);
   const previousRects = useRef(new Map<string, DOMRect>());
+
+  const paneGap = usePrimarySettings((s) => s.paneGap);
+  const paneRadius = usePrimarySettings((s) => s.paneRadius);
+  const paneShadow = usePrimarySettings((s) => s.paneShadow);
+
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport?.querySelectorAll) return;
@@ -76,6 +91,7 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
     }
     previousRects.current = next;
   }, [tab.layout]);
+
   useEffect(() => {
     const element = viewportRef.current;
     if (!element) return;
@@ -85,6 +101,7 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+
   useEffect(() => {
     if (!scrolling) return;
     const viewport = viewportRef.current;
@@ -125,87 +142,38 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
     viewport.addEventListener("wheel", wheel, { capture: true, passive: false });
     return () => viewport.removeEventListener("wheel", wheel, true);
   }, [scrolling]);
-  const columns = tab.columns ?? [];
-  const width = scrolling ? columns.reduce((sum, c) => sum + c.width + 8, 0) : size.width;
-  const height = scrolling
-    ? Math.max(
-        size.height,
-        ...columns.flatMap((c) => c.shares.map((share) => MIN_PANE_HEIGHT / share)),
-      )
-    : size.height;
-  const rects = new Map<string, React.CSSProperties>();
-  let left = 0;
-  if (scrolling) {
-    for (const column of columns) {
-      let top = 0;
-      column.paneIds.forEach((id, index) => {
-        const paneHeight = (column.shares[index] ?? 1) * height;
-        rects.set(id, { left, top, width: column.width, height: paneHeight });
-        top += paneHeight;
-      });
-      left += column.width + 8;
-    }
-  } else {
-    for (const { id, rect } of layoutLeaves(tab.layout))
-      rects.set(id, {
-        left: rect.x * width,
-        top: rect.y * height,
-        width: rect.w * width,
-        height: rect.h * height,
-      });
-  }
-  const previewRects = new Map<
-    string,
-    { left: number; top: number; width: number; height: number }
-  >();
-  if (previewTab?.layoutMode === "scrolling") {
-    let x = 0;
-    const previewHeight = Math.max(
-      size.height,
-      ...(previewTab.columns ?? []).flatMap((column) =>
-        column.shares.map((share) => MIN_PANE_HEIGHT / share),
-      ),
-    );
-    for (const column of previewTab.columns ?? []) {
-      let y = 0;
-      column.paneIds.forEach((id, index) => {
-        const h = column.shares[index]! * previewHeight;
-        previewRects.set(id, { left: x, top: y, width: column.width, height: h });
-        y += h;
-      });
-      x += column.width + 8;
-    }
-  } else if (previewTab) {
-    for (const { id, rect } of layoutLeaves(previewTab.layout))
-      previewRects.set(id, {
-        left: rect.x * size.width,
-        top: rect.y * size.height,
-        width: rect.w * size.width,
-        height: rect.h * size.height,
-      });
-  }
-  let columnLeft = 0;
+
+  const layout = useMemo(
+    () => computePaneLayoutRects(tab, size, paneGap),
+    [tab, size, paneGap],
+  );
+
+  const previewLayout = useMemo(
+    () => (previewTab ? computePaneLayoutRects(previewTab, size, paneGap) : undefined),
+    [previewTab, size, paneGap],
+  );
+
+  const canvasStyle = {
+    width: Math.max(layout.canvasWidth, size.width),
+    height: layout.canvasHeight,
+    "--pane-gap": `${paneGap}px`,
+    "--pane-radius": `${paneRadius}px`,
+    "--pane-shadow": resolvePaneBoxShadow(paneGap, paneShadow),
+  } as React.CSSProperties;
+
   return (
     <div
       ref={viewportRef}
       className="workbench-viewport"
       data-layout-mode={scrolling ? "scrolling" : "bsp"}
     >
-      <div className="workbench-canvas" style={{ width: Math.max(width, size.width), height }}>
+      <div className="workbench-canvas" style={canvasStyle}>
         {[...tab.panes].map(([paneId, view]) => {
-          const current = rects.get(paneId);
-          const preview = previewRects.get(paneId);
+          const current = layout.rects.get(paneId);
+          const preview = previewLayout?.rects.get(paneId);
           const transform =
-            preview && current && Number(current.width) > 10 && Number(current.height) > 10
-              ? "translate(" +
-                (preview.left - Number(current.left)) +
-                "px," +
-                (preview.top - Number(current.top)) +
-                "px) scale(" +
-                (preview.width - 10) / (Number(current.width) - 10) +
-                "," +
-                (preview.height - 10) / (Number(current.height) - 10) +
-                ")"
+            preview && current && current.width > 10 && current.height > 10
+              ? `translate(${preview.left - current.left}px, ${preview.top - current.top}px) scale(${preview.width / current.width}, ${preview.height / current.height})`
               : undefined;
           return (
             <div key={view.id} className="workbench-pane-frame" style={current}>
@@ -224,74 +192,76 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
             </div>
           );
         })}
-        {scrolling
-          ? columns.map((column) => {
-              const x = columnLeft;
-              columnLeft += column.width + 8;
-              let boundary = 0;
-              return (
-                <div key={column.id}>
-                  <ResizeHandle
-                    label="Column width"
-                    dir="right"
-                    style={{ left: x + column.width - 2, top: 0, width: 8, height }}
-                    onDelta={(delta) => changeColumn(column.id, { width: column.width + delta })}
-                  />
-                  {column.shares.slice(0, -1).map((share, index) => {
-                    boundary += share;
-                    return (
-                      <ResizeHandle
-                        key={column.paneIds[index]}
-                        label="Pane height"
-                        dir="down"
-                        style={{
-                          left: x,
-                          top: boundary * height - 3,
-                          width: column.width,
-                          height: 6,
-                        }}
-                        onDelta={(delta) => {
-                          const shares = [...column.shares];
-                          const a = shares[index]!;
-                          const b = shares[index + 1]!;
-                          const min = Math.min(MIN_PANE_HEIGHT / height, (a + b) / 2);
-                          const next = Math.max(min, Math.min(a + b - min, a + delta / height));
-                          shares[index] = next;
-                          shares[index + 1] = a + b - next;
-                          changeColumn(column.id, { shares });
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-              );
-            })
-          : layoutSashes(tab.layout).map((sash) => {
-              const boundary = sash.sizes.slice(0, sash.index + 1).reduce((a, b) => a + b, 0);
-              const row = sash.dir === "right";
-              return (
-                <SashHandle
-                  key={sash.splitId + "-" + sash.index}
-                  {...sash}
-                  style={
-                    row
-                      ? {
-                          left: (sash.group.x + boundary * sash.group.w) * width - 3,
-                          top: sash.group.y * height,
-                          width: 6,
-                          height: sash.group.h * height,
-                        }
-                      : {
-                          left: sash.group.x * width,
-                          top: (sash.group.y + boundary * sash.group.h) * height - 3,
-                          width: sash.group.w * width,
-                          height: 6,
-                        }
-                  }
-                  totalPx={row ? sash.group.w * width : sash.group.h * height}
-                />
-              );
-            })}
+
+        {layout.sashes.map((sash) => {
+          if (sash.isColumnWidth) {
+            const column = (tab.columns ?? []).find((c) => c.id === sash.columnId);
+            if (!column) return null;
+            return (
+              <ResizeHandle
+                key={sash.id}
+                label={sash.label}
+                dir={sash.dir}
+                style={{
+                  left: sash.left,
+                  top: sash.top,
+                  width: sash.width,
+                  height: sash.height,
+                }}
+                onDelta={(delta) => changeColumn(column.id, { width: column.width + delta })}
+              />
+            );
+          }
+          if (sash.isPaneHeight) {
+            const column = (tab.columns ?? []).find((c) => c.id === sash.columnId);
+            if (!column || sash.paneIndex === undefined) return null;
+            const index = sash.paneIndex;
+            return (
+              <ResizeHandle
+                key={sash.id}
+                label={sash.label}
+                dir={sash.dir}
+                style={{
+                  left: sash.left,
+                  top: sash.top,
+                  width: sash.width,
+                  height: sash.height,
+                }}
+                onDelta={(delta) => {
+                  const shares = [...column.shares];
+                  const a = shares[index]!;
+                  const b = shares[index + 1]!;
+                  const totalPx = sash.totalPx ?? layout.canvasHeight;
+                  if (totalPx <= 0) return;
+                  const min = Math.min(MIN_PANE_HEIGHT / totalPx, (a + b) / 2);
+                  const next = Math.max(min, Math.min(a + b - min, a + delta / totalPx));
+                  shares[index] = next;
+                  shares[index + 1] = a + b - next;
+                  changeColumn(column.id, { shares });
+                }}
+              />
+            );
+          }
+          if (sash.splitId && sash.index !== undefined && sash.sizes) {
+            return (
+              <SashHandle
+                key={sash.id}
+                splitId={sash.splitId}
+                index={sash.index}
+                dir={sash.dir}
+                sizes={sash.sizes}
+                style={{
+                  left: sash.left,
+                  top: sash.top,
+                  width: sash.width,
+                  height: sash.height,
+                }}
+                totalPx={sash.totalPx ?? layout.canvasWidth}
+              />
+            );
+          }
+          return null;
+        })}
       </div>
     </div>
   );
@@ -312,6 +282,7 @@ function Pane({ snapshot, projects, paneId, focused }: PaneProps) {
   const activeTab = getActiveTab(snapshot);
   const view = activeTab.panes.get(paneId);
   const target = view?.target ?? null;
+  const definition = target === null ? null : resolveViewDefinition(target);
   const breadcrumbs =
     target === null ? ["Unavailable View"] : resolveTargetBreadcrumbs(target, projects);
   const drag = useWorkbenchDragSource(
@@ -350,12 +321,13 @@ function Pane({ snapshot, projects, paneId, focused }: PaneProps) {
     update(element.getBoundingClientRect());
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
-      if (entry) update(entry.contentRect);
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      update({ width: Math.round(width), height: Math.round(height) });
     });
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
-  const definition = target !== null ? resolveViewDefinition(target) : null;
+  }, [definition]);
 
   return (
     <div
@@ -371,9 +343,6 @@ function Pane({ snapshot, projects, paneId, focused }: PaneProps) {
       data-pane-focused={focused}
       data-pane-target-kind={target?.kind ?? "empty"}
     >
-      {activeTab.layoutMode === "scrolling" && (
-        <ColumnControls paneId={paneId} snapshot={snapshot} projects={projects} />
-      )}
       <PaneHeader
         paneId={paneId}
         breadcrumbs={breadcrumbs}
@@ -404,7 +373,6 @@ function Pane({ snapshot, projects, paneId, focused }: PaneProps) {
 }
 
 function PaneHeader({
-  paneId,
   breadcrumbs,
   focused,
   onDragStart,
@@ -413,19 +381,20 @@ function PaneHeader({
   onClose,
 }: {
   readonly paneId: string;
-  readonly breadcrumbs: ReadonlyArray<string>;
+  readonly breadcrumbs: readonly string[];
   readonly focused: boolean;
   readonly onDragStart: (event: ReactPointerEvent<HTMLElement>) => void;
   readonly onDuplicate: () => void;
   readonly onOpenMenu: (position: { readonly x: number; readonly y: number }) => void;
   readonly onClose: () => void;
 }) {
-  void paneId;
-  void focused;
   return (
     <div
-      className="flex h-8 touch-none cursor-grab items-center justify-between gap-2 border-b border-border px-3 text-xs text-muted-foreground active:cursor-grabbing"
       tabIndex={0}
+      role="toolbar"
+      aria-label="Pane header"
+      data-pane-header-focused={focused}
+      className="flex select-none items-center justify-between border-b border-border/70 px-3 py-1.5 text-xs"
       onPointerDown={(event) => {
         const targetElement = event.target as HTMLElement;
         if (
@@ -499,121 +468,13 @@ function EmptyPane({ target }: { readonly target: ViewTarget | null }) {
   if (target !== null) {
     return (
       <div className="flex h-full min-h-0 items-center justify-center p-6 text-sm text-muted-foreground">
-        No View registered for {target.kind}.
+        Rendering view for {target.kind}...
       </div>
     );
   }
   return (
     <div className="flex h-full min-h-0 items-center justify-center p-6 text-sm text-muted-foreground">
       View unavailable.
-    </div>
-  );
-}
-
-function ColumnControls({
-  paneId,
-  snapshot,
-  projects,
-}: {
-  paneId: string;
-  snapshot: WorkbenchSnapshot;
-  projects: ReadonlyArray<EnvironmentAcodeProject>;
-}) {
-  const tab = getActiveTab(snapshot);
-  const columns = tab.columns ?? [];
-  const columnIndex = columns.findIndex((c) => c.paneIds.includes(paneId));
-  const column = columns[columnIndex];
-  const changeColumn = useWorkbenchStore((s) => s.changeColumn);
-  const moveInColumn = useWorkbenchStore((s) => s.moveInColumn);
-  const addPane = async (dir: SplitDir, element: HTMLElement) => {
-    const api = readLocalApi();
-    if (!api) return;
-    const choices = projects.flatMap((project) =>
-      project.workspaces.flatMap((workspace) =>
-        (workspace.sessions ?? []).flatMap((session) => {
-          const target: ViewTarget | null =
-            session.kind === "agent"
-              ? {
-                  kind: "agentSession",
-                  environmentId: project.environmentId,
-                  workspaceId: workspace.id,
-                  agentSessionId: session.id,
-                }
-              : session.kind === "terminal"
-                ? {
-                    kind: "workspaceTerminal",
-                    environmentId: project.environmentId,
-                    workspaceId: workspace.id,
-                    terminalSessionId: session.id,
-                  }
-                : null;
-          return target
-            ? [{ target, label: resolveTargetBreadcrumbs(target, projects).join(" · ") }]
-            : [];
-        }),
-      ),
-    );
-    const bounds = element.getBoundingClientRect();
-    const selected = await api.contextMenu.show(
-      choices.length
-        ? choices.map((choice, index) => ({ id: String(index), label: choice.label }))
-        : [{ id: "empty", label: "Open a Session from the sidebar first", disabled: true }],
-      { x: bounds.left, y: bounds.bottom },
-    );
-    const choice = choices[Number(selected)];
-    if (selected === null || !choice) return;
-    const store = useWorkbenchStore.getState();
-    if (store.activeTabId !== tab.id || !getActiveTab(store).panes.has(paneId)) return;
-    store.setFocused(paneId);
-    useWorkbenchStore.getState().splitFocused(choice.target, dir);
-  };
-  if (!column) return null;
-  const index = column.paneIds.indexOf(paneId);
-  return (
-    <div className="workbench-column-controls">
-      <span>{index === 0 ? "Column " + (columnIndex + 1) : "Stack " + (index + 1)}</span>
-      <div className="flex gap-1">
-        <button
-          aria-label="New column"
-          onClick={(event) => void addPane("right", event.currentTarget)}
-        >
-          <PlusIcon />
-        </button>
-        <button
-          aria-label="Add pane below"
-          onClick={(event) => void addPane("down", event.currentTarget)}
-        >
-          <CopyPlusIcon />
-        </button>
-        <button
-          aria-label="Move column left"
-          disabled={columnIndex === 0}
-          onClick={() => changeColumn(column.id, { direction: -1 })}
-        >
-          <ArrowLeftIcon />
-        </button>
-        <button
-          aria-label="Move column right"
-          disabled={columnIndex === columns.length - 1}
-          onClick={() => changeColumn(column.id, { direction: 1 })}
-        >
-          <ArrowRightIcon />
-        </button>
-        <button
-          aria-label="Move pane up"
-          disabled={index === 0}
-          onClick={() => moveInColumn(paneId, -1)}
-        >
-          <ArrowUpIcon />
-        </button>
-        <button
-          aria-label="Move pane down"
-          disabled={index === column.paneIds.length - 1}
-          onClick={() => moveInColumn(paneId, 1)}
-        >
-          <ArrowDownIcon />
-        </button>
-      </div>
     </div>
   );
 }
@@ -626,6 +487,7 @@ interface ResizeHandleProps {
   readonly splitId?: string;
   readonly index?: number;
 }
+
 function ResizeHandle({ dir, style, label, onDelta, splitId, index }: ResizeHandleProps) {
   const cleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => () => cleanupRef.current?.(), []);

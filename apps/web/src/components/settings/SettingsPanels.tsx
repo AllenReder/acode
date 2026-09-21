@@ -33,6 +33,11 @@ import {
   MAX_TERMINAL_FONT_SIZE,
   MIN_CODE_FONT_SIZE,
   MIN_APPEARANCE_CONTRAST,
+  MIN_PANE_GAP,
+  MAX_PANE_GAP,
+  MIN_PANE_RADIUS,
+  MAX_PANE_RADIUS,
+  type PaneShadow,
   MIN_GLASS_OPACITY,
   MIN_INTERFACE_FONT_SIZE,
   MIN_PANEL_ANIMATION_DURATION_MS,
@@ -526,6 +531,13 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.appearanceContrast !== DEFAULT_UNIFIED_SETTINGS.appearanceContrast
         ? ["Contrast"]
         : []),
+      ...(settings.paneGap !== DEFAULT_UNIFIED_SETTINGS.paneGap ? ["Pane gap"] : []),
+      ...(settings.paneRadius !== DEFAULT_UNIFIED_SETTINGS.paneRadius
+        ? ["Pane corner radius"]
+        : []),
+      ...(settings.paneShadow !== DEFAULT_UNIFIED_SETTINGS.paneShadow
+        ? ["Pane shadow"]
+        : []),
       ...(settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity ? ["Glass opacity"] : []),
       ...(settings.diffColorScheme !== DEFAULT_UNIFIED_SETTINGS.diffColorScheme
         ? ["Diff colors"]
@@ -741,6 +753,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     }
     updateSettings({
       appearanceContrast: DEFAULT_UNIFIED_SETTINGS.appearanceContrast,
+      paneGap: DEFAULT_UNIFIED_SETTINGS.paneGap,
+      paneRadius: DEFAULT_UNIFIED_SETTINGS.paneRadius,
+      paneShadow: DEFAULT_UNIFIED_SETTINGS.paneShadow,
       diffColorScheme: DEFAULT_UNIFIED_SETTINGS.diffColorScheme,
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
       notificationMode: DEFAULT_UNIFIED_SETTINGS.notificationMode,
@@ -1124,6 +1139,13 @@ function BackgroundActivityAdvancedDialog({
   );
 }
 
+const PANE_SHADOW_LABELS: Record<PaneShadow, string> = {
+  none: "None",
+  subtle: "Subtle",
+  medium: "Medium",
+  elevated: "Elevated",
+};
+
 export function AppearanceSettingsPanel() {
   const {
     appearanceMode,
@@ -1147,6 +1169,18 @@ export function AppearanceSettingsPanel() {
   const glassOpacitySliderStyle = {
     "--settings-slider-progress": `${glassOpacityRatio * 100}%`,
     "--settings-slider-fill-offset": `${0.5 - glassOpacityRatio}rem`,
+  } as CSSProperties;
+  const paneGapRatio =
+    (settings.paneGap - MIN_PANE_GAP) / (MAX_PANE_GAP - MIN_PANE_GAP);
+  const paneGapSliderStyle = {
+    "--settings-slider-progress": `${paneGapRatio * 100}%`,
+    "--settings-slider-fill-offset": `${0.5 - paneGapRatio}rem`,
+  } as CSSProperties;
+  const paneRadiusRatio =
+    (settings.paneRadius - MIN_PANE_RADIUS) / (MAX_PANE_RADIUS - MIN_PANE_RADIUS);
+  const paneRadiusSliderStyle = {
+    "--settings-slider-progress": `${paneRadiusRatio * 100}%`,
+    "--settings-slider-fill-offset": `${0.5 - paneRadiusRatio}rem`,
   } as CSSProperties;
   const appearanceContrastRatio =
     (settings.appearanceContrast - MIN_APPEARANCE_CONTRAST) /
@@ -1232,6 +1266,151 @@ export function AppearanceSettingsPanel() {
           }
         />
 
+        <SettingsRow
+          {...searchableSetting("setting-pane-gap")}
+          description="Outer boundary and spacing between panes."
+          resetAction={
+            settings.paneGap !== DEFAULT_UNIFIED_SETTINGS.paneGap ? (
+              <SettingResetButton
+                label="pane gap"
+                onClick={() =>
+                  updateSettings({ paneGap: DEFAULT_UNIFIED_SETTINGS.paneGap })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="flex w-full items-center gap-3 sm:w-52">
+              <output
+                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
+                htmlFor="pane-gap"
+              >
+                {settings.paneGap}px
+              </output>
+              <input
+                aria-label="Pane gap"
+                className="settings-slider min-w-0 flex-1"
+                id="pane-gap"
+                max={MAX_PANE_GAP}
+                min={MIN_PANE_GAP}
+                onChange={(event) => {
+                  const paneGap = Number(event.currentTarget.value);
+                  if (
+                    Number.isInteger(paneGap) &&
+                    paneGap >= MIN_PANE_GAP &&
+                    paneGap <= MAX_PANE_GAP
+                  ) {
+                    updateSettings({ paneGap });
+                  }
+                }}
+                step={1}
+                style={paneGapSliderStyle}
+                type="range"
+                value={settings.paneGap}
+              />
+            </div>
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("setting-pane-radius")}
+          description="Corner radius of each pane."
+          resetAction={
+            settings.paneRadius !== DEFAULT_UNIFIED_SETTINGS.paneRadius ? (
+              <SettingResetButton
+                label="pane corner radius"
+                onClick={() =>
+                  updateSettings({ paneRadius: DEFAULT_UNIFIED_SETTINGS.paneRadius })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="flex w-full items-center gap-3 sm:w-52">
+              <output
+                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
+                htmlFor="pane-radius"
+              >
+                {settings.paneRadius}px
+              </output>
+              <input
+                aria-label="Pane corner radius"
+                className="settings-slider min-w-0 flex-1"
+                id="pane-radius"
+                max={MAX_PANE_RADIUS}
+                min={MIN_PANE_RADIUS}
+                onChange={(event) => {
+                  const paneRadius = Number(event.currentTarget.value);
+                  if (
+                    Number.isInteger(paneRadius) &&
+                    paneRadius >= MIN_PANE_RADIUS &&
+                    paneRadius <= MAX_PANE_RADIUS
+                  ) {
+                    updateSettings({ paneRadius });
+                  }
+                }}
+                step={1}
+                style={paneRadiusSliderStyle}
+                type="range"
+                value={settings.paneRadius}
+              />
+            </div>
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("setting-pane-shadow")}
+          description={
+            settings.paneGap === 0
+              ? "Disabled when pane gap is 0px."
+              : "Elevation shadow applied to floating panes."
+          }
+          resetAction={
+            settings.paneShadow !== DEFAULT_UNIFIED_SETTINGS.paneShadow ? (
+              <SettingResetButton
+                label="pane shadow"
+                onClick={() =>
+                  updateSettings({ paneShadow: DEFAULT_UNIFIED_SETTINGS.paneShadow })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              disabled={settings.paneGap === 0}
+              value={settings.paneGap === 0 ? "none" : settings.paneShadow}
+              onValueChange={(value) => {
+                if (
+                  value === "none" ||
+                  value === "subtle" ||
+                  value === "medium" ||
+                  value === "elevated"
+                ) {
+                  updateSettings({ paneShadow: value });
+                }
+              }}
+            >
+              <SelectTrigger
+                size="sm"
+                className="w-full sm:w-40"
+                aria-label="Pane shadow"
+              >
+                <SelectValue>
+                  {settings.paneGap === 0
+                    ? "None (gap = 0)"
+                    : PANE_SHADOW_LABELS[settings.paneShadow]}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                {Object.entries(PANE_SHADOW_LABELS).map(([value, label]) => (
+                  <SelectItem hideIndicator key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          }
+        />
         <SettingsRow
           {...searchableSetting("setting-glass-opacity")}
           description="Higher values make menus, dialogs, and the composer more solid."

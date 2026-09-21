@@ -151,6 +151,24 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["transparent transparency solid menus dialogs composer"],
   },
   {
+    id: "setting-pane-gap",
+    title: "Pane gap",
+    to: "/settings/appearance",
+    searchTerms: ["margin spacing layout padding gap boundary"],
+  },
+  {
+    id: "setting-pane-radius",
+    title: "Pane corner radius",
+    to: "/settings/appearance",
+    searchTerms: ["corner radius rounded window layout"],
+  },
+  {
+    id: "setting-pane-shadow",
+    title: "Pane shadow",
+    to: "/settings/appearance",
+    searchTerms: ["shadow elevation depth floating window layout"],
+  },
+  {
     id: "diff-color-scheme",
     title: "Diff colors",
     to: "/settings/appearance",
