@@ -1,5 +1,7 @@
 // @effect-diagnostics preferSchemaOverJson:off -- The CLI emits a deliberately small machine-readable envelope.
 // @effect-diagnostics nodeBuiltinImport:off -- The daemon command resolves its own data-root path before the server runtime starts.
+import * as NodeFS from "node:fs";
+import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
@@ -9,6 +11,7 @@ import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
 
 import {
+  deriveLocalDaemonPaths,
   inspectAndFormatLocalDaemon,
   LocalDaemonError,
   localDaemonDescriptorForJson,
@@ -31,8 +34,17 @@ const confirmFlag = Flag.boolean("confirm").pipe(
 
 const resolveDaemonBaseDir = (baseDir: Option.Option<string>) =>
   Effect.sync(() => {
-    const configured = Option.getOrUndefined(baseDir)?.trim() || process.env.T3CODE_HOME?.trim();
-    if (!configured) return NodePath.join(NodeOS.homedir(), ".t3");
+    const configured =
+      Option.getOrUndefined(baseDir)?.trim() ||
+      process.env.ACODE_HOME?.trim() ||
+      process.env.T3CODE_HOME?.trim();
+    if (!configured) {
+      const acodeHome = NodePath.join(NodeOS.homedir(), ".acode");
+      if (NodeFS.existsSync(acodeHome)) return acodeHome;
+      const t3Home = NodePath.join(NodeOS.homedir(), ".t3");
+      if (NodeFS.existsSync(t3Home)) return t3Home;
+      return acodeHome;
+    }
     const expanded =
       configured === "~"
         ? NodeOS.homedir()
@@ -155,7 +167,52 @@ const stopCommand = Command.make("stop", {
   Command.withHandler(runStop),
 );
 
+const readToken = (baseDir: string) =>
+  Effect.tryPromise({
+    try: async () => {
+      const paths = deriveLocalDaemonPaths(baseDir);
+      const token = (await NodeFSP.readFile(paths.credentialPath, "utf8")).trim();
+      if (token.length === 0) {
+        throw new LocalDaemonError(
+          "credential-missing",
+          "No daemon credential found. Start with `acode daemon start`.",
+        );
+      }
+      return token;
+    },
+    catch: (cause) =>
+      cause instanceof LocalDaemonError
+        ? cause
+        : new LocalDaemonError(
+            "credential-missing",
+            "No daemon credential found. Start with `acode daemon start`.",
+          ),
+  });
+
+const runToken = (flags: { readonly baseDir: Option.Option<string>; readonly json: boolean }) =>
+  Effect.gen(function* () {
+    const baseDir = yield* resolveDaemonBaseDir(flags.baseDir);
+    return yield* readToken(baseDir).pipe(
+      Effect.matchEffect({
+        onSuccess: (token) =>
+          flags.json
+            ? Console.log(JSON.stringify({ ok: true, token }))
+            : Console.log(`ACode daemon bootstrap token: ${token}`),
+        onFailure: (cause) =>
+          flags.json ? Console.log(localDaemonErrorForJson(cause)) : Effect.fail(cause),
+      }),
+    );
+  });
+
+const tokenCommand = Command.make("token", {
+  baseDir: baseDirFlag,
+  json: jsonFlag,
+}).pipe(
+  Command.withDescription("Read the local daemon bootstrap credential for client authentication."),
+  Command.withHandler(runToken),
+);
+
 export const daemonCommand = Command.make("daemon").pipe(
   Command.withDescription("Manage the ACode local daemon."),
-  Command.withSubcommands([startCommand, statusCommand, stopCommand]),
+  Command.withSubcommands([startCommand, statusCommand, stopCommand, tokenCommand]),
 );

@@ -845,4 +845,87 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
       expect(resolved.otlpProtocol).toBe("http/protobuf");
     }),
   );
+
+  it.effect("prefers ACODE_HOME over T3CODE_HOME when flags are omitted", () =>
+    Effect.gen(function* () {
+      const { join } = yield* Path.Path;
+      const acodeHome = join(NodeOS.tmpdir(), "acode-home-preferred");
+      const t3Home = join(NodeOS.tmpdir(), "t3-home-fallback");
+
+      const resolved = yield* resolveServerConfig(
+        {
+          mode: Option.none(),
+          port: Option.none(),
+          host: Option.none(),
+          baseDir: Option.none(),
+          cwd: Option.none(),
+          devUrl: Option.none(),
+          noBrowser: Option.none(),
+          bootstrapFd: Option.none(),
+          autoBootstrapProjectFromCwd: Option.none(),
+          logWebSocketEvents: Option.none(),
+          tailscaleServeEnabled: Option.none(),
+          tailscaleServePort: Option.none(),
+        },
+        Option.none(),
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            ConfigProvider.layer(
+              ConfigProvider.fromEnv({
+                env: {
+                  ACODE_HOME: acodeHome,
+                  T3CODE_HOME: t3Home,
+                },
+              }),
+            ),
+            NetService.layer,
+          ),
+        ),
+      );
+
+      expect(resolved.baseDir).toBe(acodeHome);
+    }),
+  );
+
+  it.effect("prefers ACODE_DAEMON_PORT or ACODE_PORT over T3CODE_PORT", () =>
+    Effect.gen(function* () {
+      const { join } = yield* Path.Path;
+      const baseDir = join(NodeOS.tmpdir(), "acode-port-test-base");
+
+      const resolved = yield* resolveServerConfig(
+        {
+          mode: Option.none(),
+          port: Option.none(),
+          host: Option.none(),
+          baseDir: Option.some(baseDir),
+          cwd: Option.none(),
+          devUrl: Option.none(),
+          noBrowser: Option.none(),
+          bootstrapFd: Option.none(),
+          autoBootstrapProjectFromCwd: Option.none(),
+          logWebSocketEvents: Option.none(),
+          tailscaleServeEnabled: Option.none(),
+          tailscaleServePort: Option.none(),
+        },
+        Option.none(),
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            ConfigProvider.layer(
+              ConfigProvider.fromEnv({
+                env: {
+                  ACODE_DAEMON_PORT: "14773",
+                  T3CODE_PORT: "4001",
+                },
+              }),
+            ),
+            NetService.layer,
+          ),
+        ),
+      );
+
+      expect(resolved.port).toBe(14773);
+    }),
+  );
 });

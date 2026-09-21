@@ -220,4 +220,12 @@ describe("local daemon discovery diagnostics", () => {
       await server.close();
     }
   });
+
+  it("resolves credential path under secrets directory", async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "acode-daemon-paths-"));
+    const paths = deriveLocalDaemonPaths(root);
+    expect(paths.credentialPath).toBe(
+      NodePath.join(root, "userdata", "secrets", "desktop-bootstrap.token"),
+    );
+  });
 });

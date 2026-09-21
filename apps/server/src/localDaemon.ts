@@ -496,6 +496,7 @@ const inspectionError = (inspection: Exclude<LocalDaemonInspection, { status: "r
 async function reserveLoopbackPort(): Promise<number> {
   const preferredPortRaw =
     process.env.ACODE_DAEMON_PORT ||
+    process.env.ACODE_PORT ||
     process.env.T3CODE_DAEMON_PORT ||
     process.env.T3CODE_PORT;
   const preferredPort = preferredPortRaw ? Number(preferredPortRaw) : NaN;
@@ -584,6 +585,7 @@ async function spawnManagedServer(input: {
   const invocation = input.options.serverInvocation ?? defaultServerInvocation();
   const environment: NodeJS.ProcessEnv = {
     ...process.env,
+    ACODE_HOME: input.baseDir,
     T3CODE_HOME: input.baseDir,
     T3CODE_MODE: "desktop",
     T3CODE_HOST: "127.0.0.1",
@@ -697,9 +699,7 @@ export async function startLocalDaemon(
       requestTimeoutMs: options.requestTimeoutMs,
     });
     const preferredPortRaw =
-      process.env.ACODE_DAEMON_PORT ||
-      process.env.T3CODE_DAEMON_PORT ||
-      process.env.T3CODE_PORT;
+      process.env.ACODE_DAEMON_PORT || process.env.T3CODE_DAEMON_PORT || process.env.T3CODE_PORT;
     const preferredPort = preferredPortRaw ? Number(preferredPortRaw) : NaN;
 
     if (existing.status === "ready") {
