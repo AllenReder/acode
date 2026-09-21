@@ -12,9 +12,9 @@ import {
   isWorkspaceImagePreviewPath,
   isWorkspaceVideoPreviewPath,
 } from "@t3tools/shared/filePreview";
-import { VirtualizedFile, type SelectedLineRange } from "@pierre/diffs";
+import { VirtualizedFile, parseDiffFromFile, type SelectedLineRange } from "@pierre/diffs";
 import { Editor } from "@pierre/diffs/editor";
-import { EditProvider, File, type FileOptions, Virtualizer } from "@pierre/diffs/react";
+import { EditProvider, File, FileDiff, type FileOptions, Virtualizer } from "@pierre/diffs/react";
 import { DiffWorkerPoolProvider } from "../DiffWorkerPoolProvider";
 import {
   isAtomCommandInterrupted,
@@ -1007,6 +1007,7 @@ export default function FilePreviewPanel({
   const [pendingSwitchPath, setPendingSwitchPath] = useState<string | null>(null);
   const [showSwitchModal, setShowSwitchModal] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
+  const [showDiffModal, setShowDiffModal] = useState(false);
   const closeResolverRef = useRef<((allowed: boolean) => void) | null>(null);
   const { resolvedTheme } = useTheme();
   const wordWrap = useClientSettings((settings) => settings.wordWrap);
@@ -1183,6 +1184,15 @@ export default function FilePreviewPanel({
     [file.data?.contents],
   );
 
+  const conflictDiff = useMemo(() => {
+    if (!conflict || !relativePath || conflict.diskContents === undefined) return null;
+    const draftText = draftContentsRef.current ?? file.data?.contents ?? "";
+    return parseDiffFromFile(
+      { name: relativePath, contents: conflict.diskContents },
+      { name: relativePath, contents: draftText },
+    );
+  }, [conflict, file.data?.contents, relativePath]);
+
   const writeFileCommand = useAtomCommand(projectEnvironment.writeFile);
   const readFileCommand = useAtomQueryRunner(projectEnvironment.readFile, { reportFailure: false });
 
@@ -1244,6 +1254,33 @@ export default function FilePreviewPanel({
     },
     [cwd, environmentId, file, readFileCommand, relativePath, writeFileCommand],
   );
+
+  const handleDiscardAndReload = useCallback(async () => {
+    if (!relativePath) return;
+    let diskText = conflict?.diskContents;
+    if (diskText === undefined) {
+      const latest = await readFileCommand({ environmentId, input: { cwd, relativePath } });
+      if (latest._tag === "Success") {
+        diskText = latest.value.contents;
+      }
+    }
+    if (diskText !== undefined) {
+      setProjectFileQueryData(environmentId, cwd, relativePath, diskText);
+      resetDraft();
+      setConflict(null);
+      setShowDiffModal(false);
+      setReloadKey((k) => k + 1);
+      file.refresh();
+    } else {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Reload failed",
+          description: "Could not read file from disk.",
+        }),
+      );
+    }
+  }, [conflict?.diskContents, cwd, environmentId, file, readFileCommand, relativePath, resetDraft]);
 
   useEffect(() => {
     if (!explicitSave) return;
@@ -1383,21 +1420,20 @@ export default function FilePreviewPanel({
         >
           <span>Conflict: This file was modified externally on disk.</span>
           <div className="flex items-center gap-2">
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => setShowDiffModal(true)}
+            >
+              Compare Diff
+            </Button>
             <Button size="xs" variant="destructive" onClick={() => void handleSave(true)}>
               Overwrite
             </Button>
             <Button
               size="xs"
               variant="outline"
-              onClick={() => {
-                if (conflict.diskContents !== undefined && relativePath !== null) {
-                  setProjectFileQueryData(environmentId, cwd, relativePath, conflict.diskContents);
-                }
-                resetDraft();
-                setConflict(null);
-                setReloadKey((k) => k + 1);
-                file.refresh();
-              }}
+              onClick={() => void handleDiscardAndReload()}
             >
               Discard & Reload
             </Button>
@@ -1660,6 +1696,66 @@ export default function FilePreviewPanel({
                 }}
               >
                 Save
+              </Button>
+            </DialogFooter>
+          </DialogPopup>
+        </Dialog>
+      ) : null}
+
+      {showDiffModal && conflict ? (
+        <Dialog
+          open={showDiffModal}
+          onOpenChange={(open) => {
+            if (!open) setShowDiffModal(false);
+          }}
+        >
+          <DialogPopup showCloseButton className="max-w-4xl max-h-[85vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>File Conflict: {relativePath}</DialogTitle>
+              <DialogDescription>
+                Compare your unsaved draft (incoming changes) with the disk version (current).
+              </DialogDescription>
+            </DialogHeader>
+            <div className="min-h-0 flex-1 overflow-auto rounded-md border text-xs my-2">
+              {conflictDiff ? (
+                <FileDiff
+                  fileDiff={conflictDiff}
+                  options={{
+                    diffStyle: "unified",
+                    theme: resolveDiffThemeName(resolvedTheme),
+                    overflow: "wrap",
+                  }}
+                />
+              ) : (
+                <div className="p-4 text-muted-foreground text-center">
+                  Diff comparison unavailable.
+                </div>
+              )}
+            </div>
+            <DialogFooter variant="bare">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowDiffModal(false)}
+              >
+                Close
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleDiscardAndReload()}
+              >
+                Discard & Reload
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={async () => {
+                  const saved = await handleSave(true);
+                  if (saved) setShowDiffModal(false);
+                }}
+              >
+                Overwrite
               </Button>
             </DialogFooter>
           </DialogPopup>
