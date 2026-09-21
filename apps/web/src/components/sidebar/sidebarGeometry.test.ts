@@ -5,6 +5,7 @@ import {
   BUTTON_GAP,
   SEPARATOR_LEFT_GAP,
   SEPARATOR_RIGHT_GAP,
+  SETTINGS_RIGHT_GAP,
   TITLEBAR_BUTTON_SIZE,
   TRAFFIC_LIGHTS_WIDTH,
   TRAFFIC_LIGHTS_ZONE,
@@ -43,7 +44,7 @@ describe("sidebarGeometry", () => {
       TITLEBAR_BUTTON_SIZE +
       BUTTON_GAP +
       TITLEBAR_BUTTON_SIZE +
-      BASE_SPACING;
+      SETTINGS_RIGHT_GAP;
     expect(resolveSidebarMinimumWidth({ isMac: true })).toBe(expected);
   });
 
@@ -52,7 +53,7 @@ describe("sidebarGeometry", () => {
       TITLEBAR_BUTTON_SIZE +
       BUTTON_GAP +
       TITLEBAR_BUTTON_SIZE +
-      BASE_SPACING;
+      SETTINGS_RIGHT_GAP;
     expect(resolveSidebarMinimumWidth({ isMac: false })).toBe(expected);
   });
 
@@ -60,13 +61,13 @@ describe("sidebarGeometry", () => {
     const macInsets = resolveSidebarHeaderInsets({ isMac: true });
     expect(macInsets.sidebarTriggerLeft).toBe(SIDEBAR_TRIGGER_LEFT_MAC);
     expect(macInsets.buttonGap).toBe(BUTTON_GAP);
-    expect(macInsets.rightInset).toBe(BASE_SPACING);
+    expect(macInsets.rightInset).toBe(SETTINGS_RIGHT_GAP);
     expect(macInsets.titlebarHeight).toBe(36);
 
     const winInsets = resolveSidebarHeaderInsets({ isMac: false });
     expect(winInsets.sidebarTriggerLeft).toBe(SIDEBAR_TRIGGER_LEFT_WIN);
     expect(winInsets.buttonGap).toBe(BUTTON_GAP);
-    expect(winInsets.rightInset).toBe(BASE_SPACING);
+    expect(winInsets.rightInset).toBe(SETTINGS_RIGHT_GAP);
     expect(winInsets.titlebarHeight).toBe(36);
   });
 });

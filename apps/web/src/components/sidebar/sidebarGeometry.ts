@@ -19,13 +19,13 @@ export const TRAFFIC_LIGHT_GAP = 10;
  * 2. 隐藏按钮与设置按钮之间的间距 (Button Gap)
  * 默认 6px（控制隐藏按钮与设置按钮两枚按钮之间的距离）。
  */
-export const BUTTON_GAP = 6;
+export const BUTTON_GAP = 2;
 
 /**
  * 3. 折叠状态下：设置按钮与右侧细分割线之间的间距 (Separator Left Gap)
- * 默认 12px（控制设置按钮右侧到分割线的距离）。
+ * 默认 6px（控制设置按钮右侧到分割线的距离）。
  */
-export const SEPARATOR_LEFT_GAP = 12;
+export const SEPARATOR_LEFT_GAP = 6;
 
 /**
  * 4. 折叠状态下：细分割线与右侧第一个 Tab 之间的间距 (Separator Right Gap)
@@ -35,9 +35,9 @@ export const SEPARATOR_RIGHT_GAP = 12;
 
 /**
  * 5. 展开状态下：设置按钮与侧边栏右边界的间距 (Settings Right Margin)
- * 默认 12px（控制展开时设置按钮距离侧边栏右边界的距离）。
+ * 默认 6px（控制展开时设置按钮距离侧边栏右边界的距离）。
  */
-export const SETTINGS_RIGHT_GAP = 12;
+export const SETTINGS_RIGHT_GAP = 6;
 
 /** 展开状态下设置按钮相对于侧边栏右边界的总偏移量 (按钮宽 28px + 右外边距 SETTINGS_RIGHT_GAP) */
 export const EXPANDED_ACTION_RIGHT_OFFSET = TITLEBAR_BUTTON_SIZE + SETTINGS_RIGHT_GAP; // 28 + 12 = 40px

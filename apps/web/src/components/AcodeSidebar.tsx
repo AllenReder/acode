@@ -39,7 +39,7 @@ import { SessionRow } from "./sidebar/SessionRow";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { nextWorkspaceTerminalId } from "./Sidebar.logic";
 import { stackedThreadToast, toastManager } from "./ui/toast";
-import { SidebarContent, SidebarGroup, SidebarGroupLabel } from "./ui/sidebar";
+import { SidebarContent, SidebarGroup } from "./ui/sidebar";
 import { sessionRouteForTarget } from "../workbench/deepLinks";
 import { runtimeTerminalIdForTarget, terminalTargetForRuntime } from "../workbench/sessionTarget";
 import type { ViewTarget } from "../workbench/viewRegistry";
@@ -436,44 +436,34 @@ export function AcodeSidebar() {
     [renameTerminalSession],
   );
 
-  if (projects.length === 0) {
-    return (
-      <>
-        <SidebarChromeHeader />
-        <SidebarContent className="gap-0">
-          <SidebarGroup className="px-2 py-2">
-            <button
-              type="button"
-              data-testid="sidebar-add-project"
-              className="flex h-8 items-center gap-2 rounded-md px-2 text-xs hover:bg-sidebar-row-hover"
-              onClick={openAddProject}
-            >
-              <PlusIcon className="size-3.5" /> Add Project
-            </button>
-          </SidebarGroup>
-        </SidebarContent>
-        <SidebarChromeFooter />
-      </>
-    );
-  }
-
   return (
     <>
       <SidebarChromeHeader />
       <SidebarContent className="gap-0">
-      <SidebarGroup className="px-2 py-2">
-        <button
-          type="button"
-          data-testid="sidebar-add-project"
-          className="flex h-8 items-center gap-2 rounded-md px-2 text-xs hover:bg-sidebar-row-hover"
-          onClick={openAddProject}
+        {/* 最上面区域：可以放置若干按钮，每个一行，目前先只放 Add Project */}
+        <SidebarGroup
+          data-testid="sidebar-top-section"
+          className="shrink-0 px-2 pt-2 pb-1"
         >
-          <PlusIcon className="size-3.5" /> Add Project
-        </button>
-      </SidebarGroup>
-      <SidebarGroup className="min-h-0 flex-1 overflow-auto px-2 pb-2">
-        <SidebarGroupLabel>Projects</SidebarGroupLabel>
-        <div
+          <div className="flex flex-col gap-1 w-full">
+            <button
+              type="button"
+              data-testid="sidebar-add-project"
+              className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-sidebar-row-hover"
+              onClick={openAddProject}
+            >
+              <PlusIcon className="size-3.5 shrink-0" />
+              <span className="min-w-0 flex-1 truncate">Add Project</span>
+            </button>
+          </div>
+        </SidebarGroup>
+
+        {/* 中间区域：紧贴着上面区域，放置实际 sidebar 的三级菜单（project/workspace/session），并且这里去掉 Projects 字样，直接显示三级树状菜单 */}
+        <SidebarGroup
+          data-testid="sidebar-middle-section"
+          className="min-h-0 flex-1 overflow-auto px-2 pb-2 pt-0"
+        >
+          <div
           role="tree"
           aria-label="Projects, Workspaces, and Sessions"
           className="flex flex-col gap-px"
@@ -743,8 +733,15 @@ export function AcodeSidebar() {
             );
           })}
         </div>
-      </SidebarGroup>
-    </SidebarContent>
+        </SidebarGroup>
+      </SidebarContent>
+
+      {/* 下面区域：向下对齐，贴着底边，目前先什么都不放 */}
+      <div
+        data-testid="sidebar-bottom-section"
+        className="mt-auto shrink-0 px-2 py-2 empty:min-h-0 empty:p-0"
+      />
+
       <SidebarChromeFooter />
     </>
   );
