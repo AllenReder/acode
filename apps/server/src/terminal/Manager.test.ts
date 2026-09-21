@@ -2120,6 +2120,40 @@ it.layer(
       }),
   );
 
+  it.effect("declares the PTY identity and drops an inherited COLORFGBG", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager(5, {
+        env: {
+          // A stale host value is what made CLIs choose the wrong theme; the
+          // renderer answers OSC 10/11/12 from the theme it actually paints.
+          COLORFGBG: "0;15",
+          TERM: "xterm-ghostty",
+          TERM_PROGRAM: "ghostty",
+        },
+      });
+      yield* manager.open(openInput());
+      const spawnInput = ptyAdapter.spawnInputs[0];
+      assert.ok(spawnInput);
+      expect(spawnInput.env.COLORFGBG).toBeUndefined();
+      expect(spawnInput.env.TERM).toBe("xterm-256color");
+      expect(spawnInput.env.TERM_PROGRAM).toBe("acode");
+    }),
+  );
+
+  it.effect("does not fabricate terminal protocol replies in the daemon", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager(5);
+      yield* manager.open(openInput());
+      const process = ptyAdapter.processes[0];
+      assert.ok(process);
+      // The renderer owns these replies: only it knows the painted theme and
+      // the real cursor. A daemon reply here would be a second, wrong answer.
+      process.emitData("\x1b]11;?\x1b\\");
+      process.emitData("\x1b[5n");
+      expect(process.writes).toEqual([]);
+    }),
+  );
+
   it.effect("filters app runtime env variables from terminal sessions", () =>
     Effect.gen(function* () {
       const { manager, ptyAdapter } = yield* createManager(5, {

@@ -1,5 +1,12 @@
 # Ghostty web terminal
 
+> Retained, not wired up. The shipped client renders with
+> `apps/web/src/terminal/xterm/` (see ADR 0009); nothing in the app imports this
+> directory today. It stays because mobile entrypoints that reuse the same
+> `libghostty-vt` ABI are still deferred, and removing it also means retiring
+> the vendored pin, its license entry, and the desktop `wasm-unsafe-eval` grant.
+> Do not treat anything here as the current renderer.
+
 This directory is the browser adapter for the same official `libghostty-vt` C ABI used by Android.
 It is intentionally not an xterm compatibility layer.
 

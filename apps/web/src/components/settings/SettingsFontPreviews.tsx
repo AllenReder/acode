@@ -7,10 +7,10 @@ import { useTheme } from "../../hooks/useTheme";
 import { DISCONNECTED_COMPOSER_PLACEHOLDER } from "../../composerPlaceholder";
 import { resolveDiffThemeName, type DiffThemeName } from "../../lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "../../lib/syntaxHighlighting";
-import { GhosttyTerminalSurface } from "~/terminal/ghostty/surface";
+import { XtermTerminalSurface } from "~/terminal/xterm/surface";
 
 // The font previews are the real surfaces, not lookalikes: the composer's
-// Lexical editor, the diff panel's file diff, and the Ghostty canvas
+// Lexical editor, the diff panel's file diff, and the xterm terminal
 // renderer. Each already consumes the appearance font tokens (or, for the
 // terminal, the settings passed down as props), so what the row shows is
 // exactly what the app renders.
@@ -173,14 +173,14 @@ function previewTerminalFont(family: string, size: number): { family?: string; s
 }
 
 /**
- * The real Ghostty canvas renderer against a local echo loop instead of a
+ * The real xterm terminal renderer against a local echo loop instead of a
  * PTY: keys print, Enter starts a new prompt line, Backspace erases. That
  * exercises the same glyph atlas, cell metrics, and monospace gate the
  * terminal drawer uses.
  */
 export function TerminalFontPreview({ family, size }: { family: string; size: number }) {
   const mountRef = useRef<HTMLDivElement>(null);
-  const surfaceRef = useRef<GhosttyTerminalSurface | null>(null);
+  const surfaceRef = useRef<XtermTerminalSurface | null>(null);
   const fontRef = useRef({ family, size });
   const { theme, resolvedTheme } = useTheme();
 
@@ -233,7 +233,7 @@ export function TerminalFontPreview({ family, size }: { family: string; size: nu
       lineLength += printable.length;
     };
 
-    void GhosttyTerminalSurface.create(mount, {
+    void XtermTerminalSurface.create(mount, {
       theme: terminalThemeFromApp(mount),
       font: previewTerminalFont(fontRef.current.family, fontRef.current.size),
       onData: echo,
