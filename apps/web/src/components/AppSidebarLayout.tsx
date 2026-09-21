@@ -7,7 +7,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { useLocation, useNavigate } from "@tanstack/react-router";
+import { useCanGoBack, useLocation, useNavigate } from "@tanstack/react-router";
 
 import { getLocalStorageItem, removeLocalStorageItem } from "../hooks/useLocalStorage";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
@@ -121,6 +121,7 @@ function ProjectProjectionRetention() {
 
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const canGoBack = useCanGoBack();
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
     usePanelAnimationSettings();
   // Settings routes show the settings nav in place of whichever thread
@@ -196,6 +197,40 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       unsubscribe?.();
     };
   }, [navigate, pathname]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest("[data-keybinding-capture]")
+      ) {
+        return;
+      }
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        (event.key === "," || event.code === "Comma") &&
+        !event.shiftKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        const isSettingsRoute = /^\/settings(\/|$)/.test(pathname);
+        if (isSettingsRoute) {
+          if (canGoBack) {
+            window.history.back();
+          } else {
+            void navigate({ to: "/" });
+          }
+        } else {
+          void navigate({ to: "/settings" });
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [canGoBack, navigate, pathname]);
 
   return (
     <PanelAnimationSuppressionProvider value={panelAnimationsSuppressed}>
