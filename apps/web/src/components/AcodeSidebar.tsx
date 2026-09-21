@@ -36,6 +36,7 @@ import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { SessionRow } from "./sidebar/SessionRow";
+import { AddWorkspaceDialog, NewWorkspaceDialog } from "./sidebar/WorkspaceDialogs";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { nextWorkspaceTerminalId } from "./Sidebar.logic";
 import { stackedThreadToast, toastManager } from "./ui/toast";
@@ -47,6 +48,8 @@ import { useWorkbenchStore } from "../workbench/workbenchStore";
 
 type ProjectMenuId =
   | "new-project"
+  | "add-workspace"
+  | "new-workspace"
   | "associate-worktree"
   | "new-worktree"
   | "rename-project"
@@ -76,8 +79,8 @@ export function projectMenuItems(input: {
     { id: "new-project", label: "New project", icon: "folder-plus" },
     ...(input.canManageWorkspaces
       ? ([
-          { id: "associate-worktree", label: "Associate Workspace", icon: "folder-input" },
-          { id: "new-worktree", label: "New Worktree", icon: "git-branch" },
+          { id: "add-workspace", label: "Add Workspace", icon: "folder-input" },
+          { id: "new-workspace", label: "New Workspace", icon: "git-branch" },
         ] satisfies ContextMenuItem<ProjectMenuId>[])
       : []),
     { id: "rename-project", label: "Rename project", icon: "pencil", separatorBefore: true },
@@ -152,6 +155,10 @@ export function AcodeSidebar() {
     [environments],
   );
   const serverConfigs = useAtomValue(environmentServerConfigsAtom);
+  const [addWorkspaceProject, setAddWorkspaceProject] =
+    useState<EnvironmentAcodeProject | null>(null);
+  const [newWorkspaceProject, setNewWorkspaceProject] =
+    useState<EnvironmentAcodeProject | null>(null);
   const [collapsedProjects, setCollapsedProjects] = useState<ReadonlySet<string>>(new Set());
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<ReadonlySet<string>>(new Set());
   const [historyExpanded, setHistoryExpanded] = useState<ReadonlySet<string>>(new Set());
@@ -240,45 +247,43 @@ export function AcodeSidebar() {
     [navigate, openTerminal],
   );
 
-  const associateExisting = useCallback(
-    (project: EnvironmentAcodeProject) => {
-      const path = window.prompt("Path of an existing Git worktree");
-      if (!path?.trim()) return;
-      void associateWorkspace({
-        environmentId: project.environmentId,
-        input: { projectId: project.id, path },
-      }).then((result) => {
-        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-          commandFailureToast("Could not associate Workspace", squashAtomCommandFailure(result));
-        }
+  const handleAssociateWorkspace = useCallback(
+    async (path: string) => {
+      if (!addWorkspaceProject) return;
+      const result = await associateWorkspace({
+        environmentId: addWorkspaceProject.environmentId,
+        input: { projectId: addWorkspaceProject.id, path },
       });
+      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        commandFailureToast("Could not add Workspace", error);
+        throw error;
+      }
+      setAddWorkspaceProject(null);
     },
-    [associateWorkspace],
+    [addWorkspaceProject, associateWorkspace],
   );
 
-  const addWorktree = useCallback(
-    (project: EnvironmentAcodeProject) => {
-      const newBranch = window.prompt("New branch name (leave blank for detached HEAD)");
-      if (newBranch === null) return;
-      const baseRef = window.prompt("Base branch, tag, or commit", "HEAD");
-      if (baseRef === null) return;
-      const path = window.prompt("Destination path (leave blank for the managed worktrees folder)");
-      if (path === null) return;
-      void createWorktree({
-        environmentId: project.environmentId,
+  const handleCreateWorkspace = useCallback(
+    async (input: { readonly newBranch?: string | undefined; readonly baseRef?: string | undefined; readonly path?: string | undefined }) => {
+      if (!newWorkspaceProject) return;
+      const result = await createWorktree({
+        environmentId: newWorkspaceProject.environmentId,
         input: {
-          projectId: project.id,
-          ...(newBranch.trim() ? { newBranch } : {}),
-          ...(baseRef.trim() ? { baseRef } : {}),
-          ...(path.trim() ? { path } : {}),
+          projectId: newWorkspaceProject.id,
+          ...(input.newBranch ? { newBranch: input.newBranch } : {}),
+          ...(input.baseRef ? { baseRef: input.baseRef } : {}),
+          ...(input.path ? { path: input.path } : {}),
         },
-      }).then((result) => {
-        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-          commandFailureToast("Could not create Worktree", squashAtomCommandFailure(result));
-        }
       });
+      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        commandFailureToast("Could not create Workspace", error);
+        throw error;
+      }
+      setNewWorkspaceProject(null);
     },
-    [createWorktree],
+    [createWorktree, newWorkspaceProject],
   );
 
   const removeAcodeProject = useCallback(
@@ -312,8 +317,12 @@ export function AcodeSidebar() {
         );
         if (clicked === null) return;
         if (clicked === "new-project") openAddProject();
-        if (clicked === "associate-worktree") associateExisting(project);
-        if (clicked === "new-worktree") addWorktree(project);
+        if (clicked === "add-workspace" || (clicked as string) === "associate-worktree") {
+          setAddWorkspaceProject(project);
+        }
+        if (clicked === "new-workspace" || (clicked as string) === "new-worktree") {
+          setNewWorkspaceProject(project);
+        }
         if (clicked === "rename-project") {
           const title = window.prompt("Project name", project.title)?.trim();
           if (!title) return;
@@ -330,8 +339,6 @@ export function AcodeSidebar() {
       })();
     },
     [
-      addWorktree,
-      associateExisting,
       openAddProject,
       removeAcodeProject,
       renameProject,
@@ -743,6 +750,23 @@ export function AcodeSidebar() {
       />
 
       <SidebarChromeFooter />
+
+      <AddWorkspaceDialog
+        project={addWorkspaceProject}
+        open={addWorkspaceProject !== null}
+        onOpenChange={(open) => {
+          if (!open) setAddWorkspaceProject(null);
+        }}
+        onAssociate={handleAssociateWorkspace}
+      />
+      <NewWorkspaceDialog
+        project={newWorkspaceProject}
+        open={newWorkspaceProject !== null}
+        onOpenChange={(open) => {
+          if (!open) setNewWorkspaceProject(null);
+        }}
+        onCreate={handleCreateWorkspace}
+      />
     </>
   );
 }
