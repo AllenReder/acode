@@ -342,7 +342,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
           )}
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="px-[var(--sidebar-content-inset)] py-1">
+      <SidebarFooter className="border-t border-sidebar-border/40 px-[var(--sidebar-content-inset)] py-1.5 backdrop-blur-sm">
         <Suspense fallback={null}>
           <T3ConnectSidebarSignIn />
         </Suspense>

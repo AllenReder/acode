@@ -1,5 +1,5 @@
 import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
-import { PlusIcon, XIcon } from "lucide-react";
+import { Columns3Icon, PanelsTopLeftIcon, PlusIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { cn } from "../lib/utils";
@@ -28,6 +28,8 @@ function accentForTarget(target: ViewTarget): string {
 
 /** The frameless Workbench title strip shared by native and browser shells. */
 export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChromeProps) {
+  const setLayoutMode = useWorkbenchStore((state) => state.setLayoutMode);
+  const activeTab = snapshot.tabs.find((tab) => tab.id === snapshot.activeTabId)!;
   const createTab = useWorkbenchStore((state) => state.createTab);
   const activateTab = useWorkbenchStore((state) => state.activateTab);
   const closeTab = useWorkbenchStore((state) => state.closeTab);
@@ -93,15 +95,14 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
                 aria-selected={active}
                 aria-label={`Open ${title}`}
                 tabIndex={active ? 0 : -1}
-                title={title}
                 data-tab-id={tab.id}
                 data-workbench-tab-drop={tab.id}
                 data-active-tab={active ? "true" : "false"}
                 className={cn(
                   "group flex h-7 shrink-0 cursor-pointer items-center gap-2.5 overflow-hidden rounded-[var(--control-radius)] border transition-[width,background-color,border-color] duration-150",
                   active
-                    ? "w-64 justify-start border-border bg-muted/70 px-2.5 text-foreground"
-                    : "w-7 justify-center border-border bg-background/80 text-muted-foreground shadow-xs hover:w-28 hover:justify-start hover:bg-muted/50 hover:px-2.5",
+                    ? "w-48 justify-start border-border/60 bg-background px-2.5 text-foreground shadow-xs"
+                    : "w-32 justify-start border-transparent bg-transparent px-2.5 text-muted-foreground hover:bg-muted/50",
                 )}
                 onClick={() => {
                   if (!active) activateTab(tab.id);
@@ -154,9 +155,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
                     }}
                   />
                 ) : (
-                  <div
-                    className={cn("min-w-0 flex-1", active ? "block" : "hidden group-hover:block")}
-                  >
+                  <div className={cn("min-w-0 flex-1", "block")}>
                     <div className="truncate text-xs font-medium leading-none">{title}</div>
                     <div className="truncate text-[9px] text-muted-foreground leading-none mt-0.5">
                       {resolveTargetContext(target, projects)}
@@ -181,6 +180,24 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
           })}
         </div>
 
+        <div className="workbench-layout-switch" role="group" aria-label="Tab layout">
+          <button
+            type="button"
+            aria-label="BSP layout"
+            aria-pressed={activeTab.layoutMode !== "scrolling"}
+            onClick={() => setLayoutMode("bsp")}
+          >
+            <PanelsTopLeftIcon />
+          </button>
+          <button
+            type="button"
+            aria-label="Scrolling layout"
+            aria-pressed={activeTab.layoutMode === "scrolling"}
+            onClick={() => setLayoutMode("scrolling")}
+          >
+            <Columns3Icon />
+          </button>
+        </div>
         <button
           type="button"
           aria-label="New tab"

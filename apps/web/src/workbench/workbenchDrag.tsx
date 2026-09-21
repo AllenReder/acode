@@ -13,7 +13,9 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import { layoutLeaves, paneDropZoneFromPoint } from "./layout";
+import { paneDropZoneFromPoint } from "./layout";
+import { computePaneLayoutRects } from "./layoutGeometry";
+import { usePrimarySettings } from "../hooks/useSettings";
 import { type ViewDragSource, type ViewDropTarget, type ViewDropResult } from "./workbenchState";
 import { useWorkbenchStore } from "./workbenchStore";
 
@@ -183,6 +185,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
   const stabilizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeRef = useRef(false);
+  const cleanupDragRef = useRef<(() => void) | null>(null);
 
   const consumeSuppressedClick = useCallback(() => {
     const suppressed = suppressClickRef.current;
@@ -199,6 +202,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
   const beginDrag = useCallback(
     (source: ViewDragSource, label: string, event: ReactPointerEvent<HTMLElement>) => {
       if (event.button !== 0 || event.defaultPrevented) return;
+      cleanupDragRef.current?.();
       const handle = event.currentTarget;
       const sourceElement =
         source.kind === "pane"
@@ -223,8 +227,38 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
       let lastResult: ViewDropResult | null = null;
       let publishedTarget: ViewDropTarget | null = null;
 
+      // Preview transforms never move the semantic drop regions beneath the pointer.
+      const paneRegions = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-workbench-pane-drop]"),
+      ).map((element) => ({ element, rect: element.getBoundingClientRect() }));
       const resolveTarget = (x: number, y: number) => {
-        lastTarget = resolveWorkbenchDropTargetAtPoint(x, y);
+        const actual = resolveWorkbenchDropTargetAtPoint(x, y);
+        if (actual && actual.kind !== "pane") {
+          lastTarget = actual;
+          return actual;
+        }
+        const viewport = document
+          .querySelector<HTMLElement>(".workbench-viewport")
+          ?.getBoundingClientRect();
+        const inside =
+          viewport &&
+          x >= viewport.left &&
+          x <= viewport.right &&
+          y >= viewport.top &&
+          y <= viewport.bottom;
+        const hit = inside
+          ? paneRegions.find(
+              ({ rect }) => x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom,
+            )
+          : undefined;
+        lastTarget = hit
+          ? {
+              kind: "pane",
+              tabId: hit.element.dataset.workbenchTabId!,
+              paneId: hit.element.dataset.paneId!,
+              zone: paneDropZoneFromPoint(x, y, hit.rect),
+            }
+          : actual;
         return lastTarget;
       };
 
@@ -266,7 +300,9 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         window.removeEventListener("pointercancel", onCancel);
         window.removeEventListener("keydown", onKeyDown);
         delete document.documentElement.dataset.workbenchDragging;
+        cleanupDragRef.current = null;
       };
+      cleanupDragRef.current = cleanup;
 
       const finish = (cancelled: boolean) => {
         const wasActive = activeRef.current;
@@ -274,9 +310,10 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         if (!wasActive) return;
         activeRef.current = false;
         suppressClickRef.current = true;
-        const liveTarget = cancelled ? null : resolveWorkbenchDropTargetAtPoint(lastX, lastY);
-        const target = !cancelled && sameTarget(liveTarget, lastTarget) ? liveTarget : null;
-        const result = target === null ? null : lastResult;
+        const liveTarget = cancelled ? null : resolveTarget(lastX, lastY);
+        const target = liveTarget;
+        const result =
+          target === null ? null : useWorkbenchStore.getState().previewDrop(source, target);
         if (!cancelled && target !== null && result !== null) {
           useWorkbenchStore.getState().commitDrop(result);
           setState(null);
@@ -344,6 +381,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
 
   useEffect(
     () => () => {
+      cleanupDragRef.current?.();
       clearFrame();
       if (finishTimerRef.current !== null) clearTimeout(finishTimerRef.current);
       if (stabilizeTimerRef.current !== null) clearTimeout(stabilizeTimerRef.current);
@@ -413,6 +451,7 @@ function tabInsertionMarker(target: ViewDropTarget): WorkbenchRect | null {
 
 export function WorkbenchDropOverlay() {
   const state = useWorkbenchDragState();
+  const paneGap = usePrimarySettings((s) => s.paneGap);
   const isDragging = state !== null;
   const surfaceRef = useRef<HTMLDivElement>(null);
   const [surfaceRect, setSurfaceRect] = useState<WorkbenchRect | null>(null);
@@ -425,11 +464,9 @@ export function WorkbenchDropOverlay() {
     setSurfaceRect(rectFromElement(surfaceRef.current));
   }, [isDragging]);
 
-  if (state === null) return null;
-
-  const preview = state.phase === "canceling" ? null : state.result;
+  const preview = state === null || state.phase === "canceling" ? null : state.result;
   const previewTabId =
-    preview === null || state.target === null
+    state === null || preview === null || state.target === null
       ? null
       : state.target.kind === "newTab"
         ? preview.tabId
@@ -438,21 +475,32 @@ export function WorkbenchDropOverlay() {
     previewTabId === null
       ? null
       : (preview?.snapshot.tabs.find((tab) => tab.id === previewTabId) ?? null);
-  const previewLeaves = previewTab === null ? [] : layoutLeaves(previewTab.layout);
-  const destinationLeaf =
-    preview === null ? null : (previewLeaves.find((leaf) => leaf.id === preview.paneId) ?? null);
 
-  const destinationRect =
-    destinationLeaf !== null && surfaceRect !== null
-      ? {
-          left: surfaceRect.left + destinationLeaf.rect.x * surfaceRect.width,
-          top: surfaceRect.top + destinationLeaf.rect.y * surfaceRect.height,
-          width: destinationLeaf.rect.w * surfaceRect.width,
-          height: destinationLeaf.rect.h * surfaceRect.height,
-        }
-      : state.target === null
-        ? null
-        : targetFallbackRect(state.target);
+  const previewLayout = useMemo(() => {
+    if (!previewTab || !surfaceRect) return null;
+    return computePaneLayoutRects(previewTab, surfaceRect, paneGap);
+  }, [previewTab, surfaceRect, paneGap]);
+
+  if (state === null) return null;
+
+  let destinationRect: WorkbenchRect | null = null;
+  if (preview && previewLayout && surfaceRect) {
+    const rect = previewLayout.rects.get(preview.paneId);
+    if (rect) {
+      const viewport = document.querySelector<HTMLElement>(".workbench-viewport");
+      const scrollLeft = previewTab?.layoutMode === "scrolling" ? (viewport?.scrollLeft ?? 0) : 0;
+      const scrollTop = viewport?.scrollTop ?? 0;
+      destinationRect = {
+        left: surfaceRect.left + rect.left - scrollLeft,
+        top: surfaceRect.top + rect.top - scrollTop,
+        width: rect.width,
+        height: rect.height,
+      };
+    }
+  }
+  if (!destinationRect && state.target !== null) {
+    destinationRect = targetFallbackRect(state.target);
+  }
 
   const ghostRect =
     state.phase === "canceling"
@@ -481,29 +529,31 @@ export function WorkbenchDropOverlay() {
             : undefined
         }
       >
-        {previewLeaves.map((leaf) => {
-          const destination = destinationLeaf?.id === leaf.id;
-          return (
-            <div
-              key={leaf.id}
-              data-workbench-preview-pane
-              data-pane-id={leaf.id}
-              data-destination={destination ? "true" : "false"}
-              className={
-                "absolute rounded-md border transition-[left,top,width,height,background-color,border-color,opacity] duration-200 ease-out motion-reduce:transition-none " +
-                (destination
-                  ? "border-primary bg-primary/15 shadow-[0_0_0_1px_var(--color-primary)]"
-                  : "border-border/80 bg-background/55")
-              }
-              style={{
-                left: `${leaf.rect.x * 100}%`,
-                top: `${leaf.rect.y * 100}%`,
-                width: `${leaf.rect.w * 100}%`,
-                height: `${leaf.rect.h * 100}%`,
-              }}
-            />
-          );
-        })}
+        {previewLayout
+          ? [...previewLayout.rects.entries()].map(([paneId, rect]) => {
+              const destination = preview?.paneId === paneId;
+              return (
+                <div
+                  key={paneId}
+                  data-workbench-preview-pane
+                  data-pane-id={paneId}
+                  data-destination={destination ? "true" : "false"}
+                  className={
+                    "absolute rounded-md border transition-[left,top,width,height,background-color,border-color,opacity] duration-200 ease-out motion-reduce:transition-none " +
+                    (destination
+                      ? "border-primary bg-primary/15 shadow-[0_0_0_1px_var(--color-primary)]"
+                      : "border-border/80 bg-background/55")
+                  }
+                  style={{
+                    left: `${rect.left}px`,
+                    top: `${rect.top}px`,
+                    width: `${rect.width}px`,
+                    height: `${rect.height}px`,
+                  }}
+                />
+              );
+            })
+          : null}
       </div>
       {createPortal(
         <>

@@ -335,6 +335,44 @@ async function main() {
       "Dragging the BSP separator must resize the two panes.",
     );
 
+    const beforeLayoutSwitch = await workbenchStateSignature(page);
+    const terminalCanvas = await terminalPane.locator("canvas").first().elementHandle();
+    await page.getByRole("button", { name: "Scrolling layout", exact: true }).click();
+    await page.locator('[data-layout-mode="scrolling"]').waitFor({ state: "visible" });
+    NodeAssert.equal(await workbenchStateSignature(page), beforeLayoutSwitch);
+    NodeAssert.equal(
+      await page.locator(".workbench-column-controls").count(),
+      0,
+      "Scrolling mode must not render extra Column or Stack control bars.",
+    );
+    const canvas = page.locator(".workbench-canvas");
+    const initialGap = await canvas.evaluate((el) => getComputedStyle(el).getPropertyValue("--pane-gap").trim());
+    const initialRadius = await canvas.evaluate((el) => getComputedStyle(el).getPropertyValue("--pane-radius").trim());
+    const initialShadow = await canvas.evaluate((el) => getComputedStyle(el).getPropertyValue("--pane-shadow").trim());
+    NodeAssert.equal(initialGap, "0px");
+    NodeAssert.equal(initialRadius, "0px");
+    NodeAssert.equal(initialShadow, "none");
+    NodeAssert.equal(
+      await terminalCanvas.evaluate((element) => element.isConnected),
+      true,
+      "Switching must retain the terminal emulator mount.",
+    );
+    const columnSash = page.getByRole("separator", { name: "Column width" }).first();
+    await columnSash.focus();
+    await columnSash.press("ArrowRight");
+    const scrollingLayout = await page.evaluate(async () => {
+      const { useWorkbenchStore } = await import("/src/workbench/workbenchStore.ts");
+      return useWorkbenchStore
+        .getState()
+        .tabs.find((tab) => tab.id === useWorkbenchStore.getState().activeTabId).columns;
+    });
+    NodeAssert.equal(scrollingLayout[0].width, 576);
+    await page.getByRole("button", { name: "BSP layout", exact: true }).click();
+    await page.getByRole("button", { name: "Scrolling layout", exact: true }).click();
+    NodeAssert.equal(await terminalCanvas.evaluate((element) => element.isConnected), true);
+    NodeAssert.equal(await workbenchStateSignature(page), beforeLayoutSwitch);
+    await page.getByRole("button", { name: "BSP layout", exact: true }).click();
+
     await draftPane.getByRole("button", { name: "Close pane" }).click();
     await NodeAssert.rejects(
       draftPane.waitFor({ state: "visible", timeout: 1_000 }),
@@ -451,6 +489,13 @@ async function main() {
       "workspaceTerminal",
       "newAgentSession",
     ]);
+    await page.locator(".workbench-pane-frame").evaluateAll(async (elements) => {
+      await Promise.all(
+        elements.flatMap((element) =>
+          element.getAnimations().map((animation) => animation.finished.catch(() => {})),
+        ),
+      );
+    });
     const movedTerminalBox = await page
       .locator('[data-pane-target-kind="workspaceTerminal"]')
       .first()
@@ -542,6 +587,7 @@ async function main() {
     const draftHandleInSourceTab = draftPaneInSourceTab.locator(
       "[data-workbench-pane-drag-handle]",
     );
+    await draftHandleInSourceTab.waitFor({ state: "visible", timeout: timeoutMs });
     const draftHandleInSourceTabBox = await draftHandleInSourceTab.boundingBox();
     const newTabButton = page.locator("[data-workbench-new-tab-drop]");
     const newTabButtonBox = await newTabButton.boundingBox();

@@ -1,7 +1,5 @@
 import {
   ArrowLeftIcon,
-  ChartNoAxesColumnIcon,
-  GitPullRequestIcon,
   SettingsIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -9,6 +7,7 @@ import { memo, useCallback } from "react";
 import { useCanGoBack, useLocation, useNavigate } from "@tanstack/react-router";
 
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
+import { isMacPlatform } from "../../lib/utils";
 import { useEnvironments } from "../../state/environments";
 import {
   resolveEnvironmentIdentificationPillLabel,
@@ -57,10 +56,12 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader() {
 function SidebarUtilityItem({
   icon,
   label,
+  shortcut,
   onClick,
 }: {
   icon: ReactNode;
   label: string;
+  shortcut?: string;
   onClick: () => void;
 }) {
   return (
@@ -68,12 +69,23 @@ function SidebarUtilityItem({
       <Tooltip>
         <TooltipTrigger
           render={
-            <SidebarMenuButton aria-label={label} onClick={onClick} size="icon">
+            <SidebarMenuButton
+              aria-label={label}
+              data-testid="sidebar-settings-button"
+              onClick={onClick}
+              size="icon"
+              className="rounded-md transition-all duration-150 ease-out hover:bg-sidebar-row-hover active:scale-[0.98]"
+            >
               {icon}
             </SidebarMenuButton>
           }
         />
-        <TooltipPopup side="top">{label}</TooltipPopup>
+        <TooltipPopup side="top" className="flex items-center gap-1.5">
+          <span>{label}</span>
+          {shortcut ? (
+            <span className="font-mono text-[10px] opacity-60">{shortcut}</span>
+          ) : null}
+        </TooltipPopup>
       </Tooltip>
     </SidebarMenuItem>
   );
@@ -95,39 +107,22 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
               ? "pull-requests"
               : null,
   });
-  const { environments } = useEnvironments();
-  // The page reads every connected server, so one of them offering pull requests is enough for
-  // the link to lead somewhere.
-  const pullRequestsSupported = environments.some(
-    (environment) => environment.serverConfig?.environment.capabilities.pullRequests === true,
-  );
+  const isMac = typeof navigator !== "undefined" && isMacPlatform(navigator.platform);
+
   const closeMobileSidebar = useCallback(() => {
     if (isMobile) {
       setOpenMobile(false);
     }
   }, [isMobile, setOpenMobile]);
-  const handlePullRequestsClick = useCallback(() => {
-    closeMobileSidebar();
-    void navigate({
-      to: "/pull-requests",
-      search: readPullRequestListPreferences(),
-    });
-  }, [closeMobileSidebar, navigate]);
+
   const handleSettingsClick = useCallback(() => {
     closeMobileSidebar();
     void navigate({ to: "/settings" });
   }, [closeMobileSidebar, navigate]);
 
-  const handleUsageClick = useCallback(() => {
-    if (isMobile) {
-      setOpenMobile(false);
-    }
-    void navigate({ to: "/usage" });
-  }, [isMobile, navigate, setOpenMobile]);
-
   const handleBackClick = useCallback(() => {
     closeMobileSidebar();
-    if (canGoBack) {
+    if (canGoBack && typeof window !== "undefined") {
       window.history.back();
       return;
     }
@@ -138,31 +133,21 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     <SidebarMenu className="flex-row items-center">
       {currentFooterPage ? (
         <SidebarMenuItem className="min-w-0 flex-1">
-          <SidebarMenuButton onClick={handleBackClick}>
+          <SidebarMenuButton
+            onClick={handleBackClick}
+            className="rounded-md transition-all duration-150 ease-out hover:bg-sidebar-row-hover active:scale-[0.98]"
+          >
             <ArrowLeftIcon />
             <span>Back</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
       ) : (
-        <>
-          <SidebarUtilityItem
-            icon={<SettingsIcon />}
-            label="Settings"
-            onClick={handleSettingsClick}
-          />
-          {pullRequestsSupported ? (
-            <SidebarUtilityItem
-              icon={<GitPullRequestIcon />}
-              label="Pull Requests"
-              onClick={handlePullRequestsClick}
-            />
-          ) : null}
-          <SidebarUtilityItem
-            icon={<ChartNoAxesColumnIcon />}
-            label="Usage"
-            onClick={handleUsageClick}
-          />
-        </>
+        <SidebarUtilityItem
+          icon={<SettingsIcon className="size-4" />}
+          label="Settings"
+          shortcut={isMac ? "⌘," : "Ctrl+,"}
+          onClick={handleSettingsClick}
+        />
       )}
       <SidebarUpdatePill />
     </SidebarMenu>
@@ -171,7 +156,10 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
 
 export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   return (
-    <SidebarFooter className="px-[var(--sidebar-content-inset)] py-1">
+    <SidebarFooter
+      data-testid="sidebar-footer"
+      className="border-t border-sidebar-border/40 px-[var(--sidebar-content-inset)] py-1.5 backdrop-blur-sm"
+    >
       <SidebarProviderUpdatePill />
       <SidebarUpdateArchitectureWarning />
       <SidebarUtilityMenu />

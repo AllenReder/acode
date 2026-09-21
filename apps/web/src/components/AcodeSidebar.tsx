@@ -36,6 +36,7 @@ import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { SessionRow } from "./sidebar/SessionRow";
+import { SidebarChromeFooter } from "./sidebar/SidebarChrome";
 import { nextWorkspaceTerminalId } from "./Sidebar.logic";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { SidebarContent, SidebarGroup, SidebarGroupLabel } from "./ui/sidebar";
@@ -437,23 +438,27 @@ export function AcodeSidebar() {
 
   if (projects.length === 0) {
     return (
-      <SidebarContent className="gap-0">
-        <SidebarGroup className="px-2 py-2">
-          <button
-            type="button"
-            data-testid="sidebar-add-project"
-            className="flex h-8 items-center gap-2 rounded-md px-2 text-xs hover:bg-sidebar-row-hover"
-            onClick={openAddProject}
-          >
-            <PlusIcon className="size-3.5" /> Add Project
-          </button>
-        </SidebarGroup>
-      </SidebarContent>
+      <>
+        <SidebarContent className="gap-0">
+          <SidebarGroup className="px-2 py-2">
+            <button
+              type="button"
+              data-testid="sidebar-add-project"
+              className="flex h-8 items-center gap-2 rounded-md px-2 text-xs hover:bg-sidebar-row-hover"
+              onClick={openAddProject}
+            >
+              <PlusIcon className="size-3.5" /> Add Project
+            </button>
+          </SidebarGroup>
+        </SidebarContent>
+        <SidebarChromeFooter />
+      </>
     );
   }
 
   return (
-    <SidebarContent className="gap-0">
+    <>
+      <SidebarContent className="gap-0">
       <SidebarGroup className="px-2 py-2">
         <button
           type="button"
@@ -738,5 +743,7 @@ export function AcodeSidebar() {
         </div>
       </SidebarGroup>
     </SidebarContent>
+      <SidebarChromeFooter />
+    </>
   );
 }

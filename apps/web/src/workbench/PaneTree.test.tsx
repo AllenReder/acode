@@ -1,4 +1,4 @@
-import { act } from "react";
+import { act, useEffect, useState } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { PaneTree } from "./PaneTree";
@@ -100,4 +100,102 @@ it("renders Welcome without Workspace navigation or a Workspace View", async () 
       .findAllByType("button")
       .some((node) => node.children.join("").includes("ACode / Main")),
   ).toBe(false);
+});
+
+it("keeps View content mounted through layout switches, stacking and column movement", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  let mounts = 0;
+  function Content() {
+    const [value, setValue] = useState("");
+    useEffect(() => {
+      mounts++;
+    }, []);
+    return <input value={value} onChange={(e) => setValue(e.target.value)} />;
+  }
+  registerViewDefinition({
+    id: "workspace",
+    label: "Workspace",
+    accepts: (target): target is Extract<ViewTarget, { kind: "workspace" }> =>
+      target.kind === "workspace",
+    bind: emptyViewBinding,
+    Component: Content,
+  });
+  const target = {
+    kind: "workspace",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "one" as WorkspaceId,
+  } as const;
+  useWorkbenchStore.getState().openTarget(target);
+  await act(() => {
+    renderer = create(<Harness />);
+  });
+  await act(() =>
+    renderer!.root.findByType("input").props.onChange({ target: { value: "unfinished draft" } }),
+  );
+  await act(() =>
+    useWorkbenchStore
+      .getState()
+      .splitFocused({ ...target, workspaceId: "two" as WorkspaceId }, "down"),
+  );
+  await act(() => useWorkbenchStore.getState().setLayoutMode("scrolling"));
+  const column = getActiveTab(useWorkbenchStore.getState()).columns![0]!;
+  await act(() => useWorkbenchStore.getState().changeColumn(column.id, { direction: 1 }));
+  await act(() => useWorkbenchStore.getState().setLayoutMode("bsp"));
+  expect(mounts).toBe(2);
+  expect(renderer!.root.findAllByType("input")[0]!.props.value).toBe("unfinished draft");
+});
+
+it("does not render extra column or stack headers in scrolling mode", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  registerViewDefinition({
+    id: "workspace",
+    label: "Workspace",
+    accepts: (target): target is Extract<ViewTarget, { kind: "workspace" }> =>
+      target.kind === "workspace",
+    bind: emptyViewBinding,
+    Component: () => <div>View Content</div>,
+  });
+  const target = {
+    kind: "workspace",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "s1" as WorkspaceId,
+  } as const;
+  useWorkbenchStore.getState().openTarget(target);
+  useWorkbenchStore.getState().splitFocused({ ...target, workspaceId: "s2" as WorkspaceId }, "down");
+  useWorkbenchStore.getState().setLayoutMode("scrolling");
+
+  await act(() => {
+    renderer = create(<Harness />);
+  });
+
+  const textNodes = renderer!.root.findAll((node) => typeof node.children?.[0] === "string");
+  const texts = textNodes.map((n) => n.children.join(""));
+  expect(texts.some((t) => t.includes("Column 1") || t.includes("Stack"))).toBe(false);
+});
+
+it("applies pane gap, radius, and shadow CSS variables to the canvas", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  registerViewDefinition({
+    id: "workspace",
+    label: "Workspace",
+    accepts: (target): target is Extract<ViewTarget, { kind: "workspace" }> =>
+      target.kind === "workspace",
+    bind: emptyViewBinding,
+    Component: () => <div>Test</div>,
+  });
+  const target = {
+    kind: "workspace",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "w1" as WorkspaceId,
+  } as const;
+  useWorkbenchStore.getState().openTarget(target);
+
+  await act(() => {
+    renderer = create(<Harness />);
+  });
+
+  const canvas = renderer!.root.findByProps({ className: "workbench-canvas" });
+  expect(canvas.props.style["--pane-gap"]).toBe("0px");
+  expect(canvas.props.style["--pane-radius"]).toBe("0px");
+  expect(canvas.props.style["--pane-shadow"]).toBe("none");
 });
