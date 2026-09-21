@@ -91,6 +91,11 @@ import { resolveCenteredFileLineScrollTop } from "./fileLineReveal";
 import { DiffCommentAnnotation } from "../diffs/DiffCommentAnnotation";
 import { projectFileCacheKey, projectFileEditorCacheKey } from "./fileContentRevision";
 import {
+  buildEditableFileOptions,
+  buildFileEditorKey,
+  shouldEnableCommentAnnotations,
+} from "./fileEditorOptions";
+import {
   isMarkdownPreviewFile,
   setMarkdownTaskChecked,
   shouldShowFileExplorer,
@@ -578,6 +583,9 @@ interface FileSelectionOverride {
   range: SelectedLineRange | null;
 }
 
+const NOOP_PENDING_CHANGE = () => {};
+const EMPTY_LINE_ANNOTATIONS: FileCommentLineAnnotation[] = [];
+
 function EditableFileSurface({
   environmentId,
   cwd,
@@ -592,26 +600,40 @@ function EditableFileSurface({
   explicitSave = false,
   onDraftChange,
 }: EditableFileSurfaceProps) {
+  const enableCommentAnnotations = shouldEnableCommentAnnotations(composerDraftTarget);
   const addReviewComment = useComposerDraftStore((store) => store.addReviewComment);
   const removeReviewComment = useComposerDraftStore((store) => store.removeReviewComment);
   const [lineAnnotations, setLineAnnotations] = useState<FileCommentLineAnnotation[]>([]);
   const [selectionOverride, setSelectionOverride] = useState<FileSelectionOverride | null>(null);
   const selectedRange =
-    selectionOverride?.revealRequestId === revealRequestId ? selectionOverride.range : null;
+    enableCommentAnnotations && selectionOverride?.revealRequestId === revealRequestId
+      ? selectionOverride.range
+      : null;
   const setSelectedRange = useCallback(
     (range: SelectedLineRange | null) => {
+      if (!enableCommentAnnotations) return;
       setSelectionOverride({ revealRequestId, range });
     },
-    [revealRequestId],
+    [enableCommentAnnotations, revealRequestId],
   );
   const surfaceRef = useRef<HTMLDivElement>(null);
   const selectionFrameRef = useRef<number | null>(null);
+
+  const onDraftChangeRef = useRef(onDraftChange);
+  onDraftChangeRef.current = onDraftChange;
+  const composerDraftTargetRef = useRef(composerDraftTarget);
+  composerDraftTargetRef.current = composerDraftTarget;
+
   const saveCoordinator = useFileSaveCoordinator({
     environmentId,
     cwd,
     relativePath,
-    onPendingChange: onPendingChange ?? (() => {}),
+    onPendingChange: onPendingChange ?? NOOP_PENDING_CHANGE,
+    enabled: !explicitSave,
   });
+  const saveCoordinatorRef = useRef(saveCoordinator);
+  saveCoordinatorRef.current = saveCoordinator;
+
   const editor = useMemo(
     () =>
       new Editor<FileCommentAnnotationGroup>({
@@ -619,12 +641,12 @@ function EditableFileSurface({
         persistStateStorage: "inMemory",
         onChange: (file, nextLineAnnotations) => {
           if (explicitSave) {
-            onDraftChange?.(file.contents);
+            onDraftChangeRef.current?.(file.contents);
           } else {
             setProjectFileQueryData(environmentId, cwd, relativePath, file.contents);
-            saveCoordinator.change(file.contents);
+            saveCoordinatorRef.current.change(file.contents);
           }
-          if (nextLineAnnotations && composerDraftTarget) {
+          if (nextLineAnnotations && composerDraftTargetRef.current) {
             const remapped = remapFileCommentAnnotations(
               nextLineAnnotations as FileCommentLineAnnotation[],
             );
@@ -633,7 +655,7 @@ function EditableFileSurface({
               for (const entry of annotation.metadata.entries) {
                 if (entry.kind !== "comment") continue;
                 addReviewComment(
-                  composerDraftTarget,
+                  composerDraftTargetRef.current,
                   buildFileReviewComment({
                     id: entry.id,
                     filePath: relativePath,
@@ -648,7 +670,7 @@ function EditableFileSurface({
           }
         },
       }),
-    [addReviewComment, composerDraftTarget, cwd, environmentId, relativePath, saveCoordinator],
+    [addReviewComment, cwd, environmentId, explicitSave, relativePath],
   );
 
   useEffect(
@@ -757,10 +779,13 @@ function EditableFileSurface({
     },
     [editor],
   );
-  const hasOpenCommentForm = lineAnnotations.some((annotation) =>
+  const hasOpenCommentForm =
+    enableCommentAnnotations &&
+    lineAnnotations.some((annotation) =>
     annotation.metadata.entries.some((entry) => entry.kind === "draft"),
   );
   useEffect(() => {
+    if (!enableCommentAnnotations) return;
     const root = surfaceRef.current;
     if (!root) return;
     return installFileEditorDismissal({
@@ -769,15 +794,16 @@ function EditableFileSurface({
       isBlocked: () => hasOpenCommentForm,
       onDismiss: () => setSelectedRange(null),
     });
-  }, [editor, hasOpenCommentForm, setSelectedRange]);
+  }, [editor, enableCommentAnnotations, hasOpenCommentForm, setSelectedRange]);
   const handleLineSelectionEnd = useCallback(
     (range: SelectedLineRange | null) => {
+      if (!enableCommentAnnotations) return;
       setSelectedRange(range);
       if (range) {
         beginComment(range);
       }
     },
-    [beginComment, setSelectedRange],
+    [beginComment, enableCommentAnnotations, setSelectedRange],
   );
 
   const handlePostRender = useCallback<FilePostRender>(
@@ -797,6 +823,29 @@ function EditableFileSurface({
       });
     },
     [onPostRender, selectedRange],
+  );
+
+  const fileOptions = useMemo(
+    () =>
+      buildEditableFileOptions({
+        enableCommentAnnotations,
+        hasOpenCommentForm,
+        wordWrap,
+        resolvedTheme,
+        onPostRender: handlePostRender,
+        onGutterUtilityClick: setSelectedRange,
+        onLineSelectionChange: setSelectedRange,
+        onLineSelectionEnd: handleLineSelectionEnd,
+      }),
+    [
+      enableCommentAnnotations,
+      handleLineSelectionEnd,
+      handlePostRender,
+      hasOpenCommentForm,
+      resolvedTheme,
+      setSelectedRange,
+      wordWrap,
+    ],
   );
 
   return (
@@ -821,37 +870,28 @@ function EditableFileSurface({
                 editor.getFile(),
               ),
             }}
-            options={{
-              disableFileHeader: true,
-              enableGutterUtility: !hasOpenCommentForm,
-              enableLineSelection: !hasOpenCommentForm,
-              onGutterUtilityClick: setSelectedRange,
-              onLineSelectionChange: setSelectedRange,
-              onLineSelectionEnd: handleLineSelectionEnd,
-              overflow: wordWrap ? "wrap" : "scroll",
-              theme: resolveDiffThemeName(resolvedTheme),
-              preferredHighlighter: PREFERRED_HIGHLIGHTER,
-              themeType: resolvedTheme,
-              unsafeCSS: FILE_LINK_REVEAL_UNSAFE_CSS,
-              onPostRender: handlePostRender,
-            }}
+            options={fileOptions}
             selectedLines={selectedRange}
-            lineAnnotations={lineAnnotations}
-            renderAnnotation={(annotation) => (
-              <div className="py-1">
-                {annotation.metadata.entries.map((entry) => (
-                  <DiffCommentAnnotation
-                    key={entry.id}
-                    kind={entry.kind}
-                    rangeLabel={formatFileCommentRange(entry.startLine, entry.endLine)}
-                    text={entry.text}
-                    onCancel={() => removeAnnotationEntry(entry.id)}
-                    onComment={(text) => submitAnnotationEntry(entry.id, text)}
-                    onDelete={() => removeAnnotationEntry(entry.id)}
-                  />
-                ))}
-              </div>
-            )}
+            lineAnnotations={enableCommentAnnotations ? lineAnnotations : EMPTY_LINE_ANNOTATIONS}
+            {...(enableCommentAnnotations
+              ? {
+                  renderAnnotation: (annotation) => (
+                    <div className="py-1">
+                      {annotation.metadata.entries.map((entry) => (
+                        <DiffCommentAnnotation
+                          key={entry.id}
+                          kind={entry.kind}
+                          rangeLabel={formatFileCommentRange(entry.startLine, entry.endLine)}
+                          text={entry.text}
+                          onCancel={() => removeAnnotationEntry(entry.id)}
+                          onComment={(text) => submitAnnotationEntry(entry.id, text)}
+                          onDelete={() => removeAnnotationEntry(entry.id)}
+                        />
+                      ))}
+                    </div>
+                  ),
+                }
+              : {})}
             className="min-h-full"
             contentEditable
           />
@@ -951,12 +991,19 @@ export default function FilePreviewPanel({
     () => threadRef ?? ({ environmentId, threadId: "workspace-files" as any } as ScopedThreadRef),
     [environmentId, threadRef],
   );
-  const [draftContents, setDraftContents] = useState<string | null>(null);
+  const draftContentsRef = useRef<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [isDirty, setIsDirty] = useState(false);
   const [conflict, setConflict] = useState<{
     readonly actualHash?: string | undefined;
     readonly diskContents?: string | undefined;
   } | null>(null);
+
+  const resetDraft = useCallback(() => {
+    draftContentsRef.current = null;
+    setIsDirty(false);
+  }, []);
+
   const [pendingSwitchPath, setPendingSwitchPath] = useState<string | null>(null);
   const [showSwitchModal, setShowSwitchModal] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
@@ -1117,35 +1164,45 @@ export default function FilePreviewPanel({
   }, [absolutePath, createAssetUrl, cwd, environmentHttpBaseUrl, openPreview, threadRef]);
 
   useEffect(() => {
-    setDraftContents(null);
-    setIsDirty(false);
+    resetDraft();
     setConflict(null);
-  }, [relativePath]);
+  }, [relativePath, resetDraft]);
 
   useEffect(() => {
     if (!isDirty && file.data) {
-      setDraftContents(file.data.contents);
+      draftContentsRef.current = null;
     }
   }, [file.data, isDirty]);
+
+  const handleDraftChange = useCallback(
+    (next: string) => {
+      draftContentsRef.current = next;
+      const dirty = next !== (file.data?.contents ?? "");
+      setIsDirty((prev) => (prev !== dirty ? dirty : prev));
+    },
+    [file.data?.contents],
+  );
 
   const writeFileCommand = useAtomCommand(projectEnvironment.writeFile);
   const readFileCommand = useAtomQueryRunner(projectEnvironment.readFile, { reportFailure: false });
 
   const handleSave = useCallback(
     async (force = false): Promise<boolean> => {
-      if (!relativePath || draftContents === null) return true;
+      const contentsToSave = draftContentsRef.current ?? file.data?.contents;
+      if (!relativePath || contentsToSave === undefined) return true;
       const result = await writeFileCommand({
         environmentId,
         input: {
           cwd,
           relativePath,
-          contents: draftContents,
+          contents: contentsToSave,
           expectedContentHash: force ? undefined : (file.data?.contentHash ?? undefined),
         },
       });
 
       if (result._tag === "Success") {
-        setIsDirty(false);
+        setProjectFileQueryData(environmentId, cwd, relativePath, contentsToSave);
+        resetDraft();
         setConflict(null);
         file.refresh();
         toastManager.add(
@@ -1185,7 +1242,7 @@ export default function FilePreviewPanel({
       );
       return false;
     },
-    [cwd, draftContents, environmentId, file, readFileCommand, relativePath, writeFileCommand],
+    [cwd, environmentId, file, readFileCommand, relativePath, writeFileCommand],
   );
 
   useEffect(() => {
@@ -1333,11 +1390,12 @@ export default function FilePreviewPanel({
               size="xs"
               variant="outline"
               onClick={() => {
-                if (conflict.diskContents !== undefined) {
-                  setDraftContents(conflict.diskContents);
+                if (conflict.diskContents !== undefined && relativePath !== null) {
+                  setProjectFileQueryData(environmentId, cwd, relativePath, conflict.diskContents);
                 }
+                resetDraft();
                 setConflict(null);
-                setIsDirty(false);
+                setReloadKey((k) => k + 1);
                 file.refresh();
               }}
             >
@@ -1449,22 +1507,19 @@ export default function FilePreviewPanel({
             ) : (
               <DiffWorkerPoolProvider>
                 <EditableFileSurface
-                  key={`${relativePath}:${resolvedTheme}`}
+                  key={buildFileEditorKey(relativePath, resolvedTheme, reloadKey)}
                   environmentId={environmentId}
                   cwd={cwd}
                   relativePath={relativePath}
                   composerDraftTarget={composerDraftTarget}
-                  contents={draftContents ?? file.data.contents}
+                  contents={file.data.contents}
                   resolvedTheme={resolvedTheme}
                   revealRequestId={revealRequestId}
                   wordWrap={wordWrap}
                   onPostRender={onFilePostRender}
                   onPendingChange={onPendingChange}
                   explicitSave={explicitSave}
-                  onDraftChange={(next) => {
-                    setDraftContents(next);
-                    setIsDirty(next !== file.data?.contents);
-                  }}
+                  onDraftChange={handleDraftChange}
                 />
               </DiffWorkerPoolProvider>
             )
@@ -1527,7 +1582,7 @@ export default function FilePreviewPanel({
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  setIsDirty(false);
+                  resetDraft();
                   setShowSwitchModal(false);
                   if (pendingSwitchPath) onOpenFile?.(pendingSwitchPath);
                   setPendingSwitchPath(null);
@@ -1586,7 +1641,7 @@ export default function FilePreviewPanel({
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  setIsDirty(false);
+                  resetDraft();
                   setShowCloseModal(false);
                   closeResolverRef.current?.(true);
                 }}
