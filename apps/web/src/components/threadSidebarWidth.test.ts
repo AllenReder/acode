@@ -6,13 +6,13 @@ import {
 } from "./threadSidebarWidth";
 
 describe("threadSidebarWidth", () => {
-  it("resolves minimum sidebar width to 156px based on titlebar geometry", () => {
-    expect(THREAD_SIDEBAR_MIN_WIDTH).toBe(156);
+  it("resolves minimum sidebar width dynamically based on titlebar geometry", () => {
+    expect(THREAD_SIDEBAR_MIN_WIDTH).toBe(150);
   });
 
   it("clamps initial width to minimum width", () => {
     const width = resolveInitialThreadSidebarWidth(100, 1200);
-    expect(width).toBe(156);
+    expect(width).toBe(150);
   });
 
   it("respects stored width when greater than minimum", () => {

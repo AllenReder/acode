@@ -7,6 +7,7 @@ import { useCanGoBack, useLocation, useNavigate } from "@tanstack/react-router";
 
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { isMacPlatform } from "../../lib/utils";
+import { DOCK_LEFT_MAC, DOCK_LEFT_WIN } from "./sidebarGeometry";
 import {
   resolveEnvironmentIdentificationPillLabel,
   useEnvironmentStageLabel,
@@ -98,7 +99,7 @@ export function SidebarActionControl({
     void navigate({ to: "/" });
   }, [canGoBack, navigate]);
 
-  const dockLeft = isMac ? "116px" : "40px";
+  const dockLeft = `${isMac ? DOCK_LEFT_MAC : DOCK_LEFT_WIN}px`;
   const expandedLeft = "calc(var(--sidebar-width) - 40px)";
 
   return (
