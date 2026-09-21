@@ -7,7 +7,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { CopyPlusIcon, GripVerticalIcon } from "lucide-react";
+import { CopyPlusIcon } from "lucide-react";
 
 import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
 import type { PaneShadow } from "@t3tools/contracts/settings";
@@ -394,13 +394,11 @@ function PaneHeader({
       role="toolbar"
       aria-label="Pane header"
       data-pane-header-focused={focused}
-      className="flex select-none items-center justify-between border-b border-border/70 px-3 py-1.5 text-xs"
+      data-workbench-pane-drag-handle=""
+      className="flex select-none items-center justify-between border-b border-border/70 px-3 py-1.5 text-xs touch-none cursor-grab active:cursor-grabbing"
       onPointerDown={(event) => {
         const targetElement = event.target as HTMLElement;
-        if (
-          targetElement.closest("button") !== null &&
-          targetElement.closest("[data-workbench-pane-drag-handle]") === null
-        ) {
+        if (targetElement.closest("button") !== null) {
           return;
         }
         onDragStart(event);
@@ -442,14 +440,6 @@ function PaneHeader({
           onClick={onDuplicate}
         >
           <CopyPlusIcon className="size-3" />
-        </button>
-        <button
-          type="button"
-          aria-label="Move pane"
-          data-workbench-pane-drag-handle=""
-          className="flex size-5 touch-none cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing"
-        >
-          <GripVerticalIcon className="size-3" />
         </button>
         <button
           type="button"
