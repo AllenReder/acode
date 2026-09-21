@@ -494,6 +494,24 @@ const inspectionError = (inspection: Exclude<LocalDaemonInspection, { status: "r
 };
 
 async function reserveLoopbackPort(): Promise<number> {
+  const preferredPortRaw =
+    process.env.ACODE_DAEMON_PORT ||
+    process.env.T3CODE_DAEMON_PORT ||
+    process.env.T3CODE_PORT;
+  const preferredPort = preferredPortRaw ? Number(preferredPortRaw) : NaN;
+  if (Number.isInteger(preferredPort) && preferredPort > 0) {
+    const server = NodeNet.createServer();
+    const canListen = await new Promise<boolean>((resolve) => {
+      server.once("error", () => resolve(false));
+      server.listen(preferredPort, "127.0.0.1", () => {
+        server.close(() => resolve(true));
+      });
+    });
+    if (canListen) {
+      return preferredPort;
+    }
+  }
+
   const server = NodeNet.createServer();
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
