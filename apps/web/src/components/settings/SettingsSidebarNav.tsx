@@ -231,7 +231,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
   );
   return (
     <>
-      <SidebarChromeHeader mode="settings" />
+      <SidebarChromeHeader />
       <SidebarContent className="overflow-x-hidden">
         <SidebarGroup className="gap-2 p-[var(--sidebar-content-inset)]">
           <div className="flex h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground">

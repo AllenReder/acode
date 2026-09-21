@@ -13,6 +13,7 @@ import { getLocalStorageItem, removeLocalStorageItem } from "../hooks/useLocalSt
 import { PanelLeftCloseIcon, PanelLeftIcon } from "lucide-react";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import { SidebarTitlebarButton } from "./sidebar/SidebarTitlebarControl";
+import { SidebarActionControl } from "./sidebar/SidebarChrome";
 import { isMacPlatform } from "../lib/utils";
 import { resolveWorkbenchTitlebarStyle } from "../lib/windowControlsOverlay";
 import { primaryServerKeybindingsAtom } from "../state/server";
@@ -271,6 +272,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
           </Sidebar>
           {children}
           <SidebarControl />
+          <SidebarActionControl pathname={pathname} />
         </SidebarProvider>
       </WorkbenchDragProvider>
     </PanelAnimationSuppressionProvider>

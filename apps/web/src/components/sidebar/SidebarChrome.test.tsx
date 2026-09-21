@@ -31,7 +31,7 @@ vi.mock("../ui/sidebar", () => ({
     </footer>
   ),
   SidebarHeader: ({ children, ...props }: any) => <header {...props}>{children}</header>,
-  useSidebar: () => ({ isMobile: false, toggleSidebar: vi.fn() }),
+  useSidebar: () => ({ isMobile: false, toggleSidebar: vi.fn(), open: true }),
   useSidebarVisibility: () => true,
 }));
 
@@ -54,9 +54,9 @@ vi.mock("./SidebarUpdatePill", () => ({
   SidebarUpdatePill: () => null,
 }));
 
-import { SidebarChromeHeader, SidebarChromeFooter } from "./SidebarChrome";
+import { SidebarChromeHeader, SidebarChromeFooter, SidebarActionControl } from "./SidebarChrome";
 
-describe("SidebarChromeHeader and SidebarChromeFooter", () => {
+describe("SidebarChromeHeader and SidebarActionControl", () => {
   let renderer: ReactTestRenderer;
 
   afterEach(async () => {
@@ -66,11 +66,11 @@ describe("SidebarChromeHeader and SidebarChromeFooter", () => {
     routerState.pathname = "/";
   });
 
-  it("renders the settings button in header on standard routes and navigates to /settings when clicked", async () => {
+  it("renders the settings button on standard routes and navigates to /settings when clicked", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
     await act(() => {
-      renderer = create(<SidebarChromeHeader mode="main" />);
+      renderer = create(<SidebarActionControl mode="main" />);
     });
 
     const settingsButton = renderer.root.findByProps({ "data-testid": "sidebar-settings-button" });
@@ -83,14 +83,14 @@ describe("SidebarChromeHeader and SidebarChromeFooter", () => {
     expect(routerState.navigate).toHaveBeenCalledWith({ to: "/settings" });
   });
 
-  it("renders a Back button in header when on the settings route and handles back navigation", async () => {
+  it("renders a Back button when on the settings route and handles back navigation", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
     const historyBack = vi.fn();
     vi.stubGlobal("window", { history: { back: historyBack } });
 
     await act(() => {
-      renderer = create(<SidebarChromeHeader mode="settings" />);
+      renderer = create(<SidebarActionControl mode="settings" />);
     });
 
     expect(renderer.root.findAllByProps({ "data-testid": "sidebar-settings-button" })).toHaveLength(0);
@@ -105,14 +105,17 @@ describe("SidebarChromeHeader and SidebarChromeFooter", () => {
     expect(historyBack).toHaveBeenCalled();
   });
 
-  it("renders the toggle placeholder in the header to accommodate fixed control", async () => {
+  it("renders placeholders in the header to accommodate fixed titlebar controls", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
     await act(() => {
-      renderer = create(<SidebarChromeHeader mode="main" />);
+      renderer = create(<SidebarChromeHeader />);
     });
 
     const togglePlaceholder = renderer.root.findByProps({ "data-testid": "sidebar-toggle-placeholder" });
     expect(togglePlaceholder).toBeDefined();
+
+    const actionPlaceholder = renderer.root.findByProps({ "data-testid": "sidebar-action-placeholder" });
+    expect(actionPlaceholder).toBeDefined();
   });
 });

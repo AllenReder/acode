@@ -48,7 +48,7 @@ vi.mock("./ui/sidebar", () => ({
       {children}
     </button>
   ),
-  useSidebar: () => ({ isMobile: false, setOpenMobile: vi.fn(), toggleSidebar: vi.fn() }),
+  useSidebar: () => ({ isMobile: false, setOpenMobile: vi.fn(), toggleSidebar: vi.fn(), open: true }),
   useSidebarVisibility: () => true,
 }));
 
@@ -78,7 +78,7 @@ vi.mock("../hooks/useSettings", () => ({
 
 import { AcodeSidebar } from "./AcodeSidebar";
 
-describe("AcodeSidebar with footer", () => {
+describe("AcodeSidebar", () => {
   let renderer: ReactTestRenderer;
 
   afterEach(async () => {
@@ -87,7 +87,7 @@ describe("AcodeSidebar with footer", () => {
     mockState.projects = [];
   });
 
-  it("renders the sidebar footer with settings button when there are no projects", async () => {
+  it("renders the sidebar header and add project button when there are no projects", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     mockState.projects = [];
 
@@ -95,20 +95,14 @@ describe("AcodeSidebar with footer", () => {
       renderer = create(<AcodeSidebar />);
     });
 
-    const footer = renderer.root.findByProps({ "data-testid": "sidebar-footer" });
-    expect(footer).toBeDefined();
+    const addProjectBtn = renderer.root.findByProps({ "data-testid": "sidebar-add-project" });
+    expect(addProjectBtn).toBeDefined();
 
-    const settingsButton = renderer.root.findByProps({ "data-testid": "sidebar-settings-button" });
-    expect(settingsButton).toBeDefined();
-
-    await act(() => {
-      settingsButton.props.onClick();
-    });
-
-    expect(mockState.navigate).toHaveBeenCalledWith({ to: "/settings" });
+    const header = renderer.root.findByProps({ "data-sidebar": "header" });
+    expect(header).toBeDefined();
   });
 
-  it("renders the sidebar footer with settings button when projects exist", async () => {
+  it("renders the sidebar header and project list when projects exist", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     mockState.projects = [
       {
@@ -123,10 +117,10 @@ describe("AcodeSidebar with footer", () => {
       renderer = create(<AcodeSidebar />);
     });
 
-    const footer = renderer.root.findByProps({ "data-testid": "sidebar-footer" });
-    expect(footer).toBeDefined();
+    const projectRow = renderer.root.findByProps({ "data-testid": "sidebar-project-row" });
+    expect(projectRow).toBeDefined();
 
-    const settingsButton = renderer.root.findByProps({ "data-testid": "sidebar-settings-button" });
-    expect(settingsButton).toBeDefined();
+    const header = renderer.root.findByProps({ "data-sidebar": "header" });
+    expect(header).toBeDefined();
   });
 });

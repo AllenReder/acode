@@ -439,7 +439,7 @@ export function AcodeSidebar() {
   if (projects.length === 0) {
     return (
       <>
-        <SidebarChromeHeader mode="main" />
+        <SidebarChromeHeader />
         <SidebarContent className="gap-0">
           <SidebarGroup className="px-2 py-2">
             <button
@@ -459,7 +459,7 @@ export function AcodeSidebar() {
 
   return (
     <>
-      <SidebarChromeHeader mode="main" />
+      <SidebarChromeHeader />
       <SidebarContent className="gap-0">
       <SidebarGroup className="px-2 py-2">
         <button
