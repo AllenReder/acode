@@ -54,7 +54,7 @@ describe("ACode Sidebar menus", () => {
       "new-agent-session",
       "new-terminal-session",
       "rename-workspace",
-      "remove-registration",
+      "remove-workspace",
       "delete-directory",
     ]);
   });

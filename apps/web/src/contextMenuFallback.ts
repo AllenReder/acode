@@ -121,6 +121,74 @@ const ICON_PATHS: Record<string, ReadonlyArray<{ tag: string; attrs: Record<stri
     { tag: "path", attrs: { d: "M3 5a2 2 0 0 0 2 2h3" } },
     { tag: "path", attrs: { d: "M3 3v13a2 2 0 0 0 2 2h3" } },
   ],
+  "folder-plus": [
+    {
+      tag: "path",
+      attrs: {
+        d: "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z",
+      },
+    },
+    { tag: "path", attrs: { d: "M12 10v6" } },
+    { tag: "path", attrs: { d: "M9 13h6" } },
+  ],
+  "folder-input": [
+    {
+      tag: "path",
+      attrs: {
+        d: "M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1",
+      },
+    },
+    { tag: "path", attrs: { d: "M2 13h10" } },
+    { tag: "path", attrs: { d: "m9 16 3-3-3-3" } },
+  ],
+  terminal: [
+    { tag: "polyline", attrs: { points: "4 17 10 11 4 5" } },
+    { tag: "line", attrs: { x1: "12", x2: "20", y1: "19", y2: "19" } },
+  ],
+  unlink: [
+    {
+      tag: "path",
+      attrs: {
+        d: "m18.84 12.25 1.72-1.71h-.02a5.004 5.004 0 0 0-.12-7.07 5.006 5.006 0 0 0-6.95 0l-1.72 1.71",
+      },
+    },
+    {
+      tag: "path",
+      attrs: {
+        d: "m5.17 11.75-1.71 1.71a5.004 5.004 0 0 0 .12 7.07 5.006 5.006 0 0 0 6.95 0l1.71-1.71",
+      },
+    },
+    { tag: "line", attrs: { x1: "8", x2: "8", y1: "2", y2: "5" } },
+    { tag: "line", attrs: { x1: "2", x2: "5", y1: "8", y2: "8" } },
+    { tag: "line", attrs: { x1: "16", x2: "16", y1: "19", y2: "22" } },
+    { tag: "line", attrs: { x1: "19", x2: "22", y1: "16", y2: "16" } },
+  ],
+  "maximize-2": [
+    { tag: "path", attrs: { d: "M15 3h6v6" } },
+    { tag: "path", attrs: { d: "m21 3-7 7" } },
+    { tag: "path", attrs: { d: "m3 21 7-7" } },
+    { tag: "path", attrs: { d: "M9 21H3v-6" } },
+  ],
+  crosshair: [
+    { tag: "circle", attrs: { cx: "12", cy: "12", r: "10" } },
+    { tag: "line", attrs: { x1: "22", x2: "18", y1: "12", y2: "12" } },
+    { tag: "line", attrs: { x1: "6", x2: "2", y1: "12", y2: "12" } },
+    { tag: "line", attrs: { x1: "12", x2: "12", y1: "6", y2: "2" } },
+    { tag: "line", attrs: { x1: "12", x2: "12", y1: "22", y2: "18" } },
+  ],
+  columns: [
+    { tag: "rect", attrs: { width: "18", height: "18", x: "3", y: "3", rx: "2" } },
+    { tag: "path", attrs: { d: "M12 3v18" } },
+  ],
+  rows: [
+    { tag: "rect", attrs: { width: "18", height: "18", x: "3", y: "3", rx: "2" } },
+    { tag: "path", attrs: { d: "M3 12h18" } },
+  ],
+  "x-circle": [
+    { tag: "circle", attrs: { cx: "12", cy: "12", r: "10" } },
+    { tag: "path", attrs: { d: "m15 9-6 6" } },
+    { tag: "path", attrs: { d: "m9 9 6 6" } },
+  ],
   trash: [
     { tag: "path", attrs: { d: "M3 6h18" } },
     { tag: "path", attrs: { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" } },

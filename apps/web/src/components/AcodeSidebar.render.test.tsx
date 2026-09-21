@@ -17,6 +17,7 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("@effect/atom-react", () => ({
   useAtomValue: () => new Map(),
+  useAtomRefresh: () => vi.fn(),
 }));
 
 vi.mock("../state/entities", () => ({

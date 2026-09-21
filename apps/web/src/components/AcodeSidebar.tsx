@@ -59,6 +59,7 @@ type WorkspaceMenuId =
   | "new-agent-session"
   | "new-terminal-session"
   | "rename-workspace"
+  | "remove-workspace"
   | "remove-registration"
   | "delete-directory";
 
@@ -102,9 +103,10 @@ export function workspaceMenuItems(input: {
     { id: "new-terminal-session", label: "New Terminal Session", icon: "terminal" },
     { id: "rename-workspace", label: "Rename", icon: "pencil", separatorBefore: true },
     {
-      id: "remove-registration",
-      label: "Remove registration",
-      icon: "unlink",
+      id: "remove-workspace",
+      label: "Remove workspace",
+      icon: "trash",
+      destructive: true,
       separatorBefore: true,
     },
     ...(input.canDeleteDirectory
@@ -374,7 +376,7 @@ export function AcodeSidebar() {
             }
           });
         }
-        if (clicked === "remove-registration") {
+        if (clicked === "remove-workspace" || (clicked as string) === "remove-registration") {
           if (!window.confirm(`Remove Workspace "${workspace.title}" from this project?`)) return;
           void removeWorkspace({
             environmentId: project.environmentId,
