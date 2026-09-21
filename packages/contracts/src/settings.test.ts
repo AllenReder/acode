@@ -419,7 +419,7 @@ describe("ClientSettings window glass and backdrop settings", () => {
     const settings = decodeClientSettings({});
     expect(settings.sidebarOpacity).toBe(85);
     expect(settings.sidebarBlur).toBe(24);
-    expect(settings.workbenchGlass).toBe(false);
+    expect(settings.workbenchGlass).toBe(true);
     expect(settings.workbenchOpacity).toBe(88);
     expect(settings.chatBackgroundPath).toBeNull();
     expect(settings.chatBackgroundOpacity).toBe(24);

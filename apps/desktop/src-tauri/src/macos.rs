@@ -35,7 +35,7 @@ unsafe extern "C" {
 }
 
 pub fn install(window: &WebviewWindow) {
-    prepare_launch(window);
+    enable_glass(window);
     let event_window = window.clone();
     window.on_window_event(move |event| match event {
         WindowEvent::Destroyed => {
@@ -75,6 +75,7 @@ fn set_glass_enabled(window: &WebviewWindow, enabled: bool) {
     }
 }
 
+#[allow(dead_code)]
 fn prepare_launch(window: &WebviewWindow) {
     set_launch_background(window, 23, 23, 23);
     let Some(ns_window) = ns_window(window) else {

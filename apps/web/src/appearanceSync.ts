@@ -16,9 +16,23 @@ export interface ChatBackgroundSettings {
 
 export function isNativeGlassPlatform(): boolean {
   if (typeof window === "undefined") return false;
-  if (!isTauri) return false;
-  const platform = window.desktopBridge?.getClientPlatform?.() ?? "";
-  return platform === "darwin" || platform === "win32" || navigator.userAgent.includes("Mac") || navigator.userAgent.includes("Windows");
+  const desktopPlatform = window.desktopBridge?.getClientPlatform?.();
+  const isDarwinOrWin = desktopPlatform === "darwin" || desktopPlatform === "win32";
+  const isMac = typeof navigator !== "undefined" && (/Mac|iPhone|iPad/i.test(navigator.platform) || /Mac/i.test(navigator.userAgent));
+  const isWin = typeof navigator !== "undefined" && (/Win/i.test(navigator.platform) || /Windows/i.test(navigator.userAgent));
+  return (isDarwinOrWin || Boolean(isTauri || (window as any).isTauri || (window as any).__TAURI_INTERNALS__)) && (isMac || isWin || isDarwinOrWin);
+}
+
+export async function syncNativeWindowGlass(enabled: boolean, blurRadius: number) {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("set_window_glass_enabled", { enabled });
+    if (enabled) {
+      await invoke("set_window_background_blur", { radius: blurRadius });
+    }
+  } catch {
+    // Non-Tauri environment
+  }
 }
 
 export function applyWindowGlass(
@@ -35,10 +49,16 @@ export function applyWindowGlass(
   root.classList.toggle("glass-workbench", isDesktopGlass && options.workbenchGlass);
 
   if (isDesktopGlass) {
+    root.style.backgroundColor = "transparent";
+    if (typeof document !== "undefined" && document.body) {
+      document.body.style.backgroundColor = "transparent";
+    }
     void window.desktopBridge?.setWindowGlassEnabled?.(true);
     void window.desktopBridge?.setWindowBackgroundBlur?.(options.sidebarBlur);
+    void syncNativeWindowGlass(true, options.sidebarBlur);
   } else {
     void window.desktopBridge?.setWindowGlassEnabled?.(false);
+    void syncNativeWindowGlass(false, options.sidebarBlur);
   }
 }
 

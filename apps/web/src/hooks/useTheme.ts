@@ -295,6 +295,13 @@ function resolveBrowserChromeSurface(): HTMLElement {
 
 export function syncBrowserChromeTheme() {
   if (typeof document === "undefined" || typeof getComputedStyle === "undefined") return;
+  if (document.documentElement.classList.contains("has-native-glass")) {
+    document.documentElement.style.backgroundColor = "transparent";
+    if (document.body) {
+      document.body.style.backgroundColor = "transparent";
+    }
+    return;
+  }
   const rootStyles = getComputedStyle(document.documentElement);
   const themeChromeColor = document.documentElement.dataset.themeId
     ? normalizeThemeColor(rootStyles.getPropertyValue("--app-chrome-background"))

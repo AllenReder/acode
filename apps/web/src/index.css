@@ -272,16 +272,31 @@ html.has-native-glass,
 html.has-native-glass body,
 html.has-native-glass #root {
   background: transparent !important;
+  background-color: transparent !important;
+}
+
+html.has-native-glass [data-slot="sidebar-container"],
+html.has-native-glass [data-app-sidebar],
+html.has-native-glass [data-slot="sidebar-gap"] {
+  background: transparent !important;
+  background-color: transparent !important;
 }
 
 .sidebar-glass,
+[data-slot="sidebar-inner"],
 [data-app-sidebar] [data-slot="sidebar-inner"] {
   background: var(--sidebar);
 }
 
 html.has-native-glass .sidebar-glass,
+html.has-native-glass [data-slot="sidebar-inner"],
 html.has-native-glass [data-app-sidebar] [data-slot="sidebar-inner"] {
   background: color-mix(
+    in srgb,
+    var(--sidebar) calc(var(--sidebar-opacity, 0.85) * 100%),
+    transparent
+  ) !important;
+  background-color: color-mix(
     in srgb,
     var(--sidebar) calc(var(--sidebar-opacity, 0.85) * 100%),
     transparent
@@ -290,16 +305,32 @@ html.has-native-glass [data-app-sidebar] [data-slot="sidebar-inner"] {
 
 .workbench-glass,
 [data-workbench-root] {
-  background: var(--background);
+  background: var(--canvas);
 }
 
 html.has-native-glass.glass-workbench .workbench-glass,
-html.has-native-glass.glass-workbench [data-workbench-root] {
+html.has-native-glass.glass-workbench [data-workbench-root],
+html.has-native-glass.glass-workbench [data-slot="sidebar-inset"] {
   background: color-mix(
     in srgb,
-    var(--background) calc(var(--workbench-opacity, 0.88) * 100%),
+    var(--canvas) calc(var(--workbench-opacity, 0.88) * 100%),
     transparent
   ) !important;
+  background-color: color-mix(
+    in srgb,
+    var(--canvas) calc(var(--workbench-opacity, 0.88) * 100%),
+    transparent
+  ) !important;
+}
+
+/* Make internal chat view containers transparent when workbench glass is active */
+html.has-native-glass.glass-workbench .chat-pane-background,
+html.has-native-glass.glass-workbench .chat-pane-background > div,
+html.has-native-glass.glass-workbench .chat-pane-background [data-chat-view-root],
+html.has-native-glass.glass-workbench .chat-pane-background [data-chat-header],
+html.has-native-glass.glass-workbench .chat-pane-background .bg-background {
+  background: transparent !important;
+  background-color: transparent !important;
 }
 
 .chat-pane-background {
@@ -319,7 +350,7 @@ html.has-chat-background .chat-pane-background::before {
   z-index: 0;
 }
 
-html.chat-background-empty-only:not(.is-empty-session) .chat-pane-background::before {
+html.chat-background-empty-only .chat-pane-background:not(.is-empty-session)::before {
   display: none;
 }
 

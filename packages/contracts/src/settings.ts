@@ -120,7 +120,7 @@ export const DEFAULT_SIDEBAR_BLUR: SidebarBlur = 24;
 
 export const WorkbenchGlass = Schema.Boolean;
 export type WorkbenchGlass = typeof WorkbenchGlass.Type;
-export const DEFAULT_WORKBENCH_GLASS: WorkbenchGlass = false;
+export const DEFAULT_WORKBENCH_GLASS: WorkbenchGlass = true;
 
 export const MIN_WORKBENCH_OPACITY = 50;
 export const MAX_WORKBENCH_OPACITY = 100;
