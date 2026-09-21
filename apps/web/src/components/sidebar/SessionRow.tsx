@@ -36,10 +36,18 @@ export function SessionRow({
   className,
   ...props
 }: SessionRowProps) {
-  const selected = useWorkbenchStore((state) => {
+  const isFocused = useWorkbenchStore((state) => {
     const tab = getActiveTab(state);
     const focused = tab.panes.get(tab.focusedPaneId);
     return focused !== undefined && targetsEqual(focused.target, target);
+  });
+
+  const isOpenInActiveTab = useWorkbenchStore((state) => {
+    const tab = getActiveTab(state);
+    for (const pane of tab.panes.values()) {
+      if (targetsEqual(pane.target, target)) return true;
+    }
+    return false;
   });
 
   const { openMenu } = useSessionActionMenu({
@@ -75,11 +83,17 @@ export function SessionRow({
       data-workbench-drag-source="sidebar"
       className={cn(
         "flex min-h-6 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
-        selected && "bg-sidebar-row-active text-sidebar-foreground",
+        isFocused
+          ? "bg-sidebar-row-active font-medium text-sidebar-foreground"
+          : isOpenInActiveTab
+            ? "bg-sidebar-row-selected text-sidebar-foreground"
+            : undefined,
         isClosed && "opacity-75",
         className,
       )}
-      aria-current={selected ? "page" : undefined}
+      aria-current={isFocused ? "page" : isOpenInActiveTab ? "true" : undefined}
+      data-session-focused={isFocused ? "true" : "false"}
+      data-session-open-in-tab={isOpenInActiveTab ? "true" : "false"}
       aria-description="Open Session (Alt/Option: split right; Alt/Option+Shift: split down)"
       onClick={(event) => {
         const commands = useWorkbenchStore.getState();

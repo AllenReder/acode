@@ -1,4 +1,4 @@
-import { GripVerticalIcon } from "lucide-react";
+import { MessageSquarePlusIcon, TerminalIcon, CopyPlusIcon } from "lucide-react";
 import {
   createContext,
   useCallback,
@@ -36,6 +36,7 @@ export interface WorkbenchDropResolver {
 export interface WorkbenchDragState {
   readonly phase: WorkbenchDragPhase;
   readonly label: string;
+  readonly source: ViewDragSource;
   readonly pointer: { readonly x: number; readonly y: number };
   readonly startRect: WorkbenchRect;
   readonly target: ViewDropTarget | null;
@@ -345,6 +346,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           setState({
             phase: "dragging",
             label,
+            source,
             pointer: { x: lastX, y: lastY },
             startRect,
             target,
@@ -449,9 +451,46 @@ function tabInsertionMarker(target: ViewDropTarget): WorkbenchRect | null {
   };
 }
 
+function dragGhostInfo(source: ViewDragSource): { readonly icon: ReactNode; readonly typeLabel: string } {
+  if (source.kind === "sidebar") {
+    if (source.target.kind === "agentSession") {
+      return {
+        icon: <MessageSquarePlusIcon className="size-5 text-primary" />,
+        typeLabel: "Agent Session",
+      };
+    }
+    if (source.target.kind === "workspaceTerminal") {
+      return {
+        icon: <TerminalIcon className="size-5 text-primary" />,
+        typeLabel: "Terminal Session",
+      };
+    }
+  } else if (source.kind === "pane") {
+    const tab = useWorkbenchStore.getState().tabs.find((t) => t.id === source.tabId);
+    const pane = tab?.panes.get(source.paneId);
+    if (pane?.target.kind === "agentSession") {
+      return {
+        icon: <MessageSquarePlusIcon className="size-5 text-primary" />,
+        typeLabel: "Agent Session",
+      };
+    }
+    if (pane?.target.kind === "workspaceTerminal") {
+      return {
+        icon: <TerminalIcon className="size-5 text-primary" />,
+        typeLabel: "Terminal Session",
+      };
+    }
+  }
+  return {
+    icon: <CopyPlusIcon className="size-5 text-primary" />,
+    typeLabel: "View",
+  };
+}
+
 export function WorkbenchDropOverlay() {
   const state = useWorkbenchDragState();
   const paneGap = usePrimarySettings((s) => s.paneGap);
+  const paneRadius = usePrimarySettings((s) => s.paneRadius);
   const isDragging = state !== null;
   const surfaceRef = useRef<HTMLDivElement>(null);
   const [surfaceRect, setSurfaceRect] = useState<WorkbenchRect | null>(null);
@@ -502,18 +541,25 @@ export function WorkbenchDropOverlay() {
     destinationRect = targetFallbackRect(state.target);
   }
 
+  const GHOST_WIDTH = 156;
+  const GHOST_HEIGHT = 84;
   const ghostRect =
     state.phase === "canceling"
-      ? state.startRect
-      : (destinationRect ?? {
-          left: state.pointer.x - 84,
-          top: state.pointer.y - 22,
-          width: 168,
-          height: 44,
-        });
-  const hasDestination = destinationRect !== null;
+      ? {
+          left: state.startRect.left,
+          top: state.startRect.top,
+          width: GHOST_WIDTH,
+          height: GHOST_HEIGHT,
+        }
+      : {
+          left: state.pointer.x - GHOST_WIDTH / 2,
+          top: state.pointer.y - GHOST_HEIGHT / 2,
+          width: GHOST_WIDTH,
+          height: GHOST_HEIGHT,
+        };
   const invalid = state.phase === "rejected" || (state.target !== null && !state.valid);
   const tabMarker = state.target === null ? null : tabInsertionMarker(state.target);
+  const ghostInfo = dragGhostInfo(state.source);
 
   return (
     <>
@@ -539,16 +585,17 @@ export function WorkbenchDropOverlay() {
                   data-pane-id={paneId}
                   data-destination={destination ? "true" : "false"}
                   className={
-                    "absolute rounded-md border transition-[left,top,width,height,background-color,border-color,opacity] duration-200 ease-out motion-reduce:transition-none " +
+                    "absolute border transition-[left,top,width,height,background-color,border-color,opacity] duration-200 ease-out motion-reduce:transition-none " +
                     (destination
-                      ? "border-primary bg-primary/15 shadow-[0_0_0_1px_var(--color-primary)]"
-                      : "border-border/80 bg-background/55")
+                      ? "border-2 border-primary bg-primary/15 shadow-[0_0_0_1px_var(--color-primary)]"
+                      : "border border-border/80 bg-background/55")
                   }
                   style={{
                     left: `${rect.left}px`,
                     top: `${rect.top}px`,
                     width: `${rect.width}px`,
                     height: `${rect.height}px`,
+                    borderRadius: `${paneRadius}px`,
                   }}
                 />
               );
@@ -574,24 +621,32 @@ export function WorkbenchDropOverlay() {
             data-phase={state.phase}
             data-valid={invalid ? "false" : "true"}
             className={
-              "pointer-events-none fixed z-[100] flex items-center gap-2 overflow-hidden rounded-lg border bg-background/95 px-3 shadow-xl backdrop-blur-sm will-change-transform " +
-              "transition-[transform,width,height,border-color,opacity] ease-out motion-reduce:transition-none " +
+              "pointer-events-none fixed z-[100] flex flex-col items-center justify-center overflow-hidden rounded-xl border p-2.5 shadow-2xl backdrop-blur-md will-change-transform " +
+              "transition-[opacity,border-color] ease-out motion-reduce:transition-none " +
               (invalid
-                ? "border-destructive text-destructive "
-                : "border-primary text-foreground ") +
-              (state.phase === "canceling" ? "opacity-0" : "opacity-100")
+                ? "border-destructive/80 bg-destructive/15 text-destructive "
+                : "border-border/80 bg-background/85 text-foreground ") +
+              (state.phase === "canceling" ? "opacity-0 duration-180" : "opacity-100 duration-75")
             }
             style={{
               left: 0,
               top: 0,
-              width: ghostRect.width,
-              height: ghostRect.height,
+              width: `${ghostRect.width}px`,
+              height: `${ghostRect.height}px`,
               transform: `translate3d(${ghostRect.left}px, ${ghostRect.top}px, 0)`,
-              transitionDuration: hasDestination ? "200ms" : "80ms",
             }}
           >
-            <GripVerticalIcon className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1 truncate text-xs font-medium">{state.label}</span>
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              {ghostInfo.icon}
+            </div>
+            <div className="flex flex-col items-center min-w-0 max-w-full mt-1.5">
+              <span className="truncate max-w-[136px] text-xs font-semibold text-foreground leading-tight text-center">
+                {state.label}
+              </span>
+              <span className="text-[10px] text-muted-foreground font-medium leading-tight mt-0.5 text-center">
+                {ghostInfo.typeLabel}
+              </span>
+            </div>
           </div>
         </>,
         document.body,

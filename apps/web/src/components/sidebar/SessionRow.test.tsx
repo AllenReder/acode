@@ -275,3 +275,56 @@ it("supports keyboard context-menu invocation via ContextMenu and Shift+F10", as
   });
   expect(showContextMenuMock).toHaveBeenCalledWith(expect.any(Array), { x: 100, y: 90 });
 });
+
+it("marks focused session with bg-sidebar-row-active and open-in-tab session with bg-sidebar-row-selected", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const target1 = {
+    kind: "agentSession",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    agentSessionId: "s1" as AgentSessionId,
+  } as const;
+  const target2 = {
+    kind: "agentSession",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    agentSessionId: "s2" as AgentSessionId,
+  } as const;
+  const target3 = {
+    kind: "agentSession",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    agentSessionId: "s3" as AgentSessionId,
+  } as const;
+
+  await act(() => {
+    renderer = create(
+      <>
+        <SessionRow target={target1}>Session 1</SessionRow>
+        <SessionRow target={target2}>Session 2</SessionRow>
+        <SessionRow target={target3}>Session 3</SessionRow>
+      </>,
+    );
+  });
+
+  const [row1, row2, row3] = renderer!.root.findAllByType("button");
+
+  // Open target1 in the active tab (focused)
+  await act(() => row1!.props.onClick({ altKey: false }));
+
+  // Split target2 into the active tab (now target2 is focused)
+  await act(() => row2!.props.onClick({ altKey: true, shiftKey: false }));
+
+  // Target2 is now focused in tab, target1 is open in tab but not focused, target3 is not in tab
+  expect(row2!.props["data-session-focused"]).toBe("true");
+  expect(row2!.props["className"]).toContain("bg-sidebar-row-active");
+
+  expect(row1!.props["data-session-focused"]).toBe("false");
+  expect(row1!.props["data-session-open-in-tab"]).toBe("true");
+  expect(row1!.props["className"]).toContain("bg-sidebar-row-selected");
+
+  expect(row3!.props["data-session-focused"]).toBe("false");
+  expect(row3!.props["data-session-open-in-tab"]).toBe("false");
+  expect(row3!.props["className"]).not.toContain("bg-sidebar-row-active");
+  expect(row3!.props["className"]).not.toContain("bg-sidebar-row-selected");
+});
