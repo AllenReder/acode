@@ -57,7 +57,7 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
 
   return (
     <SidebarHeader
-      className="drag-region flex h-[var(--workbench-titlebar-height,36px)] shrink-0 flex-row items-center border-b border-sidebar-border/60 bg-sidebar p-0"
+      className="drag-region flex h-[var(--workbench-titlebar-height,36px)] shrink-0 flex-row items-center bg-sidebar p-0"
       data-tauri-drag-region
       data-sidebar-header=""
       style={{

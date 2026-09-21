@@ -150,9 +150,10 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       ? getWindowFullscreenState()
       : false;
   });
+  const effectiveAnimationDurationMs = panelAnimationDurationMs > 0 ? panelAnimationDurationMs : 200;
   const sidebarProviderStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
-    "--panel-animation-duration": `${panelAnimationDurationMs}ms`,
+    "--panel-animation-duration": `${effectiveAnimationDurationMs}ms`,
     ...resolveWorkbenchTitlebarStyle({
       hasDesktopBridge: window.desktopBridge !== undefined,
       platform: navigator.platform,
@@ -236,7 +237,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       <WorkbenchDragProvider>
         <SidebarProvider
           className="h-dvh! min-h-0!"
-          data-panel-animations={routePanelAnimationsActive ? "true" : "false"}
+          data-panel-animations={!panelAnimationsSuppressed ? "true" : "false"}
           defaultOpen
           style={sidebarProviderStyle}
         >
