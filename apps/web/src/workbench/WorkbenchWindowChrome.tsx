@@ -4,6 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 
 import { cn, isMacPlatform } from "../lib/utils";
 import { useSidebarVisibility } from "../components/ui/sidebar";
+import {
+  COLLAPSED_TABS_INSET_MAC,
+  COLLAPSED_TABS_INSET_WIN,
+  EXPANDED_TABS_INSET,
+} from "../components/sidebar/sidebarGeometry";
 import { firstLeafId } from "./layout";
 import { targetKey, type ViewTarget } from "./viewRegistry";
 import { tabDisplayTitle, type WorkbenchSnapshot, type WorkbenchTab } from "./workbenchState";
@@ -60,29 +65,34 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
     setDraftTitle("");
   };
 
+  const tabsInsetWidth = isSidebarOpen
+    ? EXPANDED_TABS_INSET
+    : isMac
+      ? COLLAPSED_TABS_INSET_MAC
+      : COLLAPSED_TABS_INSET_WIN;
+
   return (
     <header
       className="drag-region flex h-[var(--workbench-titlebar-height,36px)] w-full shrink-0 items-center border-b border-border/60 bg-background/95 backdrop-blur z-30"
       data-tauri-drag-region
       data-workbench-window-chrome=""
     >
-      {!isSidebarOpen ? (
-        <div
-          className="flex shrink-0 items-center [-webkit-app-region:no-drag] transition-opacity duration-200 ease-out"
-          style={{
-            paddingLeft: isMac
-              ? "calc(var(--sidebar-controls-left, 76px) + 28px + 12px + 28px)"
-              : "calc(var(--sidebar-controls-left-win, 0px) + 28px + 12px + 28px)",
-          }}
-        >
-          <div
-            className="mx-3 h-3.5 w-px bg-border/60 shrink-0"
-            data-slot="workbench-titlebar-separator"
-          />
-        </div>
-      ) : (
-        <div className="w-3 shrink-0" />
-      )}
+      <div
+        className="flex shrink-0 items-center overflow-hidden transition-[width] duration-200 ease-out [-webkit-app-region:no-drag]"
+        data-slot="workbench-tabs-inset-spacer"
+        style={{
+          width: `${tabsInsetWidth}px`,
+        }}
+      >
+        {!isSidebarOpen ? (
+          <div className="flex h-full w-full items-center justify-end pr-3 transition-opacity duration-200 ease-out">
+            <div
+              className="h-3.5 w-px bg-border/60 shrink-0"
+              data-slot="workbench-titlebar-separator"
+            />
+          </div>
+        ) : null}
+      </div>
 
       <div className="flex min-w-0 flex-1 items-center gap-2 pr-3 [-webkit-app-region:no-drag]">
         <div

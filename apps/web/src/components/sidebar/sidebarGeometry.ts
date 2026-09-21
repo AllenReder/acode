@@ -34,6 +34,25 @@ export function resolveSidebarMinimumWidth(options: { readonly isMac: boolean })
   );
 }
 
+/** Left spacer width for the Workbench tabs container when the sidebar is collapsed */
+export const COLLAPSED_TABS_INSET_MAC =
+  TRAFFIC_LIGHTS_ZONE +
+  BASE_SPACING +
+  TITLEBAR_BUTTON_SIZE +
+  BASE_SPACING +
+  TITLEBAR_BUTTON_SIZE +
+  BASE_SPACING +
+  BASE_SPACING; // 168px
+
+export const COLLAPSED_TABS_INSET_WIN =
+  TITLEBAR_BUTTON_SIZE +
+  BASE_SPACING +
+  TITLEBAR_BUTTON_SIZE +
+  BASE_SPACING +
+  BASE_SPACING; // 92px
+
+export const EXPANDED_TABS_INSET = BASE_SPACING; // 12px
+
 export interface SidebarHeaderInsets {
   readonly trafficLightsInset: number;
   readonly sidebarTriggerLeft: number;

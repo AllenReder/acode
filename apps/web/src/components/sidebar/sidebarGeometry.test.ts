@@ -4,6 +4,9 @@ import {
   TITLEBAR_BUTTON_SIZE,
   TRAFFIC_LIGHTS_WIDTH,
   TRAFFIC_LIGHTS_ZONE,
+  COLLAPSED_TABS_INSET_MAC,
+  COLLAPSED_TABS_INSET_WIN,
+  EXPANDED_TABS_INSET,
   resolveSidebarMinimumWidth,
   resolveSidebarHeaderInsets,
 } from "./sidebarGeometry";
@@ -14,6 +17,9 @@ describe("sidebarGeometry", () => {
     expect(TRAFFIC_LIGHTS_WIDTH).toBe(52);
     expect(TRAFFIC_LIGHTS_ZONE).toBe(64);
     expect(TITLEBAR_BUTTON_SIZE).toBe(28);
+    expect(COLLAPSED_TABS_INSET_MAC).toBe(168);
+    expect(COLLAPSED_TABS_INSET_WIN).toBe(92);
+    expect(EXPANDED_TABS_INSET).toBe(12);
   });
 
   it("calculates macOS sidebar minimum width matching the unified formula", () => {
