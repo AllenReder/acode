@@ -62,6 +62,7 @@ export class XtermTerminalSurface {
 
     this.terminal = new Terminal({
       allowProposedApi: true,
+      allowTransparency: true,
       convertEol: false,
       cursorBlink: true,
       cursorStyle: "bar",

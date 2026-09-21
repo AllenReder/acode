@@ -323,12 +323,29 @@ html.has-native-glass.glass-workbench [data-slot="sidebar-inset"] {
   ) !important;
 }
 
-/* Make internal chat view containers transparent when workbench glass is active */
+/* Make internal workbench views transparent when workbench glass is active */
+html.has-native-glass.glass-workbench [data-workbench-root] .bg-background,
+html.has-native-glass.glass-workbench [data-workbench-root] [data-slot="sidebar-inset"] .bg-background,
+html.has-native-glass.glass-workbench [data-workbench-root] [data-chat-view-root],
+html.has-native-glass.glass-workbench [data-workbench-root] [data-chat-header],
+html.has-native-glass.glass-workbench [data-workbench-root] aside,
+html.has-native-glass.glass-workbench [data-workbench-root] [data-surface-subheader],
+html.has-native-glass.glass-workbench [data-workbench-root] [data-testid="workspace-file-view"],
+html.has-native-glass.glass-workbench [data-workbench-root] [data-testid="workspace-file-view"] > div,
+html.has-native-glass.glass-workbench [data-workbench-root] [data-settings-page-scroll],
+html.has-native-glass.glass-workbench [data-workbench-root] [data-settings-page-scroll] > div,
+html.has-native-glass.glass-workbench [data-workbench-root] [data-slot="sidebar-header"],
+html.has-native-glass.glass-workbench [data-workbench-root] .bg-\[var\(--terminal-background\)\],
+html.has-native-glass.glass-workbench [data-workbench-root] .xterm,
+html.has-native-glass.glass-workbench [data-workbench-root] .xterm-viewport,
+html.has-native-glass.glass-workbench [data-workbench-root] .xterm-screen,
+html.has-native-glass.glass-workbench [data-workbench-window-chrome] {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
 html.has-native-glass.glass-workbench .chat-pane-background,
-html.has-native-glass.glass-workbench .chat-pane-background > div,
-html.has-native-glass.glass-workbench .chat-pane-background [data-chat-view-root],
-html.has-native-glass.glass-workbench .chat-pane-background [data-chat-header],
-html.has-native-glass.glass-workbench .chat-pane-background .bg-background {
+html.has-native-glass.glass-workbench .chat-pane-background > div {
   background: transparent !important;
   background-color: transparent !important;
 }

@@ -74,7 +74,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
 
   return (
     <header
-      className="drag-region flex h-[var(--workbench-titlebar-height,36px)] w-full shrink-0 items-center border-b border-border/60 bg-background/95 backdrop-blur z-30"
+      className="drag-region flex h-[var(--workbench-titlebar-height,36px)] w-full shrink-0 items-center border-b border-border/60 bg-background/40 z-30"
       data-tauri-drag-region
       data-workbench-window-chrome=""
     >
@@ -126,8 +126,8 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
                 className={cn(
                   "group relative flex h-full w-44 min-w-28 shrink cursor-pointer items-center gap-2 border-r border-border/60 px-3 text-left transition-colors duration-150 select-none",
                   active
-                    ? "bg-background text-foreground font-medium"
-                    : "bg-muted/15 text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+                    ? "bg-background/40 text-foreground font-medium"
+                    : "bg-muted/10 text-muted-foreground hover:bg-muted/25 hover:text-foreground",
                 )}
                 onClick={() => {
                   if (!active) activateTab(tab.id);

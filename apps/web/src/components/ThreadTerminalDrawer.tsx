@@ -173,14 +173,20 @@ export function terminalThemeFromApp(mountElement?: HTMLElement | null): ITheme 
   const fallbackForeground = isDark ? "#f5f5f5" : "#1a1a1e";
   const rootThemeStyles = getComputedStyle(document.documentElement);
 
-  const background = normalizeComputedColor(
-    readThemeColor(
-      themeStyles,
-      "--terminal-background",
-      readThemeColor(rootThemeStyles, "--terminal-background", containerStyles.backgroundColor),
-    ),
-    fallbackBackground,
-  );
+  const isGlassWorkbench =
+    typeof document !== "undefined" &&
+    document.documentElement.classList.contains("has-native-glass") &&
+    document.documentElement.classList.contains("glass-workbench");
+  const background = isGlassWorkbench
+    ? "transparent"
+    : normalizeComputedColor(
+        readThemeColor(
+          themeStyles,
+          "--terminal-background",
+          readThemeColor(rootThemeStyles, "--terminal-background", containerStyles.backgroundColor),
+        ),
+        fallbackBackground,
+      );
   const foreground = normalizeComputedColor(
     readThemeColor(
       themeStyles,
@@ -1009,7 +1015,7 @@ export function TerminalViewport({
     <div
       ref={containerRef}
       tabIndex={-1}
-      className="relative h-full w-full overflow-hidden bg-[var(--terminal-background)]"
+      className="relative h-full w-full overflow-hidden bg-[var(--terminal-background)] html-has-native-glass-glass-workbench:bg-transparent"
     />
   );
 }
