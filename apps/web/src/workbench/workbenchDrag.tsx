@@ -81,6 +81,12 @@ const WorkbenchDragStateContext = createContext<WorkbenchDragState | null>(null)
 const DRAG_THRESHOLD = 5;
 const CANCEL_DURATION_MS = 180;
 
+function escapeCss(value: string): string {
+  return typeof CSS !== "undefined" && typeof CSS.escape === "function"
+    ? CSS.escape(value)
+    : value.replace(/["\\]/g, "\\$&");
+}
+
 function rectFromElement(element: Element | null): WorkbenchRect | null {
   if (element === null) return null;
   const rect = element.getBoundingClientRect();
@@ -91,13 +97,13 @@ function elementForTarget(target: ViewDropTarget): Element | null {
   if (typeof document === "undefined") return null;
   if (target.kind === "pane") {
     const pane = document.querySelector<HTMLElement>(
-      `[data-workbench-pane-drop][data-pane-id="${CSS.escape(target.paneId)}"]`,
+      `[data-workbench-pane-drop][data-pane-id="${escapeCss(target.paneId)}"]`,
     );
     if (pane !== null) return pane;
   }
   if (target.kind === "existingTab") {
     const tab = document.querySelector<HTMLElement>(
-      `[data-workbench-tab-drop="${CSS.escape(target.tabId)}"]`,
+      `[data-workbench-tab-drop="${escapeCss(target.tabId)}"]`,
     );
     if (tab !== null) return tab;
   }
@@ -335,6 +341,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
   const frameRef = useRef<number | null>(null);
   const stabilizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeRef = useRef(false);
   const cleanupDragRef = useRef<(() => void) | null>(null);
 
@@ -358,7 +365,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
       const sourceElement =
         source.kind === "pane"
           ? document.querySelector<HTMLElement>(
-              `[data-workbench-pane-drop][data-pane-id="${CSS.escape(source.paneId)}"]`,
+              `[data-workbench-pane-drop][data-pane-id="${escapeCss(source.paneId)}"]`,
             )
           : handle;
       const startRect = rectFromElement(sourceElement) ?? rectFromElement(handle);
@@ -368,6 +375,10 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
       if (finishTimerRef.current !== null) {
         clearTimeout(finishTimerRef.current);
         finishTimerRef.current = null;
+      }
+      if (settleTimerRef.current !== null) {
+        clearTimeout(settleTimerRef.current);
+        settleTimerRef.current = null;
       }
       clearFrame();
       activeRef.current = false;
@@ -478,7 +489,6 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         window.removeEventListener("pointerup", onUp);
         window.removeEventListener("pointercancel", onCancel);
         window.removeEventListener("keydown", onKeyDown);
-        delete document.documentElement.dataset.workbenchDragging;
         cleanupDragRef.current = null;
       };
       cleanupDragRef.current = cleanup;
@@ -488,9 +498,19 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         const currentSidebarDropTarget = lastSidebarDropTarget;
         const currentIsOverSidebar = lastIsOverSidebar;
         cleanup();
-        if (!wasActive) return;
+        if (!wasActive) {
+          delete document.documentElement.dataset.workbenchDragging;
+          return;
+        }
         activeRef.current = false;
         suppressClickRef.current = true;
+
+        document.documentElement.dataset.workbenchDragging = "settling";
+        if (settleTimerRef.current !== null) clearTimeout(settleTimerRef.current);
+        settleTimerRef.current = setTimeout(() => {
+          settleTimerRef.current = null;
+          delete document.documentElement.dataset.workbenchDragging;
+        }, 240);
 
         if (
           !cancelled &&
@@ -505,7 +525,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           const workspaceKey = `${source.target.environmentId}:${source.target.workspaceId}`;
           const allSessionRows = Array.from(
             document.querySelectorAll<HTMLElement>(
-              `[data-sidebar-session-row][data-workspace-key="${CSS.escape(workspaceKey)}"]`,
+              `[data-sidebar-session-row][data-workspace-key="${escapeCss(workspaceKey)}"]`,
             ),
           )
             .map((el) => el.dataset.sessionId)
@@ -578,7 +598,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
             return;
           }
           activeRef.current = true;
-          document.documentElement.dataset.workbenchDragging = "true";
+          document.documentElement.dataset.workbenchDragging = "active";
           window.getSelection()?.removeAllRanges();
           const target = isOverSidebar ? null : resolveTarget(lastX, lastY);
           const result = isOverSidebar ? null : previewFor(target);
@@ -630,6 +650,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
       clearFrame();
       if (finishTimerRef.current !== null) clearTimeout(finishTimerRef.current);
       if (stabilizeTimerRef.current !== null) clearTimeout(stabilizeTimerRef.current);
+      if (settleTimerRef.current !== null) clearTimeout(settleTimerRef.current);
       delete document.documentElement.dataset.workbenchDragging;
     },
     [clearFrame],
@@ -768,20 +789,27 @@ export function WorkbenchDropOverlay() {
 
   if (state === null || state.isOverSidebar) return null;
 
+  const viewport =
+    typeof document !== "undefined"
+      ? document.querySelector<HTMLElement>(".workbench-viewport")
+      : null;
+  const scrollLeft = previewTab?.layoutMode === "scrolling" ? (viewport?.scrollLeft ?? 0) : 0;
+  const scrollTop = viewport?.scrollTop ?? 0;
+
+  const destRect = preview && previewLayout ? previewLayout.rects.get(preview.paneId) : null;
+  const secondaryRects =
+    previewLayout && preview
+      ? [...previewLayout.rects.entries()].filter(([paneId]) => paneId !== preview.paneId)
+      : [];
+
   let destinationRect: WorkbenchRect | null = null;
-  if (preview && previewLayout && surfaceRect) {
-    const rect = previewLayout.rects.get(preview.paneId);
-    if (rect) {
-      const viewport = document.querySelector<HTMLElement>(".workbench-viewport");
-      const scrollLeft = previewTab?.layoutMode === "scrolling" ? (viewport?.scrollLeft ?? 0) : 0;
-      const scrollTop = viewport?.scrollTop ?? 0;
-      destinationRect = {
-        left: surfaceRect.left + rect.left - scrollLeft,
-        top: surfaceRect.top + rect.top - scrollTop,
-        width: rect.width,
-        height: rect.height,
-      };
-    }
+  if (destRect && surfaceRect) {
+    destinationRect = {
+      left: surfaceRect.left + destRect.left - scrollLeft,
+      top: surfaceRect.top + destRect.top - scrollTop,
+      width: destRect.width,
+      height: destRect.height,
+    };
   }
   if (!destinationRect && state.target !== null) {
     destinationRect = targetFallbackRect(state.target);
@@ -821,34 +849,41 @@ export function WorkbenchDropOverlay() {
             : undefined
         }
       >
-        {previewLayout
-          ? [...previewLayout.rects.entries()].map(([paneId, rect]) => {
-              const destination = preview?.paneId === paneId;
-              return (
-                <div
-                  key={paneId}
-                  data-workbench-preview-pane
-                  data-pane-id={paneId}
-                  data-destination={destination ? "true" : "false"}
-                  className={
-                    "absolute border transition-[left,top,width,height,background-color,border-color,opacity] duration-200 ease-out motion-reduce:transition-none " +
-                    (destination
-                      ? "border-2 border-primary bg-primary/15 shadow-[0_0_0_1px_var(--color-primary)]"
-                      : "border border-border/80 bg-background/55")
-                  }
-                  style={{
-                    left: `${rect.left}px`,
-                    top: `${rect.top}px`,
-                    width: `${rect.width}px`,
-                    height: `${rect.height}px`,
-                    borderRadius: `${paneRadius}px`,
-                  }}
-                />
-              );
-            })
-          : null}
+        {destRect && (
+          <div
+            key="workbench-drop-destination-indicator"
+            data-workbench-preview-pane
+            data-pane-id={preview?.paneId}
+            data-destination="true"
+            className="workbench-drop-destination-indicator"
+            style={{
+              left: `${destRect.left - scrollLeft}px`,
+              top: `${destRect.top - scrollTop}px`,
+              width: `${destRect.width}px`,
+              height: `${destRect.height}px`,
+              borderRadius: `${paneRadius}px`,
+            }}
+          />
+        )}
+        {secondaryRects.map(([paneId, rect]) => (
+          <div
+            key={paneId}
+            data-workbench-preview-pane
+            data-pane-id={paneId}
+            data-destination="false"
+            className="workbench-preview-pane-secondary"
+            style={{
+              left: `${rect.left - scrollLeft}px`,
+              top: `${rect.top - scrollTop}px`,
+              width: `${rect.width}px`,
+              height: `${rect.height}px`,
+              borderRadius: `${paneRadius}px`,
+            }}
+          />
+        ))}
       </div>
-      {createPortal(
+      {typeof document !== "undefined" && document.body
+        ? createPortal(
         <>
           {tabMarker === null ? null : (
             <div
@@ -896,7 +931,7 @@ export function WorkbenchDropOverlay() {
           </div>
         </>,
         document.body,
-      )}
+      ) : null}
     </>
   );
 }

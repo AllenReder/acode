@@ -49,6 +49,18 @@ and added unnecessary cognitive load.
   exclusively for external drops from the Sidebar.
 - **Layout parity**: Both BSP and Scrolling layout modes share the exact same
   virtual base layout derivation and directional edge placement semantics.
+- **Synchronized Apple fluid motion**: Both existing pane frames in the
+  Workbench (`.workbench-pane-frame`) and the blue drop destination indicator
+  (`.workbench-drop-destination-indicator`) animate with identical Apple fluid
+  damping (`cubic-bezier(0.22, 1, 0.36, 1)`) and duration (220ms).
+- **Persistent destination indicator identity**: The preview destination
+  indicator maintains a stable element key across pointer updates and zone
+  transitions, gliding and morphing smoothly between candidate positions
+  rather than unmounting and remounting on each target change.
+- **Settling lifecycle**: When a drag ends (drop commit or cancel),
+  `data-workbench-dragging="settling"` keeps transitions active for 240ms so
+  in-flight motions settle gracefully into their final resting positions
+  without abrupt snapping or layout jitter.
 
 ## Consequences
 
@@ -58,3 +70,5 @@ and added unnecessary cognitive load.
   Tab cannot accidentally destroy or close a running Terminal or Agent View.
 - Hit-testing is purely mathematical and decoupled from DOM updates, CSS
   transitions, and React component mount lifecycles.
+- Workbench reorganization feels fluid and tactile, matching native macOS
+  window management and Stage Manager tiling gestures.
