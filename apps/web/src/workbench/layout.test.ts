@@ -12,6 +12,7 @@ import {
   neighborLeafId,
   newTab,
   paneDropZoneFromPoint,
+  paneDirectionalZoneFromPoint,
   paneEdgeFromPoint,
   placeLayout,
   placePane,
@@ -345,5 +346,29 @@ describe("newTab", () => {
     const tab = newTab("a");
     expect(tab.layout).toEqual(leaf("a"));
     expect(tab.focusedPaneId).toBe("a");
+  });
+});
+
+describe("paneDirectionalZoneFromPoint", () => {
+  const rect = { left: 0, top: 0, width: 1000, height: 600 };
+
+  it("resolves to left in the left region", () => {
+    expect(paneDirectionalZoneFromPoint(100, 20, rect)).toBe("left");
+    expect(paneDirectionalZoneFromPoint(300, 300, rect)).toBe("left");
+  });
+
+  it("resolves to right in the right region", () => {
+    expect(paneDirectionalZoneFromPoint(900, 20, rect)).toBe("right");
+    expect(paneDirectionalZoneFromPoint(700, 300, rect)).toBe("right");
+  });
+
+  it("resolves to top in the center upper region", () => {
+    expect(paneDirectionalZoneFromPoint(500, 20, rect)).toBe("top");
+    expect(paneDirectionalZoneFromPoint(500, 250, rect)).toBe("top");
+  });
+
+  it("resolves to bottom in the center lower region", () => {
+    expect(paneDirectionalZoneFromPoint(500, 350, rect)).toBe("bottom");
+    expect(paneDirectionalZoneFromPoint(500, 580, rect)).toBe("bottom");
   });
 });

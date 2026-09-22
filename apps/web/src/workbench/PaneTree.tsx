@@ -83,6 +83,7 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
       if (
         !old ||
         document.documentElement.dataset.workbenchResizing ||
+        document.documentElement.dataset.workbenchDragging ||
         window.matchMedia("(prefers-reduced-motion: reduce)").matches
       )
         continue;
@@ -92,7 +93,7 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
         frame.getAnimations().forEach((animation) => animation.cancel());
         frame.animate(
           [{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "translate(0,0)" }],
-          { duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" },
+          { duration: 220, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
         );
       }
     }
@@ -137,6 +138,21 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
     () => (previewTab ? computePaneLayoutRects(previewTab, size, paneGap) : undefined),
     [previewTab, size, paneGap],
   );
+
+  useLayoutEffect(() => {
+    if (!previewLayout) return;
+    const viewport = viewportRef.current;
+    if (!viewport?.querySelectorAll) return;
+    const frames = viewport.querySelectorAll<HTMLElement>(".workbench-pane-frame");
+    const capturedRects = new Map<string, DOMRect>();
+    for (const frame of frames) {
+      const id =
+        frame.querySelector<HTMLElement>("[data-view-instance-id]")?.dataset.viewInstanceId;
+      if (!id) continue;
+      capturedRects.set(id, frame.getBoundingClientRect());
+    }
+    previousRects.current = capturedRects;
+  }, [previewLayout]);
 
   useEffect(() => {
     if (!scrolling) return;
@@ -199,9 +215,10 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
     dragState?.phase,
   ]);
 
+  const activeLayout = previewLayout ?? layout;
   const canvasStyle = {
-    width: Math.max(layout.canvasWidth, size.width),
-    height: layout.canvasHeight,
+    width: Math.max(activeLayout.canvasWidth, size.width),
+    height: activeLayout.canvasHeight,
     "--pane-gap": `${paneGap}px`,
     "--pane-radius": `${paneRadius}px`,
     "--pane-shadow": resolvePaneBoxShadow(paneGap, paneShadow),
@@ -218,6 +235,10 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
           const current = layout.rects.get(paneId);
           const preview = previewLayout?.rects.get(paneId);
           const targetRect = preview ?? current;
+          const isDraggedPane =
+            dragState?.phase === "dragging" &&
+            dragState.source.kind === "pane" &&
+            dragState.source.paneId === paneId;
           return (
             <div
               key={view.id}
@@ -258,7 +279,14 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
               <div
                 className="workbench-pane-preview"
                 data-previewing={Boolean(previewTab)}
-                style={{ opacity: previewTab && !preview ? 0.2 : undefined }}
+                style={{
+                  opacity:
+                    previewTab && !preview
+                      ? 0.2
+                      : isDraggedPane
+                        ? 0.5
+                        : undefined,
+                }}
               >
                 <Pane
                   snapshot={snapshot}

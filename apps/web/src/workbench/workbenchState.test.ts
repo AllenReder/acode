@@ -21,10 +21,12 @@ import {
   applyOpenDeepLinkTarget,
   applySetFocused,
   applySetSplitRatio,
+  applySetLayoutMode,
   applySplitFocused,
   applyRemoveNewAgentSessionViews,
   applyReplacePaneTarget,
   applyViewDrop,
+  initialPaneDropTarget,
   applyPruneWorkspaceViews,
   emptyWorkbenchSnapshot,
   tabDisplayTitle,
@@ -869,7 +871,7 @@ describe("applyViewDrop", () => {
     expect(result).toMatchObject({ tabId, paneId: sourcePaneId });
   });
 
-  it("moves a Pane View instance into the center of another Pane and drops the source leaf", () => {
+  it("repositions a Pane when dropped with directional edge within the same Tab in BSP mode", () => {
     const ids = makeIds();
     let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
     const tabId = snap.activeTabId;
@@ -877,21 +879,49 @@ describe("applyViewDrop", () => {
     const sourceView = getActiveTab(snap).panes.get(sourcePaneId)!;
     snap = applySplitFocused(snap, terminal("term-1"), "right", ids);
     const targetPaneId = getActiveTab(snap).focusedPaneId;
+    const targetView = getActiveTab(snap).panes.get(targetPaneId)!;
 
     const result = applyViewDrop(
       snap,
       { kind: "pane", tabId, paneId: sourcePaneId },
-      { kind: "pane", tabId, paneId: targetPaneId, zone: "replace" },
+      { kind: "pane", tabId, paneId: targetPaneId, zone: "right" },
       ids,
     );
 
     expect(result).not.toBeNull();
     const dropped = getActiveTab(result!.snapshot);
-    expect(leafIds(dropped.layout)).toEqual([targetPaneId]);
-    expect(dropped.panes.has(sourcePaneId)).toBe(false);
-    expect(dropped.panes.get(targetPaneId)).toBe(sourceView);
-    expect(dropped.focusedPaneId).toBe(targetPaneId);
-    expect(result).toMatchObject({ tabId, paneId: targetPaneId });
+    expect(leafIds(dropped.layout)).toEqual([targetPaneId, sourcePaneId]);
+    expect(dropped.panes.get(sourcePaneId)).toBe(sourceView);
+    expect(dropped.panes.get(targetPaneId)).toBe(targetView);
+    expect(dropped.focusedPaneId).toBe(sourcePaneId);
+    expect(result).toMatchObject({ tabId, paneId: sourcePaneId });
+  });
+
+  it("repositions a Pane when dropped with directional edge within the same Tab in scrolling mode", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const tabId = snap.activeTabId;
+    const sourcePaneId = getActiveTab(snap).focusedPaneId;
+    const sourceView = getActiveTab(snap).panes.get(sourcePaneId)!;
+    snap = applySplitFocused(snap, terminal("term-1"), "right", ids);
+    const targetPaneId = getActiveTab(snap).focusedPaneId;
+    const targetView = getActiveTab(snap).panes.get(targetPaneId)!;
+    snap = applySetLayoutMode(snap, "scrolling");
+
+    const result = applyViewDrop(
+      snap,
+      { kind: "pane", tabId, paneId: sourcePaneId },
+      { kind: "pane", tabId, paneId: targetPaneId, zone: "right" },
+      ids,
+    );
+
+    expect(result).not.toBeNull();
+    const dropped = getActiveTab(result!.snapshot);
+    expect(dropped.columns?.map((c) => c.paneIds)).toEqual([[targetPaneId], [sourcePaneId]]);
+    expect(dropped.panes.get(sourcePaneId)).toBe(sourceView);
+    expect(dropped.panes.get(targetPaneId)).toBe(targetView);
+    expect(dropped.focusedPaneId).toBe(sourcePaneId);
+    expect(result).toMatchObject({ tabId, paneId: sourcePaneId });
   });
 
   it("moves a Pane View instance into an existing Tab and leaves Welcome behind", () => {
@@ -1042,5 +1072,79 @@ describe("applyPruneWorkspaceViews", () => {
 
     expect(after).toBe(snap);
     expect([...getActiveTab(after).panes.values()][0]?.target).toEqual(remoteTarget);
+  });
+});
+
+describe("initialPaneDropTarget", () => {
+  const ids = makeIds();
+
+  it("identifies the initial left/right drop target in a horizontal split", () => {
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const leftPaneId = getActiveTab(snap).focusedPaneId;
+    snap = applySplitFocused(snap, terminal("term-1"), "right", ids);
+    const rightPaneId = getActiveTab(snap).focusedPaneId;
+    const tab = getActiveTab(snap);
+
+    const targetLeft = initialPaneDropTarget(tab, leftPaneId);
+    expect(targetLeft).toEqual({
+      kind: "pane",
+      tabId: tab.id,
+      paneId: rightPaneId,
+      zone: "left",
+    });
+
+    const targetRight = initialPaneDropTarget(tab, rightPaneId);
+    expect(targetRight).toEqual({
+      kind: "pane",
+      tabId: tab.id,
+      paneId: leftPaneId,
+      zone: "right",
+    });
+  });
+
+  it("identifies the initial top/bottom drop target in a vertical split", () => {
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const topPaneId = getActiveTab(snap).focusedPaneId;
+    snap = applySplitFocused(snap, terminal("term-1"), "down", ids);
+    const bottomPaneId = getActiveTab(snap).focusedPaneId;
+    const tab = getActiveTab(snap);
+
+    const targetTop = initialPaneDropTarget(tab, topPaneId);
+    expect(targetTop).toEqual({
+      kind: "pane",
+      tabId: tab.id,
+      paneId: bottomPaneId,
+      zone: "top",
+    });
+
+    const targetBottom = initialPaneDropTarget(tab, bottomPaneId);
+    expect(targetBottom).toEqual({
+      kind: "pane",
+      tabId: tab.id,
+      paneId: topPaneId,
+      zone: "bottom",
+    });
+  });
+
+  it("identifies initial drop target in scrolling columns", () => {
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const firstPaneId = getActiveTab(snap).focusedPaneId;
+    snap = applySplitFocused(snap, terminal("term-1"), "right", ids);
+    const secondPaneId = getActiveTab(snap).focusedPaneId;
+    snap = applySetLayoutMode(snap, "scrolling");
+    const tab = getActiveTab(snap);
+
+    expect(initialPaneDropTarget(tab, firstPaneId)).toEqual({
+      kind: "pane",
+      tabId: tab.id,
+      paneId: secondPaneId,
+      zone: "left",
+    });
+  });
+
+  it("returns null when the tab has only one pane", () => {
+    const snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const tab = getActiveTab(snap);
+    expect(initialPaneDropTarget(tab, tab.focusedPaneId)).toBeNull();
   });
 });

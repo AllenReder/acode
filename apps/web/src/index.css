@@ -2167,16 +2167,42 @@ html[data-workbench-window-chrome] {
   position: absolute;
   padding: 0;
 }
-html[data-workbench-dragging="active"] .workbench-pane-frame {
+html[data-workbench-dragging] .workbench-pane-frame {
   transition:
-    left 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    top 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    width 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    height 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    left 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: left, top, width, height;
+}
+html[data-workbench-resizing] .workbench-pane-frame {
+  transition: none !important;
+}
+html[data-workbench-dragging] .workbench-sash {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+.workbench-drop-destination-indicator {
+  position: absolute;
+  pointer-events: none;
+  border: 2px solid var(--primary);
+  background: color-mix(in oklch, var(--primary) 15%, transparent);
+  box-shadow:
+    0 0 0 1px var(--primary),
+    0 8px 24px -4px color-mix(in oklch, var(--primary) 25%, transparent);
+  transition:
+    left 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease-out;
+  will-change: left, top, width, height;
 }
 @media (prefers-reduced-motion: reduce) {
-  .workbench-pane-frame {
-    transition: none;
+  .workbench-pane-frame,
+  .workbench-drop-destination-indicator {
+    transition: none !important;
   }
 }
 .workbench-pane {

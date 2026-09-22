@@ -138,7 +138,6 @@ export function splitPane(
   };
 }
 
-/** Swap one leaf id for another, keeping the split tree intact. */
 export function replaceLeafId(node: LayoutNode, fromId: string, toId: string): LayoutNode {
   if (fromId === toId) return node;
   if (node.type === "leaf") {
@@ -380,6 +379,26 @@ export function paneEdgeFromPoint(
 }
 
 /** Resolve the split edge or central replace zone for a Pane drop. */
+
+/**
+ * Resolve one of the 4 directional edges (left, right, top, bottom) for a Pane drop,
+ * with no central replace zone. Suitable for intra-workbench pane repositioning.
+ */
+export function paneDirectionalZoneFromPoint(
+  x: number,
+  y: number,
+  rect: { left: number; top: number; width: number; height: number },
+): PaneEdge {
+  if (rect.width <= 0 || rect.height <= 0) return "left";
+  const nx = (x - rect.left) / rect.width;
+  const ny = (y - rect.top) / rect.height;
+
+  if (nx >= 0.42 && nx <= 0.58) {
+    return ny < 0.5 ? "top" : "bottom";
+  }
+  return nx < 0.5 ? "left" : "right";
+}
+
 export function paneDropZoneFromPoint(
   x: number,
   y: number,
@@ -400,7 +419,7 @@ function edgeSplit(edge: PaneEdge): { dir: SplitDir; place: PanePlace } {
   return { dir: "down", place: "after" };
 }
 
-function leafParent(
+export function leafParent(
   node: LayoutNode,
   leafId: string,
 ): { parentId: string; index: number; dir: SplitDir } | null {

@@ -3,6 +3,7 @@ import {
   reconcileColumns,
   reconcileBsp,
   placeInColumns,
+  adjacentScrollingPaneTarget,
   LAYOUT_VERSION,
   MIN_COLUMN_WIDTH,
   MAX_COLUMN_WIDTH,
@@ -13,6 +14,8 @@ import {
 import {
   closeLeaf,
   firstLeafId,
+  leafParent,
+  neighborLeafId,
   leafIds,
   movePane,
   newTab,
@@ -21,6 +24,8 @@ import {
   replaceLeafId,
   setSplitRatio,
   type AcodeTab,
+  type FocusDir,
+  type PaneEdge,
   type PaneDropZone,
   type SplitDir,
 } from "./layout.ts";
@@ -127,6 +132,56 @@ export function reconcileTab(tab: WorkbenchTab): WorkbenchTab {
   for (const id of tab.panes.keys()) if (!ids.includes(id)) ids.push(id);
   const columns = reconcileColumns(tab.columns ?? [], ids);
   return { ...tab, columns, layout: columnsTree(columns) };
+}
+
+/** Determine the initial drop target and zone for an existing pane in its current tab. */
+export function initialPaneDropTarget(tab: WorkbenchTab, paneId: string): ViewDropTarget | null {
+  if (tab.panes.size <= 1) return null;
+  if (tab.layoutMode === "scrolling") {
+    return adjacentScrollingPaneTarget(tab.columns ?? [], tab.id, paneId);
+  }
+
+  const parent = leafParent(tab.layout, paneId);
+  if (!parent) return null;
+  const neighborDir: FocusDir =
+    parent.dir === "right"
+      ? parent.index > 0
+        ? "left"
+        : "right"
+      : parent.index > 0
+        ? "up"
+        : "down";
+  const neighbor = neighborLeafId(tab.layout, paneId, neighborDir);
+  if (!neighbor) return null;
+  const zone: PaneDropZone =
+    parent.dir === "right"
+      ? parent.index === 0
+        ? "left"
+        : "right"
+      : parent.index === 0
+        ? "top"
+        : "bottom";
+  return { kind: "pane", tabId: tab.id, paneId: neighbor, zone };
+}
+
+/** Compute the base tab layout when dragging a pane, treating the tab as if the pane is removed. */
+export function computeBaseTab(tab: WorkbenchTab, draggedPaneId: string): WorkbenchTab | null {
+  if (tab.panes.size <= 1) return null;
+  if (!tab.panes.has(draggedPaneId)) return tab;
+
+  const panes = new Map(tab.panes);
+  panes.delete(draggedPaneId);
+
+  if (tab.layoutMode === "scrolling") {
+    const remainingIds = [...panes.keys()];
+    const columns = reconcileColumns(tab.columns ?? [], remainingIds);
+    const layout = columnsTree(columns);
+    return { ...tab, layout, columns, panes };
+  }
+
+  const layout = removePane(tab.layout, draggedPaneId);
+  if (layout === null) return null;
+  return { ...tab, layout, panes };
 }
 
 function placedLayout(tab: WorkbenchTab, paneId: string, targetId: string, zone: PaneDropZone) {
@@ -350,8 +405,7 @@ export function applyOpenTarget(
   // 3. Not open in any Tab:
   // 3a. If the active Tab is an empty Welcome Tab, replace it in-place.
   const isSoleWelcome =
-    activeTab.panes.size === 1 &&
-    [...activeTab.panes.values()][0]?.target.kind === "welcome";
+    activeTab.panes.size === 1 && [...activeTab.panes.values()][0]?.target.kind === "welcome";
 
   if (isSoleWelcome) {
     const paneId = activeTab.focusedPaneId;
@@ -363,12 +417,8 @@ export function applyOpenTarget(
   // 3b. Otherwise, create a new Tab immediately to the right of the active Tab.
   const activeIndex = snapshot.tabs.findIndex((tab) => tab.id === snapshot.activeTabId);
   const insertIndex = activeIndex >= 0 ? activeIndex + 1 : snapshot.tabs.length;
-  return insertPresentationTab(
-    snapshot,
-    viewInstance(target, generateId),
-    insertIndex,
-    generateId,
-  ).snapshot;
+  return insertPresentationTab(snapshot, viewInstance(target, generateId), insertIndex, generateId)
+    .snapshot;
 }
 
 /**
@@ -498,31 +548,13 @@ export function applyViewDrop(
       return null;
     }
     if (sourceTab.id === targetTab.id) {
-      if (target.zone === "replace") {
-        const layout = removePane(sourceTab.layout, source.paneId);
-        if (layout === null) return null;
-        const panes = new Map(sourceTab.panes);
-        const sourceView = panes.get(source.paneId);
-        if (sourceView === undefined) return null;
-        panes.delete(source.paneId);
-        panes.set(target.paneId, sourceView);
-        return {
-          snapshot: updateTab(snapshot, {
-            ...sourceTab,
-            layout,
-            panes,
-            focusedPaneId: target.paneId,
-          }),
-          tabId: sourceTab.id,
-          paneId: target.paneId,
-        };
-      }
+      const edge: PaneEdge = target.zone === "replace" ? "right" : target.zone;
       return {
         snapshot: updateTab(snapshot, {
           ...sourceTab,
           ...(sourceTab.layoutMode === "scrolling"
-            ? placedLayout(sourceTab, source.paneId, target.paneId, target.zone)
-            : { layout: movePane(sourceTab.layout, source.paneId, target.paneId, target.zone) }),
+            ? placedLayout(sourceTab, source.paneId, target.paneId, edge)
+            : { layout: movePane(sourceTab.layout, source.paneId, target.paneId, edge) }),
           focusedPaneId: source.paneId,
         }),
         tabId: sourceTab.id,

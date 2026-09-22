@@ -1,6 +1,19 @@
-import { expect, it } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
-import { resolveWorkbenchDropTargetAtPoint, resolveSidebarDropTargetAtPoint } from "./workbenchDrag";
+import {
+  resolveWorkbenchDropTargetAtPoint,
+  resolveSidebarDropTargetAtPoint,
+  computeVirtualPaneRegions,
+  resolveVirtualPaneDropTargetAtPoint,
+} from "./workbenchDrag";
+import { leaf, splitPane } from "./layout";
+import { computeBaseTab, type WorkbenchTab, type ViewInstance } from "./workbenchState";
+
+const dummyView = (id: string): ViewInstance => ({
+  id: `view-${id}`,
+  definitionId: "agent",
+  target: { kind: "welcome" },
+});
 
 function fakeElement(input: {
   readonly dataset?: Record<string, string>;
@@ -143,5 +156,186 @@ it("resolves sidebar session reorder target when dragging inside sidebar within 
   expect(outsideRes).toEqual({
     isOverSidebar: false,
     sidebarDropTarget: null,
+  });
+});
+
+describe("computeBaseTab", () => {
+  it("returns null when the tab has only one pane", () => {
+    const singleTab: WorkbenchTab = {
+      id: "tab-1",
+      layout: leaf("pane-a"),
+      panes: new Map([["pane-a", dummyView("pane-a")]]),
+      focusedPaneId: "pane-a",
+      titleMode: "auto",
+      titleOverride: null,
+    };
+    expect(computeBaseTab(singleTab, "pane-a")).toBeNull();
+  });
+
+  it("returns layout without the dragged pane in BSP mode", () => {
+    const tree = splitPane(leaf("pane-a"), "pane-a", "right", "pane-b");
+    const twoPaneTab: WorkbenchTab = {
+      id: "tab-1",
+      layout: tree,
+      panes: new Map([
+        ["pane-a", dummyView("pane-a")],
+        ["pane-b", dummyView("pane-b")],
+      ]),
+      focusedPaneId: "pane-a",
+      titleMode: "auto",
+      titleOverride: null,
+    };
+
+    const baseTab = computeBaseTab(twoPaneTab, "pane-a");
+    expect(baseTab).not.toBeNull();
+    expect(baseTab?.layout).toEqual(leaf("pane-b"));
+    expect(baseTab?.panes.has("pane-a")).toBe(false);
+    expect(baseTab?.panes.has("pane-b")).toBe(true);
+  });
+
+  it("returns layout without the dragged pane in scrolling mode", () => {
+    const scrollingTab: WorkbenchTab = {
+      id: "tab-1",
+      layoutMode: "scrolling",
+      layout: leaf("pane-a"),
+      columns: [
+        { id: "col-1", width: 500, paneIds: ["pane-a"], shares: [1] },
+        { id: "col-2", width: 500, paneIds: ["pane-b"], shares: [1] },
+      ],
+      panes: new Map([
+        ["pane-a", dummyView("pane-a")],
+        ["pane-b", dummyView("pane-b")],
+      ]),
+      focusedPaneId: "pane-a",
+      titleMode: "auto",
+      titleOverride: null,
+    };
+
+    const baseTab = computeBaseTab(scrollingTab, "pane-a");
+    expect(baseTab).not.toBeNull();
+    expect(baseTab?.columns?.map((c) => c.paneIds)).toEqual([["pane-b"]]);
+    expect(baseTab?.panes.has("pane-a")).toBe(false);
+  });
+});
+
+describe("Virtual Base Layout Drag Hit-Testing", () => {
+  it("maps former pane A area to the left edge of pane B when dragging pane A", () => {
+    const tree = splitPane(leaf("pane-a"), "pane-a", "right", "pane-b");
+    const twoPaneTab: WorkbenchTab = {
+      id: "tab-1",
+      layout: tree,
+      panes: new Map([
+        ["pane-a", dummyView("pane-a")],
+        ["pane-b", dummyView("pane-b")],
+      ]),
+      focusedPaneId: "pane-a",
+      titleMode: "auto",
+      titleOverride: null,
+    };
+
+    const viewportRect = { left: 0, top: 0, width: 1000, height: 600 };
+    const baseTab = computeBaseTab(twoPaneTab, "pane-a");
+    const regions = computeVirtualPaneRegions(baseTab, viewportRect, 0);
+
+    expect(regions).toHaveLength(1);
+    expect(regions[0]?.paneId).toBe("pane-b");
+    expect(regions[0]?.rect).toMatchObject({ left: 0, top: 0, width: 1000, height: 600 });
+
+    // In the former area of pane A (e.g. x = 100, y = 300, which is near the left of B):
+    const hitLeft = resolveVirtualPaneDropTargetAtPoint(100, 300, viewportRect, regions, 0, true);
+    expect(hitLeft).toEqual({
+      kind: "pane",
+      tabId: "tab-1",
+      paneId: "pane-b",
+      zone: "left",
+    });
+
+    // In the center of the screen for intra-workbench pane drag (directional-only, no replace):
+    const hitTop = resolveVirtualPaneDropTargetAtPoint(500, 200, viewportRect, regions, 0, true);
+    expect(hitTop).toEqual({
+      kind: "pane",
+      tabId: "tab-1",
+      paneId: "pane-b",
+      zone: "top",
+    });
+
+    const hitBottom = resolveVirtualPaneDropTargetAtPoint(500, 400, viewportRect, regions, 0, true);
+    expect(hitBottom).toEqual({
+      kind: "pane",
+      tabId: "tab-1",
+      paneId: "pane-b",
+      zone: "bottom",
+    });
+
+    // On the far right (x = 900, y = 300):
+    const hitRight = resolveVirtualPaneDropTargetAtPoint(900, 300, viewportRect, regions, 0, true);
+    expect(hitRight).toEqual({
+      kind: "pane",
+      tabId: "tab-1",
+      paneId: "pane-b",
+      zone: "right",
+    });
+
+    // For sidebar drag (directionalOnly: false), center remains replace:
+    const hitCenterReplace = resolveVirtualPaneDropTargetAtPoint(
+      500,
+      300,
+      viewportRect,
+      regions,
+      0,
+      false,
+    );
+    expect(hitCenterReplace).toEqual({
+      kind: "pane",
+      tabId: "tab-1",
+      paneId: "pane-b",
+      zone: "replace",
+    });
+  });
+
+  it("handles sash and gap coordinates without dropping to null", () => {
+    const tree = splitPane(leaf("pane-b"), "pane-b", "right", "pane-c");
+    const twoPaneTab: WorkbenchTab = {
+      id: "tab-1",
+      layout: tree,
+      panes: new Map([
+        ["pane-b", dummyView("pane-b")],
+        ["pane-c", dummyView("pane-c")],
+      ]),
+      focusedPaneId: "pane-b",
+      titleMode: "auto",
+      titleOverride: null,
+    };
+
+    const viewportRect = { left: 0, top: 0, width: 1000, height: 600 };
+    const gap = 8;
+    const regions = computeVirtualPaneRegions(twoPaneTab, viewportRect, gap);
+    expect(regions).toHaveLength(2);
+
+    // Coordinate in the sash gap between pane-b and pane-c
+    const bRight = regions[0]!.rect.left + regions[0]!.rect.width;
+    const gapX = bRight + gap / 2;
+    const hitGap = resolveVirtualPaneDropTargetAtPoint(gapX, 300, viewportRect, regions, gap);
+    expect(hitGap).not.toBeNull();
+    expect(hitGap?.kind).toBe("pane");
+  });
+
+  it("returns null for canvas hit testing when dragging a single-pane tab", () => {
+    const singleTab: WorkbenchTab = {
+      id: "tab-1",
+      layout: leaf("pane-a"),
+      panes: new Map([["pane-a", dummyView("pane-a")]]),
+      focusedPaneId: "pane-a",
+      titleMode: "auto",
+      titleOverride: null,
+    };
+
+    const viewportRect = { left: 0, top: 0, width: 1000, height: 600 };
+    const baseTab = computeBaseTab(singleTab, "pane-a");
+    const regions = computeVirtualPaneRegions(baseTab, viewportRect, 0);
+
+    expect(regions).toHaveLength(0);
+    const hit = resolveVirtualPaneDropTargetAtPoint(100, 300, viewportRect, regions);
+    expect(hit).toBeNull();
   });
 });
