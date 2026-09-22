@@ -420,7 +420,7 @@ function edgeSplit(edge: PaneEdge): { dir: SplitDir; place: PanePlace } {
   return { dir: "down", place: "after" };
 }
 
-function leafParent(
+export function leafParent(
   node: LayoutNode,
   leafId: string,
 ): { parentId: string; index: number; dir: SplitDir } | null {

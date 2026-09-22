@@ -26,6 +26,7 @@ import {
   applyRemoveNewAgentSessionViews,
   applyReplacePaneTarget,
   applyViewDrop,
+  initialPaneDropTarget,
   applyPruneWorkspaceViews,
   emptyWorkbenchSnapshot,
   tabDisplayTitle,
@@ -1071,5 +1072,79 @@ describe("applyPruneWorkspaceViews", () => {
 
     expect(after).toBe(snap);
     expect([...getActiveTab(after).panes.values()][0]?.target).toEqual(remoteTarget);
+  });
+});
+
+describe("initialPaneDropTarget", () => {
+  const ids = makeIds();
+
+  it("identifies the initial left/right drop target in a horizontal split", () => {
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const leftPaneId = getActiveTab(snap).focusedPaneId;
+    snap = applySplitFocused(snap, terminal("term-1"), "right", ids);
+    const rightPaneId = getActiveTab(snap).focusedPaneId;
+    const tab = getActiveTab(snap);
+
+    const targetLeft = initialPaneDropTarget(tab, leftPaneId);
+    expect(targetLeft).toEqual({
+      kind: "pane",
+      tabId: tab.id,
+      paneId: rightPaneId,
+      zone: "left",
+    });
+
+    const targetRight = initialPaneDropTarget(tab, rightPaneId);
+    expect(targetRight).toEqual({
+      kind: "pane",
+      tabId: tab.id,
+      paneId: leftPaneId,
+      zone: "right",
+    });
+  });
+
+  it("identifies the initial top/bottom drop target in a vertical split", () => {
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const topPaneId = getActiveTab(snap).focusedPaneId;
+    snap = applySplitFocused(snap, terminal("term-1"), "down", ids);
+    const bottomPaneId = getActiveTab(snap).focusedPaneId;
+    const tab = getActiveTab(snap);
+
+    const targetTop = initialPaneDropTarget(tab, topPaneId);
+    expect(targetTop).toEqual({
+      kind: "pane",
+      tabId: tab.id,
+      paneId: bottomPaneId,
+      zone: "top",
+    });
+
+    const targetBottom = initialPaneDropTarget(tab, bottomPaneId);
+    expect(targetBottom).toEqual({
+      kind: "pane",
+      tabId: tab.id,
+      paneId: topPaneId,
+      zone: "bottom",
+    });
+  });
+
+  it("identifies initial drop target in scrolling columns", () => {
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const firstPaneId = getActiveTab(snap).focusedPaneId;
+    snap = applySplitFocused(snap, terminal("term-1"), "right", ids);
+    const secondPaneId = getActiveTab(snap).focusedPaneId;
+    snap = applySetLayoutMode(snap, "scrolling");
+    const tab = getActiveTab(snap);
+
+    expect(initialPaneDropTarget(tab, firstPaneId)).toEqual({
+      kind: "pane",
+      tabId: tab.id,
+      paneId: secondPaneId,
+      zone: "left",
+    });
+  });
+
+  it("returns null when the tab has only one pane", () => {
+    const snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const tab = getActiveTab(snap);
+    expect(initialPaneDropTarget(tab, tab.focusedPaneId)).toBeNull();
   });
 });

@@ -14,10 +14,13 @@ import {
 import {
   closeLeaf,
   firstLeafId,
+  leafParent,
+  siblingLeafId,
   leafIds,
   movePane,
   newTab,
   placePane,
+  removePane,
   replaceLeafId,
   swapLeaves,
   setSplitRatio,
@@ -128,6 +131,71 @@ export function reconcileTab(tab: WorkbenchTab): WorkbenchTab {
   for (const id of tab.panes.keys()) if (!ids.includes(id)) ids.push(id);
   const columns = reconcileColumns(tab.columns ?? [], ids);
   return { ...tab, columns, layout: columnsTree(columns) };
+}
+
+/** Determine the initial drop target and zone for an existing pane in its current tab. */
+export function initialPaneDropTarget(tab: WorkbenchTab, paneId: string): ViewDropTarget | null {
+  if (tab.panes.size <= 1) return null;
+  if (tab.layoutMode === "scrolling") {
+    const columns = tab.columns ?? [];
+    for (let cIdx = 0; cIdx < columns.length; cIdx++) {
+      const col = columns[cIdx]!;
+      const pIdx = col.paneIds.indexOf(paneId);
+      if (pIdx < 0) continue;
+      if (col.paneIds.length > 1) {
+        const neighborId = pIdx > 0 ? col.paneIds[pIdx - 1]! : col.paneIds[pIdx + 1]!;
+        const zone: PaneDropZone = pIdx === 0 ? "top" : "bottom";
+        return { kind: "pane", tabId: tab.id, paneId: neighborId, zone };
+      }
+      const neighborCol = cIdx > 0 ? columns[cIdx - 1]! : columns[cIdx + 1];
+      if (!neighborCol || neighborCol.paneIds.length === 0) return null;
+      const neighborId = neighborCol.paneIds[0]!;
+      const zone: PaneDropZone = cIdx === 0 ? "left" : "right";
+      return { kind: "pane", tabId: tab.id, paneId: neighborId, zone };
+    }
+    return null;
+  }
+
+  const parent = leafParent(tab.layout, paneId);
+  const sibling = siblingLeafId(tab.layout, paneId);
+  if (!parent || !sibling) return null;
+  const zone: PaneDropZone =
+    parent.dir === "right"
+      ? parent.index === 0
+        ? "left"
+        : "right"
+      : parent.index === 0
+        ? "top"
+        : "bottom";
+  return { kind: "pane", tabId: tab.id, paneId: sibling, zone };
+}
+
+function swappedLayout(tab: WorkbenchTab, aId: string, bId: string) {
+  if (tab.layoutMode !== "scrolling") {
+    return { layout: swapLeaves(tab.layout, aId, bId) };
+  }
+  const columns = swapInColumns(tab.columns ?? [], aId, bId);
+  return { columns, layout: columnsTree(columns) };
+}
+
+/** Compute the base tab layout when dragging a pane, treating the tab as if the pane is removed. */
+export function computeBaseTab(tab: WorkbenchTab, draggedPaneId: string): WorkbenchTab | null {
+  if (tab.panes.size <= 1) return null;
+  if (!tab.panes.has(draggedPaneId)) return tab;
+
+  const panes = new Map(tab.panes);
+  panes.delete(draggedPaneId);
+
+  if (tab.layoutMode === "scrolling") {
+    const remainingIds = [...panes.keys()];
+    const columns = reconcileColumns(tab.columns ?? [], remainingIds);
+    const layout = columnsTree(columns);
+    return { ...tab, layout, columns, panes };
+  }
+
+  const layout = removePane(tab.layout, draggedPaneId);
+  if (layout === null) return null;
+  return { ...tab, layout, panes };
 }
 
 function placedLayout(tab: WorkbenchTab, paneId: string, targetId: string, zone: PaneDropZone) {
@@ -495,17 +563,10 @@ export function applyViewDrop(
     }
     if (sourceTab.id === targetTab.id) {
       if (target.zone === "replace") {
-        const isScrolling = sourceTab.layoutMode === "scrolling";
-        const columns = isScrolling
-          ? swapInColumns(sourceTab.columns ?? [], source.paneId, target.paneId)
-          : undefined;
-        const layout = isScrolling
-          ? columnsTree(columns!)
-          : swapLeaves(sourceTab.layout, source.paneId, target.paneId);
         return {
           snapshot: updateTab(snapshot, {
             ...sourceTab,
-            ...(isScrolling ? { columns: columns!, layout } : { layout }),
+            ...swappedLayout(sourceTab, source.paneId, target.paneId),
             focusedPaneId: source.paneId,
           }),
           tabId: sourceTab.id,

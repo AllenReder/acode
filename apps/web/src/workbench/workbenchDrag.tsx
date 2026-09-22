@@ -13,12 +13,13 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import { paneDropZoneFromPoint, removePane } from "./layout";
-import { columnsTree, reconcileColumns } from "./scrollingLayout";
+import { paneDropZoneFromPoint } from "./layout";
 import { computePaneLayoutRects } from "./layoutGeometry";
 import { usePrimarySettings } from "../hooks/useSettings";
 import { useUiStateStore } from "../uiStateStore";
 import {
+  computeBaseTab,
+  initialPaneDropTarget,
   type ViewDragSource,
   type ViewDropTarget,
   type ViewDropResult,
@@ -247,30 +248,12 @@ export function resolveSidebarDropTargetAtPoint(
   return { isOverSidebar: true, sidebarDropTarget: null };
 }
 
+export { computeBaseTab };
+
 export interface VirtualPaneRegion {
   readonly tabId: string;
   readonly paneId: string;
   readonly rect: WorkbenchRect;
-}
-
-/** Compute the base tab layout when dragging a pane, treating the tab as if the pane is removed. */
-export function computeBaseTab(tab: WorkbenchTab, draggedPaneId: string): WorkbenchTab | null {
-  if (tab.panes.size <= 1) return null;
-  if (!tab.panes.has(draggedPaneId)) return tab;
-
-  const panes = new Map(tab.panes);
-  panes.delete(draggedPaneId);
-
-  if (tab.layoutMode === "scrolling") {
-    const remainingIds = [...panes.keys()];
-    const columns = reconcileColumns(tab.columns ?? [], remainingIds);
-    const layout = columnsTree(columns);
-    return { ...tab, layout, columns, panes };
-  }
-
-  const layout = removePane(tab.layout, draggedPaneId);
-  if (layout === null) return null;
-  return { ...tab, layout, panes };
 }
 
 /** Compute virtual pane screen rectangles from a base tab and viewport dimensions. */
@@ -310,6 +293,7 @@ export function resolveVirtualPaneDropTargetAtPoint(
   y: number,
   viewportRect: WorkbenchRect,
   regions: ReadonlyArray<VirtualPaneRegion>,
+  paneGap = 0,
 ): ViewDropTarget | null {
   if (
     x < viewportRect.left ||
@@ -319,9 +303,13 @@ export function resolveVirtualPaneDropTargetAtPoint(
   ) {
     return null;
   }
+  const halfGap = Math.max(0, paneGap) / 2;
   const hit = regions.find(
     ({ rect }) =>
-      x >= rect.left && x <= rect.left + rect.width && y >= rect.top && y <= rect.top + rect.height,
+      x >= rect.left - halfGap &&
+      x <= rect.left + rect.width + halfGap &&
+      y >= rect.top - halfGap &&
+      y <= rect.top + rect.height + halfGap,
   );
   if (!hit) return null;
   return {
@@ -395,12 +383,18 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
       const viewportRect = rectFromElement(viewportEl);
 
       let baseTab: WorkbenchTab | null = null;
+      let sourceTab: WorkbenchTab | undefined;
       if (source.kind === "pane") {
-        const sourceTab = currentStore.tabs.find((t) => t.id === source.tabId);
+        sourceTab = currentStore.tabs.find((t) => t.id === source.tabId);
         baseTab = sourceTab ? computeBaseTab(sourceTab, source.paneId) : null;
       } else if (source.kind === "sidebar" && activeTab) {
         baseTab = activeTab;
       }
+
+      const initialTarget =
+        source.kind === "pane" && sourceTab
+          ? initialPaneDropTarget(sourceTab, source.paneId)
+          : null;
 
       const getVirtualRegions = () => {
         if (!viewportRect || !baseTab) return [];
@@ -420,8 +414,18 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           lastTarget = actual;
           return actual;
         }
+        if (initialTarget && Math.hypot(x - event.clientX, y - event.clientY) < 20) {
+          lastTarget = initialTarget;
+          return initialTarget;
+        }
         const regions = getVirtualRegions();
-        const hit = resolveVirtualPaneDropTargetAtPoint(x, y, viewportRect, regions);
+        const hit = resolveVirtualPaneDropTargetAtPoint(
+          x,
+          y,
+          viewportRect,
+          regions,
+          paneGapRef.current,
+        );
         lastTarget = hit;
         return lastTarget;
       };
