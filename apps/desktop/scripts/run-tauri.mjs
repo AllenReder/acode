@@ -14,6 +14,14 @@ const desktopRoot = NodePath.resolve(
 const repositoryRoot = NodePath.resolve(desktopRoot, "../..");
 const inheritedHome = process.env.ACODE_HOME?.trim() || process.env.T3CODE_HOME?.trim();
 const developmentHome = inheritedHome || NodePath.resolve(repositoryRoot, ".acode");
+// One number has to serve as both the daemon port and the web dev proxy target:
+// in dev the web client sends every `/api`, `/ws`, and `/oauth` request through
+// the Vite server, so a daemon bound anywhere else answers nothing. Stating it
+// as ACODE_DAEMON_PORT (rather than only T3CODE_PORT) makes the launcher fail
+// loudly when the port is taken instead of drifting to a free one, which used to
+// leave the proxy dialing a dead port while a healthy daemon listened elsewhere.
+const daemonPort =
+  process.env.ACODE_DAEMON_PORT?.trim() || process.env.T3CODE_PORT?.trim() || "13773";
 const cliArgs = process.argv.slice(2);
 const hasExplicitConfig = cliArgs.some((argument) => argument === "--config" || argument === "-c");
 const tauriArgs =
@@ -39,7 +47,12 @@ function launchTauriCli() {
       ACODE_HOME: developmentHome,
       T3CODE_HOME: process.env.T3CODE_HOME?.trim() || developmentHome,
       T3CODE_PORT_OFFSET: process.env.T3CODE_PORT_OFFSET?.trim() || "0",
-      T3CODE_PORT: process.env.T3CODE_PORT?.trim() || "13773",
+      ACODE_DAEMON_PORT: daemonPort,
+      T3CODE_PORT: daemonPort,
+      // This window's URL is the literal `devUrl` in tauri.conf.json, so the web
+      // dev server must keep the port the offset implies: walking to the next
+      // free number would leave the window loading whatever else serves that URL.
+      T3CODE_STRICT_DEV_PORTS: process.env.T3CODE_STRICT_DEV_PORTS?.trim() || "1",
     },
     failureLabel: "Unable to start the Tauri CLI",
   });

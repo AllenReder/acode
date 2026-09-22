@@ -164,6 +164,30 @@ export class DevRunnerPortExhaustedError extends Schema.TaggedError<DevRunnerPor
   }
 }
 
+/**
+ * Raised instead of silently moving to a neighbouring port.
+ *
+ * Pinned ports are what the Tauri dev window and the Vite proxy address: the
+ * `devUrl` in `tauri.conf.json` is a literal web URL and the proxy target is a
+ * literal backend port. Walking to the next free number therefore does not
+ * "just work" — the window keeps loading the old URL and quietly attaches to
+ * whatever already listens there, which reads as a broken backend rather than a
+ * port conflict.
+ */
+export class DevRunnerPortUnavailableError extends Schema.TaggedError<DevRunnerPortUnavailableError>()(
+  "DevRunnerPortUnavailableError",
+  {
+    mode: Schema.Literals(["dev", "dev:server", "dev:web"]),
+    role: Schema.Literals(["server", "web"]),
+    port: Schema.Number,
+    pinSource: Schema.String,
+  },
+) {
+  override get message(): string {
+    return `Port ${this.port} (${this.role}) is already in use while ${this.mode} runs with pinned ports (${this.pinSource}). The Tauri dev window loads a fixed web URL and the web dev server proxies to a fixed backend port, so a different number would not be reachable — another dev session is the usual cause. Free the port (\`lsof -nP -iTCP:${this.port} -sTCP:LISTEN\`) or run without the pin (\`pnpm dev:web\`) to let the runner pick free ports.`;
+  }
+}
+
 export class DevRunnerProcessError extends Schema.TaggedError<DevRunnerProcessError>()(
   "DevRunnerProcessError",
   {
@@ -212,6 +236,7 @@ export const DevRunnerError = Schema.Union([
   DevRunnerHostNotProxiableError,
   DevRunnerInvalidPortOffsetError,
   DevRunnerPortExhaustedError,
+  DevRunnerPortUnavailableError,
   DevRunnerProcessError,
   DevRunnerProcessExitError,
 ]);
@@ -241,6 +266,10 @@ const optionalIntegerConfig = (name: string): Config.Config<number | undefined> 
 const OffsetConfig = Config.all({
   portOffset: optionalIntegerConfig("T3CODE_PORT_OFFSET"),
   devInstance: optionalStringConfig("T3CODE_DEV_INSTANCE"),
+  // Set by the desktop dev wrapper: its window URL and the backend port it
+  // proxies to are literals in the Tauri config, so the runner must not move
+  // off them. Absent for `pnpm dev`/`dev:web`, which stay free to walk ports.
+  strictPorts: optionalBooleanConfig("T3CODE_STRICT_DEV_PORTS"),
 });
 
 export function resolveOffset(config: {
@@ -547,6 +576,11 @@ interface ResolveModePortOffsetsInput<R = NetService.NetService> {
   readonly startOffset: number;
   readonly hasExplicitServerPort: boolean;
   readonly hasExplicitDevUrl: boolean;
+  /**
+   * Refuse to move off the ports implied by `startOffset`. Set for the desktop
+   * dev app, where the window URL and the proxy target are literals.
+   */
+  readonly strictPorts?: boolean;
   readonly checkPortAvailability?: PortAvailabilityCheck<R>;
 }
 
@@ -555,18 +589,33 @@ export function resolveModePortOffsets<R = NetService.NetService>({
   startOffset,
   hasExplicitServerPort,
   hasExplicitDevUrl,
+  strictPorts = false,
   checkPortAvailability,
 }: ResolveModePortOffsetsInput<R>): Effect.Effect<
   { readonly serverOffset: number; readonly webOffset: number },
-  DevRunnerPortExhaustedError,
+  DevRunnerPortExhaustedError | DevRunnerPortUnavailableError,
   R
 > {
   return Effect.gen(function* () {
     const checkPort = (checkPortAvailability ??
       defaultCheckPortAvailability) as PortAvailabilityCheck<R>;
+    const pinSource = "T3CODE_STRICT_DEV_PORTS=1";
 
     if (mode === "dev:web") {
       if (hasExplicitDevUrl) {
+        return { serverOffset: startOffset, webOffset: startOffset };
+      }
+
+      if (strictPorts) {
+        const { webPort } = portPairForOffset(startOffset);
+        if (!isBrowserAllowedPort(webPort) || !(yield* checkPort(webPort, "web"))) {
+          return yield* new DevRunnerPortUnavailableError({
+            mode,
+            role: "web",
+            port: webPort,
+            pinSource,
+          });
+        }
         return { serverOffset: startOffset, webOffset: startOffset };
       }
 
@@ -584,6 +633,19 @@ export function resolveModePortOffsets<R = NetService.NetService>({
         return { serverOffset: startOffset, webOffset: startOffset };
       }
 
+      if (strictPorts) {
+        const { serverPort } = portPairForOffset(startOffset);
+        if (!(yield* checkPort(serverPort, "server"))) {
+          return yield* new DevRunnerPortUnavailableError({
+            mode,
+            role: "server",
+            port: serverPort,
+            pinSource,
+          });
+        }
+        return { serverOffset: startOffset, webOffset: startOffset };
+      }
+
       const serverOffset = yield* findFirstAvailableOffset({
         startOffset,
         requireServerPort: true,
@@ -591,6 +653,30 @@ export function resolveModePortOffsets<R = NetService.NetService>({
         checkPortAvailability: checkPort,
       });
       return { serverOffset, webOffset: serverOffset };
+    }
+
+    if (strictPorts) {
+      const { serverPort, webPort } = portPairForOffset(startOffset);
+      if (
+        !hasExplicitDevUrl &&
+        (!isBrowserAllowedPort(webPort) || !(yield* checkPort(webPort, "web")))
+      ) {
+        return yield* new DevRunnerPortUnavailableError({
+          mode,
+          role: "web",
+          port: webPort,
+          pinSource,
+        });
+      }
+      if (!hasExplicitServerPort && !(yield* checkPort(serverPort, "server"))) {
+        return yield* new DevRunnerPortUnavailableError({
+          mode,
+          role: "server",
+          port: serverPort,
+          pinSource,
+        });
+      }
+      return { serverOffset: startOffset, webOffset: startOffset };
     }
 
     const sharedOffset = yield* findFirstAvailableOffset({
@@ -620,11 +706,11 @@ interface DevRunnerCliInput {
 
 export function runDevRunnerWithInput(input: DevRunnerCliInput) {
   return Effect.gen(function* () {
-    const { portOffset, devInstance } = yield* OffsetConfig.pipe(
+    const { portOffset, devInstance, strictPorts } = yield* OffsetConfig.pipe(
       Effect.mapError(
         (cause) =>
           new DevRunnerConfigurationError({
-            configKeys: ["T3CODE_PORT_OFFSET", "T3CODE_DEV_INSTANCE"],
+            configKeys: ["T3CODE_PORT_OFFSET", "T3CODE_DEV_INSTANCE", "T3CODE_STRICT_DEV_PORTS"],
             cause,
           }),
       ),
@@ -656,6 +742,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
 
     const { serverOffset, webOffset } = yield* resolveModePortOffsets({
       mode: input.mode,
+      strictPorts: strictPorts ?? false,
       startOffset: offset,
       hasExplicitServerPort: input.port !== undefined,
       hasExplicitDevUrl: input.devUrl !== undefined,
