@@ -44,7 +44,7 @@ export const EXPANDED_ACTION_RIGHT_OFFSET = TITLEBAR_BUTTON_SIZE + SETTINGS_RIGH
 
 /** 侧边栏隐藏按钮在 macOS 上的起点坐标 */
 export const SIDEBAR_TRIGGER_LEFT_MAC = TRAFFIC_LIGHTS_ZONE + TRAFFIC_LIGHT_GAP; // 64 + 10 = 74px
-export const SIDEBAR_TRIGGER_LEFT_WIN = 0; // Windows 上对齐窗口左侧
+export const SIDEBAR_TRIGGER_LEFT_WIN = BASE_SPACING; // 12px（Windows 保持 baseline 边距）
 
 /** 设置按钮在折叠停靠时的起点坐标（由隐藏按钮位置 + 按钮尺寸 + BUTTON_GAP 决定） */
 export const DOCK_LEFT_MAC = SIDEBAR_TRIGGER_LEFT_MAC + TITLEBAR_BUTTON_SIZE + BUTTON_GAP; // 74 + 28 + 6 = 108px
@@ -53,7 +53,7 @@ export const DOCK_LEFT_WIN = SIDEBAR_TRIGGER_LEFT_WIN + TITLEBAR_BUTTON_SIZE + B
 /**
  * Minimum sidebar width:
  * macOS: TRAFFIC_LIGHTS_ZONE (64) + TRAFFIC_LIGHT_GAP (10) + HideBtn (28) + BUTTON_GAP (6) + SettingsBtn (28) + SETTINGS_RIGHT_GAP (12) = 148px.
- * Non-macOS: Directly aligned to window left boundary: HideBtn (28) + BUTTON_GAP (6) + SettingsBtn (28) + SETTINGS_RIGHT_GAP (12) = 74px.
+ * Non-macOS: SIDEBAR_TRIGGER_LEFT_WIN (12) + HideBtn (28) + BUTTON_GAP (6) + SettingsBtn (28) + SETTINGS_RIGHT_GAP (12) = 86px.
  */
 export function resolveSidebarMinimumWidth(options: { readonly isMac: boolean }): number {
   if (options.isMac) {
@@ -67,6 +67,7 @@ export function resolveSidebarMinimumWidth(options: { readonly isMac: boolean })
     );
   }
   return (
+    SIDEBAR_TRIGGER_LEFT_WIN +
     TITLEBAR_BUTTON_SIZE +
     BUTTON_GAP +
     TITLEBAR_BUTTON_SIZE +

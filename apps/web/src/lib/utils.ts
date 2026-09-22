@@ -12,6 +12,10 @@ export function isMacPlatform(platform: string): boolean {
   return /mac|iphone|ipad|ipod/i.test(platform);
 }
 
+export function isCurrentPlatformMac(): boolean {
+  return typeof navigator !== "undefined" ? isMacPlatform(navigator.platform) : true;
+}
+
 export function isWindowsPlatform(platform: string): boolean {
   return /^win(dows)?/i.test(platform);
 }

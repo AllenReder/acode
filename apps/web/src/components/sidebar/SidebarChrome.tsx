@@ -35,7 +35,7 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader() {
       style={{
         paddingLeft: isMac
           ? "var(--sidebar-controls-left, 76px)"
-          : "var(--sidebar-controls-left-win, 0px)",
+          : "var(--sidebar-controls-left-win, 12px)",
         paddingRight: "var(--sidebar-controls-right, 12px)",
       }}
     >

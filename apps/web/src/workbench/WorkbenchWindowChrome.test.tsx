@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { expect, it } from "vite-plus/test";
+import { expect, it, vi } from "vite-plus/test";
 import type {
   AcodeProjectId,
   AgentSessionId,
@@ -143,3 +143,40 @@ it("renders flat tiling tabs with uniform width and hover-only close buttons", (
   // Close button with hover opacity
   expect(html).toContain("opacity-0 group-hover:opacity-100");
 });
+
+it("omits window controls in standard non-desktop environment", () => {
+  const snapshot = createTestSnapshot();
+
+  const html = renderToStaticMarkup(
+    <SidebarProvider defaultOpen>
+      <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+    </SidebarProvider>,
+  );
+
+  expect(html).not.toContain('data-slot="window-controls"');
+});
+
+it("renders window controls at the trailing end of the topbar when on Windows desktop", () => {
+  const snapshot = createTestSnapshot();
+
+  vi.stubGlobal("window", {
+    __TAURI_INTERNALS__: {},
+  });
+  vi.stubGlobal("navigator", {
+    platform: "Win32",
+  });
+
+  const html = renderToStaticMarkup(
+    <SidebarProvider defaultOpen>
+      <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+    </SidebarProvider>,
+  );
+
+  expect(html).toContain('data-slot="window-controls"');
+  expect(html).toContain('aria-label="Minimize"');
+  expect(html).toContain('aria-label="Maximize"');
+  expect(html).toContain('aria-label="Close"');
+
+  vi.unstubAllGlobals();
+});
+

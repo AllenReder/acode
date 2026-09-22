@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { cn } from "../lib/utils";
 import { MaterialSurface } from "../components/MaterialSurface";
+import { WindowControls } from "../components/desktop/WindowControls";
+import { handleTopbarDoubleClick } from "../lib/windowControls";
 import { TopbarInset } from "./TopbarInset";
 import { firstLeafId } from "./layout";
 import { targetKey, type ViewTarget } from "./viewRegistry";
@@ -64,13 +66,15 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
       className="drag-region flex h-[var(--workbench-titlebar-height,36px)] w-full shrink-0 items-center border-b border-[var(--material-edge)] z-30"
       data-tauri-drag-region="deep"
       data-workbench-window-chrome=""
+      onDoubleClick={handleTopbarDoubleClick}
     >
       <TopbarInset />
 
-      <div className="flex h-full min-w-0 flex-1 items-center gap-2 pr-3 [-webkit-app-region:no-drag]">
+      <div className="flex h-full min-w-0 flex-1 items-center gap-2 pr-3" data-tauri-drag-region>
         <div
           className="flex h-full min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           data-workbench-tab-strip-drop=""
+          data-tauri-drag-region
           role="tablist"
           aria-label="Workbench tabs"
         >
@@ -92,7 +96,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
                 data-workbench-tab-drop={tab.id}
                 data-active-tab={active ? "true" : "false"}
                 className={cn(
-                  "group relative flex h-full w-44 min-w-28 shrink cursor-pointer items-center gap-2 border-r border-border/60 px-3 text-left transition-colors duration-150 select-none",
+                  "group relative flex h-full w-44 min-w-28 shrink cursor-pointer items-center gap-2 border-r border-border/60 px-3 text-left transition-colors duration-150 select-none [-webkit-app-region:no-drag]",
                   active
                     ? "bg-foreground/5 text-foreground font-medium"
                     : "bg-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
@@ -174,7 +178,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
         </div>
 
         <div
-          className="workbench-layout-switch shrink-0"
+          className="workbench-layout-switch shrink-0 [-webkit-app-region:no-drag]"
           data-layout={activeTab.layoutMode ?? "bsp"}
           role="group"
           aria-label="Tab layout"
@@ -200,12 +204,14 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
           type="button"
           aria-label="New tab"
           data-workbench-new-tab-drop="end"
-          className="flex size-7 shrink-0 items-center justify-center rounded-[var(--control-radius)] border border-border/70 bg-muted/25 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+          className="flex size-7 shrink-0 items-center justify-center rounded-[var(--control-radius)] border border-border/70 bg-muted/25 text-muted-foreground hover:bg-muted/60 hover:text-foreground [-webkit-app-region:no-drag]"
           onClick={createTab}
         >
           <PlusIcon className="size-4" />
         </button>
       </div>
+
+      <WindowControls />
     </MaterialSurface>
   );
 }

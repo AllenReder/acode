@@ -100,7 +100,7 @@ function SidebarControl() {
       style={{
         left: isMac
           ? "var(--sidebar-controls-left, 76px)"
-          : "var(--sidebar-controls-left-win, 0px)",
+          : "var(--sidebar-controls-left-win, 12px)",
       }}
     >
       <SidebarTitlebarButton
