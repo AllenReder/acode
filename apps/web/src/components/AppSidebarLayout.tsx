@@ -256,7 +256,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
             side="left"
             collapsible="offcanvas"
             data-app-sidebar=""
-            className="border-r border-[var(--material-edge)] text-sidebar-foreground"
+            className="border-0! text-sidebar-foreground"
             resizable={{
               maxWidth: sidebarMaximumWidth,
               minWidth: THREAD_SIDEBAR_MIN_WIDTH,
@@ -267,9 +267,10 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
               onResize: setSidebarWidth,
             }}
           >
+            {/* Paint the translucent edge over the tint, not over the bare Glass Stage. */}
             <MaterialSurface
               kind="sidebar"
-              className="flex h-full min-h-0 w-full flex-col"
+              className="flex h-full min-h-0 w-full flex-col border-r border-[var(--material-edge)]"
               data-tauri-drag-region="deep"
             >
               {isOnSettings ? <SettingsSidebarNav pathname={pathname} /> : <AcodeSidebar />}

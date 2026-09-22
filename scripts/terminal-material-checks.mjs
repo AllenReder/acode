@@ -1,6 +1,6 @@
 import * as NodeAssert from "node:assert/strict";
 
-async function paintedPixel(page, x, y) {
+export async function paintedPixel(page, x, y) {
   const png = await page.screenshot();
   return page.evaluate(
     async ({ png, x, y }) => {

@@ -1,5 +1,6 @@
 import * as NodeAssert from "node:assert/strict";
 import {
+  paintedPixel,
   verifyTerminalMaterial,
   verifyTerminalSessionMaterial,
 } from "./terminal-material-checks.mjs";
@@ -25,6 +26,7 @@ export async function verifyWorkbenchAppearance(page) {
       await dismiss.click();
     },
   );
+  await verifySidebarMaterialEdge(page);
   await verifyTerminalMaterial(page);
   await verifyTerminalSessionMaterial(page);
   const workingTopbar = await page
@@ -156,4 +158,44 @@ export async function verifyWorkbenchAppearance(page) {
   console.log(
     "settings scrolling and selection checks passed; native glass and dragging require macOS",
   );
+}
+
+/** A bright backing exposes gaps that the opaque Linux fallback conceals. */
+async function verifySidebarMaterialEdge(page) {
+  const saved = await page.evaluate(() => {
+    const root = document.documentElement;
+    const saved = {
+      classes: root.className,
+      style: root.getAttribute("style"),
+      bodyStyle: document.body.getAttribute("style"),
+    };
+    document.body.style.backgroundColor = "";
+    root.classList.remove("material-stage-opaque");
+    root.classList.add("dark", "material-stage-native");
+    root.style.setProperty("background", "white", "important");
+    root.style.setProperty("--material-sidebar-opacity", "0.5");
+    root.style.setProperty("--material-background-mask-dark-opacity", "0.35");
+    return saved;
+  });
+  try {
+    await page.mouse.move(1000, 450);
+    const box = await page.locator("[data-app-sidebar]").boundingBox();
+    const edgeX = Math.round(box.x + box.width) - 1;
+    const y = Math.round(box.y + box.height * 0.75);
+    const interior = await paintedPixel(page, edgeX - 3, y);
+    const edge = await paintedPixel(page, edgeX, y);
+    NodeAssert.ok(interior[0] > 40, "The fixture must expose a bright backing through the Sidebar");
+    NodeAssert.ok(
+      edge.every((value, index) => value <= interior[index]),
+      `The resting dark Sidebar edge must not become a bright gap: edge=${edge}, interior=${interior}`,
+    );
+  } finally {
+    await page.evaluate((saved) => {
+      if (saved.bodyStyle === null) document.body.removeAttribute("style");
+      else document.body.setAttribute("style", saved.bodyStyle);
+      document.documentElement.className = saved.classes;
+      if (saved.style === null) document.documentElement.removeAttribute("style");
+      else document.documentElement.setAttribute("style", saved.style);
+    }, saved);
+  }
 }
