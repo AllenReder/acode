@@ -152,6 +152,31 @@ describe("registerViewDefinition / resolveViewDefinition", () => {
     );
   });
 
+  it("resolves registered workspace gitView definition", () => {
+    const gitViewDefinition: ViewDefinition<Extract<ViewTarget, { kind: "workspace" }>> = {
+      id: "gitView",
+      label: "Changes",
+      accepts: (target): target is Extract<ViewTarget, { kind: "workspace" }> =>
+        target.kind === "workspace" && target.definitionId === "gitView",
+      bind: emptyViewBinding,
+      Component: StubComponent as unknown as ViewDefinition<
+        Extract<ViewTarget, { kind: "workspace" }>
+      >["Component"],
+    };
+    registerViewDefinition(gitViewDefinition);
+
+    const target: ViewTarget = {
+      kind: "workspace",
+      definitionId: "gitView",
+      environmentId: FIX_ENV,
+      workspaceId: FIX_WORKSPACE,
+    };
+    expect(resolveViewDefinition(target)?.id).toBe("gitView");
+    expect(targetKey(target)).toBe(
+      JSON.stringify(["workspace", "gitView", FIX_ENV, FIX_WORKSPACE]),
+    );
+  });
+
   it("clearViewRegistry removes all registrations", () => {
     registerViewDefinition(agentDefinition);
     clearViewRegistry();

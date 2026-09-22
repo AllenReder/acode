@@ -36,6 +36,16 @@ export function useWorkspaceViewActions({
     useWorkbenchStore.getState().splitPane(paneId, fileTarget, "right");
   }, [environmentId, paneId, workspaceId]);
 
+  const onReviewChanges = useCallback(() => {
+    const gitTarget: ViewTarget = {
+      kind: "workspace",
+      definitionId: "gitView",
+      environmentId,
+      workspaceId,
+    };
+    useWorkbenchStore.getState().splitPane(paneId, gitTarget, "right");
+  }, [environmentId, paneId, workspaceId]);
+
   const onNewTerminalSession = useCallback(() => {
     const terminalId = nextWorkspaceTerminalId();
     void openTerminal({
@@ -62,5 +72,5 @@ export function useWorkspaceViewActions({
     });
   }, [environmentId, openTerminal, paneId, workspaceId]);
 
-  return { onBrowseFiles, onNewTerminalSession };
+  return { onBrowseFiles, onReviewChanges, onNewTerminalSession };
 }

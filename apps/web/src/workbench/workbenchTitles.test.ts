@@ -105,6 +105,22 @@ describe("resolveTargetTitle", () => {
     ]);
   });
 
+  it("resolves titles and breadcrumbs for workspace gitView", () => {
+    const gitViewTarget = {
+      kind: "workspace",
+      definitionId: "gitView",
+      environmentId,
+      workspaceId,
+    } satisfies ViewTarget;
+
+    expect(resolveTargetTitle(gitViewTarget, projects)).toBe("Main checkout: Changes");
+    expect(resolveTargetBreadcrumbs(gitViewTarget, projects)).toEqual([
+      "ACode",
+      "Main checkout",
+      "Changes",
+    ]);
+  });
+
   it("uses a stable fallback when the target is offline or not present", () => {
     expect(
       resolveTargetTitle(

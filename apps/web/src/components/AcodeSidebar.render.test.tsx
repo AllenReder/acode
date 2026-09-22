@@ -186,4 +186,12 @@ describe("AcodeSidebar", () => {
     expect(browseFilesItem).toBeDefined();
     expect(browseFilesItem?.label).toBe("Browse Files");
   });
+
+  it("includes review-changes in workspace menu items", () => {
+    const items = workspaceMenuItems({ canDeleteDirectory: false });
+    const reviewChangesItem = items.find((item) => item.id === "review-changes");
+    expect(reviewChangesItem).toBeDefined();
+    expect(reviewChangesItem?.label).toBe("Review Changes");
+    expect(reviewChangesItem?.icon).toBe("git-branch");
+  });
 });

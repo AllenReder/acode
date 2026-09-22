@@ -1,4 +1,5 @@
 import { WorkspaceFileView } from "./WorkspaceFileView";
+import { WorkspaceGitView } from "./WorkspaceGitView";
 import { createWelcomeViewDefinition } from "./welcomeViewDefinition";
 import { AgentSessionView } from "./NewAgentSessionView";
 import { TerminalView } from "./TerminalView";
@@ -33,6 +34,18 @@ export const workspaceFileViewDefinition: ViewDefinition<
   Component: WorkspaceFileView,
 };
 
+
+export const workspaceGitViewDefinition: ViewDefinition<
+  Extract<ViewTarget, { kind: "workspace" }>
+> = {
+  id: "gitView",
+  label: "Changes",
+  accepts: (target): target is Extract<ViewTarget, { kind: "workspace" }> =>
+    target.kind === "workspace" && target.definitionId === "gitView",
+  bind: emptyViewBinding,
+  Component: WorkspaceGitView,
+};
+
 export const terminalViewDefinition: ViewDefinition<
   Extract<ViewTarget, { kind: "workspaceTerminal" }>
 > = {
@@ -56,6 +69,7 @@ export function registerCoreViewDefinitions(options: { force?: boolean } = {}): 
   registerViewDefinition(agentViewDefinition);
   registerViewDefinition(terminalViewDefinition);
   registerViewDefinition(workspaceFileViewDefinition);
+  registerViewDefinition(workspaceGitViewDefinition);
   registered = true;
 }
 
