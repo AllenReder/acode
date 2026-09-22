@@ -1,5 +1,8 @@
 import * as NodeAssert from "node:assert/strict";
-import { verifyTerminalMaterial } from "./terminal-material-checks.mjs";
+import {
+  verifyTerminalMaterial,
+  verifyTerminalSessionMaterial,
+} from "./terminal-material-checks.mjs";
 
 async function dragSelect(page, locator) {
   await locator.scrollIntoViewIfNeeded();
@@ -23,6 +26,10 @@ export async function verifyWorkbenchAppearance(page) {
     },
   );
   await verifyTerminalMaterial(page);
+  await verifyTerminalSessionMaterial(page);
+  const workingTopbar = await page
+    .locator("[data-workbench-window-chrome]:not(html)")
+    .boundingBox();
   const sidebar = await page.locator("[data-app-sidebar]").boundingBox();
   const firstTab = await page.getByRole("tab").first().boundingBox();
   NodeAssert.ok(
@@ -52,6 +59,28 @@ export async function verifyWorkbenchAppearance(page) {
   const scroll = page.locator("[data-settings-page-scroll]");
   await scroll.waitFor();
   console.log("appearance: settings opened");
+  const breadcrumb = page.getByRole("navigation", { name: "Settings breadcrumb" });
+  const settingsTopbar = breadcrumb.locator('xpath=ancestor::*[@data-material-surface="topbar"]');
+  const settingsBox = await settingsTopbar.boundingBox();
+  NodeAssert.equal(
+    settingsBox.height,
+    workingTopbar.height,
+    "Settings and working Topbars must have equal height",
+  );
+  const toggle = page.getByRole("button", { name: "Toggle main sidebar", exact: true });
+  await toggle.click();
+  await page.waitForTimeout(400);
+  const collapsedBreadcrumb = await breadcrumb.boundingBox();
+  const back = await page
+    .getByRole("button", { name: "Back to workspace", exact: true })
+    .boundingBox();
+  NodeAssert.ok(
+    collapsedBreadcrumb.x > back.x + back.width,
+    "Collapsed Settings navigation must clear the Back control",
+  );
+  await toggle.click();
+  await page.waitForTimeout(400);
+
   const dimensions = await scroll.evaluate((el) => ({
     height: el.clientHeight,
     content: el.scrollHeight,

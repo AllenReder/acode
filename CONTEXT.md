@@ -278,8 +278,9 @@ _Avoid_: Body glass, Main pane glass
 
 **Topbar Surface**:
 The horizontal title and tab chrome above the Workbench, alongside the
-full-height Sidebar when expanded. It is a distinct Material Surface whose
-visual continuity with the Sidebar does not merge their layout ownership.
+full-height Sidebar when expanded; it carries Settings navigation when Settings
+replaces the working content. It is a distinct Material Surface whose visual
+continuity with the Sidebar does not merge their layout ownership.
 _Avoid_: Header, Toolbar, Tab strip
 
 **Workbench Artwork**:

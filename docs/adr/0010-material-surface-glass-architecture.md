@@ -35,9 +35,31 @@ independently adjustable tint opacity. Each region paints its material once;
 Topbar opacity must not compound with a Workbench material beneath it. View
 headers and content inherit their containing region's material rather than
 introducing another region-wide background.
-Code blocks and inputs may use a subtle translucent local backing for
-readability. Menus and dialogs use a denser frosted Overlay material to
-separate their content from the content underneath.
+Settings and the ordinary Workbench share the same 36px Topbar geometry. When
+the Sidebar is collapsed, both reserve the same window-control area and place
+the same short separator between the action button and the content; Settings
+uses Back and its breadcrumb where the Workbench uses Settings and its Tabs.
+With the Sidebar expanded, neither Topbar reserves the collapsed control area.
+Controls retain subtle theme-aware borders: quiet at rest, slightly stronger
+on hover, and clearly accented for keyboard focus. Control borders and region
+dividers are separate semantic roles; changing the Sidebar divider must not
+repaint control borders or every Pane outline.
+Sidebar interaction states remain distinct without opaque dark blocks:
+hovering a Project, Workspace, or Session gently brightens the row; an
+unfocused Session already displayed in the current Tab has a small marker;
+the currently focused Session alone receives a soft accent background.
+Code blocks and ordinary inputs may use a subtle translucent local backing for
+readability. The Agent composer and its attached model, permission, and
+workspace controls instead share one continuous local frosted backdrop,
+following the earlier t3code composer treatment. This backdrop blurs content
+behind the composer; native desktop blur alone cannot replace it. Attached
+parts must not stack independent blur layers. Floating menus and dialogs use
+their own denser frosted Overlay material to separate their content from the
+content underneath.
+Modal dialogs dim the surrounding application by 20% and retain a light blur.
+This surrounding backdrop is separate from the dialog's Overlay material;
+context menus do not introduce a full-window dimmer. Overlay opacity remains
+independently adjustable from Sidebar, Topbar, and Workbench opacity.
 
 The redesign preserves native application interaction boundaries: text
 selection is available in prose, code, terminal output, and editable inputs;
@@ -69,8 +91,11 @@ Built-in secondary text is tuned against composited glass, rather than only
 against opaque theme swatches. Material edges own the Sidebar divider; theme
 text-color overrides must not repaint it as a white highlight.
 
-Terminal default canvas and viewport fills remain transparent while explicit
-ANSI backgrounds retain their semantics. Terminal Session Views alone opt in
+Terminal default canvas and viewport fills always remain transparent, including
+after initialization, live output, and history replay request a default
+background color. Explicit ANSI cell backgrounds, selection, and cursor
+rendering retain their semantics; enforcing canvas transparency must preserve
+terminal color-query handling. Terminal Session Views alone opt in
 to a 16px top content fade when the normal buffer has history above the
 viewport. Alternate screens and a cursor inside the fade band disable it;
 scrollbars and Pane chrome are never masked.

@@ -162,7 +162,7 @@ function ProviderCustomColorPanel(props: {
             props.onCommit(nextColor);
           }}
           onBlur={() => setHexDraft(null)}
-          className="h-8 rounded-md border border-input bg-background px-2 font-mono text-xs text-foreground outline-none transition-colors focus:border-ring"
+          className="h-8 rounded-md border border-border bg-background px-2 font-mono text-xs text-foreground outline-none transition-colors focus:border-ring"
           aria-label="Custom hex accent color"
           spellCheck={false}
         />
@@ -186,7 +186,7 @@ function ProviderCustomColorPicker(props: {
           <button
             type="button"
             className={cn(
-              "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-input text-white shadow-xs transition-transform duration-200 active:scale-95",
+              "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border text-white shadow-xs transition-transform duration-200 active:scale-95",
               "hover:scale-105 hover:border-ring/60",
             )}
             style={{ backgroundColor: normalized }}

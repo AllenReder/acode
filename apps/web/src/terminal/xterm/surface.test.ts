@@ -29,7 +29,7 @@ describe("XtermTerminalSurface", () => {
       cursor: "#b4cbff",
       isDark: true,
     });
-    expect(theme.background).toBe("#00000000");
+    expect(theme.background).toBe("#0a0a0a00");
     expect(theme.cursorAccent).toBe("#0a0a0a");
     expect(theme.foreground).toBe("#f5f5f5");
     expect(theme.black).toBe("#18181b");
@@ -45,7 +45,7 @@ describe("XtermTerminalSurface", () => {
       cursor: "#26384e",
       isDark: false,
     });
-    expect(theme.background).toBe("#00000000");
+    expect(theme.background).toBe("#ffffff00");
     expect(theme.cursorAccent).toBe("#ffffff");
     expect(theme.foreground).toBe("#1a1a1e");
     expect(theme.black).toBe("#1a1a1e");

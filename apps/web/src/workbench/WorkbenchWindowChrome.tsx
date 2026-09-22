@@ -2,15 +2,9 @@ import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/mode
 import { Columns3Icon, PanelsTopLeftIcon, PlusIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { cn, isMacPlatform } from "../lib/utils";
+import { cn } from "../lib/utils";
 import { MaterialSurface } from "../components/MaterialSurface";
-import { useSidebarVisibility } from "../components/ui/sidebar";
-import {
-  COLLAPSED_TABS_INSET_MAC,
-  COLLAPSED_TABS_INSET_WIN,
-  EXPANDED_TABS_INSET,
-  SEPARATOR_RIGHT_GAP,
-} from "../components/sidebar/sidebarGeometry";
+import { TopbarInset } from "./TopbarInset";
 import { firstLeafId } from "./layout";
 import { targetKey, type ViewTarget } from "./viewRegistry";
 import { tabDisplayTitle, type WorkbenchSnapshot, type WorkbenchTab } from "./workbenchState";
@@ -44,9 +38,6 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
 
-  const isSidebarOpen = useSidebarVisibility();
-  const isMac = typeof navigator !== "undefined" && isMacPlatform(navigator.platform);
-
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.workbenchWindowChrome = "true";
@@ -67,12 +58,6 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
     setDraftTitle("");
   };
 
-  const tabsInsetWidth = isSidebarOpen
-    ? EXPANDED_TABS_INSET
-    : isMac
-      ? COLLAPSED_TABS_INSET_MAC
-      : COLLAPSED_TABS_INSET_WIN;
-
   return (
     <MaterialSurface
       kind="topbar"
@@ -80,25 +65,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
       data-tauri-drag-region="deep"
       data-workbench-window-chrome=""
     >
-      <div
-        className="flex shrink-0 items-center overflow-hidden transition-[width] duration-200 ease-out [-webkit-app-region:no-drag]"
-        data-slot="workbench-tabs-inset-spacer"
-        style={{
-          width: `${tabsInsetWidth}px`,
-        }}
-      >
-        {!isSidebarOpen ? (
-          <div
-            className="flex h-full w-full items-center justify-end transition-opacity duration-200 ease-out"
-            style={{ paddingRight: `${SEPARATOR_RIGHT_GAP}px` }}
-          >
-            <div
-              className="h-3.5 w-px bg-border/60 shrink-0"
-              data-slot="workbench-titlebar-separator"
-            />
-          </div>
-        ) : null}
-      </div>
+      <TopbarInset />
 
       <div className="flex h-full min-w-0 flex-1 items-center gap-2 pr-3 [-webkit-app-region:no-drag]">
         <div

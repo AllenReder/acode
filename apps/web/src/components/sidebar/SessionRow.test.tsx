@@ -279,7 +279,7 @@ it("supports keyboard context-menu invocation via ContextMenu and Shift+F10", as
   expect(showContextMenuMock).toHaveBeenCalledWith(expect.any(Array), { x: 100, y: 90 });
 });
 
-it("marks focused session with bg-sidebar-row-active and open-in-tab session with bg-sidebar-row-selected", async () => {
+it("distinguishes the focused Session from other opened and unopened Sessions", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const target1 = {
     kind: "agentSession",
@@ -320,14 +320,13 @@ it("marks focused session with bg-sidebar-row-active and open-in-tab session wit
 
   // Target2 is now focused in tab, target1 is open in tab but not focused, target3 is not in tab
   expect(row2!.props["data-session-focused"]).toBe("true");
-  expect(row2!.props["className"]).toContain("bg-sidebar-row-active");
+  expect(row2!.props["aria-current"]).toBe("page");
 
   expect(row1!.props["data-session-focused"]).toBe("false");
   expect(row1!.props["data-session-open-in-tab"]).toBe("true");
-  expect(row1!.props["className"]).toContain("bg-sidebar-row-selected");
+  expect(row1!.props["aria-current"]).toBe("true");
 
   expect(row3!.props["data-session-focused"]).toBe("false");
   expect(row3!.props["data-session-open-in-tab"]).toBe("false");
-  expect(row3!.props["className"]).not.toContain("bg-sidebar-row-active");
-  expect(row3!.props["className"]).not.toContain("bg-sidebar-row-selected");
+  expect(row3!.props["aria-current"]).toBeUndefined();
 });

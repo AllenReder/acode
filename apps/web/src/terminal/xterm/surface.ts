@@ -1,5 +1,7 @@
 import "@xterm/xterm/css/xterm.css";
 import "./surface.css";
+import { transparentXtermTheme } from "./theme";
+import { TransparentTerminalOutput } from "./transparentOutput";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -57,8 +59,14 @@ export class XtermTerminalSurface {
   /** Invalidates an older replay's completion callback when a newer one starts. */
   private replySuppressionToken = 0;
   private disposed = false;
+  private readonly output = new TransparentTerminalOutput();
 
-  private constructor(mount: HTMLElement, options: XtermTerminalSurfaceOptions) {
+  private constructor(host: HTMLElement, options: XtermTerminalSurfaceOptions) {
+    // Async setup can overlap a cancelled instance during StrictMode or View
+    // remounts. Each instance owns its DOM so stale disposal cannot strip the
+    // live renderer's transparency/fade markers from a shared React host.
+    const mount = document.createElement("div");
+    host.appendChild(mount);
     this.mount = mount;
     this.options = options;
 
@@ -74,7 +82,7 @@ export class XtermTerminalSurface {
       macOptionIsMeta: true,
       minimumContrastRatio: 1,
       rescaleOverlappingGlyphs: true,
-      theme: options.theme,
+      theme: transparentXtermTheme(options.theme),
     });
 
     this.fitAddon = new FitAddon();
@@ -172,13 +180,14 @@ export class XtermTerminalSurface {
 
   write(data: string | Uint8Array): void {
     if (this.disposed) return;
-    this.terminal.write(data);
+    this.terminal.write(this.output.write(data));
   }
 
   resetAndWrite(data: string | Uint8Array): void {
     if (this.disposed) return;
     this.suppressReplies = true;
     const token = ++this.replySuppressionToken;
+    this.output.reset();
     this.terminal.reset();
     if (data.length === 0) {
       this.suppressReplies = false;
@@ -187,7 +196,7 @@ export class XtermTerminalSurface {
     // xterm parses writes asynchronously, so the flag has to survive until this
     // write commits rather than just this call, and a superseded replay must
     // not clear the flag for the one that replaced it.
-    this.terminal.write(data, () => {
+    this.terminal.write(this.output.write(data), () => {
       if (this.replySuppressionToken === token) this.suppressReplies = false;
     });
   }
@@ -228,7 +237,7 @@ export class XtermTerminalSurface {
 
   setTheme(theme: ITheme): void {
     if (this.disposed) return;
-    this.terminal.options.theme = theme;
+    this.terminal.options.theme = transparentXtermTheme(theme);
   }
 
   setFont(font: { family?: string; size: number }): void {
@@ -318,8 +327,6 @@ export class XtermTerminalSurface {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    this.mount.classList.remove("acode-terminal-surface");
-    delete this.mount.dataset.terminalTopFade;
     for (const cleanup of this.cleanups) {
       cleanup();
     }
@@ -340,5 +347,6 @@ export class XtermTerminalSurface {
     } catch {
       // ignore
     }
+    this.mount.remove();
   }
 }
