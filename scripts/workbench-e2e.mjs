@@ -7,6 +7,7 @@ import * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import { chromium } from "playwright";
+import { nodeEntryInvocation, withNodeModulesBin } from "./lib/spawn-command.ts";
 import { verifyWorkbenchAppearance } from "./workbench-appearance-checks.mjs";
 
 // This suite never sends an Agent turn. Promotion coverage must use the ACP
@@ -184,31 +185,28 @@ async function main() {
   await NodeFSP.mkdir(home, { recursive: true });
 
   const serverPort = await reservePort();
-  const child = NodeChildProcess.spawn(
-    "pnpm",
-    [
-      "exec",
-      "node",
-      NodePath.join(repositoryRoot, "scripts/dev-runner.ts"),
-      "--home-dir",
-      home,
-      "--port",
-      String(serverPort),
-      "--auto-bootstrap-project-from-cwd",
-      "dev",
-    ],
-    {
-      cwd: repositoryRoot,
-      // oxlint-disable-next-line t3code/no-global-process-runtime -- This standalone browser harness owns native child process groups.
-      detached: NodeOS.platform() !== "win32",
-      env: {
+  // Run the daemon with this Node executable rather than `pnpm exec node`: a
+  // bare `pnpm` cannot be spawned on Windows, and `node_modules/.bin` on PATH
+  // gives `scripts/dev-runner.ts` the `vp` it resolves by name.
+  const devRunnerInvocation = nodeEntryInvocation(
+    NodePath.join(repositoryRoot, "scripts/dev-runner.ts"),
+    ["--home-dir", home, "--port", String(serverPort), "--auto-bootstrap-project-from-cwd", "dev"],
+  );
+  const child = NodeChildProcess.spawn(devRunnerInvocation.command, devRunnerInvocation.args, {
+    cwd: repositoryRoot,
+    // oxlint-disable-next-line t3code/no-global-process-runtime -- This standalone browser harness owns native child process groups.
+    detached: NodeOS.platform() !== "win32",
+    env: withNodeModulesBin(
+      {
         ...process.env,
         CI: "1",
         T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "1",
       },
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
+      [repositoryRoot],
+    ),
+    shell: devRunnerInvocation.shell,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 
   let browser = null;
   let page = null;

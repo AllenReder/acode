@@ -4,6 +4,8 @@ import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
+import { packageManagerInvocation } from "./lib/spawn-command.ts";
+
 const REQUIRED_FILES = ["package.json", "pnpm-lock.yaml"];
 
 /**
@@ -34,18 +36,18 @@ export function runWorktreeSetup({
   spawn = NodeChildProcess.spawnSync,
 } = {}) {
   const worktreePath = resolveCodexWorktreePath(environment, cwd);
-  // oxlint-disable-next-line t3code/no-global-process-runtime -- This bootstrap hook runs before workspace dependencies are installed.
-  const packageManager = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+  const invocation = packageManagerInvocation(["install", "--frozen-lockfile"], { environment });
 
   console.log(`[acode] installing dependencies in ${worktreePath}`);
-  const result = spawn(packageManager, ["install", "--frozen-lockfile"], {
+  const result = spawn(invocation.command, [...invocation.args], {
     cwd: worktreePath,
     env: environment,
+    shell: invocation.shell,
     stdio: "inherit",
   });
 
   if (result.error) {
-    throw new Error(`Could not start ${packageManager}: ${result.error.message}`);
+    throw new Error(`Could not start ${invocation.command}: ${result.error.message}`);
   }
   if (result.status !== 0) {
     const reason = result.signal ? `signal ${result.signal}` : `exit code ${String(result.status)}`;
