@@ -566,6 +566,13 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.workbenchOpacity !== DEFAULT_UNIFIED_SETTINGS.workbenchOpacity
         ? ["Workbench opacity"]
         : []),
+      ...(settings.backgroundMaskLightOpacity !==
+      DEFAULT_UNIFIED_SETTINGS.backgroundMaskLightOpacity
+        ? ["Light background mask"]
+        : []),
+      ...(settings.backgroundMaskDarkOpacity !== DEFAULT_UNIFIED_SETTINGS.backgroundMaskDarkOpacity
+        ? ["Dark background mask"]
+        : []),
       ...(settings.diffColorScheme !== DEFAULT_UNIFIED_SETTINGS.diffColorScheme
         ? ["Diff colors"]
         : []),
@@ -702,6 +709,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.sidebarBlur,
       settings.workbenchGlass,
       settings.workbenchOpacity,
+      settings.backgroundMaskLightOpacity,
+      settings.backgroundMaskDarkOpacity,
       settings.panelAnimationDurationMs,
       settings.responseStreamingMode,
       settings.enableProviderUpdateChecks,
@@ -808,6 +817,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarBlur: DEFAULT_UNIFIED_SETTINGS.sidebarBlur,
       workbenchGlass: DEFAULT_UNIFIED_SETTINGS.workbenchGlass,
       workbenchOpacity: DEFAULT_UNIFIED_SETTINGS.workbenchOpacity,
+      backgroundMaskLightOpacity: DEFAULT_UNIFIED_SETTINGS.backgroundMaskLightOpacity,
+      backgroundMaskDarkOpacity: DEFAULT_UNIFIED_SETTINGS.backgroundMaskDarkOpacity,
       panelAnimationDurationMs: DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs,
       sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
@@ -1201,6 +1212,13 @@ export function AppearanceSettingsPanel() {
   const environmentStageLabel = useEnvironmentStageLabel();
   const showEnvironmentIdentification =
     resolveEnvironmentIdentificationPillLabel(environmentStageLabel) !== null;
+  const backgroundMaskKey =
+    resolvedTheme === "dark" ? "backgroundMaskDarkOpacity" : "backgroundMaskLightOpacity";
+  const backgroundMaskOpacity = settings[backgroundMaskKey];
+  const backgroundMaskSliderStyle = {
+    "--settings-slider-progress": `${backgroundMaskOpacity}%`,
+    "--settings-slider-fill-offset": `${0.5 - backgroundMaskOpacity / 100}rem`,
+  } as CSSProperties;
   const glassOpacityRatio =
     (settings.glassOpacity - MIN_GLASS_OPACITY) / (MAX_GLASS_OPACITY - MIN_GLASS_OPACITY);
   const glassOpacitySliderStyle = {
@@ -1336,6 +1354,50 @@ export function AppearanceSettingsPanel() {
       </SettingsSection>
 
       <SettingsSection id="appearance-window-glass" title="Window & Glass">
+        <SettingsRow
+          {...searchableSetting("setting-background-mask")}
+          description={
+            resolvedTheme === "dark"
+              ? "Darken the blurred desktop behind all regions with a black mask. Saved separately for dark mode."
+              : "Brighten the blurred desktop behind all regions with a white mask. Saved separately for light mode."
+          }
+          resetAction={
+            backgroundMaskOpacity !== DEFAULT_UNIFIED_SETTINGS[backgroundMaskKey] ? (
+              <SettingResetButton
+                label="background mask strength"
+                onClick={() =>
+                  updateSettings({
+                    [backgroundMaskKey]: DEFAULT_UNIFIED_SETTINGS[backgroundMaskKey],
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="flex w-full items-center gap-3 sm:w-52">
+              <output
+                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
+                htmlFor="background-mask"
+              >
+                {backgroundMaskOpacity}%
+              </output>
+              <input
+                aria-label="Background mask strength"
+                id="background-mask"
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                className="settings-slider min-w-0 flex-1"
+                style={backgroundMaskSliderStyle}
+                value={backgroundMaskOpacity}
+                onChange={(event) =>
+                  updateSettings({ [backgroundMaskKey]: Number(event.currentTarget.value) })
+                }
+              />
+            </div>
+          }
+        />
         <SettingsRow
           {...searchableSetting("setting-sidebar-blur")}
           description="Adjust the intensity of the native desktop background blur."

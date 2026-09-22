@@ -76,6 +76,8 @@ describe("appearanceSync", () => {
         {
           stageEnabled: true,
           blurRadius: 24,
+          backgroundMaskLightOpacity: 10,
+          backgroundMaskDarkOpacity: 35,
           sidebarOpacity: 65,
           topbarOpacity: 75,
           workbenchOpacity: 88,
@@ -85,6 +87,7 @@ describe("appearanceSync", () => {
         root,
       );
 
+      expect(properties.get("--material-background-mask-dark-opacity")).toBe("0.35");
       expect(properties.get("--material-sidebar-opacity")).toBe("0.65");
       expect(properties.get("--material-topbar-opacity")).toBe("0.75");
       expect(properties.get("--material-workbench-opacity")).toBe("0.88");
@@ -93,6 +96,37 @@ describe("appearanceSync", () => {
       expect(classes.has("material-stage-opaque")).toBe(false);
       expect(setWindowGlassEnabled).toHaveBeenCalledWith(true);
       expect(setWindowBackgroundBlur).toHaveBeenCalledWith(24);
+    });
+
+    it("updates mask and tint without reconfiguring the native window", () => {
+      const setWindowGlassEnabled = vi.fn();
+      const setWindowBackgroundBlur = vi.fn();
+      vi.stubGlobal("window", {
+        desktopBridge: {
+          getClientPlatform: () => "darwin",
+          setWindowGlassEnabled,
+          setWindowBackgroundBlur,
+        },
+      });
+      const { root } = makeRoot();
+      const settings = {
+        stageEnabled: true,
+        blurRadius: 24,
+        sidebarOpacity: 50,
+        topbarOpacity: 50,
+        workbenchOpacity: 50,
+        workbenchGlass: true,
+        overlayOpacity: 90,
+        backgroundMaskLightOpacity: 10,
+        backgroundMaskDarkOpacity: 35,
+      };
+      applyMaterialSettings(settings, root);
+      applyMaterialSettings(
+        { ...settings, backgroundMaskDarkOpacity: 60, sidebarOpacity: 40 },
+        root,
+      );
+      expect(setWindowGlassEnabled).toHaveBeenCalledTimes(1);
+      expect(setWindowBackgroundBlur).toHaveBeenCalledTimes(1);
     });
 
     it("falls back to opaque stage variables when native glass is unavailable", () => {
@@ -104,6 +138,8 @@ describe("appearanceSync", () => {
         {
           stageEnabled: true,
           blurRadius: 24,
+          backgroundMaskLightOpacity: 10,
+          backgroundMaskDarkOpacity: 35,
           sidebarOpacity: 65,
           topbarOpacity: 75,
           workbenchOpacity: 88,
@@ -113,6 +149,7 @@ describe("appearanceSync", () => {
         root,
       );
 
+      expect(properties.get("--material-background-mask-dark-opacity")).toBe("0");
       expect(classes.has("material-stage-native")).toBe(false);
       expect(classes.has("material-stage-opaque")).toBe(true);
       expect(properties.get("--material-workbench-opacity")).toBe("1");

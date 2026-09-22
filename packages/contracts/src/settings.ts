@@ -96,7 +96,7 @@ export const GlassOpacity = Schema.Int.check(
 export type GlassOpacity = typeof GlassOpacity.Type;
 const DEFAULT_GLASS_OPACITY: GlassOpacity = 90;
 
-export const MIN_SIDEBAR_OPACITY = 15;
+export const MIN_SIDEBAR_OPACITY = 10;
 export const MAX_SIDEBAR_OPACITY = 100;
 export const SidebarOpacity = Schema.Int.check(
   Schema.isBetween({
@@ -105,15 +105,21 @@ export const SidebarOpacity = Schema.Int.check(
   }),
 );
 export type SidebarOpacity = typeof SidebarOpacity.Type;
-export const DEFAULT_SIDEBAR_OPACITY: SidebarOpacity = 85;
+export const DEFAULT_SIDEBAR_OPACITY: SidebarOpacity = 50;
 
-export const MIN_TOPBAR_OPACITY = 15;
+export const MIN_TOPBAR_OPACITY = 10;
 export const MAX_TOPBAR_OPACITY = 100;
 export const TopbarOpacity = Schema.Int.check(
   Schema.isBetween({ minimum: MIN_TOPBAR_OPACITY, maximum: MAX_TOPBAR_OPACITY }),
 );
 export type TopbarOpacity = typeof TopbarOpacity.Type;
-export const DEFAULT_TOPBAR_OPACITY: TopbarOpacity = 85;
+export const DEFAULT_TOPBAR_OPACITY: TopbarOpacity = 50;
+
+export const BackgroundMaskOpacity = Schema.Int.check(
+  Schema.isBetween({ minimum: 0, maximum: 100 }),
+);
+export const DEFAULT_BACKGROUND_MASK_LIGHT_OPACITY = 10;
+export const DEFAULT_BACKGROUND_MASK_DARK_OPACITY = 35;
 
 export const MIN_SIDEBAR_BLUR = 1;
 export const MAX_SIDEBAR_BLUR = 64;
@@ -130,7 +136,7 @@ export const WorkbenchGlass = Schema.Boolean;
 export type WorkbenchGlass = typeof WorkbenchGlass.Type;
 export const DEFAULT_WORKBENCH_GLASS: WorkbenchGlass = true;
 
-export const MIN_WORKBENCH_OPACITY = 50;
+export const MIN_WORKBENCH_OPACITY = 10;
 export const MAX_WORKBENCH_OPACITY = 100;
 export const WorkbenchOpacity = Schema.Int.check(
   Schema.isBetween({
@@ -139,7 +145,7 @@ export const WorkbenchOpacity = Schema.Int.check(
   }),
 );
 export type WorkbenchOpacity = typeof WorkbenchOpacity.Type;
-export const DEFAULT_WORKBENCH_OPACITY: WorkbenchOpacity = 88;
+export const DEFAULT_WORKBENCH_OPACITY: WorkbenchOpacity = 50;
 
 export const ChatBackgroundPath = Schema.NullOr(TrimmedNonEmptyString);
 export type ChatBackgroundPath = typeof ChatBackgroundPath.Type;
@@ -457,6 +463,12 @@ export const ClientSettingsSchema = Schema.Struct({
   ),
   topbarOpacity: TopbarOpacity.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_TOPBAR_OPACITY)),
+  ),
+  backgroundMaskLightOpacity: BackgroundMaskOpacity.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_BACKGROUND_MASK_LIGHT_OPACITY)),
+  ),
+  backgroundMaskDarkOpacity: BackgroundMaskOpacity.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_BACKGROUND_MASK_DARK_OPACITY)),
   ),
   sidebarBlur: SidebarBlur.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_BLUR))),
   workbenchGlass: WorkbenchGlass.pipe(
@@ -1574,6 +1586,8 @@ export const ClientSettingsPatch = Schema.Struct({
   glassOpacity: Schema.optionalKey(GlassOpacity),
   sidebarOpacity: Schema.optionalKey(SidebarOpacity),
   topbarOpacity: Schema.optionalKey(TopbarOpacity),
+  backgroundMaskLightOpacity: Schema.optionalKey(BackgroundMaskOpacity),
+  backgroundMaskDarkOpacity: Schema.optionalKey(BackgroundMaskOpacity),
   sidebarBlur: Schema.optionalKey(SidebarBlur),
   workbenchGlass: Schema.optionalKey(WorkbenchGlass),
   workbenchOpacity: Schema.optionalKey(WorkbenchOpacity),

@@ -1,4 +1,5 @@
 import "@xterm/xterm/css/xterm.css";
+import "./surface.css";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -9,6 +10,7 @@ export interface XtermTerminalSurfaceOptions {
   theme: ITheme;
   font: { family?: string; size: number };
   visible?: boolean;
+  topFade?: boolean;
   onData: (data: string) => void;
   onResize: (cols: number, rows: number) => void;
   onSelectionChange?: () => void;
@@ -121,7 +123,19 @@ export class XtermTerminalSurface {
       shouldXtermHandleKey(event, this.options.beforeKey),
     );
 
+    mount.classList.add("acode-terminal-surface");
     this.terminal.open(mount);
+    if (options.topFade) {
+      const update = () => this.updateTopFade();
+      const listeners = [
+        this.terminal.onScroll(update),
+        this.terminal.onRender(update),
+        this.terminal.onCursorMove(update),
+        this.terminal.buffer.onBufferChange(update),
+      ];
+      this.cleanups.push(() => listeners.forEach((listener) => listener.dispose()));
+      update();
+    }
 
     // Attempt WebGL acceleration when available
     if (typeof window !== "undefined" && typeof window.WebGLRenderingContext !== "undefined") {
@@ -179,7 +193,12 @@ export class XtermTerminalSurface {
   }
 
   fit(): boolean {
-    if (this.disposed || !this.mount || this.mount.clientWidth <= 0 || this.mount.clientHeight <= 0) {
+    if (
+      this.disposed ||
+      !this.mount ||
+      this.mount.clientWidth <= 0 ||
+      this.mount.clientHeight <= 0
+    ) {
       return false;
     }
     try {
@@ -221,6 +240,18 @@ export class XtermTerminalSurface {
       this.terminal.options.fontSize = font.size;
     }
     this.fit();
+  }
+
+  private updateTopFade(): void {
+    if (this.disposed) return;
+    const buffer = this.terminal.buffer.active;
+    const screen = this.mount.querySelector(".xterm-screen");
+    const rowHeight = (screen?.getBoundingClientRect().height ?? 0) / this.terminal.rows;
+    const cursorRow = buffer.baseY + buffer.cursorY - buffer.viewportY;
+    const cursorInFade = cursorRow >= 0 && cursorRow * rowHeight < 16;
+    const show = buffer.type === "normal" && buffer.viewportY > 0 && rowHeight > 0 && !cursorInFade;
+    const value = show ? "true" : "false";
+    if (this.mount.dataset.terminalTopFade !== value) this.mount.dataset.terminalTopFade = value;
   }
 
   isAtBottom(): boolean {
@@ -287,6 +318,8 @@ export class XtermTerminalSurface {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.mount.classList.remove("acode-terminal-surface");
+    delete this.mount.dataset.terminalTopFade;
     for (const cleanup of this.cleanups) {
       cleanup();
     }

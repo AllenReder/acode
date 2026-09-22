@@ -53,10 +53,7 @@ import {
   resolveSelectionActionPosition,
   type SelectionActionPoint,
 } from "~/lib/selectionActions";
-import {
-  XtermTerminalSurface,
-  type XtermTerminalSurfaceOptions,
-} from "~/terminal/xterm/surface";
+import { XtermTerminalSurface, type XtermTerminalSurfaceOptions } from "~/terminal/xterm/surface";
 import { buildXtermTheme } from "~/terminal/xterm/theme";
 import type { ITheme } from "@xterm/xterm";
 import { useOpenInPreferredEditor } from "../editorPreferences";
@@ -290,6 +287,7 @@ export function shouldHandleTerminalExit(
 }
 
 interface TerminalViewportProps {
+  topFade?: boolean;
   advancedTypography: boolean;
   environmentId?: EnvironmentId;
   threadRef?: ScopedThreadRef;
@@ -320,6 +318,7 @@ interface TerminalLaunchLocation {
 }
 
 export function TerminalViewport({
+  topFade = false,
   advancedTypography,
   environmentId: inputEnvironmentId,
   threadRef,
@@ -503,6 +502,7 @@ export function TerminalViewport({
       const setupFont = terminalFontRef.current;
       const terminalOptions: XtermTerminalSurfaceOptions = {
         theme: terminalThemeFromApp(mount),
+        topFade,
         font: terminalFontOptions(setupFont.family, setupFont.size),
         get visible() {
           return visibleRef.current;
@@ -935,7 +935,7 @@ export function TerminalViewport({
       teardown?.();
       if (hadFocus && mount.isConnected) mount.focus({ preventScroll: true });
     };
-  }, [cwd, environmentId, runtimeEnvKey, terminalId, threadId, worktreePath]);
+  }, [cwd, environmentId, runtimeEnvKey, terminalId, threadId, worktreePath, topFade]);
 
   useEffect(() => {
     const terminal = terminalRef.current;
@@ -1516,12 +1516,7 @@ export default function ThreadTerminalDrawer({
       )}
 
       <div className="min-h-0 w-full flex-1">
-        <div
-          className={cn(
-            "flex h-full min-h-0",
-            hasTerminalSidebar && "gap-1.5",
-          )}
-        >
+        <div className={cn("flex h-full min-h-0", hasTerminalSidebar && "gap-1.5")}>
           <div className="min-w-0 flex-1">
             {isSplitView ? (
               <div

@@ -144,6 +144,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["colors borders interface"],
   },
   {
+    id: "setting-background-mask",
+    title: "Background mask strength",
+    to: "/settings/appearance",
+    searchTerms: ["glass white black brighten darken backdrop mask transparency"],
+  },
+  {
     id: "setting-sidebar-blur",
     title: "Window blur radius",
     to: "/settings/appearance",

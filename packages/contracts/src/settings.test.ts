@@ -417,10 +417,13 @@ describe("ClientSettings browser recording frame rate", () => {
 describe("ClientSettings window glass and backdrop settings", () => {
   it("defaults to standard window glass values", () => {
     const settings = decodeClientSettings({});
-    expect(settings.sidebarOpacity).toBe(85);
+    expect(settings.sidebarOpacity).toBe(50);
+    expect(settings.topbarOpacity).toBe(50);
+    expect(settings.backgroundMaskLightOpacity).toBe(10);
+    expect(settings.backgroundMaskDarkOpacity).toBe(35);
     expect(settings.sidebarBlur).toBe(24);
     expect(settings.workbenchGlass).toBe(true);
-    expect(settings.workbenchOpacity).toBe(88);
+    expect(settings.workbenchOpacity).toBe(50);
     expect(settings.chatBackgroundPath).toBeNull();
     expect(settings.chatBackgroundOpacity).toBe(24);
     expect(settings.chatBackgroundScope).toBe("all");
@@ -447,12 +450,30 @@ describe("ClientSettings window glass and backdrop settings", () => {
     expect(settings.chatBackgroundScope).toBe("empty");
   });
 
+  it("retains saved material values while accepting the shared range", () => {
+    const saved = decodeClientSettings({
+      sidebarOpacity: 85,
+      topbarOpacity: 85,
+      workbenchOpacity: 88,
+    });
+    expect([saved.sidebarOpacity, saved.topbarOpacity, saved.workbenchOpacity]).toEqual([
+      85, 85, 88,
+    ]);
+    expect(
+      decodeClientSettingsPatch({ sidebarOpacity: 10, topbarOpacity: 10, workbenchOpacity: 10 }),
+    ).toEqual({ sidebarOpacity: 10, topbarOpacity: 10, workbenchOpacity: 10 });
+    expect(
+      decodeClientSettingsPatch({ backgroundMaskLightOpacity: 0, backgroundMaskDarkOpacity: 100 }),
+    ).toEqual({ backgroundMaskLightOpacity: 0, backgroundMaskDarkOpacity: 100 });
+    expect(() => decodeClientSettingsPatch({ backgroundMaskDarkOpacity: 101 })).toThrow();
+  });
+
   it("rejects invalid window glass values", () => {
-    expect(() => decodeClientSettingsPatch({ sidebarOpacity: 14 })).toThrow();
+    expect(() => decodeClientSettingsPatch({ sidebarOpacity: 9 })).toThrow();
     expect(() => decodeClientSettingsPatch({ sidebarOpacity: 101 })).toThrow();
     expect(() => decodeClientSettingsPatch({ sidebarBlur: 0 })).toThrow();
     expect(() => decodeClientSettingsPatch({ sidebarBlur: 65 })).toThrow();
-    expect(() => decodeClientSettingsPatch({ workbenchOpacity: 49 })).toThrow();
+    expect(() => decodeClientSettingsPatch({ workbenchOpacity: 9 })).toThrow();
     expect(() => decodeClientSettingsPatch({ workbenchOpacity: 101 })).toThrow();
     expect(() => decodeClientSettingsPatch({ chatBackgroundOpacity: 4 })).toThrow();
     expect(() => decodeClientSettingsPatch({ chatBackgroundOpacity: 66 })).toThrow();

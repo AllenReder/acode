@@ -253,6 +253,12 @@ window-wide frosted-glass base. It is a platform capability, not a Theme,
 Sidebar, Workbench, or View.
 _Avoid_: Glass background, CSS stage, Global blur layer
 
+**Background Mask**:
+A window-wide tint that brightens the blurred desktop in light mode or darkens
+it in dark mode. Its separately remembered light and dark strengths combine
+with Material Surface opacity without fading the content above those surfaces.
+_Avoid_: Content opacity, Blur strength, Workbench Artwork
+
 **Material Surface**:
 A user-visible chrome layer that intentionally supplies a background material
 over the Glass Stage. Sidebar, Topbar, Workbench, and Overlay are Material

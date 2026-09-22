@@ -302,13 +302,29 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
 }
 
 :root {
-  --material-edge: color-mix(in srgb, var(--foreground) 8%, transparent);
+  --material-edge: rgb(0 0 0 / 10%);
+  --material-background-mask-color: white;
+  --material-background-mask-opacity: var(--material-background-mask-light-opacity, 0.1);
+  @variant dark {
+    --material-edge: rgb(0 0 0 / 20%);
+    --material-background-mask-color: black;
+    --material-background-mask-opacity: var(--material-background-mask-dark-opacity, 0.35);
+  }
 }
 
 html.material-stage-native,
 html.material-stage-native body,
 html.material-stage-native #root {
   background: transparent;
+}
+
+/* One viewport-wide tint, beneath all Material Surfaces and portal content. */
+html.material-stage-native body {
+  background-color: color-mix(
+    in srgb,
+    var(--material-background-mask-color) calc(var(--material-background-mask-opacity, 0) * 100%),
+    transparent
+  );
 }
 
 html.material-stage-opaque,
@@ -320,12 +336,12 @@ html.material-stage-opaque #root {
 .material-surface-sidebar {
   background: color-mix(
     in srgb,
-    var(--sidebar) calc(var(--material-sidebar-opacity, 0.85) * 100%),
+    var(--sidebar) calc(var(--material-sidebar-opacity, 0.5) * 100%),
     transparent
   );
   background-color: color-mix(
     in srgb,
-    var(--sidebar) calc(var(--material-sidebar-opacity, 0.85) * 100%),
+    var(--sidebar) calc(var(--material-sidebar-opacity, 0.5) * 100%),
     transparent
   );
 }
@@ -333,12 +349,12 @@ html.material-stage-opaque #root {
 .material-surface-topbar {
   background: color-mix(
     in srgb,
-    var(--app-chrome-background) calc(var(--material-topbar-opacity, 0.85) * 100%),
+    var(--app-chrome-background) calc(var(--material-topbar-opacity, 0.5) * 100%),
     transparent
   );
   background-color: color-mix(
     in srgb,
-    var(--app-chrome-background) calc(var(--material-topbar-opacity, 0.85) * 100%),
+    var(--app-chrome-background) calc(var(--material-topbar-opacity, 0.5) * 100%),
     transparent
   );
 }
@@ -346,12 +362,12 @@ html.material-stage-opaque #root {
 .material-surface-workbench {
   background: color-mix(
     in srgb,
-    var(--canvas) calc(var(--material-workbench-opacity, 0.88) * 100%),
+    var(--canvas) calc(var(--material-workbench-opacity, 0.5) * 100%),
     transparent
   );
   background-color: color-mix(
     in srgb,
-    var(--canvas) calc(var(--material-workbench-opacity, 0.88) * 100%),
+    var(--canvas) calc(var(--material-workbench-opacity, 0.5) * 100%),
     transparent
   );
 }
@@ -1524,11 +1540,6 @@ html[data-theme-id] [data-app-sidebar] {
   --sidebar-row-selected: var(--app-theme-sidebar-row-selected);
   --sidebar-border: var(--app-theme-sidebar-border);
   --sidebar-stage-fade: var(--app-theme-sidebar);
-  border-color: color-mix(in srgb, var(--contrast-sidebar-foreground) 10%, transparent);
-
-  @variant dark {
-    border-color: color-mix(in srgb, var(--contrast-sidebar-foreground) 8%, transparent);
-  }
 }
 
 /* Recompute contrast wherever a subtree owns its own semantic color palette. */
@@ -2367,13 +2378,37 @@ html[data-workbench-resizing] .workbench-sash:active::after {
   outline: none;
 }
 .workbench-layout-switch {
+  position: relative;
+  isolation: isolate;
   display: flex;
   gap: 2px;
   padding: 3px;
   border-radius: 8px;
   background: color-mix(in oklch, var(--muted) 65%, transparent);
 }
+.workbench-layout-switch::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 28px;
+  height: 22px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
+  box-shadow: 0 1px 3px #00000012;
+  pointer-events: none;
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.workbench-layout-switch[data-layout="scrolling"]::before {
+  transform: translateX(30px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .workbench-layout-switch::before {
+    transition: none;
+  }
+}
 .workbench-layout-switch button {
+  position: relative;
   display: grid;
   place-items: center;
   width: 28px;
@@ -2387,8 +2422,6 @@ html[data-workbench-resizing] .workbench-sash:active::after {
 }
 .workbench-layout-switch button[aria-pressed="true"] {
   color: var(--foreground);
-  background: var(--background);
-  box-shadow: 0 1px 3px #00000012;
 }
 .workbench-layout-switch svg {
   width: 14px;

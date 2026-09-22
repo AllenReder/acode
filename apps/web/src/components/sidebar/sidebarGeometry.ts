@@ -81,7 +81,7 @@ export const COLLAPSED_TABS_INSET_MAC =
 export const COLLAPSED_TABS_INSET_WIN =
   DOCK_LEFT_WIN + TITLEBAR_BUTTON_SIZE + SEPARATOR_LEFT_GAP + 1 + SEPARATOR_RIGHT_GAP;
 
-export const EXPANDED_TABS_INSET = BASE_SPACING; // 12px
+export const EXPANDED_TABS_INSET = 0;
 
 export interface SidebarHeaderInsets {
   readonly trafficLightsInset: number;

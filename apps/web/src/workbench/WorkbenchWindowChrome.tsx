@@ -206,7 +206,12 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
           })}
         </div>
 
-        <div className="workbench-layout-switch shrink-0" role="group" aria-label="Tab layout">
+        <div
+          className="workbench-layout-switch shrink-0"
+          data-layout={activeTab.layoutMode ?? "bsp"}
+          role="group"
+          aria-label="Tab layout"
+        >
           <button
             type="button"
             aria-label="BSP layout"

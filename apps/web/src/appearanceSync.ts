@@ -9,6 +9,8 @@ export interface ChatBackgroundSettings {
 export interface MaterialSettings {
   readonly stageEnabled: boolean;
   readonly blurRadius: number;
+  readonly backgroundMaskLightOpacity: number;
+  readonly backgroundMaskDarkOpacity: number;
   readonly sidebarOpacity: number;
   readonly topbarOpacity: number;
   readonly workbenchOpacity: number;
@@ -51,8 +53,18 @@ export function applyMaterialSettings(
 ) {
   if (!root) return;
   const nativeStage = options.stageEnabled && isNativeGlassPlatform();
+  const stageChanged = root.classList.contains("material-stage-native") !== nativeStage;
   root.classList.toggle("material-stage-native", nativeStage);
   root.classList.toggle("material-stage-opaque", !nativeStage);
+
+  root.style.setProperty(
+    "--material-background-mask-light-opacity",
+    `${nativeStage ? options.backgroundMaskLightOpacity / 100 : 0}`,
+  );
+  root.style.setProperty(
+    "--material-background-mask-dark-opacity",
+    `${nativeStage ? options.backgroundMaskDarkOpacity / 100 : 0}`,
+  );
 
   const opacities = {
     sidebar: options.sidebarOpacity,
@@ -65,21 +77,30 @@ export function applyMaterialSettings(
   }
 
   const blurRadius = Math.max(1, Math.min(64, Math.round(options.blurRadius)));
+  const radiusChanged =
+    root.style.getPropertyValue("--material-native-blur-radius") !== `${blurRadius}px`;
+  root.style.setProperty("--material-native-blur-radius", `${blurRadius}px`);
   if (nativeStage) {
     root.style.backgroundColor = "transparent";
     if (typeof document !== "undefined" && document.body) {
-      document.body.style.backgroundColor = "transparent";
+      document.body.style.backgroundColor = "";
     }
-    void window.desktopBridge?.setWindowGlassEnabled?.(true);
-    void window.desktopBridge?.setWindowBackgroundBlur?.(blurRadius);
-    void syncNativeWindowGlass(true, blurRadius);
   } else {
     root.style.backgroundColor = "";
     if (typeof document !== "undefined" && document.body) {
       document.body.style.backgroundColor = "";
     }
-    void window.desktopBridge?.setWindowGlassEnabled?.(false);
-    void syncNativeWindowGlass(false, blurRadius);
+  }
+  // Tint and mask sliders only change CSS; avoid rebuilding native backing
+  // views (and their shadows) on every slider event or calling two bridges.
+  if (stageChanged || radiusChanged) {
+    const bridge = window.desktopBridge;
+    if (bridge?.setWindowGlassEnabled && bridge.setWindowBackgroundBlur) {
+      void bridge.setWindowGlassEnabled(nativeStage);
+      if (nativeStage) void bridge.setWindowBackgroundBlur(blurRadius);
+    } else {
+      void syncNativeWindowGlass(nativeStage, blurRadius);
+    }
   }
 }
 

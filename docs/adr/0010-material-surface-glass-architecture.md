@@ -13,9 +13,10 @@ custom and imported themes continue to provide colors only, not Material
 parameters. The legacy glass settings migrate once into a Material settings
 group; unknown values use the new defaults. Platform capability is represented
 as native-stage, css-overlay, or opaque. The blur control specifies the WindowServer radius in pixels on macOS;
-Windows maps glass to its Acrylic/Mica capabilities. Sidebar and Topbar default
-to 85% opacity, Workbench to 88%, and Overlay to 90%; each remains individually
-adjustable in Settings. Overlay backdrops mount only while open, nested backdrop filters
+Windows maps glass to its Acrylic/Mica capabilities. Sidebar, Topbar, and Workbench default
+to 50% opacity with a shared 10%–100% range; Overlay remains at 90%. Each is
+individually adjustable in Settings. Saved opacity values are preserved; only
+missing values and explicit resets adopt the new defaults. Overlay backdrops mount only while open, nested backdrop filters
 are avoided, and a reduce-transparency or disabled-glass path remains available.
 Optional wallpaper becomes Workbench Artwork: one image layer beneath all
 Workbench content and above the Workbench Material Surface, rather than a
@@ -54,3 +55,22 @@ Implementation reference: Monocode `bb3924b61f4d48ba12327ee1eb70a8b83d95e51d`
 confirms the existing macOS WindowServer and 1%-alpha AppKit backing approach.
 Window dragging uses Tauri's existing deep drag regions, including its native
 interactive-element exclusions, rather than a parallel JavaScript drag system.
+
+## Background mask and readable glass
+
+One Background Mask tints the blurred desktop beneath every Material Surface:
+white in light mode, black in dark mode. Its strength is independent of region
+opacity, ranges from 0% to 100%, and is stored separately for light (10% default)
+and dark (35% default). These alpha layers compound; region opacity is not a
+measurement of total desktop transmission. The mask never covers content or
+adds another blur, and opaque fallback surfaces cover it. Mode selection uses
+the same root appearance state as theme colors, including live previews.
+Built-in secondary text is tuned against composited glass, rather than only
+against opaque theme swatches. Material edges own the Sidebar divider; theme
+text-color overrides must not repaint it as a white highlight.
+
+Terminal default canvas and viewport fills remain transparent while explicit
+ANSI backgrounds retain their semantics. Terminal Session Views alone opt in
+to a 16px top content fade when the normal buffer has history above the
+viewport. Alternate screens and a cursor inside the fade band disable it;
+scrollbars and Pane chrome are never masked.

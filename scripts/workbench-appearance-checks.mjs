@@ -1,4 +1,5 @@
 import * as NodeAssert from "node:assert/strict";
+import { verifyTerminalMaterial } from "./terminal-material-checks.mjs";
 
 async function dragSelect(page, locator) {
   await locator.scrollIntoViewIfNeeded();
@@ -14,6 +15,35 @@ async function dragSelect(page, locator) {
 
 /** Real DOM/layout and pointer checks. Native composition still needs a Mac. */
 export async function verifyWorkbenchAppearance(page) {
+  page.setDefaultTimeout(30_000);
+  await page.addLocatorHandler(
+    page.getByRole("button", { name: "Dismiss notification", exact: true }).first(),
+    async (dismiss) => {
+      await dismiss.click();
+    },
+  );
+  await verifyTerminalMaterial(page);
+  const sidebar = await page.locator("[data-app-sidebar]").boundingBox();
+  const firstTab = await page.getByRole("tab").first().boundingBox();
+  NodeAssert.ok(
+    Math.abs(firstTab.x - sidebar.x - sidebar.width) <= 1,
+    "Expanded Sidebar must meet the first Tab without a spacer",
+  );
+  const switcher = page.getByRole("group", { name: "Tab layout" });
+  await page.getByRole("button", { name: "Scrolling layout", exact: true }).click();
+  await page.waitForFunction(
+    () =>
+      new DOMMatrix(
+        getComputedStyle(document.querySelector('[aria-label="Tab layout"]'), "::before").transform,
+      ).m41 === 30,
+  );
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByRole("button", { name: "BSP layout", exact: true }).click();
+  NodeAssert.equal(
+    await switcher.evaluate((el) => getComputedStyle(el, "::before").transitionDuration),
+    "0s",
+  );
+  await page.emulateMedia({ reducedMotion: "no-preference" });
   console.log("appearance: settings scroll and text selection");
   await page.goto(new URL("/settings/appearance", page.url()).toString(), {
     waitUntil: "domcontentloaded",
@@ -52,6 +82,47 @@ export async function verifyWorkbenchAppearance(page) {
   await search.fill("");
 
   console.log("appearance: selection boundaries passed");
+  const mask = page.getByRole("slider", { name: "Background mask strength", exact: true });
+  for (const [mode, defaultMask] of [
+    ["light", "10"],
+    ["dark", "35"],
+  ]) {
+    console.log(`appearance: ${mode} mask and colors`);
+    await page.getByRole("button", { name: `Use ${mode} mode`, exact: true }).click();
+    await page.waitForFunction(
+      (mode) => document.documentElement.classList.contains("dark") === (mode === "dark"),
+      mode,
+    );
+    NodeAssert.equal(await mask.inputValue(), defaultMask);
+    const color = await description.evaluate((el) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 1;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = getComputedStyle(el).color;
+      ctx.fillRect(0, 0, 1, 1);
+      return ctx.getImageData(0, 0, 1, 1).data[0];
+    });
+    NodeAssert.ok(
+      mode === "dark" ? color > 200 : color < 100,
+      `${mode} secondary text must use the matching palette`,
+    );
+    await mask.focus();
+    await mask.press("End");
+    await mask.press("ArrowLeft");
+    NodeAssert.equal(await mask.inputValue(), "99");
+  }
+  await page.getByRole("button", { name: "Use light mode", exact: true }).click();
+  NodeAssert.equal(await mask.inputValue(), "99", "Mode-specific mask values must be retained");
+  await page
+    .getByRole("button", { name: "Reset background mask strength to default", exact: true })
+    .click();
+  NodeAssert.equal(await mask.inputValue(), "10");
+  await page.getByRole("button", { name: "Use dark mode", exact: true }).click();
+  NodeAssert.equal(await mask.inputValue(), "99", "Resetting light must not reset dark");
+  await page
+    .getByRole("button", { name: "Reset background mask strength to default", exact: true })
+    .click();
+  NodeAssert.equal(await mask.inputValue(), "35");
 
   console.log(
     "settings scrolling and selection checks passed; native glass and dragging require macOS",

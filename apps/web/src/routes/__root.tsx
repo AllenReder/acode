@@ -269,6 +269,12 @@ function ContrastAppearanceSync() {
 }
 
 function GlassAppearanceSync() {
+  const backgroundMaskLightOpacity = useClientSettings(
+    (settings) => settings.backgroundMaskLightOpacity,
+  );
+  const backgroundMaskDarkOpacity = useClientSettings(
+    (settings) => settings.backgroundMaskDarkOpacity,
+  );
   const blurRadius = useClientSettings((settings) => settings.sidebarBlur);
   const sidebarOpacity = useClientSettings((settings) => settings.sidebarOpacity);
   const topbarOpacity = useClientSettings((settings) => settings.topbarOpacity);
@@ -281,6 +287,8 @@ function GlassAppearanceSync() {
   useEffect(() => {
     applyMaterialSettings({
       stageEnabled: true,
+      backgroundMaskLightOpacity,
+      backgroundMaskDarkOpacity,
       blurRadius,
       sidebarOpacity,
       topbarOpacity,
@@ -288,7 +296,16 @@ function GlassAppearanceSync() {
       workbenchGlass,
       overlayOpacity,
     });
-  }, [blurRadius, sidebarOpacity, topbarOpacity, workbenchOpacity, workbenchGlass, overlayOpacity]);
+  }, [
+    blurRadius,
+    backgroundMaskLightOpacity,
+    backgroundMaskDarkOpacity,
+    sidebarOpacity,
+    topbarOpacity,
+    workbenchOpacity,
+    workbenchGlass,
+    overlayOpacity,
+  ]);
 
   useEffect(() => {
     applyWorkbenchArtwork({
