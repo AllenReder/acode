@@ -105,6 +105,11 @@ export function baseSshArgs(
   return [
     "-o",
     `BatchMode=${input?.batchMode ?? "no"}`,
+    // Host keys are gated by the trust flow (known_hosts via ssh-keyscan), so
+    // never let a permissive user ssh_config downgrade verification of a
+    // changed key to a warning or an auto-accept.
+    "-o",
+    "StrictHostKeyChecking=yes",
     "-o",
     "ConnectTimeout=10",
     ...(target.port !== null ? ["-p", String(target.port)] : []),

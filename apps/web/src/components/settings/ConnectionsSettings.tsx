@@ -164,6 +164,8 @@ import {
   useRelayEnvironmentDiscovery,
 } from "~/state/environments";
 import { requestConfirmDialog } from "~/confirmDialog";
+import { APP_VERSION } from "../../branding";
+import { gateSshEnvironmentConnection } from "./sshConnectionGate";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { primaryServerKeybindingsAtom, serverEnvironment } from "~/state/server";
 import { ConnectionStatusDot } from "../ConnectionStatusDot";
@@ -2297,6 +2299,44 @@ export function ConnectionsSettings() {
     async (target: DesktopSshEnvironmentTarget) => {
       setIsAddingSavedBackend(true);
       setSavedBackendError(null);
+      // Host-key trust and the remote install plan are confirmed here, before
+      // provisioning starts, so the user never approves a connection after
+      // ACode has already written to the remote host. The connection platform
+      // re-blocks untrusted or changed keys as a fail-safe.
+      if (desktopBridge?.inspectSshHostTrust && desktopBridge.trustSshHost) {
+        let gate: Awaited<ReturnType<typeof gateSshEnvironmentConnection>>;
+        try {
+          gate = await gateSshEnvironmentConnection({
+            target,
+            version: APP_VERSION,
+            deps: {
+              inspectTrust: (gateTarget) => desktopBridge.inspectSshHostTrust!(gateTarget),
+              trustHost: (gateTarget) => desktopBridge.trustSshHost!(gateTarget),
+              confirm: (message, options) => requestConfirmDialog(message, options),
+            },
+          });
+        } catch (error) {
+          setSavedBackendError(formatDesktopSshConnectionError(error));
+          setIsAddingSavedBackend(false);
+          return;
+        }
+        if (gate.status === "blocked") {
+          setSavedBackendError(gate.message);
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "SSH connection blocked",
+              description: gate.message,
+            }),
+          );
+          setIsAddingSavedBackend(false);
+          return;
+        }
+        if (gate.status === "cancelled") {
+          setIsAddingSavedBackend(false);
+          return;
+        }
+      }
       const result = await connectSshEnvironment({ target, label: "" });
       if (result._tag === "Failure") {
         if (!isAtomCommandInterrupted(result)) {
@@ -2319,7 +2359,7 @@ export function ConnectionsSettings() {
       });
       setIsAddingSavedBackend(false);
     },
-    [connectSshEnvironment],
+    [connectSshEnvironment, desktopBridge],
   );
 
   const handleAddSavedBackend = useCallback(async () => {

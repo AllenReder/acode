@@ -135,6 +135,14 @@
       "types": "./src/remote.ts",
       "import": "./src/remote.ts"
     },
+    "./remoteEnvironmentHttp": {
+      "types": "./src/remoteEnvironmentHttp.ts",
+      "import": "./src/remoteEnvironmentHttp.ts"
+    },
+    "./serverRelease": {
+      "types": "./src/serverRelease.ts",
+      "import": "./src/serverRelease.ts"
+    },
     "./relaySigning": {
       "types": "./src/relaySigning.ts",
       "import": "./src/relaySigning.ts"

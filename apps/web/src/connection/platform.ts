@@ -143,9 +143,42 @@ function sshPreparationError(cause: unknown) {
   });
 }
 
+/**
+ * Fail-safe trust gate shared by provisioning and reconnect: the settings UI
+ * collects trust confirmation up front, but a changed or never-trusted key
+ * must also block here so no code path provisions an untrusted host. Trust
+ * acceptance only happens in the UI; this guard never accepts keys.
+ */
+const assertSshHostTrusted = Effect.fn("web.connectionPlatform.ssh.assertTrusted")(function* (
+  bridge: DesktopBridge,
+  target: DesktopSshEnvironmentTarget,
+) {
+  if (bridge.inspectSshHostTrust === undefined) {
+    return;
+  }
+  const trust = yield* Effect.tryPromise({
+    try: () => bridge.inspectSshHostTrust!(target),
+    catch: sshPreparationError,
+  });
+  if (trust.status === "changed") {
+    return yield* new ConnectionBlockedError({
+      reason: "unsupported",
+      detail:
+        "The SSH host key changed for this target. ACode blocks the connection; verify the key outside the app and remove the old known_hosts entry to trust a new key.",
+    });
+  }
+  if (trust.status === "new") {
+    return yield* new ConnectionBlockedError({
+      reason: "permission",
+      detail: "The SSH host key must be trusted before ACode can install or start the remote daemon.",
+    });
+  }
+});
+
 export const provisionDesktopSshEnvironment = Effect.fn(
   "web.connectionPlatform.ssh.provisionDesktop",
 )(function* (bridge: DesktopBridge, target: DesktopSshEnvironmentTarget) {
+  yield* assertSshHostTrusted(bridge, target);
   const bootstrap = yield* Effect.tryPromise({
     try: () =>
       bridge.ensureSshEnvironment(target, {
@@ -244,6 +277,10 @@ const capabilitiesLayer = Layer.effectContext(
             detail: "SSH environments are only available in the desktop app.",
           });
         }
+        // Reconnects skip the UI, so the trust check here is the only gate —
+        // a host key that changed since the environment was saved blocks with
+        // a distinct error instead of a generic SSH failure.
+        yield* assertSshHostTrusted(bridge, input.target);
         const bootstrap = yield* Effect.tryPromise({
           try: () =>
             bridge.ensureSshEnvironment(input.target, {

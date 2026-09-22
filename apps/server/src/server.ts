@@ -1,4 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off
+// @effect-diagnostics nodeBuiltinImport:off anyUnknownInErrorContext:off
 import * as NodeHttp from "node:http";
 
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
@@ -142,6 +142,10 @@ import * as NativeTelemetryClient from "./resourceTelemetry/NativeTelemetryClien
 import * as ResourceAttribution from "./resourceTelemetry/ResourceAttribution.ts";
 import * as ResourceMonitorBinary from "./resourceTelemetry/ResourceMonitorBinary.ts";
 import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
+import packageJson from "../package.json" with { type: "json" };
+import * as DesktopSshEnvironment from "./desktop/sshEnvironment.ts";
+import * as DesktopSshPasswordPrompts from "./desktop/sshPasswordPrompts.ts";
+import { desktopSshRouteLayer } from "./desktop/sshRoutes.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
 import * as UsageService from "./usage/UsageService.ts";
 import { OrchestrationLayerLive } from "./orchestration/runtimeLayer.ts";
@@ -207,6 +211,18 @@ const BackgroundLayerLive = BackgroundPolicy.layer.pipe(
 );
 
 const UsageLayerLive = UsageService.layer.pipe(Layer.provide(ServerSettingsLayerLive));
+
+// provideMerge (not provide): the desktop SSH routes also read the prompt
+// store directly, so the service must stay in the layer outputs instead of
+// being swallowed as a private dependency of the environment service.
+const DesktopSshLayerLive = DesktopSshEnvironment.layer({
+  resolveCliRunner: Effect.succeed({
+    archiveVersion: packageJson.version,
+    // The remote host must already provide this engine range; ACode never
+    // installs Node.js on the remote.
+    nodeEngineRange: packageJson.engines?.node ?? null,
+  }),
+}).pipe(Layer.provideMerge(DesktopSshPasswordPrompts.layer()));
 
 const ResourceDiagnosticsLayerLive = Layer.mergeAll(
   HostResources.layer,
@@ -537,6 +553,7 @@ const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(ServerEnvironmentLayerLive),
   Layer.provideMerge(AuthLayerLive),
   Layer.provideMerge(ServerSecretStore.layer),
+  Layer.provideMerge(DesktopSshLayerLive),
   Layer.provideMerge(
     Layer.mergeAll(
       CloudCliTokenManager.layer.pipe(
@@ -581,6 +598,7 @@ export const makeRoutesLayer = Layer.mergeAll(
     ),
     otlpTracesProxyRouteLayer,
     localDaemonHandshakeRouteLayer,
+    desktopSshRouteLayer,
     assetRouteLayer,
     attachmentUploadRouteLayer,
     deviceHubProxyRouteLayer,

@@ -492,6 +492,24 @@ export interface DesktopSshEnvironmentBootstrap {
   remoteServerKind?: "external" | "managed";
 }
 
+export type DesktopSshHostKeyTrustStatus = "trusted" | "new" | "changed";
+export interface DesktopSshHostKeyTrust {
+  readonly status: DesktopSshHostKeyTrustStatus;
+  readonly fingerprint: string | null;
+  readonly keyType: string | null;
+}
+
+export const DesktopSshHostKeyTrustStatusSchema = Schema.Literals([
+  "trusted",
+  "new",
+  "changed",
+]);
+export const DesktopSshHostKeyTrustSchema = Schema.Struct({
+  status: DesktopSshHostKeyTrustStatusSchema,
+  fingerprint: Schema.NullOr(Schema.String),
+  keyType: Schema.NullOr(Schema.String),
+});
+
 export const DesktopSshEnvironmentBootstrapSchema = Schema.Struct({
   target: DesktopSshEnvironmentTargetSchema,
   httpBaseUrl: Schema.String,
@@ -1241,6 +1259,8 @@ export interface DesktopBridge {
   discoverSshHosts: () => Promise<readonly DesktopDiscoveredSshHost[]>;
   /** Resolves a suggested SSH alias before populating the connection form. */
   resolveSshHost: (alias: string) => Promise<DesktopSshEnvironmentTarget>;
+  inspectSshHostTrust?: (target: DesktopSshEnvironmentTarget) => Promise<DesktopSshHostKeyTrust>;
+  trustSshHost?: (target: DesktopSshEnvironmentTarget) => Promise<void>;
   requestSnapShotPermissions?: (includeAccessibility: boolean) => Promise<void>;
   getSnapShotState?: () => Promise<DesktopSnapShotState>;
   setupSnapShot?: (action: DesktopSnapShotSetupAction) => Promise<void>;

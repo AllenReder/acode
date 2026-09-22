@@ -68,6 +68,7 @@ function makeBridge(
         scope: AuthStandardClientScopes.join(" "),
       };
     },
+    inspectSshHostTrust: async () => ({ status: "trusted", fingerprint: null, keyType: null }),
   } as unknown as DesktopBridge;
 }
 
@@ -93,6 +94,40 @@ describe("desktop SSH pairing", () => {
       ).pipe(Effect.flip);
 
       expect(calls).toEqual(["ensure", "descriptor"]);
+    }),
+  );
+
+  it.effect("blocks a changed SSH host key without consuming the credential", () =>
+    Effect.gen(function* () {
+      const calls: string[] = [];
+      const bridge = makeBridge(calls);
+      bridge.inspectSshHostTrust = async () => ({
+        status: "changed",
+        fingerprint: "changed-key",
+        keyType: "ssh-ed25519",
+      });
+
+      const error = yield* provisionDesktopSshEnvironment(bridge, TARGET).pipe(Effect.flip);
+
+      expect(error._tag).toBe("ConnectionBlockedError");
+      expect(calls).toEqual([]);
+    }),
+  );
+
+  it.effect("blocks a new SSH host key until the desktop confirms trust", () =>
+    Effect.gen(function* () {
+      const calls: string[] = [];
+      const bridge = makeBridge(calls);
+      bridge.inspectSshHostTrust = async () => ({
+        status: "new",
+        fingerprint: "new-key",
+        keyType: "ssh-ed25519",
+      });
+
+      const error = yield* provisionDesktopSshEnvironment(bridge, TARGET).pipe(Effect.flip);
+
+      expect(error._tag).toBe("ConnectionBlockedError");
+      expect(calls).toEqual([]);
     }),
   );
 });

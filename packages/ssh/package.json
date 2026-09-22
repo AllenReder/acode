@@ -22,6 +22,10 @@
     "./tunnel": {
       "types": "./src/tunnel.ts",
       "import": "./src/tunnel.ts"
+    },
+    "./trust": {
+      "types": "./src/trust.ts",
+      "import": "./src/trust.ts"
     }
   },
   "scripts": {
