@@ -10,6 +10,7 @@
  *   node_modules/ (production dependencies)
  */
 import * as NodeChildProcess from "node:child_process";
+import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
@@ -48,7 +49,12 @@ export interface BuildServerPackageOptions {
   readonly outputDir?: string | undefined;
   readonly platform?: string;
   readonly arch?: string;
+  readonly version?: string;
   readonly skipBuild?: boolean;
+}
+
+export function isExactServerPackageVersion(version: string): boolean {
+  return /^\d+\.\d+\.\d+(?:[-+.][0-9A-Za-z.-]+)?$/u.test(version);
 }
 
 export function buildServerPackage(options: BuildServerPackageOptions = {}) {
@@ -59,7 +65,10 @@ export function buildServerPackage(options: BuildServerPackageOptions = {}) {
     options.platform ??
     (hostPlatform === "darwin" ? "darwin" : hostPlatform === "win32" ? "win32" : "linux");
   const arch = options.arch ?? (hostArch === "arm64" ? "arm64" : "x64");
-  const version = packageJson.version;
+  const version = options.version ?? packageJson.version;
+  if (!isExactServerPackageVersion(version)) {
+    throw new Error(`Server package version must be exact, received '${version}'.`);
+  }
   const stem = `acode-server-${version}-${platform}-${arch}`;
 
   if (!options.skipBuild) {
@@ -129,14 +138,20 @@ Standalone headless server package for ACode daemon.
     NodeFS.mkdirSync(outputDir, { recursive: true });
     const archiveFileName = `${stem}.tar.gz`;
     const archivePath = NodePath.join(outputDir, archiveFileName);
+    const checksumPath = NodePath.join(outputDir, "SHA256SUMS");
 
     console.log(`[build-server-package] Creating archive ${archivePath}...`);
     NodeChildProcess.execSync(`tar -czf "${archivePath}" -C "${stageRoot}" "${stem}"`, {
       stdio: "inherit",
     });
+    const archiveHash = NodeCrypto.createHash("sha256")
+      .update(NodeFS.readFileSync(archivePath))
+      .digest("hex");
+    NodeFS.writeFileSync(checksumPath, `${archiveHash}  ${archiveFileName}\n`);
 
     console.log(`[build-server-package] Successfully created ${archivePath}`);
-    return { archivePath, stageDir, stem, version };
+    console.log(`[build-server-package] Wrote ${checksumPath}`);
+    return { archivePath, checksumPath, stageDir, stem, version };
   } finally {
     NodeFS.rmSync(stageRoot, { recursive: true, force: true });
   }
@@ -144,7 +159,18 @@ Standalone headless server package for ACode daemon.
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2);
-  const outputDirIndex = args.indexOf("--output-dir");
-  const outputDir = outputDirIndex !== -1 ? args[outputDirIndex + 1] : undefined;
-  buildServerPackage({ outputDir });
+  const optionValue = (name: string) => {
+    const index = args.indexOf(`--${name}`);
+    return index !== -1 ? args[index + 1] : undefined;
+  };
+  const outputDir = optionValue("output-dir");
+  const platform = optionValue("platform");
+  const arch = optionValue("arch");
+  const version = optionValue("version");
+  buildServerPackage({
+    ...(outputDir !== undefined ? { outputDir } : {}),
+    ...(platform !== undefined ? { platform } : {}),
+    ...(arch !== undefined ? { arch } : {}),
+    ...(version !== undefined ? { version } : {}),
+  });
 }
