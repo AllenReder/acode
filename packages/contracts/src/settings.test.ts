@@ -462,7 +462,7 @@ describe("ClientSettings window glass and backdrop settings", () => {
 
 describe("ClientSettings glass opacity", () => {
   it("defaults to a readable translucent surface", () => {
-    expect(decodeClientSettings({}).glassOpacity).toBe(80);
+    expect(decodeClientSettings({}).glassOpacity).toBe(90);
   });
 
   it.each([39, 101, 72.5])("rejects an invalid glass opacity: %s", (value) => {

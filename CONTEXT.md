@@ -271,9 +271,9 @@ Window Glass translucency or stays opaque.
 _Avoid_: Body glass, Main pane glass
 
 **Topbar Surface**:
-The horizontal title and tab chrome that spans the Sidebar and Workbench
-areas. It is one Material Surface even when its controls visually align with
-those areas.
+The horizontal title and tab chrome above the Workbench, alongside the
+full-height Sidebar when expanded. It is a distinct Material Surface whose
+visual continuity with the Sidebar does not merge their layout ownership.
 _Avoid_: Header, Toolbar, Tab strip
 
 **Workbench Artwork**:

@@ -167,24 +167,26 @@ export function Workbench({ navigate: navigateTo }: WorkbenchProps = {}) {
   }, [draftTarget, openDeepLinkTarget]);
 
   return (
-    <MaterialSurface
-      kind="workbench"
-      className="relative isolate flex h-full min-h-0 min-w-0 flex-1 flex-col"
-    >
-      <div className="workbench-artwork" aria-hidden="true" />
-      <div className="relative z-[1] flex h-full min-h-0 min-w-0 flex-col">
-        <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
-        <DeepLinkStatus
-          resolution={resolution}
-          dismissed={missingDismissed}
-          onDismiss={() => setMissingDismissed(true)}
-        />
-        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-          <PaneTree snapshot={snapshot} projects={projects} />
-          <WorkbenchDropOverlay />
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+      <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+      <MaterialSurface
+        kind="workbench"
+        className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col"
+      >
+        <div className="workbench-artwork" aria-hidden="true" />
+        <div className="relative z-[1] flex min-h-0 min-w-0 flex-1 flex-col">
+          <DeepLinkStatus
+            resolution={resolution}
+            dismissed={missingDismissed}
+            onDismiss={() => setMissingDismissed(true)}
+          />
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+            <PaneTree snapshot={snapshot} projects={projects} />
+            <WorkbenchDropOverlay />
+          </div>
         </div>
-      </div>
-    </MaterialSurface>
+      </MaterialSurface>
+    </div>
   );
 }
 

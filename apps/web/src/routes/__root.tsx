@@ -269,18 +269,26 @@ function ContrastAppearanceSync() {
 }
 
 function GlassAppearanceSync() {
-  const stageStrength = useClientSettings((settings) => settings.sidebarBlur);
-  const surfaceOpacity = useClientSettings((settings) => settings.workbenchOpacity);
+  const blurRadius = useClientSettings((settings) => settings.sidebarBlur);
+  const sidebarOpacity = useClientSettings((settings) => settings.sidebarOpacity);
+  const topbarOpacity = useClientSettings((settings) => settings.topbarOpacity);
+  const workbenchOpacity = useClientSettings((settings) => settings.workbenchOpacity);
+  const workbenchGlass = useClientSettings((settings) => settings.workbenchGlass);
+  const overlayOpacity = useClientSettings((settings) => settings.glassOpacity);
   const artworkPath = useClientSettings((settings) => settings.chatBackgroundPath);
   const artworkOpacity = useClientSettings((settings) => settings.chatBackgroundOpacity);
 
   useEffect(() => {
     applyMaterialSettings({
       stageEnabled: true,
-      stageStrength,
-      surfaceOpacity,
+      blurRadius,
+      sidebarOpacity,
+      topbarOpacity,
+      workbenchOpacity,
+      workbenchGlass,
+      overlayOpacity,
     });
-  }, [stageStrength, surfaceOpacity]);
+  }, [blurRadius, sidebarOpacity, topbarOpacity, workbenchOpacity, workbenchGlass, overlayOpacity]);
 
   useEffect(() => {
     applyWorkbenchArtwork({

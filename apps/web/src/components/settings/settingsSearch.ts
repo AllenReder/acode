@@ -156,6 +156,18 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["sidebar opacity translucent transparency glass"],
   },
   {
+    id: "setting-topbar-opacity",
+    title: "Topbar opacity",
+    to: "/settings/appearance",
+    searchTerms: ["topbar tabbar title tabs opacity transparency"],
+  },
+  {
+    id: "setting-overlay-opacity",
+    title: "Overlay opacity",
+    to: "/settings/appearance",
+    searchTerms: ["menus dialogs frosted opacity transparency"],
+  },
+  {
     id: "setting-workbench-glass",
     title: "Workbench glass",
     to: "/settings/appearance",

@@ -50,7 +50,9 @@ export const lightTerminalAnsi = {
 export function buildXtermTheme(config: TerminalPaletteConfig): ITheme {
   const ansi = config.isDark ? darkTerminalAnsi : lightTerminalAnsi;
   return {
-    background: config.background,
+    // The Workbench supplies the canvas, even with glass disabled. ANSI cell
+    // backgrounds remain intact; only the terminal's default fill is clear.
+    background: "#00000000",
     foreground: config.foreground,
     cursor: config.cursor,
     cursorAccent: config.background,

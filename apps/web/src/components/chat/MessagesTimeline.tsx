@@ -1030,7 +1030,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     if (hideEmptyPlaceholder) {
       // Occupy the pane with the theme surface so a thread switch cannot
       // punch a hole through to the window chrome (white in light mode).
-      return <div className="h-full min-h-0 bg-background" data-timeline-loading="true" />;
+      return <div className="h-full min-h-0 bg-transparent" data-timeline-loading="true" />;
     }
     return (
       <div className="flex h-full items-center justify-center">
@@ -1546,7 +1546,7 @@ function QueuedMessageTimelineRow({
     <div className="flex flex-col items-end" data-queued-message-id={queuedMessage.id}>
       <div className="max-w-[80%] rounded-2xl border border-dashed border-border p-3 text-message-foreground/80">
         {text.length > 0 ? (
-          <div className="whitespace-pre-wrap break-words text-sm">{text}</div>
+          <div className="select-text whitespace-pre-wrap break-words text-sm">{text}</div>
         ) : null}
         {attachmentCount > 0 || contextCount > 0 ? (
           <div className={cn("text-secondary-label text-xs", text.length > 0 && "mt-1.5")}>
@@ -1865,7 +1865,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
               <div
                 key={image.id}
                 className={cn(
-                  "bg-background/70",
+                  "bg-background/20",
                   image.source?.kind === "snap-shot" && image.previewUrl
                     ? cn(SNAP_SHOT_ATTACHMENT_FRAME_CLASS, "col-span-2")
                     : "aspect-[4/3] overflow-hidden rounded-lg border border-border/80",
@@ -2991,7 +2991,7 @@ function UserMessagePreviewAnnotationDetails(props: {
   const ctx = use(TimelineRowCtx);
   const visibleElements = props.record.elements ?? [];
   return (
-    <div className="max-w-full overflow-hidden rounded-lg border border-border/70 bg-background/70">
+    <div className="max-w-full overflow-hidden rounded-lg border border-border/70 bg-background/20">
       {props.image?.previewUrl ? (
         <button
           type="button"
@@ -3019,7 +3019,7 @@ function UserMessagePreviewAnnotationDetails(props: {
           {props.record.pageTitle?.trim() || props.record.pageUrl || "Preview annotation"}
         </div>
         {props.record.comment ? (
-          <div className="mt-1 whitespace-pre-wrap wrap-break-word text-sm">
+          <div className="select-text mt-1 whitespace-pre-wrap wrap-break-word text-sm">
             {props.record.comment}
           </div>
         ) : null}
@@ -3084,7 +3084,7 @@ function UserMessageElementDetails({
     ? `${record.source.fileName}${record.source.lineNumber === null ? "" : `:${record.source.lineNumber}`}`
     : null;
   return (
-    <div className="max-w-full overflow-hidden rounded-lg border border-border/70 bg-background/70">
+    <div className="max-w-full overflow-hidden rounded-lg border border-border/70 bg-background/20">
       <div className="border-b border-border/70 px-3 py-2.5">
         <div className="truncate text-message-foreground text-xs font-medium">
           {record.pageTitle?.trim() || record.pageUrl}
@@ -3559,7 +3559,7 @@ function UserMessageReviewCommentCard({ comment }: { comment: ReviewCommentConte
   );
 
   return (
-    <div className="space-y-2 rounded-lg border border-border/70 bg-background/70 p-3">
+    <div className="space-y-2 rounded-lg border border-border/70 bg-background/20 p-3">
       <div className="space-y-1">
         <div className="text-message-foreground text-xs font-medium">
           {formatWorkspaceRelativePath(comment.filePath, ctx.workspaceRoot)}
@@ -3569,7 +3569,7 @@ function UserMessageReviewCommentCard({ comment }: { comment: ReviewCommentConte
         </div>
       </div>
       {comment.text.length > 0 && (
-        <div className="whitespace-pre-wrap wrap-break-word text-sm">
+        <div className="select-text whitespace-pre-wrap wrap-break-word text-sm">
           <SkillInlineText text={comment.text} skills={ctx.skills} />
         </div>
       )}
@@ -4512,12 +4512,12 @@ function QuestionAnswerHistory({
       ].map((questionId) => (
         <div key={questionId} className="space-y-1">
           {answer.questionTextById?.[questionId] ? (
-            <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+            <p className="select-text whitespace-pre-wrap text-sm text-muted-foreground">
               {answer.questionTextById[questionId]}
             </p>
           ) : null}
           {getQuestionAnswerText(answer.answers[questionId]) ? (
-            <p className="ms-3 whitespace-pre-wrap text-sm text-muted-foreground">
+            <p className="select-text ms-3 whitespace-pre-wrap text-sm text-muted-foreground">
               {getQuestionAnswerText(answer.answers[questionId])}
             </p>
           ) : null}

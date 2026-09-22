@@ -76,8 +76,8 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
   return (
     <MaterialSurface
       kind="topbar"
-      className="drag-region flex h-[var(--workbench-titlebar-height,36px)] w-full shrink-0 items-center border-b border-border/60 z-30"
-      data-tauri-drag-region
+      className="drag-region flex h-[var(--workbench-titlebar-height,36px)] w-full shrink-0 items-center border-b border-[var(--material-edge)] z-30"
+      data-tauri-drag-region="deep"
       data-workbench-window-chrome=""
     >
       <div
@@ -103,7 +103,6 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
       <div className="flex h-full min-w-0 flex-1 items-center gap-2 pr-3 [-webkit-app-region:no-drag]">
         <div
           className="flex h-full min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          data-tauri-drag-region
           data-workbench-tab-strip-drop=""
           role="tablist"
           aria-label="Workbench tabs"
@@ -128,8 +127,8 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
                 className={cn(
                   "group relative flex h-full w-44 min-w-28 shrink cursor-pointer items-center gap-2 border-r border-border/60 px-3 text-left transition-colors duration-150 select-none",
                   active
-                    ? "bg-background/40 text-foreground font-medium"
-                    : "bg-muted/10 text-muted-foreground hover:bg-muted/25 hover:text-foreground",
+                    ? "bg-foreground/5 text-foreground font-medium"
+                    : "bg-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
                 )}
                 onClick={() => {
                   if (!active) activateTab(tab.id);
@@ -165,7 +164,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
                     autoFocus
                     value={draftTitle}
                     aria-label="Tab title"
-                    className="mx-1 min-w-0 flex-1 rounded border border-border bg-background px-1.5 py-0.5 text-xs outline-none focus:ring-1 focus:ring-ring"
+                    className="mx-1 min-w-0 flex-1 rounded border border-border bg-background/20 px-1.5 py-0.5 text-xs outline-none focus:ring-1 focus:ring-ring"
                     onChange={(event) => setDraftTitle(event.target.value)}
                     onClick={(event) => event.stopPropagation()}
                     onBlur={() => commitRename(tab.id)}

@@ -8,8 +8,12 @@ export interface ChatBackgroundSettings {
 
 export interface MaterialSettings {
   readonly stageEnabled: boolean;
-  readonly stageStrength: number;
-  readonly surfaceOpacity: number;
+  readonly blurRadius: number;
+  readonly sidebarOpacity: number;
+  readonly topbarOpacity: number;
+  readonly workbenchOpacity: number;
+  readonly workbenchGlass: boolean;
+  readonly overlayOpacity: number;
 }
 
 export function isNativeGlassPlatform(): boolean {
@@ -50,14 +54,17 @@ export function applyMaterialSettings(
   root.classList.toggle("material-stage-native", nativeStage);
   root.classList.toggle("material-stage-opaque", !nativeStage);
 
-  const surfaceOpacity = nativeStage ? options.surfaceOpacity / 100 : 1;
-  root.style.setProperty("--material-stage-strength", `${options.stageStrength}`);
-  root.style.setProperty("--material-surface-opacity", `${surfaceOpacity}`);
-  for (const surface of ["sidebar", "topbar", "workbench", "overlay"] as const) {
-    root.style.setProperty(`--material-${surface}-opacity`, `${surfaceOpacity}`);
+  const opacities = {
+    sidebar: options.sidebarOpacity,
+    topbar: options.topbarOpacity,
+    workbench: options.workbenchGlass ? options.workbenchOpacity : 100,
+    overlay: options.overlayOpacity,
+  };
+  for (const [surface, opacity] of Object.entries(opacities)) {
+    root.style.setProperty(`--material-${surface}-opacity`, `${nativeStage ? opacity / 100 : 1}`);
   }
 
-  const blurRadius = Math.max(1, Math.round((options.stageStrength / 100) * 52));
+  const blurRadius = Math.max(1, Math.min(64, Math.round(options.blurRadius)));
   if (nativeStage) {
     root.style.backgroundColor = "transparent";
     if (typeof document !== "undefined" && document.body) {

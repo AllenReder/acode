@@ -267,6 +267,44 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   }
 }
 
+/* Chrome does not participate in browser drag-selection. Restore selection
+   only at content boundaries; nested controls stay native application chrome. */
+@layer base {
+  body {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  :where(
+    input,
+    textarea,
+    [contenteditable="true"],
+    [contenteditable="plaintext-only"],
+    .select-text,
+    .chat-markdown,
+    [data-selectable-content],
+    pre,
+    .xterm
+  ) {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  :where(
+    button,
+    [role="button"],
+    [role="tab"],
+    [role="menuitem"],
+    .chat-markdown-codeblock-header,
+    .select-none
+  ) {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
+:root {
+  --material-edge: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
 html.material-stage-native,
 html.material-stage-native body,
 html.material-stage-native #root {
@@ -321,12 +359,12 @@ html.material-stage-opaque #root {
 .material-surface-overlay {
   background: color-mix(
     in srgb,
-    var(--popover) calc(var(--material-overlay-opacity, 0.88) * 100%),
+    var(--popover) calc(var(--material-overlay-opacity, 0.9) * 100%),
     transparent
   );
   background-color: color-mix(
     in srgb,
-    var(--popover) calc(var(--material-overlay-opacity, 0.88) * 100%),
+    var(--popover) calc(var(--material-overlay-opacity, 0.9) * 100%),
     transparent
   );
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
@@ -348,7 +386,7 @@ html.material-stage-opaque #root {
 @utility surface-glass {
   background: color-mix(
     in srgb,
-    var(--background) calc(var(--material-overlay-opacity, 0.88) * 100%),
+    var(--background) calc(var(--material-overlay-opacity, 0.9) * 100%),
     transparent
   );
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
@@ -368,7 +406,7 @@ html.material-stage-opaque #root {
     ),
     color-mix(
       in srgb,
-      var(--background) calc(var(--material-overlay-opacity, 0.88) * 100%),
+      var(--background) calc(var(--material-overlay-opacity, 0.9) * 100%),
       transparent
     ) !important;
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
@@ -398,7 +436,7 @@ html.material-stage-opaque #root {
 @utility dialog-glass {
   background: color-mix(
     in srgb,
-    var(--background) calc(var(--material-overlay-opacity, 0.88) * 100%),
+    var(--background) calc(var(--material-overlay-opacity, 0.9) * 100%),
     transparent
   );
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
@@ -434,7 +472,7 @@ html.material-stage-opaque #root {
     var(--popover) 18%,
     color-mix(
       in srgb,
-      var(--popover) calc(var(--material-overlay-opacity, 0.88) * 100%),
+      var(--popover) calc(var(--material-overlay-opacity, 0.9) * 100%),
       transparent
     )
   );
@@ -1386,7 +1424,7 @@ html[data-theme-token-probe] *::after {
    roles explicit prevents the thread toolbar from falling back to the default
    dark-mode whites while preserving the same theme file across clients. */
 html[data-theme-id] [data-chat-header] {
-  background-color: var(--toolbar-background);
+  background-color: transparent;
   color: var(--contrast-toolbar-foreground);
 }
 
@@ -1394,7 +1432,7 @@ html[data-theme-id] [data-chat-header] [data-slot="button"],
 html[data-theme-id] [data-chat-header] [data-slot="menu-trigger"],
 html[data-theme-id] [data-chat-header] [data-toolbar-control] {
   --control-icon-color: var(--contrast-toolbar-control-foreground);
-  background-color: var(--toolbar-control);
+  background-color: color-mix(in srgb, var(--toolbar-control) 20%, transparent);
   border-color: var(--contrast-toolbar-border);
   color: var(--contrast-toolbar-control-foreground);
 }
@@ -1441,13 +1479,13 @@ html[data-theme-id] [data-chat-header] [data-slot="separator"] {
    default look keeps its secondary/input tints; themed palettes tint those
    surfaces with the accent, which fights syntax highlighting. */
 html[data-theme-id] .chat-markdown .chat-markdown-codeblock {
-  background-color: var(--code-background);
+  background-color: color-mix(in srgb, var(--code-background) 18%, transparent);
   border-color: var(--contrast-border);
   color: var(--code-foreground);
 }
 
 html[data-theme-id] .chat-markdown pre {
-  background-color: var(--code-background);
+  background-color: color-mix(in srgb, var(--code-background) 18%, transparent);
   color: var(--code-foreground);
 }
 
@@ -1726,7 +1764,7 @@ html[data-workbench-dragging] * {
   -webkit-user-select: none;
 }
 
-/* The Workbench owns one frameless title strip across the Sidebar and main area. */
+/* The Workbench title strip sits alongside the full-height Sidebar. */
 html[data-workbench-window-chrome] {
   --workbench-titlebar-height: 36px;
   --workbench-titlebar-center: calc(var(--workbench-titlebar-height) / 2);
@@ -2108,7 +2146,7 @@ html[data-workbench-window-chrome] {
   border: 0;
   border-radius: 0;
   overflow: clip;
-  background: var(--code-background);
+  background: color-mix(in srgb, var(--code-background) 18%, transparent);
   color: var(--code-foreground);
 }
 
@@ -2276,7 +2314,7 @@ html[data-workbench-dragging] .workbench-sash {
 }
 .workbench-pane {
   overflow: hidden;
-  border: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
+  border: 1px solid var(--material-edge);
   border-radius: var(--pane-radius, 0px);
   background: transparent;
   box-shadow: var(--pane-shadow, none);
@@ -2285,10 +2323,8 @@ html[data-workbench-dragging] .workbench-sash {
     box-shadow 160ms ease;
 }
 .workbench-pane[data-pane-focused="true"] {
-  border-color: color-mix(in oklch, var(--ring) 50%, var(--border));
+  border-color: color-mix(in srgb, var(--foreground) 16%, transparent);
   box-shadow: var(--pane-shadow, none);
-  outline: 1px solid color-mix(in oklch, var(--ring) 35%, transparent);
-  outline-offset: -1px;
 }
 .workbench-pane > div[tabindex] {
   height: 34px;

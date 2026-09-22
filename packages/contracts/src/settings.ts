@@ -94,7 +94,7 @@ export const GlassOpacity = Schema.Int.check(
   }),
 );
 export type GlassOpacity = typeof GlassOpacity.Type;
-const DEFAULT_GLASS_OPACITY: GlassOpacity = 80;
+const DEFAULT_GLASS_OPACITY: GlassOpacity = 90;
 
 export const MIN_SIDEBAR_OPACITY = 15;
 export const MAX_SIDEBAR_OPACITY = 100;
@@ -106,6 +106,14 @@ export const SidebarOpacity = Schema.Int.check(
 );
 export type SidebarOpacity = typeof SidebarOpacity.Type;
 export const DEFAULT_SIDEBAR_OPACITY: SidebarOpacity = 85;
+
+export const MIN_TOPBAR_OPACITY = 15;
+export const MAX_TOPBAR_OPACITY = 100;
+export const TopbarOpacity = Schema.Int.check(
+  Schema.isBetween({ minimum: MIN_TOPBAR_OPACITY, maximum: MAX_TOPBAR_OPACITY }),
+);
+export type TopbarOpacity = typeof TopbarOpacity.Type;
+export const DEFAULT_TOPBAR_OPACITY: TopbarOpacity = 85;
 
 export const MIN_SIDEBAR_BLUR = 1;
 export const MAX_SIDEBAR_BLUR = 64;
@@ -447,9 +455,10 @@ export const ClientSettingsSchema = Schema.Struct({
   sidebarOpacity: SidebarOpacity.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_OPACITY)),
   ),
-  sidebarBlur: SidebarBlur.pipe(
-    Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_BLUR)),
+  topbarOpacity: TopbarOpacity.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_TOPBAR_OPACITY)),
   ),
+  sidebarBlur: SidebarBlur.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_BLUR))),
   workbenchGlass: WorkbenchGlass.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_WORKBENCH_GLASS)),
   ),
@@ -1564,6 +1573,7 @@ export const ClientSettingsPatch = Schema.Struct({
   environmentIdentificationMode: Schema.optionalKey(EnvironmentIdentificationMode),
   glassOpacity: Schema.optionalKey(GlassOpacity),
   sidebarOpacity: Schema.optionalKey(SidebarOpacity),
+  topbarOpacity: Schema.optionalKey(TopbarOpacity),
   sidebarBlur: Schema.optionalKey(SidebarBlur),
   workbenchGlass: Schema.optionalKey(WorkbenchGlass),
   workbenchOpacity: Schema.optionalKey(WorkbenchOpacity),

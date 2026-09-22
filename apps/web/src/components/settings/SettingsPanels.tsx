@@ -29,6 +29,8 @@ import {
   MAX_CODE_FONT_SIZE,
   MAX_GLASS_OPACITY,
   MIN_SIDEBAR_OPACITY,
+  MIN_TOPBAR_OPACITY,
+  MAX_TOPBAR_OPACITY,
   MAX_SIDEBAR_OPACITY,
   MIN_SIDEBAR_BLUR,
   MAX_SIDEBAR_BLUR,
@@ -545,10 +547,25 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.paneRadius !== DEFAULT_UNIFIED_SETTINGS.paneRadius
         ? ["Pane corner radius"]
         : []),
-      ...(settings.paneShadow !== DEFAULT_UNIFIED_SETTINGS.paneShadow
-        ? ["Pane shadow"]
+      ...(settings.paneShadow !== DEFAULT_UNIFIED_SETTINGS.paneShadow ? ["Pane shadow"] : []),
+      ...(settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity
+        ? ["Overlay opacity"]
         : []),
-      ...(settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity ? ["Glass opacity"] : []),
+      ...(settings.topbarOpacity !== DEFAULT_UNIFIED_SETTINGS.topbarOpacity
+        ? ["Topbar opacity"]
+        : []),
+      ...(settings.sidebarOpacity !== DEFAULT_UNIFIED_SETTINGS.sidebarOpacity
+        ? ["Sidebar opacity"]
+        : []),
+      ...(settings.sidebarBlur !== DEFAULT_UNIFIED_SETTINGS.sidebarBlur
+        ? ["Window blur radius"]
+        : []),
+      ...(settings.workbenchGlass !== DEFAULT_UNIFIED_SETTINGS.workbenchGlass
+        ? ["Workbench glass"]
+        : []),
+      ...(settings.workbenchOpacity !== DEFAULT_UNIFIED_SETTINGS.workbenchOpacity
+        ? ["Workbench opacity"]
+        : []),
       ...(settings.diffColorScheme !== DEFAULT_UNIFIED_SETTINGS.diffColorScheme
         ? ["Diff colors"]
         : []),
@@ -680,6 +697,11 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.fontSizePrompt,
       settings.fontSizeTerminal,
       settings.glassOpacity,
+      settings.topbarOpacity,
+      settings.sidebarOpacity,
+      settings.sidebarBlur,
+      settings.workbenchGlass,
+      settings.workbenchOpacity,
       settings.panelAnimationDurationMs,
       settings.responseStreamingMode,
       settings.enableProviderUpdateChecks,
@@ -781,6 +803,11 @@ export function useSettingsRestore(onRestored?: () => void) {
       contextWindowMeterEnabled: DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled,
       environmentIdentificationMode: DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode,
       glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity,
+      topbarOpacity: DEFAULT_UNIFIED_SETTINGS.topbarOpacity,
+      sidebarOpacity: DEFAULT_UNIFIED_SETTINGS.sidebarOpacity,
+      sidebarBlur: DEFAULT_UNIFIED_SETTINGS.sidebarBlur,
+      workbenchGlass: DEFAULT_UNIFIED_SETTINGS.workbenchGlass,
+      workbenchOpacity: DEFAULT_UNIFIED_SETTINGS.workbenchOpacity,
       panelAnimationDurationMs: DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs,
       sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
@@ -1186,6 +1213,12 @@ export function AppearanceSettingsPanel() {
     "--settings-slider-progress": `${sidebarOpacityRatio * 100}%`,
     "--settings-slider-fill-offset": `${0.5 - sidebarOpacityRatio}rem`,
   } as CSSProperties;
+  const topbarOpacityRatio =
+    (settings.topbarOpacity - MIN_TOPBAR_OPACITY) / (MAX_TOPBAR_OPACITY - MIN_TOPBAR_OPACITY);
+  const topbarOpacitySliderStyle = {
+    "--settings-slider-progress": `${topbarOpacityRatio * 100}%`,
+    "--settings-slider-fill-offset": `${0.5 - topbarOpacityRatio}rem`,
+  } as CSSProperties;
   const sidebarBlurRatio =
     (settings.sidebarBlur - MIN_SIDEBAR_BLUR) / (MAX_SIDEBAR_BLUR - MIN_SIDEBAR_BLUR);
   const sidebarBlurSliderStyle = {
@@ -1193,7 +1226,8 @@ export function AppearanceSettingsPanel() {
     "--settings-slider-fill-offset": `${0.5 - sidebarBlurRatio}rem`,
   } as CSSProperties;
   const workbenchOpacityRatio =
-    (settings.workbenchOpacity - MIN_WORKBENCH_OPACITY) / (MAX_WORKBENCH_OPACITY - MIN_WORKBENCH_OPACITY);
+    (settings.workbenchOpacity - MIN_WORKBENCH_OPACITY) /
+    (MAX_WORKBENCH_OPACITY - MIN_WORKBENCH_OPACITY);
   const workbenchOpacitySliderStyle = {
     "--settings-slider-progress": `${workbenchOpacityRatio * 100}%`,
     "--settings-slider-fill-offset": `${0.5 - workbenchOpacityRatio}rem`,
@@ -1205,8 +1239,7 @@ export function AppearanceSettingsPanel() {
     "--settings-slider-progress": `${chatBackgroundOpacityRatio * 100}%`,
     "--settings-slider-fill-offset": `${0.5 - chatBackgroundOpacityRatio}rem`,
   } as CSSProperties;
-  const paneGapRatio =
-    (settings.paneGap - MIN_PANE_GAP) / (MAX_PANE_GAP - MIN_PANE_GAP);
+  const paneGapRatio = (settings.paneGap - MIN_PANE_GAP) / (MAX_PANE_GAP - MIN_PANE_GAP);
   const paneGapSliderStyle = {
     "--settings-slider-progress": `${paneGapRatio * 100}%`,
     "--settings-slider-fill-offset": `${0.5 - paneGapRatio}rem`,
@@ -1396,6 +1429,52 @@ export function AppearanceSettingsPanel() {
         />
 
         <SettingsRow
+          {...searchableSetting("setting-topbar-opacity")}
+          description="Translucency of the title and tab bar, independent of the Workbench."
+          resetAction={
+            settings.topbarOpacity !== DEFAULT_UNIFIED_SETTINGS.topbarOpacity ? (
+              <SettingResetButton
+                label="topbar opacity"
+                onClick={() =>
+                  updateSettings({ topbarOpacity: DEFAULT_UNIFIED_SETTINGS.topbarOpacity })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="flex w-full items-center gap-3 sm:w-52">
+              <output
+                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
+                htmlFor="topbar-opacity"
+              >
+                {settings.topbarOpacity}%
+              </output>
+              <input
+                aria-label="Topbar opacity"
+                className="settings-slider min-w-0 flex-1"
+                id="topbar-opacity"
+                max={MAX_TOPBAR_OPACITY}
+                min={MIN_TOPBAR_OPACITY}
+                onChange={(event) => {
+                  const topbarOpacity = Number(event.currentTarget.value);
+                  if (
+                    Number.isInteger(topbarOpacity) &&
+                    topbarOpacity >= MIN_TOPBAR_OPACITY &&
+                    topbarOpacity <= MAX_TOPBAR_OPACITY
+                  ) {
+                    updateSettings({ topbarOpacity });
+                  }
+                }}
+                step={1}
+                style={topbarOpacitySliderStyle}
+                type="range"
+                value={settings.topbarOpacity}
+              />
+            </div>
+          }
+        />
+
+        <SettingsRow
           {...searchableSetting("setting-workbench-glass")}
           description="Apply native frosted glass to the main workspace, editor, and session timeline."
           resetAction={
@@ -1468,6 +1547,51 @@ export function AppearanceSettingsPanel() {
             </div>
           }
         />
+        <SettingsRow
+          {...searchableSetting("setting-overlay-opacity")}
+          description="Density of the frosted material behind menus and dialogs."
+          resetAction={
+            settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity ? (
+              <SettingResetButton
+                label="overlay opacity"
+                onClick={() =>
+                  updateSettings({ glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="flex w-full items-center gap-3 sm:w-52">
+              <output
+                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
+                htmlFor="overlay-opacity"
+              >
+                {settings.glassOpacity}%
+              </output>
+              <input
+                aria-label="Overlay opacity"
+                className="settings-slider min-w-0 flex-1"
+                id="overlay-opacity"
+                max={MAX_GLASS_OPACITY}
+                min={MIN_GLASS_OPACITY}
+                onChange={(event) => {
+                  const glassOpacity = Number(event.currentTarget.value);
+                  if (
+                    Number.isInteger(glassOpacity) &&
+                    glassOpacity >= MIN_GLASS_OPACITY &&
+                    glassOpacity <= MAX_GLASS_OPACITY
+                  ) {
+                    updateSettings({ glassOpacity });
+                  }
+                }}
+                step={1}
+                style={glassOpacitySliderStyle}
+                type="range"
+                value={settings.glassOpacity}
+              />
+            </div>
+          }
+        />
       </SettingsSection>
 
       <SettingsSection id="appearance-chat-wallpaper" title="Chat Wallpaper">
@@ -1479,7 +1603,9 @@ export function AppearanceSettingsPanel() {
               <SettingResetButton
                 label="chat wallpaper"
                 onClick={() =>
-                  updateSettings({ chatBackgroundPath: DEFAULT_UNIFIED_SETTINGS.chatBackgroundPath })
+                  updateSettings({
+                    chatBackgroundPath: DEFAULT_UNIFIED_SETTINGS.chatBackgroundPath,
+                  })
                 }
               />
             ) : null
@@ -1489,7 +1615,11 @@ export function AppearanceSettingsPanel() {
               {settings.chatBackgroundPath ? (
                 <div className="flex items-center gap-2">
                   <img
-                    src={isTauri && typeof window !== "undefined" ? convertFileSrc(settings.chatBackgroundPath) : settings.chatBackgroundPath}
+                    src={
+                      isTauri && typeof window !== "undefined"
+                        ? convertFileSrc(settings.chatBackgroundPath)
+                        : settings.chatBackgroundPath
+                    }
                     alt="Wallpaper preview"
                     className="size-9 rounded-md object-cover border border-border shrink-0 shadow-xs"
                   />
@@ -1511,7 +1641,9 @@ export function AppearanceSettingsPanel() {
                 onClick={async () => {
                   try {
                     const selected = await window.desktopBridge?.pickFile?.({
-                      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "gif"] }],
+                      filters: [
+                        { name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "gif"] },
+                      ],
                     });
                     if (typeof selected === "string") {
                       updateSettings({ chatBackgroundPath: selected });
@@ -1603,7 +1735,9 @@ export function AppearanceSettingsPanel() {
             >
               <SelectTrigger size="sm" className="w-full sm:w-40" aria-label="Wallpaper scope">
                 <SelectValue>
-                  {settings.chatBackgroundScope === "empty" ? "Empty sessions only" : "All sessions"}
+                  {settings.chatBackgroundScope === "empty"
+                    ? "Empty sessions only"
+                    : "All sessions"}
                 </SelectValue>
               </SelectTrigger>
               <SelectPopup align="end" alignItemWithTrigger={false}>
@@ -1620,7 +1754,6 @@ export function AppearanceSettingsPanel() {
       </SettingsSection>
 
       <SettingsSection id="appearance-interface" title="Typography & Layout">
-
         <SettingsRow
           {...searchableSetting("setting-pane-gap")}
           description="Outer boundary and spacing between panes."
@@ -1628,9 +1761,7 @@ export function AppearanceSettingsPanel() {
             settings.paneGap !== DEFAULT_UNIFIED_SETTINGS.paneGap ? (
               <SettingResetButton
                 label="pane gap"
-                onClick={() =>
-                  updateSettings({ paneGap: DEFAULT_UNIFIED_SETTINGS.paneGap })
-                }
+                onClick={() => updateSettings({ paneGap: DEFAULT_UNIFIED_SETTINGS.paneGap })}
               />
             ) : null
           }
@@ -1674,9 +1805,7 @@ export function AppearanceSettingsPanel() {
             settings.paneRadius !== DEFAULT_UNIFIED_SETTINGS.paneRadius ? (
               <SettingResetButton
                 label="pane corner radius"
-                onClick={() =>
-                  updateSettings({ paneRadius: DEFAULT_UNIFIED_SETTINGS.paneRadius })
-                }
+                onClick={() => updateSettings({ paneRadius: DEFAULT_UNIFIED_SETTINGS.paneRadius })}
               />
             ) : null
           }
@@ -1724,9 +1853,7 @@ export function AppearanceSettingsPanel() {
             settings.paneShadow !== DEFAULT_UNIFIED_SETTINGS.paneShadow ? (
               <SettingResetButton
                 label="pane shadow"
-                onClick={() =>
-                  updateSettings({ paneShadow: DEFAULT_UNIFIED_SETTINGS.paneShadow })
-                }
+                onClick={() => updateSettings({ paneShadow: DEFAULT_UNIFIED_SETTINGS.paneShadow })}
               />
             ) : null
           }
@@ -1745,11 +1872,7 @@ export function AppearanceSettingsPanel() {
                 }
               }}
             >
-              <SelectTrigger
-                size="sm"
-                className="w-full sm:w-40"
-                aria-label="Pane shadow"
-              >
+              <SelectTrigger size="sm" className="w-full sm:w-40" aria-label="Pane shadow">
                 <SelectValue>
                   {settings.paneGap === 0
                     ? "None (gap = 0)"

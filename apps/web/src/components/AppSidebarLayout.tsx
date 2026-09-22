@@ -256,7 +256,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
             side="left"
             collapsible="offcanvas"
             data-app-sidebar=""
-            className="border-r border-sidebar-border text-sidebar-foreground"
+            className="border-r border-[var(--material-edge)] text-sidebar-foreground"
             resizable={{
               maxWidth: sidebarMaximumWidth,
               minWidth: THREAD_SIDEBAR_MIN_WIDTH,
@@ -267,7 +267,11 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
               onResize: setSidebarWidth,
             }}
           >
-            <MaterialSurface kind="sidebar" className="h-full min-h-0 w-full">
+            <MaterialSurface
+              kind="sidebar"
+              className="flex h-full min-h-0 w-full flex-col"
+              data-tauri-drag-region="deep"
+            >
               {isOnSettings ? <SettingsSidebarNav pathname={pathname} /> : <AcodeSidebar />}
             </MaterialSurface>
             <SidebarRail onDoubleClick={resetSidebarWidth} />

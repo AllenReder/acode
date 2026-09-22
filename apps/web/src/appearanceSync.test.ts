@@ -75,22 +75,24 @@ describe("appearanceSync", () => {
       applyMaterialSettings(
         {
           stageEnabled: true,
-          stageStrength: 65,
-          surfaceOpacity: 88,
+          blurRadius: 24,
+          sidebarOpacity: 65,
+          topbarOpacity: 75,
+          workbenchOpacity: 88,
+          workbenchGlass: true,
+          overlayOpacity: 90,
         },
         root,
       );
 
-      expect(properties.get("--material-stage-strength")).toBe("65");
-      expect(properties.get("--material-surface-opacity")).toBe("0.88");
-      expect(properties.get("--material-sidebar-opacity")).toBe("0.88");
-      expect(properties.get("--material-topbar-opacity")).toBe("0.88");
+      expect(properties.get("--material-sidebar-opacity")).toBe("0.65");
+      expect(properties.get("--material-topbar-opacity")).toBe("0.75");
       expect(properties.get("--material-workbench-opacity")).toBe("0.88");
-      expect(properties.get("--material-overlay-opacity")).toBe("0.88");
+      expect(properties.get("--material-overlay-opacity")).toBe("0.9");
       expect(classes.has("material-stage-native")).toBe(true);
       expect(classes.has("material-stage-opaque")).toBe(false);
       expect(setWindowGlassEnabled).toHaveBeenCalledWith(true);
-      expect(setWindowBackgroundBlur).toHaveBeenCalledWith(34);
+      expect(setWindowBackgroundBlur).toHaveBeenCalledWith(24);
     });
 
     it("falls back to opaque stage variables when native glass is unavailable", () => {
@@ -101,15 +103,18 @@ describe("appearanceSync", () => {
       applyMaterialSettings(
         {
           stageEnabled: true,
-          stageStrength: 65,
-          surfaceOpacity: 88,
+          blurRadius: 24,
+          sidebarOpacity: 65,
+          topbarOpacity: 75,
+          workbenchOpacity: 88,
+          workbenchGlass: true,
+          overlayOpacity: 90,
         },
         root,
       );
 
       expect(classes.has("material-stage-native")).toBe(false);
       expect(classes.has("material-stage-opaque")).toBe(true);
-      expect(properties.get("--material-surface-opacity")).toBe("1");
       expect(properties.get("--material-workbench-opacity")).toBe("1");
     });
   });

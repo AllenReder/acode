@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeAssert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
-import * as NodeFS from "node:fs/promises";
+import * as NodeChildProcess from "node:child_process";
+import * as NodeFSP from "node:fs/promises";
 import * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import { chromium } from "playwright";
+import { verifyWorkbenchAppearance } from "./workbench-appearance-checks.mjs";
 
 // This suite never sends an Agent turn. Promotion coverage must use the ACP
 // mock agent; a future real-provider smoke must opt in, use gpt-5.6-luna at
@@ -158,7 +159,8 @@ function waitForOutput(child, pattern, label) {
 async function stopProcess(child) {
   if (child === null || child.exitCode !== null || child.signalCode !== null) return;
   const exited = new Promise((resolve) => child.once("exit", resolve));
-  if (process.platform === "win32") {
+  // oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone browser harness process-group cleanup.
+  if (NodeOS.platform() === "win32") {
     child.kill("SIGTERM");
   } else {
     process.kill(-child.pid, "SIGTERM");
@@ -167,21 +169,22 @@ async function stopProcess(child) {
     exited.then(() => true),
     new Promise((resolve) => setTimeout(() => resolve(false), 5_000)),
   ]);
-  if (!killed && process.platform !== "win32") {
+  // oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone browser harness process-group cleanup.
+  if (!killed && NodeOS.platform() !== "win32") {
     process.kill(-child.pid, "SIGKILL");
     await exited;
   }
 }
 
 async function main() {
-  const temporaryRoot = await NodeFS.mkdtemp(
+  const temporaryRoot = await NodeFSP.mkdtemp(
     NodePath.join(NodeOS.tmpdir(), "acode-workbench-e2e-"),
   );
   const home = NodePath.join(temporaryRoot, "home");
-  await NodeFS.mkdir(home, { recursive: true });
+  await NodeFSP.mkdir(home, { recursive: true });
 
   const serverPort = await reservePort();
-  const child = spawn(
+  const child = NodeChildProcess.spawn(
     "pnpm",
     [
       "exec",
@@ -196,7 +199,8 @@ async function main() {
     ],
     {
       cwd: repositoryRoot,
-      detached: process.platform !== "win32",
+      // oxlint-disable-next-line t3code/no-global-process-runtime -- This standalone browser harness owns native child process groups.
+      detached: NodeOS.platform() !== "win32",
       env: {
         ...process.env,
         CI: "1",
@@ -217,6 +221,7 @@ async function main() {
       "the isolated daemon pairing URL",
     );
     const pairingUrl = stripAnsi(pairingMatch[1]);
+    console.log("workbench: daemon ready");
     browser = await chromium.launch({
       headless: process.env.WORKBENCH_E2E_HEADED !== "1",
       ...(process.env.PLAYWRIGHT_USE_SYSTEM_CHROME === "1" ? { channel: "chrome" } : {}),
@@ -224,28 +229,36 @@ async function main() {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     await context.addInitScript(() => {
       localStorage.setItem(
-        "t3code:client-settings:v1",
+        "acode:client-settings:v1",
         JSON.stringify({ onboardingCompletedAt: new Date().toISOString() }),
       );
     });
     page = await context.newPage();
+    page.setDefaultTimeout(timeoutMs);
     page.on("pageerror", (error) => pageErrors.push(error));
     page.on("console", (message) => {
       if (message.type() === "error") consoleErrors.push(message.text());
     });
     await page.goto(pairingUrl, { waitUntil: "domcontentloaded" });
+    console.log("workbench: page loaded");
 
     const addProject = page.getByTestId("sidebar-add-project");
     const workspaceRow = page.getByTestId("sidebar-workspace-row").first();
     await workspaceRow.waitFor({ state: "visible", timeout: timeoutMs });
-    await page.locator("header[data-workbench-window-chrome]").waitFor({
+    console.log("workbench: workspace ready");
+    await page.locator("[data-workbench-window-chrome]:not(html)").waitFor({
       state: "visible",
       timeout: timeoutMs,
     });
     NodeAssert.equal(await page.locator(".sidebar-stage-backdrop").count(), 0);
     NodeAssert.equal(await page.getByText("T3 Code", { exact: true }).count(), 0);
 
-    const sidebarToggle = page.getByRole("button", { name: "Toggle sidebar", exact: true });
+    if (process.env.WORKBENCH_E2E_APPEARANCE_ONLY === "1") {
+      await verifyWorkbenchAppearance(page);
+      return;
+    }
+
+    const sidebarToggle = page.getByRole("button", { name: "Toggle main sidebar", exact: true });
     const sidebarToggleBefore = await sidebarToggle.boundingBox();
     await sidebarToggle.click();
     await page.waitForTimeout(400);
@@ -346,9 +359,15 @@ async function main() {
       "Scrolling mode must not render extra Column or Stack control bars.",
     );
     const canvas = page.locator(".workbench-canvas");
-    const initialGap = await canvas.evaluate((el) => getComputedStyle(el).getPropertyValue("--pane-gap").trim());
-    const initialRadius = await canvas.evaluate((el) => getComputedStyle(el).getPropertyValue("--pane-radius").trim());
-    const initialShadow = await canvas.evaluate((el) => getComputedStyle(el).getPropertyValue("--pane-shadow").trim());
+    const initialGap = await canvas.evaluate((el) =>
+      getComputedStyle(el).getPropertyValue("--pane-gap").trim(),
+    );
+    const initialRadius = await canvas.evaluate((el) =>
+      getComputedStyle(el).getPropertyValue("--pane-radius").trim(),
+    );
+    const initialShadow = await canvas.evaluate((el) =>
+      getComputedStyle(el).getPropertyValue("--pane-shadow").trim(),
+    );
     NodeAssert.equal(initialGap, "0px");
     NodeAssert.equal(initialRadius, "0px");
     NodeAssert.equal(initialShadow, "none");
@@ -702,7 +721,7 @@ async function main() {
     await titleInput.fill("Pinned workbench");
     await titleInput.press("Enter");
     await page.reload({ waitUntil: "domcontentloaded" });
-    await page.locator("header[data-workbench-window-chrome]").waitFor({
+    await page.locator("[data-workbench-window-chrome]:not(html)").waitFor({
       state: "visible",
       timeout: timeoutMs,
     });
@@ -738,7 +757,7 @@ async function main() {
     await browser?.close();
     await stopProcess(child);
     if (!keepTemporary) {
-      await NodeFS.rm(temporaryRoot, { recursive: true, force: true });
+      await NodeFSP.rm(temporaryRoot, { recursive: true, force: true });
     } else {
       console.log(`kept workbench E2E data at ${temporaryRoot}`);
     }
