@@ -5,12 +5,22 @@
 // This module is also the small standalone launcher called by the native
 // desktop shell. Keep its process and filesystem boundary on Node built-ins so
 // it can start the server before the rest of the server runtime is loadable.
+// Its one non-built-in import is the dependency-free port contract in
+// `@t3tools/shared/daemonPort`: the desktop dev wrapper resolves the same daemon
+// port for the web dev proxy, so a second copy here silently disagreed with it
+// (issue #87). Keep that import free of transitive runtime dependencies.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeNet from "node:net";
 import * as NodePath from "node:path";
+
+import {
+  describeInvalidDaemonPort,
+  resolveDaemonPortRequest,
+  type DaemonPortRequest,
+} from "@t3tools/shared/daemonPort";
 
 import {
   LOCAL_DAEMON_HANDSHAKE_PATH,
@@ -103,6 +113,16 @@ export interface LocalDaemonStopOptions {
   readonly requestTimeoutMs?: number;
   readonly stopTimeoutMs?: number;
 }
+
+export type LocalDaemonStopResult =
+  | { readonly status: "absent" | "stale"; readonly daemonId?: string }
+  | {
+      readonly status: "confirmation-required";
+      readonly daemonId: string;
+      readonly pid: number;
+      readonly activeWork: boolean | "unknown";
+    }
+  | { readonly status: "stopped"; readonly daemonId: string; readonly pid: number };
 
 export class LocalDaemonError extends Error {
   readonly code: string;
@@ -493,23 +513,71 @@ const inspectionError = (inspection: Exclude<LocalDaemonInspection, { status: "r
   }
 };
 
-async function reserveLoopbackPort(): Promise<number> {
-  const preferredPortRaw =
-    process.env.ACODE_DAEMON_PORT ||
-    process.env.ACODE_PORT ||
-    process.env.T3CODE_DAEMON_PORT ||
-    process.env.T3CODE_PORT;
-  const preferredPort = preferredPortRaw ? Number(preferredPortRaw) : NaN;
-  if (Number.isInteger(preferredPort) && preferredPort > 0) {
-    const server = NodeNet.createServer();
-    const canListen = await new Promise<boolean>((resolve) => {
-      server.once("error", () => resolve(false));
-      server.listen(preferredPort, "127.0.0.1", () => {
-        server.close(() => resolve(true));
-      });
+const canListenOnLoopback = async (port: number): Promise<boolean> => {
+  const server = NodeNet.createServer();
+  return new Promise<boolean>((resolve) => {
+    server.once("error", () => resolve(false));
+    server.listen(port, "127.0.0.1", () => {
+      server.close(() => resolve(true));
     });
-    if (canListen) {
-      return preferredPort;
+  });
+};
+
+/**
+ * The daemon port a caller asked for, and whether that request is a contract.
+ *
+ * The key list and its precedence live in `@t3tools/shared/daemonPort`, because
+ * the desktop dev wrapper must resolve the very same port for the web dev proxy;
+ * two copies silently disagreed and left the proxy dialing a port nothing served
+ * while a healthy daemon listened elsewhere. This is the launcher's validated
+ * read of that contract: the shared shape, with an unusable value already
+ * reported as the launcher's own error.
+ */
+export function requestedDaemonPort(env: NodeJS.ProcessEnv = process.env): DaemonPortRequest {
+  const request = resolveDaemonPortRequest(env);
+  if (request._tag === "invalid") {
+    throw new LocalDaemonError("daemon-port-invalid", describeInvalidDaemonPort(request));
+  }
+  return request;
+}
+
+type SetDaemonPortRequest = Extract<DaemonPortRequest, { readonly _tag: "set" }>;
+
+const daemonPortUnavailableMessage = (key: string, port: number): string =>
+  `${key}=${String(port)} is already in use, and a configured daemon port is a contract: the desktop shell and the web dev server both address the daemon there, so binding another port would leave every proxied request unanswered. Free it (\`lsof -nP -iTCP:${String(port)} -sTCP:LISTEN\`) or unset ${key} to let the launcher choose a free port.`;
+
+const throwDaemonPortUnavailable = (requested: SetDaemonPortRequest): never => {
+  throw new LocalDaemonError(
+    "daemon-port-unavailable",
+    daemonPortUnavailableMessage(requested.key, requested.port),
+  );
+};
+
+/**
+ * Refuse a start that cannot honour a *required* daemon port before it stops
+ * anything.
+ *
+ * Reconciliation below stops the daemon that runs on a different port, and only
+ * then reserves the port to replace it — where a foreign process holding that
+ * number fails the start. Failing after the stop would take a working daemon
+ * down and leave nothing running, so the contract is checked up front. A
+ * preference port is deliberately not checked here: falling back to a free port
+ * is its documented behaviour.
+ */
+async function assertRequestedPortAvailable(requested: DaemonPortRequest): Promise<void> {
+  if (requested._tag !== "set" || !requested.required) return;
+  if (await canListenOnLoopback(requested.port)) return;
+  throwDaemonPortUnavailable(requested);
+}
+
+async function reserveLoopbackPort(): Promise<number> {
+  const requested = requestedDaemonPort();
+  if (requested._tag === "set") {
+    if (await canListenOnLoopback(requested.port)) {
+      return requested.port;
+    }
+    if (requested.required) {
+      throwDaemonPortUnavailable(requested);
     }
   }
 
@@ -698,17 +766,22 @@ export async function startLocalDaemon(
     const existing = await inspectLocalDaemon(options.baseDir, {
       requestTimeoutMs: options.requestTimeoutMs,
     });
-    const preferredPortRaw =
-      process.env.ACODE_DAEMON_PORT || process.env.T3CODE_DAEMON_PORT || process.env.T3CODE_PORT;
-    const preferredPort = preferredPortRaw ? Number(preferredPortRaw) : NaN;
+    // Resolved through the same helper as `reserveLoopbackPort`, because a
+    // disagreement between the two would make the launcher stop a daemon and
+    // then rebind the very port it just gave up.
+    const requested = requestedDaemonPort();
 
     if (existing.status === "ready") {
-      if (Number.isInteger(preferredPort) && preferredPort > 0) {
+      if (requested._tag === "set") {
         const existingPort = Number(new URL(existing.state.origin).port);
-        if (existingPort === preferredPort) {
+        if (existingPort === requested.port) {
           return descriptorFromState(existing.state);
         }
-        await stopLocalDaemon({ baseDir: options.baseDir, confirm: true });
+        await assertRequestedPortAvailable(requested);
+        // Already inside the launch lock: re-entering it from this process can
+        // never succeed, because the lock record names this very pid, so a
+        // nested `stopLocalDaemon` would spin until `launch-lock-timeout`.
+        await stopLocalDaemonLocked({ baseDir: options.baseDir, confirm: true });
       } else {
         return descriptorFromState(existing.state);
       }
@@ -760,81 +833,94 @@ export async function inspectAndFormatLocalDaemon(baseDir: string): Promise<Loca
   return inspectLocalDaemon(baseDir);
 }
 
-export async function stopLocalDaemon(options: LocalDaemonStopOptions): Promise<
-  | { readonly status: "absent" | "stale"; readonly daemonId?: string }
-  | {
-      readonly status: "confirmation-required";
-      readonly daemonId: string;
-      readonly pid: number;
-      readonly activeWork: boolean | "unknown";
-    }
-  | { readonly status: "stopped"; readonly daemonId: string; readonly pid: number }
-> {
-  return withLocalDaemonLaunchLock(options.baseDir, async () => {
-    const inspection = await inspectLocalDaemon(options.baseDir, {
-      verifyCredential: false,
-      requestTimeoutMs: options.requestTimeoutMs,
-    });
-    if (inspection.status === "absent") return { status: "absent" };
-    if (inspection.status === "stale")
-      return { status: "stale", daemonId: inspection.state.daemonId };
-    if (inspection.status !== "ready") throw inspectionError(inspection);
+/**
+ * Stop the recorded daemon, acquiring the launch lock first.
+ *
+ * Callers that already hold the lock for a wider sequence must use
+ * {@link stopLocalDaemonLocked} instead — see startLocalDaemon.
+ */
+export async function stopLocalDaemon(
+  options: LocalDaemonStopOptions,
+): Promise<LocalDaemonStopResult> {
+  return withLocalDaemonLaunchLock(options.baseDir, () => stopLocalDaemonLocked(options));
+}
 
-    const { state } = inspection;
-    const revalidated = await inspectLocalDaemon(options.baseDir, {
-      verifyCredential: false,
-      requestTimeoutMs: options.requestTimeoutMs,
-    });
-    if (
-      revalidated.status !== "ready" ||
-      revalidated.state.daemonId !== state.daemonId ||
-      revalidated.state.pid !== state.pid
-    ) {
-      throw new LocalDaemonError(
-        "daemon-ownership-changed",
-        "The daemon identity changed before the explicit stop request; refusing to signal the recorded PID.",
-      );
-    }
-    if (!options.confirm) {
-      return {
-        status: "confirmation-required",
-        daemonId: revalidated.state.daemonId,
-        pid: revalidated.state.pid,
-        activeWork: revalidated.activeWork ?? "unknown",
-      };
-    }
-
-    try {
-      process.kill(state.pid, "SIGTERM");
-    } catch (cause) {
-      throw new LocalDaemonError(
-        "daemon-stop-failed",
-        cause instanceof Error ? cause.message : "Could not signal the local daemon.",
-      );
-    }
-
-    const deadline = Date.now() + (options.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS);
-    while (isProcessAlive(state.pid) && Date.now() < deadline) {
-      await delay(50);
-    }
-    if (isProcessAlive(state.pid)) {
-      try {
-        process.kill(state.pid, "SIGKILL");
-      } catch {
-        throw new LocalDaemonError(
-          "daemon-stop-timeout",
-          "The local daemon did not exit after the explicit stop request.",
-        );
-      }
-    }
-
-    const paths = deriveLocalDaemonPaths(options.baseDir);
-    const after = await readDiscovery(paths);
-    if (after.state?.daemonId === state.daemonId && after.state.pid === state.pid) {
-      await NodeFSP.rm(paths.runtimeStatePath, { force: true });
-    }
-    return { status: "stopped", daemonId: state.daemonId, pid: state.pid };
+/**
+ * Stop the recorded daemon while the caller holds the launch lock.
+ *
+ * `withLocalDaemonLaunchLock` is a file lock keyed on the data root, and its
+ * recovery path treats a record whose pid is still alive as an owner: from
+ * inside this same process that pid is *ours*, so a nested acquisition can
+ * never break the lock and only ends in `launch-lock-timeout` after
+ * LOCK_TIMEOUT_MS. Nesting is therefore explicit — the lock is taken once by
+ * the outermost operation and the inner steps run against this variant.
+ */
+async function stopLocalDaemonLocked(
+  options: LocalDaemonStopOptions,
+): Promise<LocalDaemonStopResult> {
+  const inspection = await inspectLocalDaemon(options.baseDir, {
+    verifyCredential: false,
+    requestTimeoutMs: options.requestTimeoutMs,
   });
+  if (inspection.status === "absent") return { status: "absent" };
+  if (inspection.status === "stale")
+    return { status: "stale", daemonId: inspection.state.daemonId };
+  if (inspection.status !== "ready") throw inspectionError(inspection);
+
+  const { state } = inspection;
+  const revalidated = await inspectLocalDaemon(options.baseDir, {
+    verifyCredential: false,
+    requestTimeoutMs: options.requestTimeoutMs,
+  });
+  if (
+    revalidated.status !== "ready" ||
+    revalidated.state.daemonId !== state.daemonId ||
+    revalidated.state.pid !== state.pid
+  ) {
+    throw new LocalDaemonError(
+      "daemon-ownership-changed",
+      "The daemon identity changed before the explicit stop request; refusing to signal the recorded PID.",
+    );
+  }
+  if (!options.confirm) {
+    return {
+      status: "confirmation-required",
+      daemonId: revalidated.state.daemonId,
+      pid: revalidated.state.pid,
+      activeWork: revalidated.activeWork ?? "unknown",
+    };
+  }
+
+  try {
+    process.kill(state.pid, "SIGTERM");
+  } catch (cause) {
+    throw new LocalDaemonError(
+      "daemon-stop-failed",
+      cause instanceof Error ? cause.message : "Could not signal the local daemon.",
+    );
+  }
+
+  const deadline = Date.now() + (options.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS);
+  while (isProcessAlive(state.pid) && Date.now() < deadline) {
+    await delay(50);
+  }
+  if (isProcessAlive(state.pid)) {
+    try {
+      process.kill(state.pid, "SIGKILL");
+    } catch {
+      throw new LocalDaemonError(
+        "daemon-stop-timeout",
+        "The local daemon did not exit after the explicit stop request.",
+      );
+    }
+  }
+
+  const paths = deriveLocalDaemonPaths(options.baseDir);
+  const after = await readDiscovery(paths);
+  if (after.state?.daemonId === state.daemonId && after.state.pid === state.pid) {
+    await NodeFSP.rm(paths.runtimeStatePath, { force: true });
+  }
+  return { status: "stopped", daemonId: state.daemonId, pid: state.pid };
 }
 
 export function localDaemonResultForJson(value: unknown): string {

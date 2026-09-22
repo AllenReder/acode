@@ -1,6 +1,7 @@
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
 
+import { resolveDesktopDevPorts } from "../../../packages/shared/src/daemonPort.ts";
 import {
   nodeEntryInvocation,
   resolvePackageEntry,
@@ -14,6 +15,15 @@ const desktopRoot = NodePath.resolve(
 const repositoryRoot = NodePath.resolve(desktopRoot, "../..");
 const inheritedHome = process.env.ACODE_HOME?.trim() || process.env.T3CODE_HOME?.trim();
 const developmentHome = inheritedHome || NodePath.resolve(repositoryRoot, ".acode");
+
+// Daemon port, web dev proxy target, and the window URL all come from the one
+// resolution in `@t3tools/shared/daemonPort`, so they cannot disagree.
+const resolvedPorts = resolveDesktopDevPorts(process.env);
+if (resolvedPorts._tag === "invalid") {
+  console.error(`[acode] ${resolvedPorts.message}`);
+  process.exit(1);
+}
+const { daemonPort, webPort } = resolvedPorts.ports;
 const cliArgs = process.argv.slice(2);
 const hasExplicitConfig = cliArgs.some((argument) => argument === "--config" || argument === "-c");
 const tauriArgs =
@@ -22,6 +32,10 @@ const tauriArgs =
         cliArgs[0],
         "--config",
         NodePath.resolve(desktopRoot, "src-tauri/tauri.dev.conf.json"),
+        // The window must load the web dev port, not the literal `devUrl` in
+        // tauri.conf.json. Merged last on purpose: a later `--config` value wins.
+        "--config",
+        JSON.stringify({ build: { devUrl: `http://localhost:${String(webPort)}` } }),
         ...cliArgs.slice(1),
       ]
     : cliArgs;
@@ -38,8 +52,15 @@ function launchTauriCli() {
       ...process.env,
       ACODE_HOME: developmentHome,
       T3CODE_HOME: process.env.T3CODE_HOME?.trim() || developmentHome,
-      T3CODE_PORT_OFFSET: process.env.T3CODE_PORT_OFFSET?.trim() || "0",
-      T3CODE_PORT: process.env.T3CODE_PORT?.trim() || "13773",
+      T3CODE_PORT_OFFSET: String(resolvedPorts.ports.offset),
+      // Pinned as a requirement, not a preference: the web dev proxy addresses
+      // the daemon by this number, so a daemon that took a different one would
+      // answer nothing. The launcher fails loudly instead of drifting.
+      ACODE_DAEMON_PORT: String(daemonPort),
+      T3CODE_PORT: String(daemonPort),
+      // The web dev server must keep the port the window loads: walking to the
+      // next free number would leave it serving a URL nothing reads.
+      T3CODE_STRICT_DEV_PORTS: process.env.T3CODE_STRICT_DEV_PORTS?.trim() || "1",
     },
     failureLabel: "Unable to start the Tauri CLI",
   });

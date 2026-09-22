@@ -273,22 +273,46 @@ fn invoke_local_daemon(action: &str, base_dir: &Path, confirm: bool) -> Result<V
     let output = command
         .output()
         .map_err(|_| "Could not start the ACode local daemon launcher.".to_owned())?;
-    if !output.status.success() {
-        return Err("The ACode local daemon launcher failed.".to_owned());
+
+    // The launcher reports a failed operation as
+    // `{"ok":false,"error":{code,message}}` on stdout *and* exits non-zero.
+    // Reading that payload instead of replacing it with a generic sentence is
+    // what keeps a failed daemon launch diagnosable: the code names the
+    // mechanism (`launch-lock-timeout`, `daemon-port-unavailable`, ...), and
+    // the message carries the operator's next step. Losing it turned every
+    // launch failure into an unexplained dead proxy port in the web client.
+    if let Ok(value) = serde_json::from_slice::<Value>(&output.stdout) {
+        if value.get("ok").and_then(Value::as_bool) == Some(false) {
+            return Err(describe_daemon_launcher_failure(&value));
+        }
+        if output.status.success() {
+            return Ok(value);
+        }
     }
 
-    let value: Value = serde_json::from_slice(&output.stdout)
-        .map_err(|_| "The ACode local daemon launcher returned an invalid response.".to_owned())?;
-    if value.get("ok").and_then(Value::as_bool) == Some(false) {
-        return Err(value
-            .get("error")
-            .and_then(Value::as_object)
-            .and_then(|error| error.get("message"))
-            .and_then(Value::as_str)
-            .unwrap_or("The ACode local daemon launcher rejected the request.")
-            .to_owned());
+    if !output.status.success() {
+        let detail = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        return Err(if detail.is_empty() {
+            "The ACode local daemon launcher failed.".to_owned()
+        } else {
+            format!("The ACode local daemon launcher failed: {detail}")
+        });
     }
-    Ok(value)
+
+    Err("The ACode local daemon launcher returned an invalid response.".to_owned())
+}
+
+fn describe_daemon_launcher_failure(value: &Value) -> String {
+    let error = value.get("error").and_then(Value::as_object);
+    let code = error
+        .and_then(|error| error.get("code"))
+        .and_then(Value::as_str)
+        .unwrap_or("daemon-launch-failed");
+    let message = error
+        .and_then(|error| error.get("message"))
+        .and_then(Value::as_str)
+        .unwrap_or("The local daemon launcher rejected the request.");
+    format!("The ACode local daemon launcher failed ({code}): {message}")
 }
 
 fn normalize_local_origin(raw: &str, expected_schemes: &[&str]) -> Result<String, String> {
@@ -595,6 +619,26 @@ mod tests {
         assert_eq!(
             websocket_origin_from_http("http://127.0.0.1:3773/").expect("valid HTTP origin"),
             "ws://127.0.0.1:3773/"
+        );
+    }
+
+    #[test]
+    fn keeps_the_launcher_failure_code_and_message() {
+        let value: Value = serde_json::from_str(
+            r#"{"ok":false,"error":{"code":"launch-lock-timeout","message":"Another local daemon operation did not finish before the launch lock expired."}}"#,
+        )
+        .expect("launcher failure envelope");
+        let message = describe_daemon_launcher_failure(&value);
+        assert!(message.contains("launch-lock-timeout"), "{message}");
+        assert!(message.contains("launch lock expired"), "{message}");
+    }
+
+    #[test]
+    fn describes_a_launcher_failure_without_an_error_payload() {
+        let value: Value = serde_json::from_str(r#"{"ok":false}"#).expect("empty failure");
+        assert_eq!(
+            describe_daemon_launcher_failure(&value),
+            "The ACode local daemon launcher failed (daemon-launch-failed): The local daemon launcher rejected the request."
         );
     }
 

@@ -764,6 +764,70 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         assert.deepStrictEqual(offsets, { serverOffset: 0, webOffset: 0 });
       }),
     );
+
+    // Pinned ports are what the desktop dev app addresses: the Tauri window URL
+    // and the backend its Vite proxy dials are literals. Walking to the next free
+    // number there does not "just work" — the window keeps loading the configured
+    // URL and silently attaches to whatever already serves it, which reads as a
+    // broken backend instead of a port conflict.
+    it.effect("refuses to walk off a pinned web port for dev:web", () =>
+      Effect.gen(function* () {
+        const error = yield* resolveModePortOffsets({
+          mode: "dev:web",
+          startOffset: 0,
+          hasExplicitServerPort: false,
+          hasExplicitDevUrl: false,
+          strictPorts: true,
+          checkPortAvailability: (port) => Effect.succeed(port !== 5733),
+        }).pipe(Effect.flip);
+
+        if (error._tag !== "DevRunnerPortUnavailableError") {
+          assert.fail(`Unexpected error: ${error._tag}`);
+        }
+        assert.equal(error.port, 5733);
+        assert.equal(error.role, "web");
+        assert.equal(error.mode, "dev:web");
+      }),
+    );
+
+    it.effect("keeps pinned ports when they are free and follows the offset", () =>
+      Effect.gen(function* () {
+        const probed: number[] = [];
+        const offsets = yield* resolveModePortOffsets({
+          mode: "dev:web",
+          startOffset: 2,
+          hasExplicitServerPort: false,
+          hasExplicitDevUrl: false,
+          strictPorts: true,
+          checkPortAvailability: (port) => {
+            probed.push(port);
+            return Effect.succeed(true);
+          },
+        });
+
+        assert.deepStrictEqual(offsets, { serverOffset: 2, webOffset: 2 });
+        assert.deepStrictEqual(probed, [5735]);
+      }),
+    );
+
+    it.effect("checks both pinned ports for dev mode", () =>
+      Effect.gen(function* () {
+        const error = yield* resolveModePortOffsets({
+          mode: "dev",
+          startOffset: 0,
+          hasExplicitServerPort: false,
+          hasExplicitDevUrl: false,
+          strictPorts: true,
+          checkPortAvailability: (_port, role) => Effect.succeed(role === "web"),
+        }).pipe(Effect.flip);
+
+        if (error._tag !== "DevRunnerPortUnavailableError") {
+          assert.fail(`Unexpected error: ${error._tag}`);
+        }
+        assert.equal(error.port, 13_773);
+        assert.equal(error.role, "server");
+      }),
+    );
   });
 
   describe("runDevRunnerWithInput", () => {
@@ -784,7 +848,11 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         if (error._tag !== "DevRunnerConfigurationError") {
           assert.fail(`Unexpected error: ${error._tag}`);
         }
-        assert.deepStrictEqual(error.configKeys, ["T3CODE_PORT_OFFSET", "T3CODE_DEV_INSTANCE"]);
+        assert.deepStrictEqual(error.configKeys, [
+          "T3CODE_PORT_OFFSET",
+          "T3CODE_DEV_INSTANCE",
+          "T3CODE_STRICT_DEV_PORTS",
+        ]);
         assert.ok(error.cause !== undefined);
         assert.ok(!error.message.includes(String((error.cause as Error).message)));
       }),

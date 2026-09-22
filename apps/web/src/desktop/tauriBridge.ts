@@ -229,7 +229,10 @@ const createTauriDesktopBridge = (): DesktopBridge => {
       return typeof selected === "string" ? selected : null;
     },
     pickFile: async (options?: {
-      readonly filters?: ReadonlyArray<{ readonly name: string; readonly extensions: ReadonlyArray<string> }>;
+      readonly filters?: ReadonlyArray<{
+        readonly name: string;
+        readonly extensions: ReadonlyArray<string>;
+      }>;
       readonly initialPath?: string;
     }): Promise<string | null> => {
       const selected = await openDialog({
@@ -355,6 +358,13 @@ if (isTauri) {
       // Keep rendering so the client can show its normal disconnected/auth
       // state instead of turning a missing daemon descriptor into a blank app.
       localEnvironmentConfigError = error;
+      // Say why, loudly: a missing bootstrap otherwise only shows up as the
+      // primary target falling back to the window origin, where the proxy dials a
+      // backend port nothing serves. The shell reports the launcher's own code.
+      console.error(
+        `[acode] the local daemon runtime config failed: ${error instanceof Error ? error.message : String(error)}`,
+        error,
+      );
     });
 }
 

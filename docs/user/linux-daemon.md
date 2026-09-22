@@ -212,5 +212,5 @@ systemctl --user status acode.service
 ## Diagnostics and Troubleshooting
 
 - **Node version too low**: The launcher aborts with `Error: Node.js version 22+ is required (found v...)`. Upgrade Node.js via your distribution package manager, `fnm`, or `nvm`.
-- **Port Conflict**: If port 3773 is occupied, specify an alternate port via `ACODE_DAEMON_PORT=<port>` or `ACODE_PORT=<port>`.
+- **Port Conflict**: `ACODE_DAEMON_PORT` and `T3CODE_DAEMON_PORT` are requirements, not preferences. If the port they name is occupied, `daemon start` fails and names the port instead of binding a different one, because the runtime descriptor and every client address the daemon by the configured port. `ACODE_PORT` (and `T3CODE_PORT`) stay preferences and still fall back to a free port when busy. Free the port or choose another number with `ACODE_DAEMON_PORT=<port>`. The failure carries the code `daemon-port-unavailable` with `--json`; without it, the same message is printed as plain text.
 - **Stale Discovery**: If the server machine crashed unexpectedly, `acode daemon status` detects whether the recorded PID is dead and reports `stale`. Running `acode daemon start` safely clears stale locks and launches a fresh daemon.
