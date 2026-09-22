@@ -8,12 +8,8 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import { chromium } from "playwright";
 import { nodeEntryInvocation, withNodeModulesBin } from "./lib/spawn-command.ts";
-import {
-  createProcessTreePort,
-  removePathWithRetry,
-  runTeardownSteps,
-  stopProcessTree,
-} from "./lib/process-teardown.ts";
+import { createProcessTreePort, stopProcessTree } from "./lib/process-tree.ts";
+import { removePathWithRetry, runTeardownSteps } from "./lib/teardown-steps.ts";
 import { verifyWorkbenchAppearance } from "./workbench-appearance-checks.mjs";
 
 // This suite never sends an Agent turn. Promotion coverage must use the ACP
@@ -186,10 +182,17 @@ async function stopDaemonProcessTree(child) {
     rootExited: waitForChildExit(child),
   });
   const result = await stopProcessTree({ port, rootPid: child.pid });
-  if (result.descendants.status === "skipped" && result.descendants.reason !== "not-required") {
-    console.error(
-      `workbench: could not track daemon descendants (${result.descendants.reason}); only the runner's own tree was signalled`,
-    );
+  if (result.descendants.status === "skipped") {
+    if (result.descendants.reason === "root-exited") {
+      console.error(
+        "workbench: the dev runner had already exited, so the daemon tree it left behind could not be tracked or stopped",
+      );
+    }
+    if (result.descendants.reason === "enumeration-unavailable") {
+      console.error(
+        "workbench: could not read the process table, so the runner's own tree was force-killed without a descendant sweep",
+      );
+    }
   }
   if (result.survivors.length > 0) {
     console.error(`workbench: daemon processes survived teardown: ${result.survivors.join(", ")}`);
