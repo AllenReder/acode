@@ -5,12 +5,18 @@
 // This module is also the small standalone launcher called by the native
 // desktop shell. Keep its process and filesystem boundary on Node built-ins so
 // it can start the server before the rest of the server runtime is loadable.
+// Its one non-built-in import is the dependency-free port contract in
+// `@t3tools/shared/daemonPort`: the desktop dev wrapper resolves the same daemon
+// port for the web dev proxy, so a second copy here silently disagreed with it
+// (issue #87). Keep that import free of transitive runtime dependencies.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeNet from "node:net";
 import * as NodePath from "node:path";
+
+import { describeInvalidDaemonPort, resolveDaemonPortRequest } from "@t3tools/shared/daemonPort";
 
 import {
   LOCAL_DAEMON_HANDSHAKE_PATH,
@@ -516,16 +522,11 @@ const canListenOnLoopback = async (port: number): Promise<boolean> => {
 /**
  * The daemon port a caller asked for, and whether that request is a contract.
  *
- * `ACODE_DAEMON_PORT`/`T3CODE_DAEMON_PORT` name the daemon port itself, so the
- * operator is stating where the daemon must live; a daemon that cannot take
- * that number has to fail loudly instead of binding somewhere else. The
- * `pnpm dev:app` wrapper depends on exactly that: it pins the daemon to the
- * port the web dev server proxies to, and a silent fallback used to leave the
- * proxy dialing an empty port while a healthy daemon listened elsewhere.
- *
- * `ACODE_PORT`/`T3CODE_PORT` stay preferences: `T3CODE_PORT` is the web dev
- * runner's general server port, and a leftover listener on it must not stop
- * `pnpm dev` from starting on a free port.
+ * The key list and its precedence live in `@t3tools/shared/daemonPort`, because
+ * the desktop dev wrapper must resolve the very same port for the web dev proxy.
+ * Two copies silently disagreed, so the proxy dialed a port nothing served while
+ * a healthy daemon listened elsewhere. This maps the shared request onto the
+ * launcher's own error type.
  */
 export interface RequestedDaemonPort {
   readonly port: number | undefined;
@@ -533,28 +534,14 @@ export interface RequestedDaemonPort {
   readonly source: string | undefined;
 }
 
-const DAEMON_PORT_KEYS: ReadonlyArray<{ readonly key: string; readonly required: boolean }> = [
-  { key: "ACODE_DAEMON_PORT", required: true },
-  { key: "ACODE_PORT", required: false },
-  { key: "T3CODE_DAEMON_PORT", required: true },
-  { key: "T3CODE_PORT", required: false },
-];
-
 export function requestedDaemonPort(env: NodeJS.ProcessEnv = process.env): RequestedDaemonPort {
-  for (const { key, required } of DAEMON_PORT_KEYS) {
-    const raw = env[key]?.trim();
-    if (raw === undefined || raw.length === 0) continue;
-    const port = Number(raw);
-    if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
-      throw new LocalDaemonError(
-        "daemon-port-invalid",
-        `${key} must be a port number between 1 and 65535; received "${raw}".`,
-      );
-    }
-    return { port, required, source: key };
+  const request = resolveDaemonPortRequest(env);
+  if (request._tag === "invalid") {
+    throw new LocalDaemonError("daemon-port-invalid", describeInvalidDaemonPort(request));
   }
-
-  return { port: undefined, required: false, source: undefined };
+  return request._tag === "set"
+    ? { port: request.port, required: request.required, source: request.key }
+    : { port: undefined, required: false, source: undefined };
 }
 
 async function reserveLoopbackPort(): Promise<number> {

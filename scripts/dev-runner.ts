@@ -3,6 +3,7 @@
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NetService from "@t3tools/shared/Net";
+import { BASE_DAEMON_PORT, BASE_WEB_DEV_PORT } from "@t3tools/shared/daemonPort";
 import { resolveGitWorktreePath } from "@t3tools/shared/devHome";
 import { HostProcessEnvironment, HostProcessWorkingDirectory } from "@t3tools/shared/hostProcess";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
@@ -22,8 +23,11 @@ import { loadRepoEnv } from "./lib/public-config.ts";
 
 Object.assign(process.env, loadRepoEnv());
 
-const BASE_SERVER_PORT = 13773;
-const BASE_WEB_PORT = 5733;
+// Base ports come from the shared daemon-port contract: the desktop dev wrapper
+// derives the same pair for the window URL and the daemon port, so a number that
+// changed here alone would desynchronize them.
+const BASE_SERVER_PORT = BASE_DAEMON_PORT;
+const BASE_WEB_PORT = BASE_WEB_DEV_PORT;
 const MAX_HASH_OFFSET = 3000;
 const MAX_PORT = 65535;
 // HTTP(S) requests to these ports are blocked by the Fetch standard before a
