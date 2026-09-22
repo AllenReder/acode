@@ -9,6 +9,7 @@ import {
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { RotateCcwIcon } from "lucide-react";
 import { Button } from "../components/ui/button";
+import { MaterialSurface } from "../components/MaterialSurface";
 import { useSettingsRestore } from "../components/settings/SettingsPanels";
 
 import { SettingsBreadcrumb } from "../components/settings/SettingsBreadcrumb";
@@ -153,37 +154,42 @@ function SettingsContentLayout() {
   }, [navigateBackWithinApp]);
 
   return (
-    <SidebarInset data-workbench-root="" className="workbench-glass h-dvh min-h-0 overflow-hidden overscroll-y-none text-foreground isolate">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-transparent text-foreground">
-        <WorkspacePageHeader electron={isElectron} className="bg-transparent">
-          <div className="flex w-full items-center gap-3">
-            <SettingsBreadcrumb
-              pathname={location.pathname}
-              scope={
-                showScope
-                  ? { value: search, groups, environments, onChange: selectScope }
-                  : undefined
-              }
-            />
-            {location.pathname === "/settings/general" ? (
-              <div className="ms-auto flex shrink-0 items-center">
-                <RestoreDeviceDefaultsButton
-                  onRestored={() => setRestoreSignal((value) => value + 1)}
-                />
-              </div>
-            ) : null}
-          </div>
-        </WorkspacePageHeader>
+    <SidebarInset
+      data-workbench-root=""
+      className="h-dvh min-h-0 overflow-hidden overscroll-y-none text-foreground isolate"
+    >
+      <MaterialSurface kind="workbench" className="h-dvh min-h-0">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col text-foreground">
+          <WorkspacePageHeader electron={isElectron}>
+            <div className="flex w-full items-center gap-3">
+              <SettingsBreadcrumb
+                pathname={location.pathname}
+                scope={
+                  showScope
+                    ? { value: search, groups, environments, onChange: selectScope }
+                    : undefined
+                }
+              />
+              {location.pathname === "/settings/general" ? (
+                <div className="ms-auto flex shrink-0 items-center">
+                  <RestoreDeviceDefaultsButton
+                    onRestored={() => setRestoreSignal((value) => value + 1)}
+                  />
+                </div>
+              ) : null}
+            </div>
+          </WorkspacePageHeader>
 
-        <div
-          key={`${JSON.stringify(search)}:${restoreSignal}`}
-          className="min-h-0 flex flex-1 flex-col"
-        >
-          <SettingsScopeBoundary pathname={location.pathname}>
-            <Outlet />
-          </SettingsScopeBoundary>
+          <div
+            key={`${JSON.stringify(search)}:${restoreSignal}`}
+            className="min-h-0 flex flex-1 flex-col"
+          >
+            <SettingsScopeBoundary pathname={location.pathname}>
+              <Outlet />
+            </SettingsScopeBoundary>
+          </div>
         </div>
-      </div>
+      </MaterialSurface>
     </SidebarInset>
   );
 }

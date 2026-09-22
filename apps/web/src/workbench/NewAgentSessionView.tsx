@@ -123,7 +123,7 @@ export function NewAgentSessionView({
   }
 
   return (
-    <div className="chat-pane-background is-empty-session relative flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col">
       <ChatView
       environmentId={target.environmentId}
       threadId={draft.threadId}

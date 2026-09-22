@@ -12,7 +12,7 @@ export function GlassBackdrop({
     <div
       aria-hidden="true"
       className={cn(
-        "pointer-events-none absolute inset-0 z-0 rounded-[inherit] backdrop-blur-xl bg-background/60",
+        "pointer-events-none absolute inset-0 z-0 rounded-[inherit]",
         className,
       )}
     />

@@ -3,6 +3,7 @@ import { Columns3Icon, PanelsTopLeftIcon, PlusIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { cn, isMacPlatform } from "../lib/utils";
+import { MaterialSurface } from "../components/MaterialSurface";
 import { useSidebarVisibility } from "../components/ui/sidebar";
 import {
   COLLAPSED_TABS_INSET_MAC,
@@ -73,8 +74,9 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
       : COLLAPSED_TABS_INSET_WIN;
 
   return (
-    <header
-      className="drag-region flex h-[var(--workbench-titlebar-height,36px)] w-full shrink-0 items-center border-b border-border/60 bg-background/40 z-30"
+    <MaterialSurface
+      kind="topbar"
+      className="drag-region flex h-[var(--workbench-titlebar-height,36px)] w-full shrink-0 items-center border-b border-border/60 z-30"
       data-tauri-drag-region
       data-workbench-window-chrome=""
     >
@@ -98,7 +100,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
         ) : null}
       </div>
 
-      <div className="flex h-full min-w-0 flex-1 items-center pr-3 [-webkit-app-region:no-drag]">
+      <div className="flex h-full min-w-0 flex-1 items-center gap-2 pr-3 [-webkit-app-region:no-drag]">
         <div
           className="flex h-full min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           data-tauri-drag-region
@@ -205,7 +207,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
           })}
         </div>
 
-        <div className="workbench-layout-switch ml-2" role="group" aria-label="Tab layout">
+        <div className="workbench-layout-switch shrink-0" role="group" aria-label="Tab layout">
           <button
             type="button"
             aria-label="BSP layout"
@@ -233,6 +235,6 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
           <PlusIcon className="size-4" />
         </button>
       </div>
-    </header>
+    </MaterialSurface>
   );
 }

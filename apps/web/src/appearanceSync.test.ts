@@ -1,8 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-vi.mock("./env", () => ({ isTauri: true }));
+let mockIsTauri = false;
+vi.mock("./env", () => ({
+  get isTauri() {
+    return mockIsTauri;
+  },
+}));
 
-import { applyChatBackground, applyWindowGlass, isNativeGlassPlatform } from "./appearanceSync";
+import {
+  applyMaterialSettings,
+  applyWorkbenchArtwork,
+  isNativeGlassPlatform,
+} from "./appearanceSync";
 
 function makeRoot() {
   const classes = new Set<string>();
@@ -48,8 +57,8 @@ describe("appearanceSync", () => {
     });
   });
 
-  describe("applyWindowGlass", () => {
-    it("applies opacity, blur, and workbench glass classes and styles", () => {
+  describe("applyMaterialSettings", () => {
+    it("publishes stage and surface material variables for native glass", () => {
       const setWindowGlassEnabled = vi.fn().mockResolvedValue(undefined);
       const setWindowBackgroundBlur = vi.fn().mockResolvedValue(undefined);
 
@@ -63,91 +72,79 @@ describe("appearanceSync", () => {
 
       const { root, properties, classes } = makeRoot();
 
-      applyWindowGlass(
+      applyMaterialSettings(
         {
-          sidebarOpacity: 75,
-          sidebarBlur: 30,
-          workbenchGlass: true,
-          workbenchOpacity: 90,
+          stageEnabled: true,
+          stageStrength: 65,
+          surfaceOpacity: 88,
         },
         root,
       );
 
-      expect(properties.get("--sidebar-opacity")).toBe("0.75");
-      expect(properties.get("--sidebar-blur")).toBe("30px");
-      expect(properties.get("--workbench-opacity")).toBe("0.9");
-      expect(classes.has("has-native-glass")).toBe(true);
-      expect(classes.has("glass-workbench")).toBe(true);
-
+      expect(properties.get("--material-stage-strength")).toBe("65");
+      expect(properties.get("--material-surface-opacity")).toBe("0.88");
+      expect(properties.get("--material-sidebar-opacity")).toBe("0.88");
+      expect(properties.get("--material-topbar-opacity")).toBe("0.88");
+      expect(properties.get("--material-workbench-opacity")).toBe("0.88");
+      expect(properties.get("--material-overlay-opacity")).toBe("0.88");
+      expect(classes.has("material-stage-native")).toBe(true);
+      expect(classes.has("material-stage-opaque")).toBe(false);
       expect(setWindowGlassEnabled).toHaveBeenCalledWith(true);
-      expect(setWindowBackgroundBlur).toHaveBeenCalledWith(30);
+      expect(setWindowBackgroundBlur).toHaveBeenCalledWith(34);
     });
 
-    it("removes glass-workbench class when workbenchGlass is false", () => {
-      vi.stubGlobal("window", {
-        desktopBridge: {
-          getClientPlatform: () => "darwin",
-          setWindowGlassEnabled: vi.fn(),
-          setWindowBackgroundBlur: vi.fn(),
-        },
-      });
+    it("falls back to opaque stage variables when native glass is unavailable", () => {
+      vi.stubGlobal("window", {});
 
-      const { root, classes } = makeRoot();
-      classes.add("glass-workbench");
+      const { root, properties, classes } = makeRoot();
 
-      applyWindowGlass(
+      applyMaterialSettings(
         {
-          sidebarOpacity: 85,
-          sidebarBlur: 24,
-          workbenchGlass: false,
-          workbenchOpacity: 88,
+          stageEnabled: true,
+          stageStrength: 65,
+          surfaceOpacity: 88,
         },
         root,
       );
 
-      expect(classes.has("glass-workbench")).toBe(false);
+      expect(classes.has("material-stage-native")).toBe(false);
+      expect(classes.has("material-stage-opaque")).toBe(true);
+      expect(properties.get("--material-surface-opacity")).toBe("1");
+      expect(properties.get("--material-workbench-opacity")).toBe("1");
     });
   });
 
-  describe("applyChatBackground", () => {
+  describe("applyWorkbenchArtwork", () => {
     it("applies background image and opacity variables", () => {
-      const { root, properties, classes } = makeRoot();
+      const { root, properties } = makeRoot();
 
-      applyChatBackground(
+      applyWorkbenchArtwork(
         {
           path: "/Users/test/wallpaper.png",
           opacity: 30,
-          scope: "empty",
         },
         root,
       );
 
-      expect(classes.has("has-chat-background")).toBe(true);
-      expect(classes.has("chat-background-empty-only")).toBe(true);
-      expect(properties.get("--chat-background-opacity")).toBe("0.3");
-      expect(properties.get("--chat-background-image")).toBeDefined();
+      expect(properties.get("--workbench-artwork-opacity")).toBe("0.3");
+      expect(properties.get("--workbench-artwork-image")).toBeDefined();
     });
 
     it("removes background classes and variables when path is null", () => {
-      const { root, properties, classes } = makeRoot();
-      classes.add("has-chat-background");
-      classes.add("chat-background-empty-only");
-      properties.set("--chat-background-image", "url(foo)");
-      properties.set("--chat-background-opacity", "0.5");
+      const { root, properties } = makeRoot();
+      properties.set("--workbench-artwork-image", "url(foo)");
+      properties.set("--workbench-artwork-opacity", "0.5");
 
-      applyChatBackground(
+      applyWorkbenchArtwork(
         {
           path: null,
           opacity: 24,
-          scope: "all",
         },
         root,
       );
 
-      expect(classes.has("has-chat-background")).toBe(false);
-      expect(classes.has("chat-background-empty-only")).toBe(false);
-      expect(properties.has("--chat-background-image")).toBe(false);
-      expect(properties.has("--chat-background-opacity")).toBe(false);
+      expect(properties.has("--workbench-artwork-image")).toBe(false);
+      expect(properties.has("--workbench-artwork-opacity")).toBe(false);
     });
   });
 });

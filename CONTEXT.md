@@ -247,10 +247,40 @@ The desktop-translucent frosted glass effect achieved through native OS window
 composition (macOS WindowServer blur or Windows Acrylic/Mica) and client tinting.
 _Avoid_: CSS blur, Backdrop filter, Translucency hack
 
+**Glass Stage**:
+The native desktop composition layer behind the web view that supplies the
+window-wide frosted-glass base. It is a platform capability, not a Theme,
+Sidebar, Workbench, or View.
+_Avoid_: Glass background, CSS stage, Global blur layer
+
+**Material Surface**:
+A user-visible chrome layer that intentionally supplies a background material
+over the Glass Stage. Sidebar, Topbar, Workbench, and Overlay are Material
+Surfaces; they own their material settings and edges.
+_Avoid_: Panel background, Widget background, Arbitrary glass layer
+
+**Content Layer**:
+The text, controls, and View content rendered above Material Surfaces. A
+Content Layer renders with a transparent base background and does not own the
+background material for its containing area.
+_Avoid_: Pane background, View background, Opaque content shell
+
 **Workbench Glass**:
 The presentation toggle determining whether the Workbench main pane adopts
 Window Glass translucency or stays opaque.
 _Avoid_: Body glass, Main pane glass
+
+**Topbar Surface**:
+The horizontal title and tab chrome that spans the Sidebar and Workbench
+areas. It is one Material Surface even when its controls visually align with
+those areas.
+_Avoid_: Header, Toolbar, Tab strip
+
+**Workbench Artwork**:
+An optional image layer shown beneath all Workbench content and above the
+Workbench Material Surface. It belongs to the Workbench rather than any one
+View, Session, or Tab.
+_Avoid_: Chat wallpaper, Session background, View background
 
 ## Core invariants
 

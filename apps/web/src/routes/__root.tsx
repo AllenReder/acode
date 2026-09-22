@@ -1,4 +1,4 @@
-import { applyWindowGlass, applyChatBackground } from "../appearanceSync";
+import { applyMaterialSettings, applyWorkbenchArtwork } from "../appearanceSync";
 import { type ServerLifecycleWelcomePayload } from "@t3tools/contracts";
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
@@ -269,41 +269,25 @@ function ContrastAppearanceSync() {
 }
 
 function GlassAppearanceSync() {
-  const glassOpacity = useClientSettings((settings) => settings.glassOpacity);
-  const sidebarOpacity = useClientSettings((settings) => settings.sidebarOpacity);
-  const sidebarBlur = useClientSettings((settings) => settings.sidebarBlur);
-  const workbenchGlass = useClientSettings((settings) => settings.workbenchGlass);
-  const workbenchOpacity = useClientSettings((settings) => settings.workbenchOpacity);
-  const chatBackgroundPath = useClientSettings((settings) => settings.chatBackgroundPath);
-  const chatBackgroundOpacity = useClientSettings((settings) => settings.chatBackgroundOpacity);
-  const chatBackgroundScope = useClientSettings((settings) => settings.chatBackgroundScope);
+  const stageStrength = useClientSettings((settings) => settings.sidebarBlur);
+  const surfaceOpacity = useClientSettings((settings) => settings.workbenchOpacity);
+  const artworkPath = useClientSettings((settings) => settings.chatBackgroundPath);
+  const artworkOpacity = useClientSettings((settings) => settings.chatBackgroundOpacity);
 
   useEffect(() => {
-    const style = document.documentElement.style;
-    style.setProperty("--glass-opacity", `${glassOpacity}%`);
-    if (glassOpacity === 100) {
-      style.setProperty("--glass-blur", "0px");
-    } else {
-      style.removeProperty("--glass-blur");
-    }
-  }, [glassOpacity]);
-
-  useEffect(() => {
-    applyWindowGlass({
-      sidebarOpacity,
-      sidebarBlur,
-      workbenchGlass,
-      workbenchOpacity,
+    applyMaterialSettings({
+      stageEnabled: true,
+      stageStrength,
+      surfaceOpacity,
     });
-  }, [sidebarOpacity, sidebarBlur, workbenchGlass, workbenchOpacity]);
+  }, [stageStrength, surfaceOpacity]);
 
   useEffect(() => {
-    applyChatBackground({
-      path: chatBackgroundPath,
-      opacity: chatBackgroundOpacity,
-      scope: chatBackgroundScope,
+    applyWorkbenchArtwork({
+      path: artworkPath,
+      opacity: artworkOpacity,
     });
-  }, [chatBackgroundPath, chatBackgroundOpacity, chatBackgroundScope]);
+  }, [artworkPath, artworkOpacity]);
 
   return null;
 }

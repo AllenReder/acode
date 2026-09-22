@@ -46,7 +46,7 @@ export function AgentView({ target, paneId, focused, focusRequestId = 0, availab
   }
 
   return (
-    <div className="chat-pane-background relative flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col">
       {session.status === "closed" && (
         <div
           role="status"

@@ -267,112 +267,90 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   }
 }
 
-
-html.has-native-glass,
-html.has-native-glass body,
-html.has-native-glass #root {
-  background: transparent !important;
-  background-color: transparent !important;
+html.material-stage-native,
+html.material-stage-native body,
+html.material-stage-native #root {
+  background: transparent;
 }
 
-html.has-native-glass [data-slot="sidebar-container"],
-html.has-native-glass [data-app-sidebar],
-html.has-native-glass [data-slot="sidebar-gap"] {
-  background: transparent !important;
-  background-color: transparent !important;
+html.material-stage-opaque,
+html.material-stage-opaque body,
+html.material-stage-opaque #root {
+  background: var(--background);
 }
 
-.sidebar-glass,
-[data-slot="sidebar-inner"],
-[data-app-sidebar] [data-slot="sidebar-inner"] {
-  background: var(--sidebar);
-}
-
-html.has-native-glass .sidebar-glass,
-html.has-native-glass [data-slot="sidebar-inner"],
-html.has-native-glass [data-app-sidebar] [data-slot="sidebar-inner"] {
+.material-surface-sidebar {
   background: color-mix(
     in srgb,
-    var(--sidebar) calc(var(--sidebar-opacity, 0.85) * 100%),
+    var(--sidebar) calc(var(--material-sidebar-opacity, 0.85) * 100%),
     transparent
-  ) !important;
+  );
   background-color: color-mix(
     in srgb,
-    var(--sidebar) calc(var(--sidebar-opacity, 0.85) * 100%),
+    var(--sidebar) calc(var(--material-sidebar-opacity, 0.85) * 100%),
     transparent
-  ) !important;
+  );
 }
 
-.workbench-glass,
-[data-workbench-root] {
-  background: var(--canvas);
-}
-
-html.has-native-glass.glass-workbench .workbench-glass,
-html.has-native-glass.glass-workbench [data-workbench-root],
-html.has-native-glass.glass-workbench [data-slot="sidebar-inset"] {
+.material-surface-topbar {
   background: color-mix(
     in srgb,
-    var(--canvas) calc(var(--workbench-opacity, 0.88) * 100%),
+    var(--app-chrome-background) calc(var(--material-topbar-opacity, 0.85) * 100%),
     transparent
-  ) !important;
+  );
   background-color: color-mix(
     in srgb,
-    var(--canvas) calc(var(--workbench-opacity, 0.88) * 100%),
+    var(--app-chrome-background) calc(var(--material-topbar-opacity, 0.85) * 100%),
     transparent
-  ) !important;
+  );
 }
 
-/* Make internal workbench views transparent when workbench glass is active */
-html.has-native-glass.glass-workbench [data-workbench-root] .bg-background,
-html.has-native-glass.glass-workbench [data-workbench-root] [data-slot="sidebar-inset"] .bg-background,
-html.has-native-glass.glass-workbench [data-workbench-root] [data-chat-view-root],
-html.has-native-glass.glass-workbench [data-workbench-root] [data-chat-header],
-html.has-native-glass.glass-workbench [data-workbench-root] aside,
-html.has-native-glass.glass-workbench [data-workbench-root] [data-surface-subheader],
-html.has-native-glass.glass-workbench [data-workbench-root] [data-testid="workspace-file-view"],
-html.has-native-glass.glass-workbench [data-workbench-root] [data-testid="workspace-file-view"] > div,
-html.has-native-glass.glass-workbench [data-workbench-root] [data-settings-page-scroll],
-html.has-native-glass.glass-workbench [data-workbench-root] [data-settings-page-scroll] > div,
-html.has-native-glass.glass-workbench [data-workbench-root] [data-slot="sidebar-header"],
-html.has-native-glass.glass-workbench [data-workbench-root] .bg-\[var\(--terminal-background\)\],
-html.has-native-glass.glass-workbench [data-workbench-root] .xterm,
-html.has-native-glass.glass-workbench [data-workbench-root] .xterm-viewport,
-html.has-native-glass.glass-workbench [data-workbench-root] .xterm-screen,
-html.has-native-glass.glass-workbench [data-workbench-window-chrome] {
-  background: transparent !important;
-  background-color: transparent !important;
+.material-surface-workbench {
+  background: color-mix(
+    in srgb,
+    var(--canvas) calc(var(--material-workbench-opacity, 0.88) * 100%),
+    transparent
+  );
+  background-color: color-mix(
+    in srgb,
+    var(--canvas) calc(var(--material-workbench-opacity, 0.88) * 100%),
+    transparent
+  );
 }
 
-html.has-native-glass.glass-workbench .chat-pane-background,
-html.has-native-glass.glass-workbench .chat-pane-background > div {
-  background: transparent !important;
-  background-color: transparent !important;
+.material-surface-overlay {
+  background: color-mix(
+    in srgb,
+    var(--popover) calc(var(--material-overlay-opacity, 0.88) * 100%),
+    transparent
+  );
+  background-color: color-mix(
+    in srgb,
+    var(--popover) calc(var(--material-overlay-opacity, 0.88) * 100%),
+    transparent
+  );
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
 }
 
-.chat-pane-background {
-  position: relative;
-}
-
-html.has-chat-background .chat-pane-background::before {
-  content: "";
+.workbench-artwork {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: var(--chat-background-image);
-  background-size: cover;
+  background-image: var(--workbench-artwork-image, none);
   background-position: center;
   background-repeat: no-repeat;
-  opacity: var(--chat-background-opacity, 0.24);
+  background-size: cover;
+  opacity: var(--workbench-artwork-opacity, 0.24);
   z-index: 0;
 }
 
-html.chat-background-empty-only .chat-pane-background:not(.is-empty-session)::before {
-  display: none;
-}
-
 @utility surface-glass {
-  background: color-mix(in srgb, var(--background) var(--glass-opacity), transparent);
+  background: color-mix(
+    in srgb,
+    var(--background) calc(var(--material-overlay-opacity, 0.88) * 100%),
+    transparent
+  );
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
 
@@ -388,7 +366,11 @@ html.chat-background-empty-only .chat-pane-background:not(.is-empty-session)::be
       color-mix(in srgb, var(--alert-glass-tint) 4%, transparent),
       color-mix(in srgb, var(--alert-glass-tint) 4%, transparent)
     ),
-    color-mix(in srgb, var(--background) var(--glass-opacity), transparent) !important;
+    color-mix(
+      in srgb,
+      var(--background) calc(var(--material-overlay-opacity, 0.88) * 100%),
+      transparent
+    ) !important;
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
 
@@ -414,7 +396,11 @@ html.chat-background-empty-only .chat-pane-background:not(.is-empty-session)::be
 }
 
 @utility dialog-glass {
-  background: color-mix(in srgb, var(--background) var(--glass-opacity), transparent);
+  background: color-mix(
+    in srgb,
+    var(--background) calc(var(--material-overlay-opacity, 0.88) * 100%),
+    transparent
+  );
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   border-color: color-mix(in srgb, var(--contrast-foreground) 10%, transparent);
@@ -446,7 +432,11 @@ html.chat-background-empty-only .chat-pane-background:not(.is-empty-session)::be
   background: color-mix(
     in srgb,
     var(--popover) 18%,
-    color-mix(in srgb, var(--popover) var(--glass-opacity), transparent)
+    color-mix(
+      in srgb,
+      var(--popover) calc(var(--material-overlay-opacity, 0.88) * 100%),
+      transparent
+    )
   );
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
@@ -867,7 +857,11 @@ html.chat-background-empty-only .chat-pane-background:not(.is-empty-session)::be
     }
   }
 
-  :is(html[data-theme-id="acode-default"], html[data-theme-id="ocean"], html[data-theme-id="slate"]) {
+  :is(
+    html[data-theme-id="acode-default"],
+    html[data-theme-id="ocean"],
+    html[data-theme-id="slate"]
+  ) {
     --stage-night-top: color-mix(in oklch, var(--stage-art-top) 38%, var(--stage-night-base-top));
     --stage-night-mid: color-mix(in oklch, var(--stage-art-mid) 38%, var(--stage-night-base-mid));
     --stage-night-bottom: color-mix(
@@ -1082,6 +1076,7 @@ html.chat-background-empty-only .chat-pane-background:not(.is-empty-session)::be
   color-scheme: light;
   --radius: 0.625rem;
   --background: var(--color-zinc-25);
+  --canvas: var(--background);
   --app-chrome-background: var(--background);
   --toolbar-background: var(--app-chrome-background);
   --toolbar-foreground: var(--foreground);
@@ -1153,6 +1148,7 @@ html.chat-background-empty-only .chat-pane-background:not(.is-empty-session)::be
     /* Keep controls and floating surfaces close to the neutral-black canvas.
        Borders and hover states provide separation without milky gray fills. */
     --background: var(--color-neutral-950);
+    --canvas: var(--background);
     --surface-raised: color-mix(in srgb, var(--background) 97%, var(--color-white));
     --foreground: var(--color-neutral-100);
     --card: color-mix(in srgb, var(--background) 97%, var(--color-white));
@@ -1194,6 +1190,7 @@ html.chat-background-empty-only .chat-pane-background:not(.is-empty-session)::be
    surfaces. */
 [data-app-sidebar] {
   --background: var(--color-zinc-25);
+  --canvas: var(--background);
   --foreground: var(--color-zinc-800);
   --card: var(--color-white);
   --card-foreground: var(--color-zinc-800);
@@ -1246,6 +1243,7 @@ html.chat-background-empty-only .chat-pane-background:not(.is-empty-session)::be
    dark variant without reintroducing raw `.dark` selectors. */
 html[data-theme-id]:not([data-theme-id=""]) {
   --background: var(--app-theme-canvas);
+  --canvas: var(--app-theme-canvas);
   --app-chrome-background: var(--app-theme-chrome);
   --toolbar-background: var(--app-theme-toolbar);
   --toolbar-foreground: var(--app-theme-toolbar-foreground);
@@ -1469,6 +1467,7 @@ html[data-theme-id] .chat-markdown .chat-markdown-chrome-action[aria-pressed="tr
 
 html[data-theme-id] [data-app-sidebar] {
   --background: var(--app-theme-canvas);
+  --canvas: var(--app-theme-canvas);
   --foreground: var(--app-theme-text);
   --card: var(--app-theme-surface);
   --card-foreground: var(--app-theme-text);
@@ -1732,9 +1731,6 @@ html[data-workbench-window-chrome] {
   --workbench-titlebar-height: 36px;
   --workbench-titlebar-center: calc(var(--workbench-titlebar-height) / 2);
 }
-
-
-
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {

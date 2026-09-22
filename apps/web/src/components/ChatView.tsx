@@ -9422,7 +9422,7 @@ export default function ChatView(props: ChatViewProps) {
   });
 
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
+    <div data-chat-view-root="" className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
       <Dialog
         open={
           deviceSetupThread !== null &&

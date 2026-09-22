@@ -23,6 +23,7 @@ import {
   usePanelNavigationSuppression,
 } from "../panelAnimations";
 import { AcodeSidebar } from "./AcodeSidebar";
+import { MaterialSurface } from "./MaterialSurface";
 import { WorkbenchDragProvider } from "../workbench/workbenchDrag";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
 import { useProjects } from "../state/entities";
@@ -103,7 +104,9 @@ function SidebarControl() {
       }}
     >
       <SidebarTitlebarButton
-        icon={isOpen ? <PanelLeftCloseIcon className="size-4" /> : <PanelLeftIcon className="size-4" />}
+        icon={
+          isOpen ? <PanelLeftCloseIcon className="size-4" /> : <PanelLeftIcon className="size-4" />
+        }
         label="Toggle main sidebar"
         shortcut={shortcutLabel || (isMac ? "⌘B" : "Ctrl+B")}
         ariaLabel="Toggle main sidebar"
@@ -156,7 +159,8 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       ? getWindowFullscreenState()
       : false;
   });
-  const effectiveAnimationDurationMs = panelAnimationDurationMs > 0 ? panelAnimationDurationMs : 200;
+  const effectiveAnimationDurationMs =
+    panelAnimationDurationMs > 0 ? panelAnimationDurationMs : 200;
   const sidebarProviderStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
     "--panel-animation-duration": `${effectiveAnimationDurationMs}ms`,
@@ -252,7 +256,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
             side="left"
             collapsible="offcanvas"
             data-app-sidebar=""
-            className="border-r border-sidebar-border sidebar-glass text-sidebar-foreground"
+            className="border-r border-sidebar-border text-sidebar-foreground"
             resizable={{
               maxWidth: sidebarMaximumWidth,
               minWidth: THREAD_SIDEBAR_MIN_WIDTH,
@@ -263,11 +267,9 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
               onResize: setSidebarWidth,
             }}
           >
-            {isOnSettings ? (
-              <SettingsSidebarNav pathname={pathname} />
-            ) : (
-              <AcodeSidebar />
-            )}
+            <MaterialSurface kind="sidebar" className="h-full min-h-0 w-full">
+              {isOnSettings ? <SettingsSidebarNav pathname={pathname} /> : <AcodeSidebar />}
+            </MaterialSurface>
             <SidebarRail onDoubleClick={resetSidebarWidth} />
           </Sidebar>
           {children}

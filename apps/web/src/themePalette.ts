@@ -1624,21 +1624,13 @@ export function applyThemePalette(theme: ThemePreference, appearance?: ThemeAppe
   if (!root?.style) return;
 
   setThemePreviewSidebarArtwork(null);
-  const palette = getThemeDefinition(theme);
+  const palette = getThemeDefinition(theme) ?? ACODE_DEFAULT_THEME;
 
-  if (palette) {
-    root.dataset.themeId = palette.id;
-    const mode = appearance ?? palette.appearance;
-    const colors = getThemeColorsForMode(palette, mode) ?? palette.colors;
-    for (const [role, value] of Object.entries(colors) as Array<[ThemeColorRole, string]>) {
-      root.style.setProperty(APP_THEME_VARIABLES[role], value);
-    }
-    return;
-  }
-
-  delete root.dataset.themeId;
-  for (const variable of Object.values(APP_THEME_VARIABLES)) {
-    root.style.removeProperty(variable);
+  root.dataset.themeId = palette.id;
+  const mode = appearance ?? palette.appearance;
+  const colors = getThemeColorsForMode(palette, mode) ?? palette.colors;
+  for (const [role, value] of Object.entries(colors) as Array<[ThemeColorRole, string]>) {
+    root.style.setProperty(APP_THEME_VARIABLES[role], value);
   }
 }
 
@@ -1655,19 +1647,19 @@ export function resolveThemeAppearance(
     // A configured half guarantees the appearance is renderable even when the
     // base theme lacks that mode.
     if (halves?.[systemAppearance]) return systemAppearance;
-    const definition = getThemeDefinition(theme);
-    return definition && getThemeColorsForMode(definition, systemAppearance) === null
+    const definition = getThemeDefinition(theme) ?? ACODE_DEFAULT_THEME;
+    return getThemeColorsForMode(definition, systemAppearance) === null
       ? definition.appearance
       : systemAppearance;
   }
   if (mode === "light" || mode === "dark") {
     if (halves?.[mode]) return mode;
-    const definition = getThemeDefinition(theme);
-    return definition && getThemeColorsForMode(definition, mode) === null
+    const definition = getThemeDefinition(theme) ?? ACODE_DEFAULT_THEME;
+    return getThemeColorsForMode(definition, mode) === null
       ? definition.appearance
       : mode;
   }
-  return getThemePreferenceMode(theme) ?? "light";
+  return getThemePreferenceMode(theme) ?? (systemDark ? "dark" : "light");
 }
 
 export function resolveDesktopTheme(
@@ -1738,5 +1730,8 @@ export function resolveThemeHalf(
   halves: ThemeHalves | null,
   appearance: ThemeAppearance,
 ): ThemePreference {
-  return halves?.[appearance] ?? theme;
+  const half = halves?.[appearance];
+  if (half && getThemeDefinition(half) !== null) return half;
+  if (getThemeDefinition(theme) !== null) return theme;
+  return ACODE_DEFAULT_THEME_ID;
 }

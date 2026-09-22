@@ -628,7 +628,7 @@ export function ThemeLibrary({
   // ----- Automatic-mode mixing -------------------------------------------
   // The pair model: one theme owns light, one owns dark, and the global
   // appearance mode (light / dark / auto) decides which is showing.
-  const baseCardId = getThemeDefinition(theme)?.id ?? null;
+  const baseCardId = getThemeDefinition(theme)?.id ?? ACODE_DEFAULT_THEME.id;
   const lightOwner = themeHalves?.light ?? baseCardId;
   const darkOwner = themeHalves?.dark ?? baseCardId;
 
@@ -673,9 +673,8 @@ export function ThemeLibrary({
     getThemeDefinition((initialAppearance === "light" ? lightOwner : darkOwner) ?? "") ?? null;
 
   const cardDefById = (id: string | null): ThemeCardDefinition => {
-    if (id === null) return STANDARD_THEME_CARDS[0]!;
-    const definition = getThemeDefinition(id);
-    return definition ? getThemeCardDefinition(definition) : STANDARD_THEME_CARDS[0]!;
+    const definition = (id ? getThemeDefinition(id) : null) ?? ACODE_DEFAULT_THEME;
+    return getThemeCardDefinition(definition);
   };
 
   const pickColors = (id: string | null, appearance: ThemeAppearance) => {

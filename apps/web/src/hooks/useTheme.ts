@@ -295,7 +295,7 @@ function resolveBrowserChromeSurface(): HTMLElement {
 
 export function syncBrowserChromeTheme() {
   if (typeof document === "undefined" || typeof getComputedStyle === "undefined") return;
-  if (document.documentElement.classList.contains("has-native-glass")) {
+  if (document.documentElement.classList.contains("material-stage-native")) {
     document.documentElement.style.backgroundColor = "transparent";
     if (document.body) {
       document.body.style.backgroundColor = "transparent";
