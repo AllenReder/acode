@@ -8,6 +8,12 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import { chromium } from "playwright";
 import { nodeEntryInvocation, withNodeModulesBin } from "./lib/spawn-command.ts";
+import {
+  createProcessTreePort,
+  removePathWithRetry,
+  runTeardownSteps,
+  stopProcessTree,
+} from "./lib/process-teardown.ts";
 import { verifyWorkbenchAppearance } from "./workbench-appearance-checks.mjs";
 
 // This suite never sends an Agent turn. Promotion coverage must use the ACP
@@ -157,24 +163,49 @@ function waitForOutput(child, pattern, label) {
   });
 }
 
-async function stopProcess(child) {
-  if (child === null || child.exitCode !== null || child.signalCode !== null) return;
-  const exited = new Promise((resolve) => child.once("exit", resolve));
-  // oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone browser harness process-group cleanup.
-  if (NodeOS.platform() === "win32") {
-    child.kill("SIGTERM");
-  } else {
-    process.kill(-child.pid, "SIGTERM");
+function waitForChildExit(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+  return new Promise((resolve) => child.once("exit", () => resolve()));
+}
+
+/**
+ * Terminate the isolated daemon, not just the runner that launched it.
+ *
+ * `scripts/dev-runner.ts` resolves `vp`, which starts a Vite+ core process,
+ * which runs `node --watch src/bin.ts`, which runs the daemon holding this
+ * run's SQLite database. Windows has neither process groups nor signal
+ * handlers there, so `child.kill` used to reach only the runner while the four
+ * processes beneath it kept the temporary home busy.
+ */
+async function stopDaemonProcessTree(child) {
+  if (typeof child.pid !== "number") return;
+  const port = createProcessTreePort({
+    hasRootExited: () => child.exitCode !== null || child.signalCode !== null,
+    // oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone browser harness owns native child process groups.
+    platform: NodeOS.platform(),
+    rootExited: waitForChildExit(child),
+  });
+  const result = await stopProcessTree({ port, rootPid: child.pid });
+  if (result.descendants.status === "skipped" && result.descendants.reason !== "not-required") {
+    console.error(
+      `workbench: could not track daemon descendants (${result.descendants.reason}); only the runner's own tree was signalled`,
+    );
   }
-  const killed = await Promise.race([
-    exited.then(() => true),
-    new Promise((resolve) => setTimeout(() => resolve(false), 5_000)),
-  ]);
-  // oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone browser harness process-group cleanup.
-  if (!killed && NodeOS.platform() !== "win32") {
-    process.kill(-child.pid, "SIGKILL");
-    await exited;
+  if (result.survivors.length > 0) {
+    console.error(`workbench: daemon processes survived teardown: ${result.survivors.join(", ")}`);
   }
+}
+
+async function finishTemporaryHome(directory, keepTemporary) {
+  if (keepTemporary) {
+    console.log(`kept workbench E2E data at ${directory}`);
+    return;
+  }
+  const result = await removePathWithRetry(directory);
+  if (result.removed) return;
+  console.error(
+    `workbench: kept ${directory} after ${result.attempts} removal attempts: ${result.reason}`,
+  );
 }
 
 async function main() {
@@ -752,12 +783,26 @@ async function main() {
     }
     throw error;
   } finally {
-    await browser?.close();
-    await stopProcess(child);
-    if (!keepTemporary) {
-      await NodeFSP.rm(temporaryRoot, { recursive: true, force: true });
-    } else {
-      console.log(`kept workbench E2E data at ${temporaryRoot}`);
+    // Teardown must not throw: an error raised here would replace the failure
+    // that made the harness fail, which is how a `browser.launch` error used to
+    // surface as an unattributable `EBUSY` instead.
+    const failures = await runTeardownSteps([
+      {
+        label: "close the browser",
+        run: async () => {
+          await browser?.close();
+        },
+      },
+      { label: "terminate the daemon process tree", run: () => stopDaemonProcessTree(child) },
+      {
+        label: keepTemporary ? "retain the temporary home" : "remove the temporary home",
+        run: () => finishTemporaryHome(temporaryRoot, keepTemporary),
+      },
+    ]);
+    for (const failure of failures) {
+      console.error(
+        `workbench: teardown failed (${failure.label}): ${failure.error instanceof Error ? failure.error.message : String(failure.error)}`,
+      );
     }
   }
 }
