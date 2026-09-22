@@ -1,5 +1,4 @@
 import { useCallback } from "react";
-import type { EnvironmentId, ThreadId, WorkspaceId } from "@awen/contracts";
 import { scopeThreadRef } from "@awen/client-runtime/environment";
 import { squashAtomCommandFailure } from "@awen/client-runtime/state/runtime";
 import { requestDestructiveConfirmation } from "../lib/destructiveConfirmation";
@@ -9,8 +8,8 @@ import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
 import { runtimeTerminalIdForTarget } from "../workbench/sessionTarget";
-import { targetKey, type ViewTarget } from "../workbench/viewRegistry";
-import { getActiveTab, findPaneBySessionTarget, type SplitDir } from "../workbench/workbenchState";
+import { type ViewTarget } from "../workbench/viewRegistry";
+import { type SplitDir } from "../workbench/workbenchState";
 import { useWorkbenchStore } from "../workbench/workbenchStore";
 
 export type SessionTarget = Extract<ViewTarget, { kind: "agentSession" | "workspaceTerminal" }>;
@@ -42,15 +41,9 @@ export function useSessionCommands(target: SessionTarget) {
     store.openTarget(target);
   }, [store, target]);
 
-  const focusSession = useCallback(() => {
-    const tab = getActiveTab(store);
-    const existingPaneId = findPaneBySessionTarget(tab, target);
-    if (existingPaneId !== null) {
-      store.setFocused(existingPaneId);
-      return;
-    }
-    store.openTarget(target);
-  }, [store, target]);
+  // A Session View is unique across the Workbench (ADR-0010), so "Focus" and
+  // "Open" are the same command: both activate the Tab that shows the Session.
+  const focusSession = openSession;
 
   const splitSession = useCallback(
     (dir: SplitDir) => {

@@ -60,11 +60,15 @@ export type ViewDragSource =
   | { readonly kind: "sidebar"; readonly target: SessionViewTarget }
   | { readonly kind: "pane"; readonly tabId: string; readonly paneId: string };
 
-export type ViewDuplicateSource = {
-  readonly kind: "pane";
-  readonly tabId: string;
-  readonly paneId: string;
-};
+/**
+ * True for the Session kinds whose View is unique across the whole Workbench.
+ *
+ * ADR-0010 gives a Session exactly one Session View; File, Git, Project, and
+ * draft Views keep their own per-Tab rules and are not constrained here.
+ */
+export function isSessionViewTarget(target: ViewTarget): target is SessionViewTarget {
+  return target.kind === "agentSession" || target.kind === "workspaceTerminal";
+}
 
 export type ViewDropTarget =
   | {
@@ -298,42 +302,106 @@ function removeViewFromTab(
   return reconcileTab({ ...tab, ...next, panes });
 }
 
-function insertViewIntoTab(
+/**
+ * Put a View into one Tab, either in the anchor Pane or in a new Pane beside it.
+ *
+ * A Welcome anchor and a center drop both reuse the anchor Pane; a new Pane is
+ * only created beside a real View. `paneId` lets a moved View keep the Pane
+ * identity it already had.
+ */
+function placeViewInTab(
   tab: WorkbenchTab,
-  paneId: string,
   view: ViewInstance,
+  target: {
+    readonly anchorPaneId: string;
+    readonly zone: PaneDropZone;
+    readonly paneId?: string;
+  },
   generateId: () => string,
 ): { readonly tab: WorkbenchTab; readonly paneId: string } {
-  const existing = tab.panes.get(paneId);
-  const resolvedPaneId =
-    existing !== undefined && existing.target.kind !== "welcome" ? generateId() : paneId;
-  const focused = tab.panes.get(tab.focusedPaneId);
-  if (focused?.target.kind === "welcome") {
+  const anchor = tab.panes.get(target.anchorPaneId);
+  const reusesAnchorPane =
+    target.zone === "replace" || anchor === undefined || anchor.target.kind === "welcome";
+
+  if (reusesAnchorPane) {
+    const paneId = target.paneId ?? target.anchorPaneId;
     const panes = new Map(tab.panes);
-    panes.delete(tab.focusedPaneId);
-    panes.set(resolvedPaneId, view);
+    panes.delete(target.anchorPaneId);
+    panes.set(paneId, view);
     return {
       tab: {
         ...tab,
-        layout: replaceLeafId(tab.layout, tab.focusedPaneId, resolvedPaneId),
+        layout: replaceLeafId(tab.layout, target.anchorPaneId, paneId),
         panes,
-        focusedPaneId: resolvedPaneId,
+        focusedPaneId: paneId,
       },
-      paneId: resolvedPaneId,
+      paneId,
     };
   }
 
+  const paneId = target.paneId ?? generateId();
   const panes = new Map(tab.panes);
-  panes.set(resolvedPaneId, view);
+  panes.set(paneId, view);
   return {
     tab: {
       ...tab,
-      ...placedLayout(tab, resolvedPaneId, tab.focusedPaneId, "right"),
       panes,
-      focusedPaneId: resolvedPaneId,
+      ...placedLayout(tab, paneId, target.anchorPaneId, target.zone),
+      focusedPaneId: paneId,
     },
-    paneId: resolvedPaneId,
+    paneId,
   };
+}
+
+/**
+ * Detach one Pane's View from its Tab, keeping the View instance for reuse.
+ *
+ * Moving a View preserves its identity: the same `ViewInstance` is placed at
+ * the new position while the Pane it came from is closed.
+ */
+function detachView(
+  snapshot: WorkbenchSnapshot,
+  location: { readonly tabId: string; readonly paneId: string },
+  generateId: () => string,
+): { readonly snapshot: WorkbenchSnapshot; readonly view: ViewInstance } | null {
+  const tab = snapshot.tabs.find((candidate) => candidate.id === location.tabId);
+  const view = tab?.panes.get(location.paneId);
+  if (tab === undefined || view === undefined) return null;
+  const tabAfter = removeViewFromTab(tab, location.paneId, generateId);
+  if (tabAfter === null) return null;
+  return {
+    snapshot: {
+      ...snapshot,
+      tabs: snapshot.tabs.map((candidate) => (candidate.id === tab.id ? tabAfter : candidate)),
+    },
+    view,
+  };
+}
+
+/**
+ * Place a detached Session View beside one anchor Pane.
+ *
+ * An explicit split names its anchor, so the moved View lands next to the Pane
+ * the gesture came from rather than the active Tab's focus.
+ */
+function placeDetachedViewBeside(
+  snapshot: WorkbenchSnapshot,
+  view: ViewInstance,
+  anchorPaneId: string,
+  dir: SplitDir,
+  generateId: () => string,
+): WorkbenchSnapshot {
+  const tab = getActiveTab(snapshot);
+  // A Tab that just lost its only View is back to Welcome; the moved View
+  // simply takes that Pane instead of splitting off a second one.
+  const anchor = tab.panes.has(anchorPaneId) ? anchorPaneId : firstLeafId(tab.layout);
+  const placed = placeViewInTab(
+    tab,
+    view,
+    { anchorPaneId: anchor, zone: dir === "down" ? "bottom" : "right" },
+    generateId,
+  );
+  return updateTab(snapshot, placed.tab);
 }
 
 function insertPresentationTab(
@@ -448,9 +516,25 @@ export function applySplitPane(
   }
 
   const tab = getActiveTab(snapshot);
-  if (!tab.panes.has(sourcePaneId) || tab.panes.get(sourcePaneId)?.target.kind === "welcome") {
+  if (!tab.panes.has(sourcePaneId)) return applyOpenTarget(snapshot, target, generateId);
+
+  // An explicit split is a layout intent. A Session View is unique across the
+  // Workbench (ADR-0010), so an already-open Session moves to the requested
+  // position instead of gaining a second View — including into an empty Tab.
+  const location = findSessionViewPane(snapshot, target);
+  if (location !== null) {
+    if (location.tabId === tab.id && location.paneId === sourcePaneId) {
+      return applySetFocused(snapshot, location.paneId);
+    }
+    const detached = detachView(snapshot, location, generateId);
+    if (detached === null) return snapshot;
+    return placeDetachedViewBeside(detached.snapshot, detached.view, sourcePaneId, dir, generateId);
+  }
+
+  if (tab.panes.get(sourcePaneId)?.target.kind === "welcome") {
     return applyOpenTarget(snapshot, target, generateId);
   }
+
   const existing = findPaneByTarget(tab, target);
   if (existing !== null) return applySetFocused(snapshot, existing);
   const paneId = generateId();
@@ -502,23 +586,35 @@ export function applyReplacePaneTarget(
   snapshot: WorkbenchSnapshot,
   paneId: string,
   target: ViewTarget,
+  generateId: () => string,
 ): WorkbenchSnapshot {
   const tab = getActiveTab(snapshot);
   const view = tab.panes.get(paneId);
   if (view === undefined) return snapshot;
-  const existingPaneId = findPaneByTarget(tab, target);
-  if (existingPaneId !== null && existingPaneId !== paneId) {
+
+  // Binding a Pane to a target that already has a View must not create a
+  // second one: a Session View is unique across the Workbench (ADR-0010),
+  // while Project/Workspace/File targets keep their per-Tab rule.
+  const sessionLocation = findSessionViewPane(snapshot, target);
+  const localPaneId = findPaneByTarget(tab, target);
+  const existing =
+    sessionLocation ?? (localPaneId === null ? null : { tabId: tab.id, paneId: localPaneId });
+
+  if (existing !== null && (existing.tabId !== tab.id || existing.paneId !== paneId)) {
     const panes = new Map(tab.panes);
     panes.delete(paneId);
-    const next = closeLeaf(tab, paneId);
-    if (next === null) return applySetFocused(snapshot, existingPaneId);
-    return updateTab(snapshot, {
-      ...tab,
-      ...next,
-      panes,
-      focusedPaneId: existingPaneId,
-    });
+    const withoutPane = closeLeaf(tab, paneId);
+    const localTab =
+      withoutPane === null
+        ? clearedTab(tab, generateId)
+        : reconcileTab({ ...tab, ...withoutPane, panes });
+    const tabs = snapshot.tabs.map((candidate) => (candidate.id === tab.id ? localTab : candidate));
+    return applySetFocused(
+      applyActivateTab({ ...snapshot, tabs }, existing.tabId),
+      existing.paneId,
+    );
   }
+
   const panes = new Map(tab.panes);
   panes.set(paneId, {
     ...view,
@@ -526,6 +622,64 @@ export function applyReplacePaneTarget(
     target,
   });
   return updateTab(snapshot, { ...tab, panes });
+}
+
+/**
+ * Detach a dragged Sidebar Session when the Workbench already shows it.
+ *
+ * Returns null when the target has no Session View yet, so the caller opens a
+ * fresh one; otherwise the caller re-places the same ViewInstance and the
+ * Pane it came from is closed.
+ */
+function takeDraggedSessionView(
+  snapshot: WorkbenchSnapshot,
+  target: ViewTarget,
+  generateId: () => string,
+): {
+  readonly snapshot: WorkbenchSnapshot;
+  readonly view: ViewInstance;
+  readonly location: { readonly tabId: string; readonly paneId: string };
+} | null {
+  const location = findSessionViewPane(snapshot, target);
+  if (location === null) return null;
+  const detached = detachView(snapshot, location, generateId);
+  if (detached === null) return null;
+  return { snapshot: detached.snapshot, view: detached.view, location };
+}
+
+/** Insert a View into an existing Tab, reusing a sole Welcome Pane. */
+function openSidebarViewInTab(
+  snapshot: WorkbenchSnapshot,
+  tabId: string,
+  view: ViewInstance,
+  generateId: () => string,
+): ViewDropResult | null {
+  const targetTab = snapshot.tabs.find((candidate) => candidate.id === tabId);
+  if (targetTab === undefined) return null;
+  const anchorPaneId = targetTab.panes.has(targetTab.focusedPaneId)
+    ? targetTab.focusedPaneId
+    : firstLeafId(targetTab.layout);
+  const placed = placeViewInTab(targetTab, view, { anchorPaneId, zone: "right" }, generateId);
+  return {
+    snapshot: updateTab(applyActivateTab(snapshot, tabId), placed.tab),
+    tabId,
+    paneId: placed.paneId,
+  };
+}
+
+/** Place Sidebar content at a Pane drop position, replacing on a center drop. */
+function placeSidebarViewInPane(
+  snapshot: WorkbenchSnapshot,
+  view: ViewInstance,
+  tabId: string,
+  targetPaneId: string,
+  zone: PaneDropZone,
+  generateId: () => string,
+): ViewDropResult | null {
+  const tab = snapshot.tabs.find((candidate) => candidate.id === tabId);
+  if (tab === undefined || !tab.panes.has(targetPaneId)) return null;
+  const placed = placeViewInTab(tab, view, { anchorPaneId: targetPaneId, zone }, generateId);
+  return { snapshot: updateTab(snapshot, placed.tab), tabId, paneId: placed.paneId };
 }
 
 /** Apply one drag/drop transaction without owning runtime Session lifecycle. */
@@ -601,7 +755,15 @@ export function applyViewDrop(
     }
     const sourceView = sourceTab.panes.get(source.paneId);
     if (sourceView === undefined) return null;
-    const inserted = insertViewIntoTab(targetTab, source.paneId, sourceView, generateId);
+    const anchorPaneId = targetTab.panes.has(targetTab.focusedPaneId)
+      ? targetTab.focusedPaneId
+      : firstLeafId(targetTab.layout);
+    const inserted = placeViewInTab(
+      targetTab,
+      sourceView,
+      { anchorPaneId, zone: "right", paneId: source.paneId },
+      generateId,
+    );
     const sourceAfter = removeViewFromTab(sourceTab, source.paneId, generateId);
     if (sourceAfter === null) return null;
     const tabs = snapshot.tabs.map((tab) => {
@@ -635,93 +797,77 @@ export function applyViewDrop(
   if (source.kind === "sidebar" && target.kind === "existingTab") {
     const targetTab = snapshot.tabs.find((candidate) => candidate.id === target.tabId);
     if (targetTab === undefined) return null;
-    const existingPaneId = findPaneByTarget(targetTab, source.target);
-    if (existingPaneId !== null) {
+
+    // Dropping Sidebar content is an explicit layout intent: an already-open
+    // Session moves to the target Tab instead of gaining a second View.
+    const dragged = takeDraggedSessionView(snapshot, source.target, generateId);
+    if (dragged !== null && dragged.location.tabId === targetTab.id) {
       return {
-        snapshot: applySetFocused(applyActivateTab(snapshot, targetTab.id), existingPaneId),
+        snapshot: applySetFocused(
+          applyActivateTab(snapshot, targetTab.id),
+          dragged.location.paneId,
+        ),
         tabId: targetTab.id,
-        paneId: existingPaneId,
+        paneId: dragged.location.paneId,
       };
     }
-    const focused = targetTab.panes.get(targetTab.focusedPaneId);
-    const paneId = focused?.target.kind === "welcome" ? targetTab.focusedPaneId : generateId();
-    const inserted = insertViewIntoTab(
-      targetTab,
-      paneId,
-      viewInstance(source.target, generateId),
+    return openSidebarViewInTab(
+      dragged === null ? snapshot : dragged.snapshot,
+      targetTab.id,
+      dragged === null ? viewInstance(source.target, generateId) : dragged.view,
       generateId,
     );
-    return {
-      snapshot: updateTab(applyActivateTab(snapshot, targetTab.id), inserted.tab),
-      tabId: targetTab.id,
-      paneId: inserted.paneId,
-    };
   }
 
   if (source.kind === "sidebar" && target.kind === "newTab") {
-    return insertPresentationTab(
-      snapshot,
-      viewInstance(source.target, generateId),
-      target.index,
-      generateId,
-    );
+    const dragged = takeDraggedSessionView(snapshot, source.target, generateId);
+    return dragged === null
+      ? insertPresentationTab(
+          snapshot,
+          viewInstance(source.target, generateId),
+          target.index,
+          generateId,
+        )
+      : insertPresentationTab(
+          dragged.snapshot,
+          dragged.view,
+          target.index,
+          generateId,
+          dragged.location.paneId,
+        );
   }
 
   if (source.kind !== "sidebar" || target.kind !== "pane") return null;
   const tab = snapshot.tabs.find((candidate) => candidate.id === target.tabId);
   if (tab === undefined || !tab.panes.has(target.paneId)) return null;
-  const existingPaneId = findPaneByTarget(tab, source.target);
-  if (existingPaneId !== null) {
-    return {
-      snapshot: applySetFocused(applyActivateTab(snapshot, tab.id), existingPaneId),
-      tabId: tab.id,
-      paneId: existingPaneId,
-    };
+
+  const dragged = takeDraggedSessionView(snapshot, source.target, generateId);
+  if (dragged !== null) {
+    if (dragged.location.tabId === tab.id && dragged.location.paneId === target.paneId) {
+      return {
+        snapshot: applySetFocused(applyActivateTab(snapshot, tab.id), dragged.location.paneId),
+        tabId: tab.id,
+        paneId: dragged.location.paneId,
+      };
+    }
+    return placeSidebarViewInPane(
+      dragged.snapshot,
+      dragged.view,
+      tab.id,
+      target.paneId,
+      target.zone,
+      generateId,
+    );
   }
 
-  if (target.zone === "replace") {
-    const panes = new Map(tab.panes);
-    panes.set(target.paneId, viewInstance(source.target, generateId));
-    return {
-      snapshot: updateTab(snapshot, { ...tab, panes, focusedPaneId: target.paneId }),
-      tabId: tab.id,
-      paneId: target.paneId,
-    };
-  }
-
-  const paneId = generateId();
-  const panes = new Map(tab.panes);
-  panes.set(paneId, viewInstance(source.target, generateId));
-  return {
-    snapshot: updateTab(snapshot, {
-      ...tab,
-      panes,
-      ...placedLayout(tab, paneId, target.paneId, target.zone),
-      focusedPaneId: paneId,
-    }),
-    tabId: tab.id,
-    paneId,
-  };
-}
-
-/** Duplicate presentation into a new Tab without duplicating its work. */
-export function applyDuplicateToNewTab(
-  snapshot: WorkbenchSnapshot,
-  source: ViewDuplicateSource,
-  index: number,
-  generateId: () => string,
-): ViewDropResult | null {
-  const sourceTarget = snapshot.tabs
-    .find((tab) => tab.id === source.tabId)
-    ?.panes.get(source.paneId)?.target;
-  if (
-    sourceTarget === undefined ||
-    (sourceTarget.kind !== "agentSession" && sourceTarget.kind !== "workspaceTerminal")
-  ) {
-    return null;
-  }
-
-  return insertPresentationTab(snapshot, viewInstance(sourceTarget, generateId), index, generateId);
+  return placeSidebarViewInPane(
+    snapshot,
+    viewInstance(source.target, generateId),
+    tab.id,
+    target.paneId,
+    target.zone,
+    generateId,
+  );
 }
 
 export function applySetSplitRatio(
@@ -737,11 +883,39 @@ export function applySetSplitRatio(
 }
 
 /** Find a pane in a Tab that displays the given Session target. */
-export function findPaneBySessionTarget(tab: WorkbenchTab, target: ViewTarget): string | null {
+function findPaneBySessionTarget(tab: WorkbenchTab, target: ViewTarget): string | null {
   for (const [paneId, view] of tab.panes) {
     if (isSameSessionTarget(view.target, target)) return paneId;
   }
   return null;
+}
+
+/**
+ * Locate the Workbench's single Session View for a target, leftmost Tab first.
+ *
+ * Non-Session targets return null: File, Git, Project, and draft Views keep
+ * their own per-Tab rules (ADR-0008) rather than Workbench uniqueness.
+ */
+export function findSessionViewPane(
+  snapshot: WorkbenchSnapshot,
+  target: ViewTarget,
+): { readonly tabId: string; readonly paneId: string } | null {
+  if (!isSessionViewTarget(target)) return null;
+  for (const tab of snapshot.tabs) {
+    const paneId = findPaneBySessionTarget(tab, target);
+    if (paneId !== null) return { tabId: tab.id, paneId };
+  }
+  return null;
+}
+
+/** Whether the Session's one View holds focus in the active Tab. */
+export function isSessionViewFocused(snapshot: WorkbenchSnapshot, target: ViewTarget): boolean {
+  const location = findSessionViewPane(snapshot, target);
+  return (
+    location !== null &&
+    location.tabId === snapshot.activeTabId &&
+    getActiveTab(snapshot).focusedPaneId === location.paneId
+  );
 }
 
 function findPaneByTarget(tab: WorkbenchTab, target: ViewTarget): string | null {
@@ -822,24 +996,19 @@ export function isSameSessionTarget(a: ViewTarget, b: ViewTarget): boolean {
   return false;
 }
 
-function applyRemoveMatchingViews(
+/** Close the given Panes per Tab, recovering Welcome and focus like closeView. */
+function removePaneIdsFromTabs(
   snapshot: WorkbenchSnapshot,
-  matches: (target: ViewTarget) => boolean,
+  removals: ReadonlyMap<string, ReadonlySet<string>>,
   generateId: () => string,
 ): WorkbenchSnapshot {
-  let changed = false;
+  if (removals.size === 0) return snapshot;
   const tabs = snapshot.tabs.map((tab) => {
-    const matchingPaneIds: string[] = [];
-    for (const [paneId, view] of tab.panes) {
-      if (matches(view.target)) {
-        matchingPaneIds.push(paneId);
-      }
-    }
-    if (matchingPaneIds.length === 0) return tab;
-    changed = true;
+    const paneIds = removals.get(tab.id);
+    if (paneIds === undefined || paneIds.size === 0) return tab;
     let currentTab: AwenTab | null = { ...tab };
     const panes = new Map(tab.panes);
-    for (const paneId of matchingPaneIds) {
+    for (const paneId of paneIds) {
       panes.delete(paneId);
       if (currentTab !== null) {
         currentTab = closeLeaf(currentTab, paneId);
@@ -858,8 +1027,32 @@ function applyRemoveMatchingViews(
       panes,
     });
   });
+  return { ...snapshot, tabs };
+}
 
-  return changed ? { ...snapshot, tabs } : snapshot;
+/** Collect the Pane ids to close, grouped by Tab, for one match predicate. */
+function paneIdsMatching(
+  snapshot: WorkbenchSnapshot,
+  matches: (target: ViewTarget) => boolean,
+): Map<string, Set<string>> {
+  const removals = new Map<string, Set<string>>();
+  for (const tab of snapshot.tabs) {
+    for (const [paneId, view] of tab.panes) {
+      if (!matches(view.target)) continue;
+      const paneIds = removals.get(tab.id) ?? new Set<string>();
+      paneIds.add(paneId);
+      removals.set(tab.id, paneIds);
+    }
+  }
+  return removals;
+}
+
+function applyRemoveMatchingViews(
+  snapshot: WorkbenchSnapshot,
+  matches: (target: ViewTarget) => boolean,
+  generateId: () => string,
+): WorkbenchSnapshot {
+  return removePaneIdsFromTabs(snapshot, paneIdsMatching(snapshot, matches), generateId);
 }
 
 /**
@@ -878,6 +1071,51 @@ export function applyRemoveSessionViews(
     (candidate) => isSameSessionTarget(candidate, target),
     generateId,
   );
+}
+
+/**
+ * Repair a restored layout that still shows one Session in several Tabs.
+ *
+ * Snapshots written before ADR-0010 could contain mirrors. Keep the occurrence
+ * the user is most likely to be looking at — the active Tab's focused Pane,
+ * else the active Tab, else the leftmost Tab — and close the rest instead of
+ * rejecting the whole snapshot and losing every Tab.
+ */
+export function applyDedupeSessionViews(
+  snapshot: WorkbenchSnapshot,
+  generateId: () => string,
+): WorkbenchSnapshot {
+  const occurrences = new Map<string, Array<{ readonly tabId: string; readonly paneId: string }>>();
+  for (const tab of snapshot.tabs) {
+    for (const [paneId, view] of tab.panes) {
+      if (!isSessionViewTarget(view.target)) continue;
+      const key = targetKey(view.target);
+      const entries = occurrences.get(key) ?? [];
+      entries.push({ tabId: tab.id, paneId });
+      occurrences.set(key, entries);
+    }
+  }
+
+  const activeTab = snapshot.tabs.find((tab) => tab.id === snapshot.activeTabId);
+  const removals = new Map<string, Set<string>>();
+  for (const entries of occurrences.values()) {
+    if (entries.length <= 1) continue;
+    const keeper =
+      entries.find(
+        (entry) =>
+          entry.tabId === snapshot.activeTabId && entry.paneId === activeTab?.focusedPaneId,
+      ) ??
+      entries.find((entry) => entry.tabId === snapshot.activeTabId) ??
+      entries[0]!;
+    for (const entry of entries) {
+      if (entry.tabId === keeper.tabId && entry.paneId === keeper.paneId) continue;
+      const paneIds = removals.get(entry.tabId) ?? new Set<string>();
+      paneIds.add(entry.paneId);
+      removals.set(entry.tabId, paneIds);
+    }
+  }
+
+  return removePaneIdsFromTabs(snapshot, removals, generateId);
 }
 
 /** Remove legacy Workspace overview Views from restored layouts. */

@@ -1,8 +1,8 @@
 import type { ComponentProps } from "react";
 import { cn } from "../../lib/utils";
-import { getActiveTab } from "../../workbench/workbenchState";
+import { findSessionViewPane, isSessionViewFocused } from "../../workbench/workbenchState";
 import { useWorkbenchStore } from "../../workbench/workbenchStore";
-import { targetsEqual, type ViewTarget } from "../../workbench/viewRegistry";
+import { type ViewTarget } from "../../workbench/viewRegistry";
 import { sessionRouteForTarget } from "../../workbench/deepLinks";
 import { useSessionActionMenu } from "../../hooks/useSessionActionMenu";
 import { useWorkbenchDragSource, useWorkbenchDragState } from "../../workbench/workbenchDrag";
@@ -36,19 +36,11 @@ export function SessionRow({
   className,
   ...props
 }: SessionRowProps) {
-  const isFocused = useWorkbenchStore((state) => {
-    const tab = getActiveTab(state);
-    const focused = tab.panes.get(tab.focusedPaneId);
-    return focused !== undefined && targetsEqual(focused.target, target);
-  });
+  const isFocused = useWorkbenchStore((state) => isSessionViewFocused(state, target));
 
-  const isOpenInActiveTab = useWorkbenchStore((state) => {
-    const tab = getActiveTab(state);
-    for (const pane of tab.panes.values()) {
-      if (targetsEqual(pane.target, target)) return true;
-    }
-    return false;
-  });
+  const isOpenInWorkbench = useWorkbenchStore(
+    (state) => findSessionViewPane(state, target) !== null,
+  );
 
   const workspaceKey = `${target.environmentId}:${target.workspaceId}`;
   const sessionId =
@@ -115,15 +107,15 @@ export function SessionRow({
         isBeingDragged && "opacity-40",
         isFocused
           ? "bg-sidebar-row-active font-medium text-sidebar-foreground"
-          : isOpenInActiveTab
+          : isOpenInWorkbench
             ? "text-sidebar-foreground"
             : undefined,
         isClosed && "opacity-75",
         className,
       )}
-      aria-current={isFocused ? "page" : isOpenInActiveTab ? "true" : undefined}
+      aria-current={isFocused ? "page" : isOpenInWorkbench ? "true" : undefined}
       data-session-focused={isFocused ? "true" : "false"}
-      data-session-open-in-tab={isOpenInActiveTab ? "true" : "false"}
+      data-session-open={isOpenInWorkbench ? "true" : "false"}
       aria-description="Open Session (Alt/Option: split right; Alt/Option+Shift: split down)"
       onClick={(event) => {
         const commands = useWorkbenchStore.getState();
@@ -163,7 +155,7 @@ export function SessionRow({
         onPointerDown?.(event);
       }}
     >
-      {isOpenInActiveTab && !isFocused ? (
+      {isOpenInWorkbench && !isFocused ? (
         <span aria-hidden="true" className="absolute left-0.5 size-1 rounded-full bg-primary" />
       ) : null}
       {props.children}

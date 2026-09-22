@@ -7,12 +7,10 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { CopyPlusIcon } from "lucide-react";
 
 import type { EnvironmentAwenProject } from "@awen/client-runtime/state/models";
 import type { PaneShadow } from "@awen/contracts/settings";
 import { usePrimarySettings } from "../hooks/useSettings";
-import { readLocalApi } from "../localApi";
 import type { SplitDir } from "./layout";
 import { computePaneLayoutRects } from "./layoutGeometry";
 import { MIN_PANE_HEIGHT } from "./scrollingLayout";
@@ -368,9 +366,7 @@ interface PaneProps {
 function Pane({ snapshot, projects, paneId, focused }: PaneProps) {
   const setFocused = useWorkbenchStore((s) => s.setFocused);
   const focusRequestId = useWorkbenchStore((s) => s.focusRequestId);
-  const closeView = useWorkbenchStore((s) => s.closeView);
   const requestClosePane = useWorkbenchStore((s) => s.requestClosePane);
-  const duplicateToNewTab = useWorkbenchStore((s) => s.duplicateToNewTab);
   const activeTab = getActiveTab(snapshot);
   const view = activeTab.panes.get(paneId);
   const target = view?.target ?? null;
@@ -402,20 +398,6 @@ function Pane({ snapshot, projects, paneId, focused }: PaneProps) {
     },
     [focused, paneId, setFocused],
   );
-
-  const onDuplicate = () => {
-    duplicateToNewTab({ kind: "pane", tabId: activeTab.id, paneId });
-  };
-
-  const openPaneMenu = (position: { readonly x: number; readonly y: number }) => {
-    const api = readLocalApi();
-    if (!api) return;
-    void api.contextMenu
-      .show([{ id: "duplicate", label: "Duplicate pane", icon: "copy-plus" }], position)
-      .then((clicked) => {
-        if (clicked === "duplicate") onDuplicate();
-      });
-  };
 
   const contentRef = useRef<HTMLDivElement>(null);
   const [availableSize, setAvailableSize] = useState({ width: 0, height: 0 });
@@ -458,8 +440,6 @@ function Pane({ snapshot, projects, paneId, focused }: PaneProps) {
         breadcrumbs={breadcrumbs}
         focused={focused}
         onDragStart={drag.onPointerDown}
-        onDuplicate={onDuplicate}
-        onOpenMenu={openPaneMenu}
         onClose={() => void requestClosePane(paneId)}
       />
       <div ref={contentRef} className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -486,16 +466,12 @@ function PaneHeader({
   breadcrumbs,
   focused,
   onDragStart,
-  onDuplicate,
-  onOpenMenu,
   onClose,
 }: {
   readonly paneId: string;
   readonly breadcrumbs: readonly string[];
   readonly focused: boolean;
   readonly onDragStart: (event: ReactPointerEvent<HTMLElement>) => void;
-  readonly onDuplicate: () => void;
-  readonly onOpenMenu: (position: { readonly x: number; readonly y: number }) => void;
   readonly onClose: () => void;
 }) {
   return (
@@ -523,16 +499,9 @@ function PaneHeader({
         onDragStart(event);
       }}
       onContextMenu={(event) => {
+        // Panes have no context menu; keep right-click from opening a stray one.
         event.preventDefault();
         event.stopPropagation();
-        onOpenMenu({ x: event.clientX, y: event.clientY });
-      }}
-      onKeyDown={(event) => {
-        if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
-        event.preventDefault();
-        event.stopPropagation();
-        const rect = event.currentTarget.getBoundingClientRect();
-        onOpenMenu({ x: rect.left + rect.width / 2, y: rect.bottom });
       }}
     >
       <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
@@ -552,14 +521,6 @@ function PaneHeader({
         ))}
       </div>
       <div className="flex items-center gap-0.5">
-        <button
-          type="button"
-          aria-label="Duplicate pane"
-          className="flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
-          onClick={onDuplicate}
-        >
-          <CopyPlusIcon className="size-3" />
-        </button>
         <button
           type="button"
           aria-label="Close pane"

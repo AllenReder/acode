@@ -1,4 +1,4 @@
-import { MessageSquarePlusIcon, TerminalIcon, CopyPlusIcon } from "lucide-react";
+import { MessageSquarePlusIcon, MoveIcon, TerminalIcon } from "lucide-react";
 import {
   createContext,
   useCallback,
@@ -759,7 +759,8 @@ function dragGhostInfo(source: ViewDragSource): {
     }
   }
   return {
-    icon: <CopyPlusIcon className="size-5 text-primary" />,
+    // ADR-0010: dragging a View moves it; no drag gesture copies one.
+    icon: <MoveIcon className="size-5 text-primary" />,
     typeLabel: "View",
   };
 }
