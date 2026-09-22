@@ -2199,22 +2199,9 @@ html[data-workbench-dragging] .workbench-sash {
     opacity 180ms ease-out;
   will-change: left, top, width, height;
 }
-.workbench-preview-pane-secondary {
-  position: absolute;
-  pointer-events: none;
-  border: 1px solid color-mix(in oklch, var(--border) 80%, transparent);
-  background: color-mix(in oklch, var(--background) 55%, transparent);
-  transition:
-    left 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    top 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    width 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    height 220ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: left, top, width, height;
-}
 @media (prefers-reduced-motion: reduce) {
   .workbench-pane-frame,
-  .workbench-drop-destination-indicator,
-  .workbench-preview-pane-secondary {
+  .workbench-drop-destination-indicator {
     transition: none !important;
   }
 }

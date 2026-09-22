@@ -254,8 +254,6 @@ export function resolveSidebarDropTargetAtPoint(
   return { isOverSidebar: true, sidebarDropTarget: null };
 }
 
-export { computeBaseTab };
-
 export interface VirtualPaneRegion {
   readonly tabId: string;
   readonly paneId: string;
@@ -411,6 +409,15 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           ? initialPaneDropTarget(sourceTab, source.paneId)
           : null;
 
+      const initialResult: ViewDropResult | null =
+        source.kind === "pane" && sourceTab
+          ? {
+              snapshot: currentStore,
+              tabId: sourceTab.id,
+              paneId: source.paneId,
+            }
+          : null;
+
       const getVirtualRegions = () => {
         if (!viewportRect || !baseTab) return [];
         return computeVirtualPaneRegions(baseTab, viewportRect, paneGapRef.current, {
@@ -429,10 +436,6 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           lastTarget = actual;
           return actual;
         }
-        if (initialTarget && Math.hypot(x - event.clientX, y - event.clientY) < 20) {
-          lastTarget = initialTarget;
-          return initialTarget;
-        }
         const regions = getVirtualRegions();
         const hit = resolveVirtualPaneDropTargetAtPoint(
           x,
@@ -442,13 +445,20 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           paneGapRef.current,
           source.kind === "pane",
         );
-        lastTarget = hit;
+        lastTarget = hit ?? initialTarget;
         return lastTarget;
       };
 
       const previewFor = (target: ViewDropTarget | null) => {
-        lastResult =
-          target === null ? null : useWorkbenchStore.getState().previewDrop(source, target);
+        if (target === null) {
+          lastResult = null;
+          return null;
+        }
+        if (initialTarget && sameTarget(target, initialTarget) && initialResult) {
+          lastResult = initialResult;
+          return lastResult;
+        }
+        lastResult = useWorkbenchStore.getState().previewDrop(source, target);
         return lastResult;
       };
 
@@ -797,10 +807,6 @@ export function WorkbenchDropOverlay() {
   const scrollTop = viewport?.scrollTop ?? 0;
 
   const destRect = preview && previewLayout ? previewLayout.rects.get(preview.paneId) : null;
-  const secondaryRects =
-    previewLayout && preview
-      ? [...previewLayout.rects.entries()].filter(([paneId]) => paneId !== preview.paneId)
-      : [];
 
   let destinationRect: WorkbenchRect | null = null;
   if (destRect && surfaceRect) {
@@ -865,22 +871,6 @@ export function WorkbenchDropOverlay() {
             }}
           />
         )}
-        {secondaryRects.map(([paneId, rect]) => (
-          <div
-            key={paneId}
-            data-workbench-preview-pane
-            data-pane-id={paneId}
-            data-destination="false"
-            className="workbench-preview-pane-secondary"
-            style={{
-              left: `${rect.left - scrollLeft}px`,
-              top: `${rect.top - scrollTop}px`,
-              width: `${rect.width}px`,
-              height: `${rect.height}px`,
-              borderRadius: `${paneRadius}px`,
-            }}
-          />
-        ))}
       </div>
       {typeof document !== "undefined" && document.body
         ? createPortal(

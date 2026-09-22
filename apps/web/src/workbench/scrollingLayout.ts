@@ -6,6 +6,7 @@ import {
   removePane,
   type LayoutNode,
   type PaneDropZone,
+  type PaneEdge,
 } from "./layout";
 
 export type LayoutMode = "bsp" | "scrolling";
@@ -70,28 +71,27 @@ export function columnsTree(columns: readonly Column[]): LayoutNode {
     sizes: normalize(columns.map((c) => c.width)),
   };
 }
-export function swapInColumns(columns: readonly Column[], aId: string, bId: string): Column[] {
-  if (aId === bId) return [...columns];
-  let foundA = false;
-  let foundB = false;
-  for (const col of columns) {
-    if (col.paneIds.includes(aId)) foundA = true;
-    if (col.paneIds.includes(bId)) foundB = true;
+export function adjacentScrollingPaneTarget(
+  columns: readonly Column[],
+  tabId: string,
+  paneId: string,
+): { kind: "pane"; tabId: string; paneId: string; zone: PaneEdge } | null {
+  for (let cIdx = 0; cIdx < columns.length; cIdx++) {
+    const col = columns[cIdx]!;
+    const pIdx = col.paneIds.indexOf(paneId);
+    if (pIdx < 0) continue;
+    if (col.paneIds.length > 1) {
+      const neighborId = pIdx > 0 ? col.paneIds[pIdx - 1]! : col.paneIds[pIdx + 1]!;
+      const zone: PaneEdge = pIdx === 0 ? "top" : "bottom";
+      return { kind: "pane", tabId, paneId: neighborId, zone };
+    }
+    const neighborCol = cIdx > 0 ? columns[cIdx - 1]! : columns[cIdx + 1];
+    if (!neighborCol || neighborCol.paneIds.length === 0) return null;
+    const neighborId = neighborCol.paneIds[0]!;
+    const zone: PaneEdge = cIdx === 0 ? "left" : "right";
+    return { kind: "pane", tabId, paneId: neighborId, zone };
   }
-  if (!foundA || !foundB) return [...columns];
-
-  return columns.map((col) => {
-    const hasA = col.paneIds.includes(aId);
-    const hasB = col.paneIds.includes(bId);
-    if (!hasA && !hasB) return col;
-
-    const paneIds = col.paneIds.map((id) => {
-      if (id === aId) return bId;
-      if (id === bId) return aId;
-      return id;
-    });
-    return { ...col, paneIds };
-  });
+  return null;
 }
 
 export function placeInColumns(

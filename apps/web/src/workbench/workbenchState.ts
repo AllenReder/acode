@@ -3,7 +3,7 @@ import {
   reconcileColumns,
   reconcileBsp,
   placeInColumns,
-  swapInColumns,
+  adjacentScrollingPaneTarget,
   LAYOUT_VERSION,
   MIN_COLUMN_WIDTH,
   MAX_COLUMN_WIDTH,
@@ -15,16 +15,17 @@ import {
   closeLeaf,
   firstLeafId,
   leafParent,
-  siblingLeafId,
+  neighborLeafId,
   leafIds,
   movePane,
   newTab,
   placePane,
   removePane,
   replaceLeafId,
-  swapLeaves,
   setSplitRatio,
   type AcodeTab,
+  type FocusDir,
+  type PaneEdge,
   type PaneDropZone,
   type SplitDir,
 } from "./layout.ts";
@@ -137,28 +138,21 @@ export function reconcileTab(tab: WorkbenchTab): WorkbenchTab {
 export function initialPaneDropTarget(tab: WorkbenchTab, paneId: string): ViewDropTarget | null {
   if (tab.panes.size <= 1) return null;
   if (tab.layoutMode === "scrolling") {
-    const columns = tab.columns ?? [];
-    for (let cIdx = 0; cIdx < columns.length; cIdx++) {
-      const col = columns[cIdx]!;
-      const pIdx = col.paneIds.indexOf(paneId);
-      if (pIdx < 0) continue;
-      if (col.paneIds.length > 1) {
-        const neighborId = pIdx > 0 ? col.paneIds[pIdx - 1]! : col.paneIds[pIdx + 1]!;
-        const zone: PaneDropZone = pIdx === 0 ? "top" : "bottom";
-        return { kind: "pane", tabId: tab.id, paneId: neighborId, zone };
-      }
-      const neighborCol = cIdx > 0 ? columns[cIdx - 1]! : columns[cIdx + 1];
-      if (!neighborCol || neighborCol.paneIds.length === 0) return null;
-      const neighborId = neighborCol.paneIds[0]!;
-      const zone: PaneDropZone = cIdx === 0 ? "left" : "right";
-      return { kind: "pane", tabId: tab.id, paneId: neighborId, zone };
-    }
-    return null;
+    return adjacentScrollingPaneTarget(tab.columns ?? [], tab.id, paneId);
   }
 
   const parent = leafParent(tab.layout, paneId);
-  const sibling = siblingLeafId(tab.layout, paneId);
-  if (!parent || !sibling) return null;
+  if (!parent) return null;
+  const neighborDir: FocusDir =
+    parent.dir === "right"
+      ? parent.index > 0
+        ? "left"
+        : "right"
+      : parent.index > 0
+        ? "up"
+        : "down";
+  const neighbor = neighborLeafId(tab.layout, paneId, neighborDir);
+  if (!neighbor) return null;
   const zone: PaneDropZone =
     parent.dir === "right"
       ? parent.index === 0
@@ -167,15 +161,7 @@ export function initialPaneDropTarget(tab: WorkbenchTab, paneId: string): ViewDr
       : parent.index === 0
         ? "top"
         : "bottom";
-  return { kind: "pane", tabId: tab.id, paneId: sibling, zone };
-}
-
-function swappedLayout(tab: WorkbenchTab, aId: string, bId: string) {
-  if (tab.layoutMode !== "scrolling") {
-    return { layout: swapLeaves(tab.layout, aId, bId) };
-  }
-  const columns = swapInColumns(tab.columns ?? [], aId, bId);
-  return { columns, layout: columnsTree(columns) };
+  return { kind: "pane", tabId: tab.id, paneId: neighbor, zone };
 }
 
 /** Compute the base tab layout when dragging a pane, treating the tab as if the pane is removed. */
@@ -562,23 +548,13 @@ export function applyViewDrop(
       return null;
     }
     if (sourceTab.id === targetTab.id) {
-      if (target.zone === "replace") {
-        return {
-          snapshot: updateTab(snapshot, {
-            ...sourceTab,
-            ...swappedLayout(sourceTab, source.paneId, target.paneId),
-            focusedPaneId: source.paneId,
-          }),
-          tabId: sourceTab.id,
-          paneId: source.paneId,
-        };
-      }
+      const edge: PaneEdge = target.zone === "replace" ? "right" : target.zone;
       return {
         snapshot: updateTab(snapshot, {
           ...sourceTab,
           ...(sourceTab.layoutMode === "scrolling"
-            ? placedLayout(sourceTab, source.paneId, target.paneId, target.zone)
-            : { layout: movePane(sourceTab.layout, source.paneId, target.paneId, target.zone) }),
+            ? placedLayout(sourceTab, source.paneId, target.paneId, edge)
+            : { layout: movePane(sourceTab.layout, source.paneId, target.paneId, edge) }),
           focusedPaneId: source.paneId,
         }),
         tabId: sourceTab.id,

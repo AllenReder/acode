@@ -9,7 +9,6 @@ import { describe, expect, it } from "vite-plus/test";
 import { createWorkbenchStore } from "./workbenchStore";
 import { getActiveTab } from "./workbenchState";
 import { leafIds } from "./layout";
-import { swapInColumns, type Column } from "./scrollingLayout";
 import type { ViewTarget } from "./viewRegistry";
 const agent = (id: string): ViewTarget => ({
   kind: "agentSession",
@@ -152,28 +151,4 @@ it("extracts the first pane of a stack into a distinct independently resizable c
   store.getState().changeColumn(columns[1]!.id, { width: 700 });
   expect(getActiveTab(store.getState()).columns?.map((c) => c.width)).toEqual([560, 700]);
   expect(deserializeWorkbenchSnapshot(serializeWorkbenchSnapshot(store.getState()))).not.toBeNull();
-});
-
-describe("swapInColumns", () => {
-  const col1: Column = { id: "col-1", width: 500, paneIds: ["p1", "p2"], shares: [0.5, 0.5] };
-  const col2: Column = { id: "col-2", width: 600, paneIds: ["p3"], shares: [1] };
-
-  it("swaps two panes across different columns", () => {
-    const result = swapInColumns([col1, col2], "p1", "p3");
-    expect(result[0]?.paneIds).toEqual(["p3", "p2"]);
-    expect(result[1]?.paneIds).toEqual(["p1"]);
-    expect(result[0]?.shares).toEqual([0.5, 0.5]);
-    expect(result[1]?.shares).toEqual([1]);
-  });
-
-  it("swaps two panes within the same column", () => {
-    const result = swapInColumns([col1, col2], "p1", "p2");
-    expect(result[0]?.paneIds).toEqual(["p2", "p1"]);
-    expect(result[1]?.paneIds).toEqual(["p3"]);
-  });
-
-  it("returns unmodified columns when ids match or are missing", () => {
-    expect(swapInColumns([col1, col2], "p1", "p1")).toEqual([col1, col2]);
-    expect(swapInColumns([col1, col2], "p1", "p99")).toEqual([col1, col2]);
-  });
 });

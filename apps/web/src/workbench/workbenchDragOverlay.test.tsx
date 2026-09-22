@@ -5,11 +5,10 @@ import {
   WorkbenchDragProvider,
   WorkbenchDropOverlay,
   useWorkbenchDragController,
-  type ViewDragSource,
 } from "./workbenchDrag";
 import { resetWorkbenchStore, useWorkbenchStore } from "./workbenchStore";
 import { leaf, splitPane } from "./layout";
-import type { WorkbenchTab, ViewInstance } from "./workbenchState";
+import type { WorkbenchTab, ViewInstance, ViewDragSource } from "./workbenchState";
 
 const dummyView = (id: string): ViewInstance => ({
   id: `view-${id}`,
@@ -211,7 +210,7 @@ describe("WorkbenchDrag lifecycle and overlay animations", () => {
         </WorkbenchDragProvider>,
         {
           createNodeMock: (el) => {
-            if (el.props["data-workbench-drop-preview"]) {
+            if ((el.props as Record<string, unknown>)["data-workbench-drop-preview"]) {
               return {
                 getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 }),
               };
@@ -259,8 +258,6 @@ describe("WorkbenchDrag lifecycle and overlay animations", () => {
       "data-workbench-preview-pane": true,
       "data-destination": "false",
     });
-    expect(secondaryPanes.length).toBe(1);
-    expect(secondaryPanes[0]!.props.className).toContain("workbench-preview-pane-secondary");
-    expect(secondaryPanes[0]!.props["data-pane-id"]).toBe("pane-b");
+    expect(secondaryPanes.length).toBe(0);
   });
 });

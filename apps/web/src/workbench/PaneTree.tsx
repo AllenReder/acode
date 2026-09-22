@@ -144,14 +144,14 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
     const viewport = viewportRef.current;
     if (!viewport?.querySelectorAll) return;
     const frames = viewport.querySelectorAll<HTMLElement>(".workbench-pane-frame");
-    const next = new Map<string, DOMRect>();
+    const capturedRects = new Map<string, DOMRect>();
     for (const frame of frames) {
       const id =
         frame.querySelector<HTMLElement>("[data-view-instance-id]")?.dataset.viewInstanceId;
       if (!id) continue;
-      next.set(id, frame.getBoundingClientRect());
+      capturedRects.set(id, frame.getBoundingClientRect());
     }
-    previousRects.current = next;
+    previousRects.current = capturedRects;
   }, [previewLayout]);
 
   useEffect(() => {

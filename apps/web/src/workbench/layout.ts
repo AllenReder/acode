@@ -138,27 +138,6 @@ export function splitPane(
   };
 }
 
-/** Swap the positions of two leaves, keeping the split tree and sizes intact. */
-export function swapLeaves(node: LayoutNode, aId: string, bId: string): LayoutNode {
-  if (aId === bId) return node;
-  const ids = leafIds(node);
-  if (!ids.includes(aId) || !ids.includes(bId)) return node;
-
-  function walk(current: LayoutNode): LayoutNode {
-    if (current.type === "leaf") {
-      if (current.id === aId) return leaf(bId);
-      if (current.id === bId) return leaf(aId);
-      return current;
-    }
-    return {
-      ...current,
-      children: current.children.map(walk),
-    };
-  }
-
-  return walk(node);
-}
-
 export function replaceLeafId(node: LayoutNode, fromId: string, toId: string): LayoutNode {
   if (fromId === toId) return node;
   if (node.type === "leaf") {
@@ -414,9 +393,10 @@ export function paneDirectionalZoneFromPoint(
   const nx = (x - rect.left) / rect.width;
   const ny = (y - rect.top) / rect.height;
 
-  if (nx < 0.35) return "left";
-  if (nx > 0.65) return "right";
-  return ny < 0.5 ? "top" : "bottom";
+  if (nx >= 0.42 && nx <= 0.58) {
+    return ny < 0.5 ? "top" : "bottom";
+  }
+  return nx < 0.5 ? "left" : "right";
 }
 
 export function paneDropZoneFromPoint(

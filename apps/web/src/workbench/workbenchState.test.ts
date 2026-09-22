@@ -871,7 +871,7 @@ describe("applyViewDrop", () => {
     expect(result).toMatchObject({ tabId, paneId: sourcePaneId });
   });
 
-  it("swaps two Pane positions when dropped in the center within the same Tab in BSP mode", () => {
+  it("repositions a Pane when dropped with directional edge within the same Tab in BSP mode", () => {
     const ids = makeIds();
     let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
     const tabId = snap.activeTabId;
@@ -884,7 +884,7 @@ describe("applyViewDrop", () => {
     const result = applyViewDrop(
       snap,
       { kind: "pane", tabId, paneId: sourcePaneId },
-      { kind: "pane", tabId, paneId: targetPaneId, zone: "replace" },
+      { kind: "pane", tabId, paneId: targetPaneId, zone: "right" },
       ids,
     );
 
@@ -897,7 +897,7 @@ describe("applyViewDrop", () => {
     expect(result).toMatchObject({ tabId, paneId: sourcePaneId });
   });
 
-  it("swaps two Pane positions when dropped in the center within the same Tab in scrolling mode", () => {
+  it("repositions a Pane when dropped with directional edge within the same Tab in scrolling mode", () => {
     const ids = makeIds();
     let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
     const tabId = snap.activeTabId;
@@ -911,7 +911,7 @@ describe("applyViewDrop", () => {
     const result = applyViewDrop(
       snap,
       { kind: "pane", tabId, paneId: sourcePaneId },
-      { kind: "pane", tabId, paneId: targetPaneId, zone: "replace" },
+      { kind: "pane", tabId, paneId: targetPaneId, zone: "right" },
       ids,
     );
 
