@@ -1,26 +1,26 @@
-// @effect-diagnostics nodeBuiltinImport:off - Tests exercise the host teardown boundary through fake process ports.
-
-import * as NodeFSP from "node:fs/promises";
-import * as NodeOS from "node:os";
-import * as NodePath from "node:path";
+// @effect-diagnostics nodeBuiltinImport:off - Tests exercise the host process-tree boundary through fake ports.
 
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   collectProcessTree,
   createProcessTreePort,
-  removePathWithRetry,
-  runTeardownSteps,
   stopProcessTree,
   type ProcessTableEntry,
   type ProcessTreePort,
-} from "./process-teardown.ts";
+} from "./process-tree.ts";
 
 interface FakeProcess {
-  readonly pid: number;
-  readonly parentPid: number;
+  pid: number;
+  parentPid: number;
+  createdAt: number;
   /** Survives every kill attempt, standing in for a leaked handle holder. */
-  readonly immortal?: boolean;
+  immortal?: boolean;
+}
+
+interface FakeControls {
+  readonly processes: FakeProcess[];
+  readonly setEnumerable: (value: boolean) => void;
 }
 
 interface FakeHost {
@@ -43,10 +43,13 @@ function createFakeHost(input: {
   readonly drainsGracefully?: boolean;
   /** When true every graceful signal is ignored, as a launcher that hangs would. */
   readonly ignoresGracefulSignal?: boolean;
+  /** Lets a test change the table between reads, which is where pids get reused. */
+  readonly onTableRead?: (readIndex: number, controls: FakeControls) => void;
 }): FakeHost {
   const calls: string[] = [];
   const processes = input.processes.map((entry) => ({ ...entry }));
-  const enumerable = input.enumerable ?? true;
+  const enumerable = { value: input.enumerable ?? true };
+  let reads = 0;
   let clock = 0;
   const exit = Promise.withResolvers<void>();
 
@@ -64,7 +67,7 @@ function createFakeHost(input: {
   /** A signal reaches one process; Windows terminates it without warning. */
   const removeOne = (pid: number): void => {
     const index = processes.findIndex((entry) => entry.pid === pid);
-    if (processes[index]?.immortal !== true && index >= 0) processes.splice(index, 1);
+    if (index >= 0 && processes[index]?.immortal !== true) processes.splice(index, 1);
     settle();
   };
 
@@ -72,7 +75,7 @@ function createFakeHost(input: {
   const removeSubtree = (pid: number): void => {
     for (const target of [pid, ...childPidsOf(pid)]) {
       const index = processes.findIndex((entry) => entry.pid === target);
-      if (processes[index]?.immortal === true || index < 0) continue;
+      if (index < 0 || processes[index]?.immortal === true) continue;
       processes.splice(index, 1);
     }
     settle();
@@ -91,8 +94,17 @@ function createFakeHost(input: {
         removeSubtree(pid);
       },
       hasRootExited: () => !isAlive(input.rootPid),
-      listProcesses: async (): Promise<ReadonlyArray<ProcessTableEntry> | null> =>
-        enumerable ? processes.map(({ parentPid, pid }) => ({ parentPid, pid })) : null,
+      listProcesses: async (): Promise<ReadonlyArray<ProcessTableEntry> | null> => {
+        reads += 1;
+        input.onTableRead?.(reads, {
+          processes,
+          setEnumerable: (value) => {
+            enumerable.value = value;
+          },
+        });
+        if (!enumerable.value) return null;
+        return processes.map(({ createdAt, parentPid, pid }) => ({ createdAt, parentPid, pid }));
+      },
       now: () => clock,
       platform: input.platform,
       rootExited: exit.promise,
@@ -121,84 +133,88 @@ function createFakeHost(input: {
   };
 }
 
-function failure(code: string): Error & { code: string } {
-  return Object.assign(new Error(`${code}: resource busy or locked`), { code });
-}
+/** Launcher `100` with three generations below it, oldest first. */
+const launcherTree: ReadonlyArray<FakeProcess> = [
+  { createdAt: 1_000, parentPid: 1, pid: 100 },
+  { createdAt: 2_000, parentPid: 100, pid: 200 },
+  { createdAt: 3_000, parentPid: 200, pid: 300 },
+  { createdAt: 4_000, parentPid: 300, pid: 400 },
+];
+
+const trackedTree = [100, 200, 300, 400];
 
 describe("collectProcessTree", () => {
   it("collects the launcher and its whole subtree, ignoring unrelated branches", () => {
     const entries: ReadonlyArray<ProcessTableEntry> = [
-      { parentPid: 1, pid: 100 },
-      { parentPid: 100, pid: 200 },
-      { parentPid: 200, pid: 300 },
-      { parentPid: 300, pid: 400 },
-      { parentPid: 1, pid: 900 },
-      { parentPid: 900, pid: 901 },
+      { createdAt: 1_000, parentPid: 1, pid: 100 },
+      { createdAt: 2_000, parentPid: 100, pid: 200 },
+      { createdAt: 3_000, parentPid: 200, pid: 300 },
+      { createdAt: 4_000, parentPid: 300, pid: 400 },
+      { createdAt: 1_500, parentPid: 1, pid: 900 },
+      { createdAt: 1_600, parentPid: 900, pid: 901 },
     ];
 
-    expect(collectProcessTree(100, entries)).toEqual([100, 200, 300, 400]);
+    expect(collectProcessTree(100, entries)).toEqual(trackedTree);
   });
 
   it("returns only the launcher when the table no longer links its descendants", () => {
     const entries: ReadonlyArray<ProcessTableEntry> = [
-      { parentPid: 1, pid: 200 },
-      { parentPid: 200, pid: 300 },
+      { createdAt: 2_000, parentPid: 1, pid: 200 },
+      { createdAt: 3_000, parentPid: 200, pid: 300 },
     ];
 
     expect(collectProcessTree(100, entries)).toEqual([100]);
   });
 
+  it("drops a candidate that predates the process it claims as its parent", () => {
+    // Windows never reparents an orphan: the field keeps naming a dead pid, and
+    // a reused pid makes that stale link look like a live child. A process that
+    // started before its claimed parent did cannot be that parent's child, and
+    // must not be reported as part of this run's tree.
+    const entries: ReadonlyArray<ProcessTableEntry> = [
+      { createdAt: 5_000, parentPid: 1, pid: 100 },
+      { createdAt: 200, parentPid: 100, pid: 900 },
+      { createdAt: 5_100, parentPid: 100, pid: 200 },
+    ];
+
+    expect(collectProcessTree(100, entries)).toEqual([100, 200]);
+  });
+
   it("terminates on a table that links a process to itself", () => {
-    expect(collectProcessTree(100, [{ parentPid: 100, pid: 100 }])).toEqual([100]);
+    expect(collectProcessTree(100, [{ createdAt: 1_000, parentPid: 100, pid: 100 }])).toEqual([
+      100,
+    ]);
   });
 });
 
 describe("stopProcessTree on win32", () => {
-  const tree: ReadonlyArray<FakeProcess> = [
-    { parentPid: 1, pid: 100 },
-    { parentPid: 100, pid: 200 },
-    { parentPid: 200, pid: 300 },
-    { parentPid: 300, pid: 400 },
-  ];
-
-  it("reports no survivors when the launcher's tree drains on the graceful signal", async () => {
-    const host = createFakeHost({
-      drainsGracefully: true,
-      platform: "win32",
-      processes: tree,
-      rootPid: 100,
-    });
+  it("kills the launcher's tree once, and never re-issues a kill per observed pid", async () => {
+    // `SIGTERM` on Windows terminates the launcher outright and cannot be
+    // handled, so signalling first would only orphan the subtree and put it out
+    // of `taskkill /T`'s reach. The host's own walk of the live tree is the
+    // whole kill; chasing pids afterwards would mean killing on identity this
+    // process inferred from parent links Windows cannot promise.
+    const host = createFakeHost({ platform: "win32", processes: launcherTree, rootPid: 100 });
 
     const result = await stopProcessTree({ port: host.port, rootPid: 100 });
 
     expect(result).toMatchObject({
-      descendants: { status: "swept", tracked: [100, 200, 300, 400] },
-      graceful: true,
+      descendants: { status: "observed", tracked: trackedTree },
       survivors: [],
+      termination: "forced",
       verified: true,
     });
-    expect(host.calls).toEqual(["signal 100 SIGTERM"]);
-  });
-
-  it("sweeps the subtree that the graceful signal orphaned out of the launcher's reach", async () => {
-    // `SIGTERM` on Windows terminates the launcher outright, so `taskkill /T`
-    // against it can no longer reach anything below it. The daemon holding the
-    // temporary home's database is the process that has to be swept by pid.
-    const host = createFakeHost({ platform: "win32", processes: tree, rootPid: 100 });
-
-    const result = await stopProcessTree({ port: host.port, rootPid: 100 });
-
-    expect(result.graceful).toBe(false);
-    expect(result.survivors).toEqual([]);
+    expect(host.calls).toEqual(["taskkill /PID 100 /T /F"]);
     expect(host.alivePids()).toEqual([]);
-    expect(host.calls).toContain("signal 100 SIGTERM");
-    expect(host.calls).toContain("taskkill /PID 200 /T /F");
   });
 
-  it("reports a tracked process that survives every kill attempt", async () => {
+  it("reports a process that outlives the kill instead of chasing it by pid", async () => {
     const host = createFakeHost({
       platform: "win32",
-      processes: [...tree.slice(0, 3), { immortal: true, parentPid: 300, pid: 400 }],
+      processes: [
+        ...launcherTree.slice(0, 3),
+        { createdAt: 4_000, immortal: true, parentPid: 300, pid: 400 },
+      ],
       rootPid: 100,
     });
 
@@ -207,15 +223,39 @@ describe("stopProcessTree on win32", () => {
     expect(result.survivors).toEqual([400]);
     expect(result.verified).toBe(true);
     expect(host.alivePids()).toEqual([400]);
+    expect(host.calls).toEqual(["taskkill /PID 100 /T /F"]);
   });
 
-  it("force-kills the tree without a graceful signal when the table is unavailable", async () => {
-    // A graceful signal would orphan the subtree before it could be tracked, so
-    // the force kill has to happen while the launcher still leads it.
+  it("does not report a pid that was reused by a different process", async () => {
+    // The table is read before the kill, so a pid in it can stop naming the same
+    // process before it is inspected. A reused number is not a survivor.
+    const host = createFakeHost({
+      onTableRead: (readIndex, { processes }) => {
+        if (readIndex !== 2) return;
+        for (const entry of processes) {
+          if (entry.pid === 400) entry.createdAt = 999_999;
+        }
+      },
+      platform: "win32",
+      processes: [
+        ...launcherTree.slice(0, 3),
+        { createdAt: 4_000, immortal: true, parentPid: 300, pid: 400 },
+      ],
+      rootPid: 100,
+    });
+
+    const result = await stopProcessTree({ port: host.port, rootPid: 100 });
+
+    expect(result.survivors).toEqual([]);
+    expect(result.verified).toBe(true);
+    expect(host.alivePids()).toContain(400);
+  });
+
+  it("force-kills the launcher's tree when the table is unavailable", async () => {
     const host = createFakeHost({
       enumerable: false,
       platform: "win32",
-      processes: tree,
+      processes: launcherTree,
       rootPid: 100,
     });
 
@@ -223,8 +263,8 @@ describe("stopProcessTree on win32", () => {
 
     expect(result).toMatchObject({
       descendants: { status: "skipped", reason: "enumeration-unavailable" },
-      graceful: false,
       survivors: [],
+      termination: "forced",
       verified: false,
     });
     expect(host.calls).toEqual(["taskkill /PID 100 /T /F"]);
@@ -237,8 +277,8 @@ describe("stopProcessTree on win32", () => {
 
     expect(result).toMatchObject({
       descendants: { status: "skipped", reason: "root-exited" },
-      graceful: false,
       survivors: [],
+      termination: "none",
       verified: false,
     });
     expect(host.calls).toEqual([]);
@@ -250,7 +290,7 @@ describe("stopProcessTree on POSIX", () => {
     const host = createFakeHost({
       drainsGracefully: true,
       platform: "linux",
-      processes: [{ parentPid: 1, pid: 100 }],
+      processes: [{ createdAt: 1_000, parentPid: 1, pid: 100 }],
       rootPid: 100,
     });
 
@@ -258,9 +298,9 @@ describe("stopProcessTree on POSIX", () => {
 
     expect(result).toMatchObject({
       descendants: { status: "skipped", reason: "not-required" },
-      graceful: true,
       strategy: "process-group",
       survivors: [],
+      termination: "graceful",
     });
     expect(host.calls).toEqual(["group -100 SIGTERM"]);
   });
@@ -269,117 +309,27 @@ describe("stopProcessTree on POSIX", () => {
     const host = createFakeHost({
       ignoresGracefulSignal: true,
       platform: "darwin",
-      processes: [{ parentPid: 1, pid: 100 }],
+      processes: [{ createdAt: 1_000, parentPid: 1, pid: 100 }],
       rootPid: 100,
     });
 
     const result = await stopProcessTree({ port: host.port, rootPid: 100 });
 
-    expect(result).toMatchObject({ graceful: false, survivors: [], strategy: "process-group" });
+    expect(result).toMatchObject({
+      survivors: [],
+      strategy: "process-group",
+      termination: "forced",
+    });
     expect(host.calls).toEqual(["group -100 SIGTERM", "group -100 SIGKILL"]);
   });
 
   it("does not signal a group whose launcher has already exited", async () => {
     const host = createFakeHost({ platform: "linux", processes: [], rootPid: 100 });
 
-    await stopProcessTree({ port: host.port, rootPid: 100 });
+    const result = await stopProcessTree({ port: host.port, rootPid: 100 });
 
+    expect(result.termination).toBe("none");
     expect(host.calls).toEqual([]);
-  });
-});
-
-describe("removePathWithRetry", () => {
-  it("retries the codes Windows raises while a handle is still open", async () => {
-    const codes = ["EBUSY", "EPERM"];
-    let attempts = 0;
-    const removed: string[] = [];
-
-    const result = await removePathWithRetry("C:\\scratch", {
-      remove: async (path) => {
-        attempts += 1;
-        const code = codes.shift();
-        if (code !== undefined) throw failure(code);
-        removed.push(path);
-      },
-      sleep: async () => undefined,
-    });
-
-    expect(result).toEqual({ attempts: 3, reason: null, removed: true });
-    expect(removed).toEqual(["C:\\scratch"]);
-  });
-
-  it("reports the retained path and reason instead of throwing", async () => {
-    const result = await removePathWithRetry("C:\\scratch", {
-      delaysMs: [1, 1],
-      remove: async () => {
-        throw failure("EBUSY");
-      },
-      sleep: async () => undefined,
-    });
-
-    expect(result.removed).toBe(false);
-    expect(result.attempts).toBe(3);
-    expect(result.reason).toContain("EBUSY");
-  });
-
-  it("stops immediately on a failure that retrying cannot fix", async () => {
-    let attempts = 0;
-
-    const result = await removePathWithRetry("C:\\scratch", {
-      remove: async () => {
-        attempts += 1;
-        throw failure("EINVAL");
-      },
-      sleep: async () => undefined,
-    });
-
-    expect(result.removed).toBe(false);
-    expect(attempts).toBe(1);
-  });
-
-  it("removes a real directory with the default primitive", async () => {
-    const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3code-teardown-"));
-    await NodeFSP.writeFile(NodePath.join(directory, "state.sqlite"), "x", "utf8");
-
-    const result = await removePathWithRetry(directory);
-
-    expect(result).toEqual({ attempts: 1, reason: null, removed: true });
-    await expect(NodeFSP.stat(directory)).rejects.toThrow();
-  });
-});
-
-describe("runTeardownSteps", () => {
-  it("runs every step and collects failures instead of throwing", async () => {
-    const ran: string[] = [];
-
-    const failures = await runTeardownSteps([
-      { label: "first", run: () => void ran.push("first") },
-      {
-        label: "second",
-        run: () => {
-          ran.push("second");
-          throw new Error("close failed");
-        },
-      },
-      { label: "third", run: () => void ran.push("third") },
-    ]);
-
-    expect(ran).toEqual(["first", "second", "third"]);
-    expect(failures).toHaveLength(1);
-    expect(failures[0]?.label).toBe("second");
-    expect(failures[0]?.error).toBeInstanceOf(Error);
-  });
-
-  it("awaits asynchronous steps in order", async () => {
-    const ran: string[] = [];
-
-    const failures = await runTeardownSteps([
-      { label: "first", run: async () => void ran.push("first") },
-      { label: "second", run: async () => void ran.push("second") },
-    ]);
-
-    expect(failures).toEqual([]);
-    expect(ran).toEqual(["first", "second"]);
   });
 });
 
@@ -394,7 +344,7 @@ describe("createProcessTreePort", () => {
     expect(await port.listProcesses()).toBeNull();
   });
 
-  it("reports the live table on a Windows host", async () => {
+  it("dates every process it reports on win32", async () => {
     const port = createProcessTreePort({
       hasRootExited: () => false,
       platform: "win32",
@@ -404,6 +354,6 @@ describe("createProcessTreePort", () => {
     const table = await port.listProcesses();
     // Enumeration is Windows-only, so there is nothing to assert elsewhere.
     if (table === null) return;
-    expect(table.some((entry) => entry.pid === process.pid)).toBe(true);
+    expect(table.find((entry) => entry.pid === process.pid)?.createdAt).toBeGreaterThan(0);
   });
 });
