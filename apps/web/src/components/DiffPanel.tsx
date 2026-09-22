@@ -45,8 +45,6 @@ import {
 import { PREFERRED_HIGHLIGHTER } from "../lib/syntaxHighlighting";
 import { areAllDiffFilesCollapsed, toggleAllDiffFiles } from "../lib/diffCollapse";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
-import { useWorkbenchStore } from "../workbench/workbenchStore";
-import { resolveDiffPathForWorkspace } from "../diffFileActions";
 import type { EnvironmentId, WorkspaceId } from "@t3tools/contracts";
 import { useWorkspaceMutationRefresh } from "../hooks/useWorkspaceMutationRefresh";
 import { useProject, useThread } from "../state/entities";
@@ -334,12 +332,12 @@ export default function DiffPanel({
   );
   const currentLoadDiffFiles = useMemo<FileDiffContentsLoader | undefined>(() => {
     const preview = branchDiffPreview.data;
-    if (selectedTurnId !== null || !activeThread || !preview || !selectedGitSource) {
+    if (selectedTurnId !== null || !effectiveEnvironmentId || !preview || !selectedGitSource) {
       return undefined;
     }
 
     return createGitDiffFileContentsLoader(getDiffFileContents, {
-      environmentId: activeThread.environmentId,
+      environmentId: effectiveEnvironmentId,
       cwd: preview.cwd,
       sourceKind: selectedGitSource.kind,
       baseRef: selectedGitSource.baseRef,
@@ -347,7 +345,7 @@ export default function DiffPanel({
       cacheKey: selectedGitSource.diffHash,
     });
   }, [
-    activeThread,
+    effectiveEnvironmentId,
     branchDiffPreview.data,
     getDiffFileContents,
     selectedGitSource,
@@ -363,10 +361,10 @@ export default function DiffPanel({
   const localBranchRefs = useEnvironmentQuery(
     selectedTurnId === null &&
       selectedGitScope === "branch" &&
-      activeThread &&
+      effectiveEnvironmentId &&
       branchDiffPreview.data?.cwd
       ? vcsEnvironment.listRefs({
-          environmentId: activeThread.environmentId,
+          environmentId: effectiveEnvironmentId,
           input: {
             cwd: branchDiffPreview.data.cwd,
             includeMatchingRemoteRefs: true,
@@ -380,10 +378,10 @@ export default function DiffPanel({
   const remoteBranchRefs = useEnvironmentQuery(
     selectedTurnId === null &&
       selectedGitScope === "branch" &&
-      activeThread &&
+      effectiveEnvironmentId &&
       branchDiffPreview.data?.cwd
       ? vcsEnvironment.listRefs({
-          environmentId: activeThread.environmentId,
+          environmentId: effectiveEnvironmentId,
           input: {
             cwd: branchDiffPreview.data.cwd,
             includeMatchingRemoteRefs: true,
@@ -507,25 +505,8 @@ export default function DiffPanel({
 
   const openDiffFile = useCallback(
     (filePath: string) => {
-      if (workspaceScope) {
-        const workspaceFilePath = resolveDiffPathForWorkspace({
-          filePath,
-          workspaceRoot: activeCwd,
-          repositoryRoot: activeRepositoryRoot,
-        });
-        if (!workspaceFilePath) return;
-        useWorkbenchStore.getState().openTarget({
-          kind: "workspace",
-          definitionId: "fileView",
-          environmentId: workspaceScope.environmentId,
-          workspaceId: workspaceScope.workspaceId,
-          initialPath: workspaceFilePath,
-        });
-        return;
-      }
-
       openDiffFilePrimaryAction({
-        threadRef: routeThreadRef,
+        threadRef: workspaceScope ? null : routeThreadRef,
         filePath,
         activeCwd,
         repositoryRoot: activeRepositoryRoot,
@@ -535,12 +516,7 @@ export default function DiffPanel({
             if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
               console.warn("Failed to open diff file in editor.", {
                 operation: "open-diff-file",
-                ...(routeThreadRef
-                  ? {
-                      environmentId: routeThreadRef.environmentId,
-                      threadId: routeThreadRef.threadId,
-                    }
-                  : {}),
+                ...(effectiveEnvironmentId ? { environmentId: effectiveEnvironmentId } : {}),
                 ...safeErrorLogAttributes(squashAtomCommandFailure(result)),
               });
             }
@@ -548,7 +524,7 @@ export default function DiffPanel({
         },
       });
     },
-    [activeCwd, activeRepositoryRoot, openInPreferredEditor, routeThreadRef, workspaceScope],
+    [activeCwd, activeRepositoryRoot, effectiveEnvironmentId, openInPreferredEditor, routeThreadRef, workspaceScope],
   );
   const toggleDiffFileCollapsed = useCallback(
     (fileKey: string) => {
