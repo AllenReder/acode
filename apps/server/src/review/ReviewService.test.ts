@@ -8,25 +8,42 @@ import * as PlatformError from "effect/PlatformError";
 import { ServerConfig } from "../config.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
+import * as Option from "effect/Option";
+import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import * as ReviewService from "./ReviewService.ts";
 
 function makeLayer(input: {
   readonly workspaceRoot: string;
   readonly baseDir: string;
   readonly detectCalls?: Array<{ readonly cwd: string }>;
+  readonly projectionSnapshotQuery?: Partial<ProjectionSnapshotQuery.ProjectionSnapshotQueryShape>;
 }) {
-  return ReviewService.layer.pipe(
-    Layer.provide(
-      Layer.mock(VcsDriverRegistry.VcsDriverRegistry)({
-        get: () => Effect.die("unexpected VCS registry get"),
-        resolve: () => Effect.die("unexpected VCS registry resolve"),
-        detect: (request) =>
-          Effect.sync(() => {
-            input.detectCalls?.push({ cwd: request.cwd });
-            return null;
-          }),
+  const vcsMock = Layer.mock(VcsDriverRegistry.VcsDriverRegistry)({
+    get: () => Effect.die("unexpected VCS registry get"),
+    resolve: () => Effect.die("unexpected VCS registry resolve"),
+    detect: (request) =>
+      Effect.sync(() => {
+        input.detectCalls?.push({ cwd: request.cwd });
+        return null;
       }),
-    ),
+  });
+
+  if (input.projectionSnapshotQuery !== undefined) {
+    return ReviewService.layer.pipe(
+      Layer.provide(vcsMock),
+      Layer.provide(Layer.mock(GitVcsDriver.GitVcsDriver)({})),
+      Layer.provide(
+        Layer.mock(ProjectionSnapshotQuery.ProjectionSnapshotQuery)(
+          input.projectionSnapshotQuery,
+        ),
+      ),
+      Layer.provide(ServerConfig.layerTest(input.workspaceRoot, input.baseDir)),
+      Layer.provideMerge(NodeServices.layer),
+    );
+  }
+
+  return ReviewService.layer.pipe(
+    Layer.provide(vcsMock),
     Layer.provide(Layer.mock(GitVcsDriver.GitVcsDriver)({})),
     Layer.provide(ServerConfig.layerTest(input.workspaceRoot, input.baseDir)),
     Layer.provideMerge(NodeServices.layer),
@@ -105,6 +122,40 @@ describe("ReviewService", () => {
       assert.strictEqual(result.cwd, workspaceRoot);
       assert.deepStrictEqual(result.sources, []);
       assert.deepStrictEqual(detectCalls, [{ cwd: workspaceRoot }]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("allows diff preview cwd inside a registered ACode project workspace root", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const workspaceRoot = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-workspace-" });
+      const additionalWorkspace = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-additional-" });
+      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-base-" });
+      const detectCalls: Array<{ readonly cwd: string }> = [];
+
+      const projectionSnapshotQuery = {
+        getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
+        getProjectShells: () => Effect.succeed([]),
+        listAcodeProjects: () =>
+          Effect.succeed([
+            {
+              id: "proj-1" as any,
+              workspaces: [{ id: "ws-1" as any, workspaceRoot: additionalWorkspace }],
+            },
+          ] as any),
+      };
+
+      const result = yield* Effect.gen(function* () {
+        const review = yield* ReviewService.ReviewService;
+        return yield* review.getDiffPreview({ cwd: additionalWorkspace });
+      }).pipe(
+        Effect.provide(
+          makeLayer({ workspaceRoot, baseDir, detectCalls, projectionSnapshotQuery }),
+        ),
+      );
+
+      assert.strictEqual(result.cwd, additionalWorkspace);
+      assert.deepStrictEqual(detectCalls, [{ cwd: additionalWorkspace }]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
