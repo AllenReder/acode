@@ -1476,9 +1476,7 @@ export default function ChatView(props: ChatViewProps) {
     workbenchMode = false,
   } = props;
   const focusedRef = useRef(focused);
-  useLayoutEffect(() => {
-    focusedRef.current = focused;
-  }, [focused]);
+  focusedRef.current = focused;
   const draftId = routeKind === "draft" ? props.draftId : null;
   const threadSyncPhase = routeKind === "server" ? (props.threadSyncPhase ?? null) : null;
   const threadDetailLoading = threadSyncPhase === "loading";
@@ -1660,8 +1658,23 @@ export default function ChatView(props: ChatViewProps) {
   const composerImagesRef = useRef<ComposerImageAttachment[]>([]);
   const composerFilesRef = useRef<ComposerFileAttachment[]>([]);
   const composerTerminalContextsRef = useRef<TerminalContextDraft[]>([]);
+  const globalComposerRef = useComposerHandleContext();
   const localComposerRef = useRef<ChatComposerHandle | null>(null);
-  const composerRef = useComposerHandleContext() ?? localComposerRef;
+  const composerRef = localComposerRef;
+
+  useEffect(() => {
+    if (!globalComposerRef) return;
+    if (focused) {
+      globalComposerRef.current = localComposerRef.current;
+    } else if (globalComposerRef.current === localComposerRef.current) {
+      globalComposerRef.current = null;
+    }
+    return () => {
+      if (globalComposerRef.current === localComposerRef.current) {
+        globalComposerRef.current = null;
+      }
+    };
+  }, [focused, globalComposerRef]);
   const branchToolbarRef = useRef<BranchToolbarHandle>(null);
   const pasteAsTextShortcutUntilRef = useRef(0);
   const [restingComposerControlsHost, setRestingComposerControlsHost] =
@@ -3984,7 +3997,10 @@ export default function ChatView(props: ChatViewProps) {
   const focusComposer = useCallback(() => {
     if (focusedRef.current) composerRef.current?.focusAtEnd();
   }, [composerRef]);
-  useEffect(() => subscribeSnapShotComposerFocus(focusComposer), [focusComposer]);
+  useEffect(() => {
+    if (!focused) return;
+    return subscribeSnapShotComposerFocus(focusComposer);
+  }, [focused, focusComposer]);
   const scheduleComposerFocus = useCallback(() => {
     window.requestAnimationFrame(() => {
       focusComposer();
@@ -5741,7 +5757,7 @@ export default function ChatView(props: ChatViewProps) {
   // terminal is a surface and is recognized by the predicate instead. Mobile is left alone so
   // returning to the app does not raise the keyboard.
   useEffect(() => {
-    if (!activeThread?.id || terminalUiState.terminalOpen || isMobileViewport) return;
+    if (!focused || !activeThread?.id || terminalUiState.terminalOpen || isMobileViewport) return;
     let frame: number | null = null;
     const onWindowFocus = () => {
       if (frame !== null) window.cancelAnimationFrame(frame);
@@ -5751,6 +5767,7 @@ export default function ChatView(props: ChatViewProps) {
       frame = window.requestAnimationFrame(() => {
         frame = window.requestAnimationFrame(() => {
           frame = null;
+          if (!focusedRef.current) return;
           if (shouldRefocusComposerOnWindowFocus(document.activeElement)) focusComposer();
         });
       });
@@ -5760,7 +5777,7 @@ export default function ChatView(props: ChatViewProps) {
       window.removeEventListener("focus", onWindowFocus);
       if (frame !== null) window.cancelAnimationFrame(frame);
     };
-  }, [activeThread?.id, focusComposer, isMobileViewport, terminalUiState.terminalOpen]);
+  }, [focused, activeThread?.id, focusComposer, isMobileViewport, terminalUiState.terminalOpen]);
 
   useEffect(() => {
     if (!activeThread?.id) return;

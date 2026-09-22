@@ -199,3 +199,214 @@ it("applies pane gap, radius, and shadow CSS variables to the canvas", async () 
   expect(canvas.props.style["--pane-radius"]).toBe("0px");
   expect(canvas.props.style["--pane-shadow"]).toBe("none");
 });
+
+it("prevents native focus scroll on PaneHeader mousedown unless clicking a button", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  registerViewDefinition({
+    id: "workspace",
+    label: "Workspace",
+    accepts: (target): target is Extract<ViewTarget, { kind: "workspace" }> =>
+      target.kind === "workspace",
+    bind: emptyViewBinding,
+    Component: () => <div>View</div>,
+  });
+  const target = {
+    kind: "workspace",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "w1" as WorkspaceId,
+  } as const;
+  useWorkbenchStore.getState().openTarget(target);
+
+  await act(() => {
+    renderer = create(<Harness />);
+  });
+
+  const header = renderer!.root.findByProps({ role: "toolbar" });
+  const preventDefault = vi.fn();
+
+  header.props.onMouseDown({
+    target: { closest: () => null },
+    preventDefault,
+  });
+  expect(preventDefault).toHaveBeenCalled();
+
+  const buttonPreventDefault = vi.fn();
+  header.props.onMouseDown({
+    target: { closest: (selector: string) => (selector === "button" ? {} : null) },
+    preventDefault: buttonPreventDefault,
+  });
+  expect(buttonPreventDefault).not.toHaveBeenCalled();
+});
+
+it("focuses the pane via onMouseDownCapture on the pane frame", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  registerViewDefinition({
+    id: "workspace",
+    label: "Workspace",
+    accepts: (target): target is Extract<ViewTarget, { kind: "workspace" }> =>
+      target.kind === "workspace",
+    bind: emptyViewBinding,
+    Component: () => <div>View</div>,
+  });
+  const first = {
+    kind: "workspace",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "w1" as WorkspaceId,
+  } as const;
+  useWorkbenchStore.getState().openTarget(first);
+  useWorkbenchStore.getState().splitFocused({ ...first, workspaceId: "w2" as WorkspaceId }, "right");
+
+  await act(() => {
+    renderer = create(<Harness />);
+  });
+
+  const state = useWorkbenchStore.getState();
+  const activeTab = getActiveTab(state);
+  const paneIds = [...activeTab.panes.keys()];
+  const unfocusedPaneId = paneIds.find((id) => id !== activeTab.focusedPaneId)!;
+
+  const frames = renderer!.root.findAllByProps({ className: "workbench-pane-frame" });
+  expect(frames.length).toBe(2);
+
+  // Trigger onMouseDownCapture on the unfocused frame
+  const unfocusedFrame = frames.find((f) => f.props.children.props.children.props.paneId === unfocusedPaneId)!;
+  await act(() => unfocusedFrame.props.onMouseDownCapture());
+
+  expect(getActiveTab(useWorkbenchStore.getState()).focusedPaneId).toBe(unfocusedPaneId);
+});
+
+it("clears viewFocused on the blurred pane immediately during scrolling animation so it cannot steal focus back", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const focusLog: { paneId: string; focused: boolean }[] = [];
+  registerViewDefinition({
+    id: "workspace",
+    label: "Workspace",
+    accepts: (target): target is Extract<ViewTarget, { kind: "workspace" }> =>
+      target.kind === "workspace",
+    bind: emptyViewBinding,
+    Component: ({ paneId, focused }) => {
+      focusLog.push({ paneId, focused });
+      return <output data-pane-output={paneId}>{String(focused)}</output>;
+    },
+  });
+
+  const first = {
+    kind: "workspace",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "w1" as WorkspaceId,
+  } as const;
+  useWorkbenchStore.getState().openTarget(first);
+  const firstId = getActiveTab(useWorkbenchStore.getState()).focusedPaneId;
+  useWorkbenchStore.getState().splitFocused({ ...first, workspaceId: "w2" as WorkspaceId }, "right");
+  const secondId = getActiveTab(useWorkbenchStore.getState()).focusedPaneId;
+  useWorkbenchStore.getState().setLayoutMode("scrolling");
+
+  await act(() => {
+    renderer = create(<Harness />);
+  });
+
+  // Second pane is initially focused
+  expect(getActiveTab(useWorkbenchStore.getState()).focusedPaneId).toBe(secondId);
+
+  // Now focus first pane
+  await act(() => {
+    useWorkbenchStore.getState().setFocused(firstId);
+  });
+
+  // Verify that the second pane does NOT retain viewFocused = true
+  const outputs = renderer!.root.findAllByType("output");
+  const secondOutput = outputs.find((o) => o.props["data-pane-output"] === secondId);
+  expect(secondOutput?.children[0]).toBe("false");
+});
+
+it("blurs activeElement of another pane on activation and prevents focus bounce", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  registerViewDefinition({
+    id: "workspace",
+    label: "Workspace",
+    accepts: (target): target is Extract<ViewTarget, { kind: "workspace" }> =>
+      target.kind === "workspace",
+    bind: emptyViewBinding,
+    Component: ({ paneId }) => <div data-view-pane={paneId}>Content</div>,
+  });
+
+  const first = {
+    kind: "workspace",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "w1" as WorkspaceId,
+  } as const;
+  useWorkbenchStore.getState().openTarget(first);
+  const firstId = getActiveTab(useWorkbenchStore.getState()).focusedPaneId;
+  useWorkbenchStore.getState().splitFocused({ ...first, workspaceId: "w2" as WorkspaceId }, "right");
+  const secondId = getActiveTab(useWorkbenchStore.getState()).focusedPaneId;
+
+  await act(() => {
+    renderer = create(<Harness />);
+  });
+
+  expect(getActiveTab(useWorkbenchStore.getState()).focusedPaneId).toBe(secondId);
+
+  const blurredActiveMock = {
+    blur: vi.fn(),
+    closest: (selector: string) => {
+      if (selector === ".workbench-pane") return { dataset: { paneId: secondId } };
+      return null;
+    },
+  };
+  vi.stubGlobal("document", { activeElement: blurredActiveMock });
+  vi.stubGlobal("window", { getSelection: () => ({ removeAllRanges: vi.fn() }) });
+
+  const frames = renderer!.root.findAllByProps({ className: "workbench-pane-frame" });
+  const firstFrame = frames.find((f) => f.props.children.props.children.props.paneId === firstId)!;
+
+  await act(() => firstFrame.props.onMouseDownCapture({ target: null, currentTarget: null }));
+
+  expect(blurredActiveMock.blur).toHaveBeenCalled();
+  expect(getActiveTab(useWorkbenchStore.getState()).focusedPaneId).toBe(firstId);
+});
+
+it("supports bidirectional focus switching between panes without focus bounce", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  registerViewDefinition({
+    id: "workspace",
+    label: "Workspace",
+    accepts: (target): target is Extract<ViewTarget, { kind: "workspace" }> =>
+      target.kind === "workspace",
+    bind: emptyViewBinding,
+    Component: ({ paneId, focused }) => (
+      <div data-pane={paneId} data-focused={String(focused)}>
+        Pane {paneId}
+      </div>
+    ),
+  });
+
+  const first = {
+    kind: "workspace",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "w1" as WorkspaceId,
+  } as const;
+  useWorkbenchStore.getState().openTarget(first);
+  const firstId = getActiveTab(useWorkbenchStore.getState()).focusedPaneId;
+  useWorkbenchStore.getState().splitFocused({ ...first, workspaceId: "w2" as WorkspaceId }, "right");
+  const secondId = getActiveTab(useWorkbenchStore.getState()).focusedPaneId;
+
+  await act(() => {
+    renderer = create(<Harness />);
+  });
+
+  const frames = renderer!.root.findAllByProps({ className: "workbench-pane-frame" });
+  const firstFrame = frames.find((f) => f.props.children.props.children.props.paneId === firstId)!;
+  const secondFrame = frames.find((f) => f.props.children.props.children.props.paneId === secondId)!;
+
+  // Switch right -> left
+  await act(() => firstFrame.props.onMouseDownCapture({ target: null, currentTarget: null }));
+  expect(getActiveTab(useWorkbenchStore.getState()).focusedPaneId).toBe(firstId);
+
+  // Switch left -> right
+  await act(() => secondFrame.props.onMouseDownCapture({ target: null, currentTarget: null }));
+  expect(getActiveTab(useWorkbenchStore.getState()).focusedPaneId).toBe(secondId);
+
+  // Switch right -> left again
+  await act(() => firstFrame.props.onMouseDownCapture({ target: null, currentTarget: null }));
+  expect(getActiveTab(useWorkbenchStore.getState()).focusedPaneId).toBe(firstId);
+});
