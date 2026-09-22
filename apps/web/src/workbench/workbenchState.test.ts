@@ -21,6 +21,7 @@ import {
   applyOpenDeepLinkTarget,
   applySetFocused,
   applySetSplitRatio,
+  applySetLayoutMode,
   applySplitFocused,
   applyRemoveNewAgentSessionViews,
   applyReplacePaneTarget,
@@ -869,7 +870,7 @@ describe("applyViewDrop", () => {
     expect(result).toMatchObject({ tabId, paneId: sourcePaneId });
   });
 
-  it("moves a Pane View instance into the center of another Pane and drops the source leaf", () => {
+  it("swaps two Pane positions when dropped in the center within the same Tab in BSP mode", () => {
     const ids = makeIds();
     let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
     const tabId = snap.activeTabId;
@@ -877,6 +878,7 @@ describe("applyViewDrop", () => {
     const sourceView = getActiveTab(snap).panes.get(sourcePaneId)!;
     snap = applySplitFocused(snap, terminal("term-1"), "right", ids);
     const targetPaneId = getActiveTab(snap).focusedPaneId;
+    const targetView = getActiveTab(snap).panes.get(targetPaneId)!;
 
     const result = applyViewDrop(
       snap,
@@ -887,11 +889,38 @@ describe("applyViewDrop", () => {
 
     expect(result).not.toBeNull();
     const dropped = getActiveTab(result!.snapshot);
-    expect(leafIds(dropped.layout)).toEqual([targetPaneId]);
-    expect(dropped.panes.has(sourcePaneId)).toBe(false);
-    expect(dropped.panes.get(targetPaneId)).toBe(sourceView);
-    expect(dropped.focusedPaneId).toBe(targetPaneId);
-    expect(result).toMatchObject({ tabId, paneId: targetPaneId });
+    expect(leafIds(dropped.layout)).toEqual([targetPaneId, sourcePaneId]);
+    expect(dropped.panes.get(sourcePaneId)).toBe(sourceView);
+    expect(dropped.panes.get(targetPaneId)).toBe(targetView);
+    expect(dropped.focusedPaneId).toBe(sourcePaneId);
+    expect(result).toMatchObject({ tabId, paneId: sourcePaneId });
+  });
+
+  it("swaps two Pane positions when dropped in the center within the same Tab in scrolling mode", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const tabId = snap.activeTabId;
+    const sourcePaneId = getActiveTab(snap).focusedPaneId;
+    const sourceView = getActiveTab(snap).panes.get(sourcePaneId)!;
+    snap = applySplitFocused(snap, terminal("term-1"), "right", ids);
+    const targetPaneId = getActiveTab(snap).focusedPaneId;
+    const targetView = getActiveTab(snap).panes.get(targetPaneId)!;
+    snap = applySetLayoutMode(snap, "scrolling");
+
+    const result = applyViewDrop(
+      snap,
+      { kind: "pane", tabId, paneId: sourcePaneId },
+      { kind: "pane", tabId, paneId: targetPaneId, zone: "replace" },
+      ids,
+    );
+
+    expect(result).not.toBeNull();
+    const dropped = getActiveTab(result!.snapshot);
+    expect(dropped.columns?.map((c) => c.paneIds)).toEqual([[targetPaneId], [sourcePaneId]]);
+    expect(dropped.panes.get(sourcePaneId)).toBe(sourceView);
+    expect(dropped.panes.get(targetPaneId)).toBe(targetView);
+    expect(dropped.focusedPaneId).toBe(sourcePaneId);
+    expect(result).toMatchObject({ tabId, paneId: sourcePaneId });
   });
 
   it("moves a Pane View instance into an existing Tab and leaves Welcome behind", () => {

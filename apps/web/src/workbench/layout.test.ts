@@ -17,6 +17,7 @@ import {
   placePane,
   removePane,
   replaceLeafId,
+  swapLeaves,
   replacePaneWithLayout,
   setSplitRatio,
   siblingLeafId,
@@ -205,6 +206,36 @@ describe("setSplitRatio", () => {
     const after = setSplitRatio(tree, "missing", 0, 0.7);
     expect(after).toEqual(tree);
     expect(after).not.toBe(tree);
+  });
+});
+
+describe("swapLeaves", () => {
+  it("swaps two leaf IDs in a split tree while preserving structure and sizes", () => {
+    let tree = splitPane(leaf("a"), "a", "right", "b");
+    tree = splitPane(tree, "b", "down", "c");
+    const swapped = swapLeaves(tree, "a", "c");
+    expect(leafIds(swapped)).toEqual(["c", "b", "a"]);
+    expect(swapped).toMatchObject({
+      type: "split",
+      dir: "right",
+      children: [
+        { type: "leaf", id: "c" },
+        {
+          type: "split",
+          dir: "down",
+          children: [
+            { type: "leaf", id: "b" },
+            { type: "leaf", id: "a" },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("returns unchanged tree when aId equals bId or when an ID is not found", () => {
+    const tree = splitPane(leaf("a"), "a", "right", "b");
+    expect(swapLeaves(tree, "a", "a")).toBe(tree);
+    expect(swapLeaves(tree, "a", "z")).toBe(tree);
   });
 });
 

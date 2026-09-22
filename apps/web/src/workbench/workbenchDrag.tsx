@@ -13,11 +13,17 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import { paneDropZoneFromPoint } from "./layout";
+import { paneDropZoneFromPoint, removePane } from "./layout";
+import { columnsTree, reconcileColumns } from "./scrollingLayout";
 import { computePaneLayoutRects } from "./layoutGeometry";
 import { usePrimarySettings } from "../hooks/useSettings";
 import { useUiStateStore } from "../uiStateStore";
-import { type ViewDragSource, type ViewDropTarget, type ViewDropResult } from "./workbenchState";
+import {
+  type ViewDragSource,
+  type ViewDropTarget,
+  type ViewDropResult,
+  type WorkbenchTab,
+} from "./workbenchState";
 import { useWorkbenchStore } from "./workbenchStore";
 
 export interface WorkbenchRect {
@@ -207,11 +213,7 @@ export function resolveSidebarDropTargetAtPoint(
         document.querySelector<HTMLElement>('[data-slot="sidebar"]');
       const rect = sidebarElement?.getBoundingClientRect();
       return (
-        rect !== undefined &&
-        x >= rect.left &&
-        x <= rect.right &&
-        y >= rect.top &&
-        y <= rect.bottom
+        rect !== undefined && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
       );
     })();
 
@@ -245,8 +247,98 @@ export function resolveSidebarDropTargetAtPoint(
   return { isOverSidebar: true, sidebarDropTarget: null };
 }
 
+export interface VirtualPaneRegion {
+  readonly tabId: string;
+  readonly paneId: string;
+  readonly rect: WorkbenchRect;
+}
+
+/** Compute the base tab layout when dragging a pane, treating the tab as if the pane is removed. */
+export function computeBaseTab(tab: WorkbenchTab, draggedPaneId: string): WorkbenchTab | null {
+  if (tab.panes.size <= 1) return null;
+  if (!tab.panes.has(draggedPaneId)) return tab;
+
+  const panes = new Map(tab.panes);
+  panes.delete(draggedPaneId);
+
+  if (tab.layoutMode === "scrolling") {
+    const remainingIds = [...panes.keys()];
+    const columns = reconcileColumns(tab.columns ?? [], remainingIds);
+    const layout = columnsTree(columns);
+    return { ...tab, layout, columns, panes };
+  }
+
+  const layout = removePane(tab.layout, draggedPaneId);
+  if (layout === null) return null;
+  return { ...tab, layout, panes };
+}
+
+/** Compute virtual pane screen rectangles from a base tab and viewport dimensions. */
+export function computeVirtualPaneRegions(
+  baseTab: WorkbenchTab | null,
+  viewportRect: WorkbenchRect,
+  paneGap: number,
+  scrollOffset?: { readonly left: number; readonly top: number },
+): ReadonlyArray<VirtualPaneRegion> {
+  if (baseTab === null) return [];
+  const layout = computePaneLayoutRects(
+    baseTab,
+    { width: viewportRect.width, height: viewportRect.height },
+    paneGap,
+  );
+  const scrollLeft = baseTab.layoutMode === "scrolling" ? (scrollOffset?.left ?? 0) : 0;
+  const scrollTop = scrollOffset?.top ?? 0;
+  const regions: VirtualPaneRegion[] = [];
+  for (const [paneId, rect] of layout.rects.entries()) {
+    regions.push({
+      tabId: baseTab.id,
+      paneId,
+      rect: {
+        left: viewportRect.left + rect.left - scrollLeft,
+        top: viewportRect.top + rect.top - scrollTop,
+        width: rect.width,
+        height: rect.height,
+      },
+    });
+  }
+  return regions;
+}
+
+/** Resolve drop target against virtual pane regions within a viewport. */
+export function resolveVirtualPaneDropTargetAtPoint(
+  x: number,
+  y: number,
+  viewportRect: WorkbenchRect,
+  regions: ReadonlyArray<VirtualPaneRegion>,
+): ViewDropTarget | null {
+  if (
+    x < viewportRect.left ||
+    x > viewportRect.left + viewportRect.width ||
+    y < viewportRect.top ||
+    y > viewportRect.top + viewportRect.height
+  ) {
+    return null;
+  }
+  const hit = regions.find(
+    ({ rect }) =>
+      x >= rect.left && x <= rect.left + rect.width && y >= rect.top && y <= rect.top + rect.height,
+  );
+  if (!hit) return null;
+  return {
+    kind: "pane",
+    tabId: hit.tabId,
+    paneId: hit.paneId,
+    zone: paneDropZoneFromPoint(x, y, hit.rect),
+  };
+}
+
 export function WorkbenchDragProvider({ children }: { readonly children: ReactNode }) {
   const [state, setState] = useState<WorkbenchDragState | null>(null);
+  const paneGap = usePrimarySettings((s) => s.paneGap);
+  const paneGapRef = useRef(paneGap);
+  useEffect(() => {
+    paneGapRef.current = paneGap;
+  }, [paneGap]);
   const suppressClickRef = useRef(false);
   const frameRef = useRef<number | null>(null);
   const stabilizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -296,38 +388,41 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
       let lastSidebarDropTarget: SidebarDropTarget | null = null;
       let publishedTarget: ViewDropTarget | null = null;
 
-      // Preview transforms never move the semantic drop regions beneath the pointer.
-      const paneRegions = Array.from(
-        document.querySelectorAll<HTMLElement>("[data-workbench-pane-drop]"),
-      ).map((element) => ({ element, rect: element.getBoundingClientRect() }));
+      const currentStore = useWorkbenchStore.getState();
+      const activeTab =
+        currentStore.tabs.find((t) => t.id === currentStore.activeTabId) ?? currentStore.tabs[0];
+      const viewportEl = document.querySelector<HTMLElement>(".workbench-viewport");
+      const viewportRect = rectFromElement(viewportEl);
+
+      let baseTab: WorkbenchTab | null = null;
+      if (source.kind === "pane") {
+        const sourceTab = currentStore.tabs.find((t) => t.id === source.tabId);
+        baseTab = sourceTab ? computeBaseTab(sourceTab, source.paneId) : null;
+      } else if (source.kind === "sidebar" && activeTab) {
+        baseTab = activeTab;
+      }
+
+      const getVirtualRegions = () => {
+        if (!viewportRect || !baseTab) return [];
+        return computeVirtualPaneRegions(baseTab, viewportRect, paneGapRef.current, {
+          left: viewportEl?.scrollLeft ?? 0,
+          top: viewportEl?.scrollTop ?? 0,
+        });
+      };
+
       const resolveTarget = (x: number, y: number) => {
         const actual = resolveWorkbenchDropTargetAtPoint(x, y);
         if (actual && actual.kind !== "pane") {
           lastTarget = actual;
           return actual;
         }
-        const viewport = document
-          .querySelector<HTMLElement>(".workbench-viewport")
-          ?.getBoundingClientRect();
-        const inside =
-          viewport &&
-          x >= viewport.left &&
-          x <= viewport.right &&
-          y >= viewport.top &&
-          y <= viewport.bottom;
-        const hit = inside
-          ? paneRegions.find(
-              ({ rect }) => x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom,
-            )
-          : undefined;
-        lastTarget = hit
-          ? {
-              kind: "pane",
-              tabId: hit.element.dataset.workbenchTabId!,
-              paneId: hit.element.dataset.paneId!,
-              zone: paneDropZoneFromPoint(x, y, hit.rect),
-            }
-          : actual;
+        if (!viewportRect) {
+          lastTarget = actual;
+          return actual;
+        }
+        const regions = getVirtualRegions();
+        const hit = resolveVirtualPaneDropTargetAtPoint(x, y, viewportRect, regions);
+        lastTarget = hit;
         return lastTarget;
       };
 
@@ -342,7 +437,11 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         const target = lastIsOverSidebar ? null : lastTarget;
         setState((current) => {
           if (current === null) return current;
-          if (sameTarget(current.target, target) && current.isOverSidebar === lastIsOverSidebar && current.sidebarDropTarget === lastSidebarDropTarget) {
+          if (
+            sameTarget(current.target, target) &&
+            current.isOverSidebar === lastIsOverSidebar &&
+            current.sidebarDropTarget === lastSidebarDropTarget
+          ) {
             return current.pointer.x === lastX && current.pointer.y === lastY
               ? current
               : { ...current, pointer: { x: lastX, y: lastY } };
@@ -384,7 +483,12 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         activeRef.current = false;
         suppressClickRef.current = true;
 
-        if (!cancelled && source.kind === "sidebar" && currentIsOverSidebar && currentSidebarDropTarget) {
+        if (
+          !cancelled &&
+          source.kind === "sidebar" &&
+          currentIsOverSidebar &&
+          currentSidebarDropTarget
+        ) {
           const sourceSessionId =
             source.target.kind === "agentSession"
               ? source.target.agentSessionId
@@ -398,13 +502,15 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
             .map((el) => el.dataset.sessionId)
             .filter((id): id is string => Boolean(id));
 
-          useUiStateStore.getState().reorderWorkspaceSessions(
-            workspaceKey,
-            allSessionRows,
-            sourceSessionId,
-            currentSidebarDropTarget.sessionId,
-            currentSidebarDropTarget.position,
-          );
+          useUiStateStore
+            .getState()
+            .reorderWorkspaceSessions(
+              workspaceKey,
+              allSessionRows,
+              sourceSessionId,
+              currentSidebarDropTarget.sessionId,
+              currentSidebarDropTarget.position,
+            );
           setState(null);
           return;
         }
@@ -579,7 +685,10 @@ function tabInsertionMarker(target: ViewDropTarget): WorkbenchRect | null {
   };
 }
 
-function dragGhostInfo(source: ViewDragSource): { readonly icon: ReactNode; readonly typeLabel: string } {
+function dragGhostInfo(source: ViewDragSource): {
+  readonly icon: ReactNode;
+  readonly typeLabel: string;
+} {
   if (source.kind === "sidebar") {
     if (source.target.kind === "agentSession") {
       return {

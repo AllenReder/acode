@@ -70,6 +70,30 @@ export function columnsTree(columns: readonly Column[]): LayoutNode {
     sizes: normalize(columns.map((c) => c.width)),
   };
 }
+export function swapInColumns(columns: readonly Column[], aId: string, bId: string): Column[] {
+  if (aId === bId) return [...columns];
+  let foundA = false;
+  let foundB = false;
+  for (const col of columns) {
+    if (col.paneIds.includes(aId)) foundA = true;
+    if (col.paneIds.includes(bId)) foundB = true;
+  }
+  if (!foundA || !foundB) return [...columns];
+
+  return columns.map((col) => {
+    const hasA = col.paneIds.includes(aId);
+    const hasB = col.paneIds.includes(bId);
+    if (!hasA && !hasB) return col;
+
+    const paneIds = col.paneIds.map((id) => {
+      if (id === aId) return bId;
+      if (id === bId) return aId;
+      return id;
+    });
+    return { ...col, paneIds };
+  });
+}
+
 export function placeInColumns(
   columns: readonly Column[],
   paneId: string,

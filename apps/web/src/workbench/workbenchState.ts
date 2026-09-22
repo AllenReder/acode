@@ -3,6 +3,7 @@ import {
   reconcileColumns,
   reconcileBsp,
   placeInColumns,
+  swapInColumns,
   LAYOUT_VERSION,
   MIN_COLUMN_WIDTH,
   MAX_COLUMN_WIDTH,
@@ -17,8 +18,8 @@ import {
   movePane,
   newTab,
   placePane,
-  removePane,
   replaceLeafId,
+  swapLeaves,
   setSplitRatio,
   type AcodeTab,
   type PaneDropZone,
@@ -350,8 +351,7 @@ export function applyOpenTarget(
   // 3. Not open in any Tab:
   // 3a. If the active Tab is an empty Welcome Tab, replace it in-place.
   const isSoleWelcome =
-    activeTab.panes.size === 1 &&
-    [...activeTab.panes.values()][0]?.target.kind === "welcome";
+    activeTab.panes.size === 1 && [...activeTab.panes.values()][0]?.target.kind === "welcome";
 
   if (isSoleWelcome) {
     const paneId = activeTab.focusedPaneId;
@@ -363,12 +363,8 @@ export function applyOpenTarget(
   // 3b. Otherwise, create a new Tab immediately to the right of the active Tab.
   const activeIndex = snapshot.tabs.findIndex((tab) => tab.id === snapshot.activeTabId);
   const insertIndex = activeIndex >= 0 ? activeIndex + 1 : snapshot.tabs.length;
-  return insertPresentationTab(
-    snapshot,
-    viewInstance(target, generateId),
-    insertIndex,
-    generateId,
-  ).snapshot;
+  return insertPresentationTab(snapshot, viewInstance(target, generateId), insertIndex, generateId)
+    .snapshot;
 }
 
 /**
@@ -499,22 +495,21 @@ export function applyViewDrop(
     }
     if (sourceTab.id === targetTab.id) {
       if (target.zone === "replace") {
-        const layout = removePane(sourceTab.layout, source.paneId);
-        if (layout === null) return null;
-        const panes = new Map(sourceTab.panes);
-        const sourceView = panes.get(source.paneId);
-        if (sourceView === undefined) return null;
-        panes.delete(source.paneId);
-        panes.set(target.paneId, sourceView);
+        const isScrolling = sourceTab.layoutMode === "scrolling";
+        const columns = isScrolling
+          ? swapInColumns(sourceTab.columns ?? [], source.paneId, target.paneId)
+          : undefined;
+        const layout = isScrolling
+          ? columnsTree(columns!)
+          : swapLeaves(sourceTab.layout, source.paneId, target.paneId);
         return {
           snapshot: updateTab(snapshot, {
             ...sourceTab,
-            layout,
-            panes,
-            focusedPaneId: target.paneId,
+            ...(isScrolling ? { columns: columns!, layout } : { layout }),
+            focusedPaneId: source.paneId,
           }),
           tabId: sourceTab.id,
-          paneId: target.paneId,
+          paneId: source.paneId,
         };
       }
       return {

@@ -138,7 +138,27 @@ export function splitPane(
   };
 }
 
-/** Swap one leaf id for another, keeping the split tree intact. */
+/** Swap the positions of two leaves, keeping the split tree and sizes intact. */
+export function swapLeaves(node: LayoutNode, aId: string, bId: string): LayoutNode {
+  if (aId === bId) return node;
+  const ids = leafIds(node);
+  if (!ids.includes(aId) || !ids.includes(bId)) return node;
+
+  function walk(current: LayoutNode): LayoutNode {
+    if (current.type === "leaf") {
+      if (current.id === aId) return leaf(bId);
+      if (current.id === bId) return leaf(aId);
+      return current;
+    }
+    return {
+      ...current,
+      children: current.children.map(walk),
+    };
+  }
+
+  return walk(node);
+}
+
 export function replaceLeafId(node: LayoutNode, fromId: string, toId: string): LayoutNode {
   if (fromId === toId) return node;
   if (node.type === "leaf") {
