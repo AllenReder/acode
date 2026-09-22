@@ -33,7 +33,7 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
 }));
 vi.mock("../components/ChatView", () => ({
-  default: (props: unknown) => <output>{JSON.stringify(props)}</output>,
+  default: (props: Record<string, unknown>) => <output {...props}>{JSON.stringify(props)}</output>,
 }));
 vi.mock("../components/ThreadTerminalDrawer", () => ({
   TerminalViewport: (props: unknown) => <output>{JSON.stringify(props)}</output>,
@@ -210,4 +210,42 @@ it("removes closed Session across multiple tabs while closeView detaches only th
   const tab1Panes = getActiveTab(useWorkbenchStore.getState()).panes;
   expect(tab1Panes.size).toBe(1);
   expect([...tab1Panes.values()][0]?.target).toEqual(targetB);
+});
+
+it("binds workspace actions (browse files, new terminal) from AgentView to ChatView", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  resetWorkbenchStore();
+  const target = {
+    kind: "agentSession" as const,
+    environmentId,
+    workspaceId,
+    agentSessionId: "one" as AgentSessionId,
+  };
+  useWorkbenchStore.getState().openTarget(target);
+  const sourcePaneId = getActiveTab(useWorkbenchStore.getState()).focusedPaneId;
+
+  await act(() => {
+    renderer = create(
+      <AgentView
+        target={target}
+        paneId={sourcePaneId}
+        focused
+        availableSize={availableSize}
+      />,
+    );
+  });
+
+  const output = renderer!.root.findByType("output");
+  expect(typeof output.props.onBrowseFiles).toBe("function");
+  expect(typeof output.props.onNewTerminalSession).toBe("function");
+
+  await act(() => output.props.onBrowseFiles());
+  const tab = getActiveTab(useWorkbenchStore.getState());
+  expect(tab.panes.size).toBe(2);
+  expect(tab.panes.get(tab.focusedPaneId)?.target).toEqual({
+    kind: "workspace",
+    definitionId: "fileView",
+    environmentId,
+    workspaceId,
+  });
 });

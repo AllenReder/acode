@@ -410,3 +410,19 @@ it("supports bidirectional focus switching between panes without focus bounce", 
   await act(() => firstFrame.props.onMouseDownCapture({ target: null, currentTarget: null }));
   expect(getActiveTab(useWorkbenchStore.getState()).focusedPaneId).toBe(firstId);
 });
+
+it("renders pane headers with integrated seamless design without a bottom border", async () => {
+  resetWorkbenchStore();
+  const target = {
+    kind: "workspace",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "w1" as WorkspaceId,
+  } as const;
+  useWorkbenchStore.getState().openTarget(target);
+  let renderer: ReactTestRenderer | null = null;
+  await act(() => {
+    renderer = create(<Harness />);
+  });
+  const header = renderer!.root.findByProps({ "aria-label": "Pane header" });
+  expect(header.props.className).not.toContain("border-b");
+});

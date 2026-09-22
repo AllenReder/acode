@@ -11,7 +11,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, EllipsisIcon, FolderIcon, TerminalIcon } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -27,6 +27,8 @@ import { isTrailingDoubleClick } from "../Sidebar.logic";
 import { type DraftId } from "~/composerDraftStore";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
+import { Button } from "../ui/button";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import ProjectScriptsControl, {
   type NewProjectScriptInput,
   type ProjectScriptActionResult,
@@ -64,6 +66,8 @@ interface ChatHeaderProps {
   rightPanelOpen: boolean;
   workbenchMode?: boolean;
   gitCwd: string | null;
+  readonly onBrowseFiles?: (() => void) | undefined;
+  readonly onNewTerminalSession?: (() => void) | undefined;
   readonly onOpenPullRequest?: ((number: number) => void) | undefined;
   onNewThreadInProject: () => void;
   onOpenProjectSettings?: (() => void) | undefined;
@@ -134,6 +138,8 @@ export const ChatHeader = memo(function ChatHeader({
   rightPanelOpen,
   workbenchMode = false,
   gitCwd,
+  onBrowseFiles,
+  onNewTerminalSession,
   onOpenPullRequest,
   onNewThreadInProject,
   onOpenProjectSettings,
@@ -335,7 +341,7 @@ export const ChatHeader = memo(function ChatHeader({
         {/* The project always leads the header: knowing which project a
             thread lives in is priority zero, and the thread title alone
             doesn't answer it. */}
-        {activeProject ? (
+        {activeProject && !workbenchMode ? (
           <>
             <WorkspaceBreadcrumbItem className="shrink">
               <Tooltip>
@@ -372,6 +378,17 @@ export const ChatHeader = memo(function ChatHeader({
               onFocus={(event) => event.currentTarget.select()}
               onKeyDown={handleRenameKeyDown}
             />
+          ) : workbenchMode ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <h2 aria-label={activeThreadTitle} className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                    {activeThreadTitle}
+                  </h2>
+                }
+              />
+              <TooltipPopup side="top">{activeThreadTitle}</TooltipPopup>
+            </Tooltip>
           ) : isServerThread ? (
             <Tooltip>
               <TooltipTrigger
@@ -379,13 +396,9 @@ export const ChatHeader = memo(function ChatHeader({
                   <button
                     ref={titleButtonRef}
                     type="button"
-                    aria-label={
-                      workbenchMode
-                        ? `Rename Agent Session ${activeThreadTitle}`
-                        : `Thread actions for ${activeThreadTitle}`
-                    }
-                    {...(workbenchMode ? {} : { "aria-haspopup": "menu" as const })}
-                    onClick={workbenchMode ? undefined : openMenuFromTitle}
+                    aria-label={`Thread actions for ${activeThreadTitle}`}
+                    aria-haspopup="menu"
+                    onClick={openMenuFromTitle}
                     onDoubleClick={handleTitleDoubleClick}
                     onBlur={cancelPendingTitleMenu}
                     className="group/thread-title inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1 rounded-sm text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
@@ -393,13 +406,11 @@ export const ChatHeader = memo(function ChatHeader({
                 }
               >
                 <h2 className="min-w-0 truncate">{activeThreadTitle}</h2>
-                {!workbenchMode ? (
-                  <ChevronDownIcon
-                    aria-hidden
-                    data-thread-title-chevron
-                    className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/thread-title:opacity-100 group-focus-visible/thread-title:opacity-100"
-                  />
-                ) : null}
+                <ChevronDownIcon
+                  aria-hidden
+                  data-thread-title-chevron
+                  className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/thread-title:opacity-100 group-focus-visible/thread-title:opacity-100"
+                />
               </TooltipTrigger>
               <TooltipPopup side="top">{activeThreadTitle}</TooltipPopup>
             </Tooltip>
@@ -422,7 +433,7 @@ export const ChatHeader = memo(function ChatHeader({
         data-chat-header-actions
         className={cn(
           "flex shrink-0 items-center justify-end gap-2 @3xl/header-actions:gap-3",
-          rightPanelOpen ? "pr-0" : "pr-16",
+          rightPanelOpen || workbenchMode ? "pr-0" : "pr-16",
           "[[data-panel-animations=true]_&]:motion-safe:transition-[padding-right] [[data-panel-animations=true]_&]:motion-safe:[transition-duration:var(--panel-animation-duration)] [[data-panel-animations=true]_&]:motion-safe:ease-out",
         )}
       >
@@ -454,6 +465,54 @@ export const ChatHeader = memo(function ChatHeader({
             {...(draftId ? { draftId } : {})}
           />
         )}
+        {workbenchMode && onNewTerminalSession ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  size="xs"
+                  variant="outline"
+                  aria-label="New terminal session"
+                  onClick={onNewTerminalSession}
+                >
+                  <TerminalIcon className="size-3.5" />
+                  <span className="sr-only @3xl/header-actions:not-sr-only @3xl/header-actions:ml-0.5">
+                    Terminal
+                  </span>
+                </Button>
+              }
+            />
+            <TooltipPopup side="top">New terminal session</TooltipPopup>
+          </Tooltip>
+        ) : null}
+        {workbenchMode && onBrowseFiles ? (
+          <Menu>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <MenuTrigger
+                    render={
+                      <Button
+                        size="icon-xs"
+                        variant="outline"
+                        aria-label="Workspace views"
+                      >
+                        <EllipsisIcon className="size-3.5" />
+                      </Button>
+                    }
+                  />
+                }
+              />
+              <TooltipPopup side="top">Workspace views</TooltipPopup>
+            </Tooltip>
+            <MenuPopup align="end" side="bottom" className="w-44">
+              <MenuItem onClick={onBrowseFiles}>
+                <FolderIcon className="size-4" />
+                <span>Browse Files</span>
+              </MenuItem>
+            </MenuPopup>
+          </Menu>
+        ) : null}
       </div>
     </div>
   );

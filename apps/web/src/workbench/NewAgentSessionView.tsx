@@ -14,6 +14,7 @@ import { resolveDraftPromotionNavigationTarget } from "../components/ChatView.lo
 import { waitForDraftHeroTransition } from "../components/chat/draftHeroTransition";
 import { useAcodeProjects, useThread, useThreadShell } from "../state/entities";
 import { AgentView } from "./AgentView";
+import { useWorkspaceViewActions } from "./useWorkspaceViewActions";
 import { sessionRouteForTarget } from "./deepLinks";
 import type { ViewTarget } from "./viewRegistry";
 import { useWorkbenchStore } from "./workbenchStore";
@@ -50,6 +51,11 @@ export function NewAgentSessionView({
   const replaceTarget = useWorkbenchStore((state) => state.replaceTarget);
   const draft = useComposerDraftStore((state) => state.getDraftSession(target.draftId));
   const projects = useAcodeProjects();
+  const { onBrowseFiles, onNewTerminalSession } = useWorkspaceViewActions({
+    environmentId: target.environmentId,
+    workspaceId: target.workspaceId,
+    paneId,
+  });
   const draftThreadRef = useMemo(
     () => (draft === null ? null : scopeThreadRef(target.environmentId, draft.threadId)),
     [draft, target.environmentId],
@@ -126,6 +132,8 @@ export function NewAgentSessionView({
       focused={focused}
       focusRequestId={focusRequestId}
       availableSize={availableSize}
+      onBrowseFiles={onBrowseFiles}
+      onNewTerminalSession={onNewTerminalSession}
     />
   );
 }
