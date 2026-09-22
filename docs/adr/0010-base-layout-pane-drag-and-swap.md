@@ -1,12 +1,13 @@
-# Base layout virtual geometry for pane dragging and intra-tab swap
+# Base layout virtual geometry for pane dragging and 4-directional edge reordering
 
 **Status: accepted**
 
 ACode's Workbench organizes Views into Panes inside Tabs using either BSP or
-Scrolling layout. Dragging an existing Pane within a Tab now resolves drop
-targets against a virtual geometry grid derived from the layout without the
-dragged Pane, and dropping onto the center of an existing Pane in the same Tab
-swaps their positions non-destructively.
+Scrolling layout. Dragging an existing Pane within a Tab resolves drop targets
+against a virtual geometry grid derived from the layout without the dragged Pane.
+Intra-workbench pane drag has no central "replace" zone: it resolves purely to
+4-directional edge placement (Left, Right, Top, Bottom) to reorder and split
+panes non-destructively.
 
 ## Context
 
@@ -21,6 +22,8 @@ drag all the way into the adjacent Pane's bounding box to hit its outer edge.
 In addition, dropping a Pane onto the central ("replace") zone of another Pane
 in the same Tab previously executed a destructive replace, deleting the target
 Pane from the Tab and destroying its View instance and associated session state.
+Even non-destructive swapping in the center created ambiguity with edge splits
+and added unnecessary cognitive load.
 
 ## Decision
 
@@ -29,29 +32,29 @@ Pane from the Tab and destroying its View instance and associated session state.
   BSP mode, `reconcileColumns` in Scrolling mode).
 - **Virtual geometry hit-testing**: Drop regions are computed as a virtual
   geometry grid via `computePaneLayoutRects(baseTab, viewportRect, paneGap)`.
-  Pointer coordinates are tested against these virtual rectangles rather than
-  animating or stale DOM elements.
+  Pointer coordinates are tested against these virtual rectangles with half-gap
+  tolerance rather than animating or stale DOM elements.
 - **Continuous preview at t=0**: Because dragging begins from Pane A's header,
-  the initial pointer coordinate naturally maps to the edge of the adjacent
-  Pane in `baseTab`. The preview immediately reflects Pane A in its starting
-  layout and transitions smoothly as the pointer moves across zones.
+  `initialPaneDropTarget` anchors the initial zone to Pane A's original
+  neighboring edge, ensuring zero visual jump at drag start.
 - **Single-pane invariant**: If a Tab has only one Pane, dragging within the
   Workbench canvas produces no valid drop target (`target: null`). Dropping to
   the Tab strip (creating a new Tab or moving to an existing Tab) remains
   supported.
-- **Intra-tab Swap**: When dropping Pane A into the center ("replace") zone of
-  Pane B in the same Tab, the operation executes a non-destructive Swap
-  (`swapLeaves` in BSP mode, `swapInColumns` in Scrolling mode). Both View
-  instances and their running session states are preserved. Dragging from the
-  Sidebar into the center retains the Replace semantics.
+- **Intra-workbench 4-directional edge reordering**: Intra-workbench pane drag
+  has no central "replace" zone. `paneDirectionalZoneFromPoint` maps points
+  purely to one of the 4 directional edges (`left`, `right`, `top`, `bottom`).
+  Dropping on the opposite side of an adjacent pane cleanly repositions/reorders
+  the panes without any central ambiguity. Central "replace" is reserved
+  exclusively for external drops from the Sidebar.
 - **Layout parity**: Both BSP and Scrolling layout modes share the exact same
-  virtual base layout derivation and swap semantics.
+  virtual base layout derivation and directional edge placement semantics.
 
 ## Consequences
 
 - Spatial interaction matches user intuition: dragging over the area vacated by
   the dragged Pane immediately targets the adjacent Pane's adjacent edge.
-- View and session lifecycles remain safe: rearranging Panes within a Tab
-  cannot accidentally destroy a running Terminal or Agent View.
+- View and session lifecycles remain completely safe: rearranging Panes within a
+  Tab cannot accidentally destroy or close a running Terminal or Agent View.
 - Hit-testing is purely mathematical and decoupled from DOM updates, CSS
   transitions, and React component mount lifecycles.

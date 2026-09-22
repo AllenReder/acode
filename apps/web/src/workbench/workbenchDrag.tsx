@@ -13,7 +13,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import { paneDropZoneFromPoint } from "./layout";
+import { paneDropZoneFromPoint, paneDirectionalZoneFromPoint } from "./layout";
 import { computePaneLayoutRects } from "./layoutGeometry";
 import { usePrimarySettings } from "../hooks/useSettings";
 import { useUiStateStore } from "../uiStateStore";
@@ -294,6 +294,7 @@ export function resolveVirtualPaneDropTargetAtPoint(
   viewportRect: WorkbenchRect,
   regions: ReadonlyArray<VirtualPaneRegion>,
   paneGap = 0,
+  directionalOnly = false,
 ): ViewDropTarget | null {
   if (
     x < viewportRect.left ||
@@ -312,11 +313,14 @@ export function resolveVirtualPaneDropTargetAtPoint(
       y <= rect.top + rect.height + halfGap,
   );
   if (!hit) return null;
+  const zone = directionalOnly
+    ? paneDirectionalZoneFromPoint(x, y, hit.rect)
+    : paneDropZoneFromPoint(x, y, hit.rect);
   return {
     kind: "pane",
     tabId: hit.tabId,
     paneId: hit.paneId,
-    zone: paneDropZoneFromPoint(x, y, hit.rect),
+    zone,
   };
 }
 
@@ -425,6 +429,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           viewportRect,
           regions,
           paneGapRef.current,
+          source.kind === "pane",
         );
         lastTarget = hit;
         return lastTarget;

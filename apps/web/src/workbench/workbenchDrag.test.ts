@@ -160,7 +160,6 @@ it("resolves sidebar session reorder target when dragging inside sidebar within 
 });
 
 describe("computeBaseTab", () => {
-
   it("returns null when the tab has only one pane", () => {
     const singleTab: WorkbenchTab = {
       id: "tab-1",
@@ -243,7 +242,7 @@ describe("Virtual Base Layout Drag Hit-Testing", () => {
     expect(regions[0]?.rect).toMatchObject({ left: 0, top: 0, width: 1000, height: 600 });
 
     // In the former area of pane A (e.g. x = 100, y = 300, which is near the left of B):
-    const hitLeft = resolveVirtualPaneDropTargetAtPoint(100, 300, viewportRect, regions);
+    const hitLeft = resolveVirtualPaneDropTargetAtPoint(100, 300, viewportRect, regions, 0, true);
     expect(hitLeft).toEqual({
       kind: "pane",
       tabId: "tab-1",
@@ -251,22 +250,46 @@ describe("Virtual Base Layout Drag Hit-Testing", () => {
       zone: "left",
     });
 
-    // In the center of the screen (x = 500, y = 300):
-    const hitCenter = resolveVirtualPaneDropTargetAtPoint(500, 300, viewportRect, regions);
-    expect(hitCenter).toEqual({
+    // In the center of the screen for intra-workbench pane drag (directional-only, no replace):
+    const hitTop = resolveVirtualPaneDropTargetAtPoint(500, 200, viewportRect, regions, 0, true);
+    expect(hitTop).toEqual({
       kind: "pane",
       tabId: "tab-1",
       paneId: "pane-b",
-      zone: "replace",
+      zone: "top",
+    });
+
+    const hitBottom = resolveVirtualPaneDropTargetAtPoint(500, 400, viewportRect, regions, 0, true);
+    expect(hitBottom).toEqual({
+      kind: "pane",
+      tabId: "tab-1",
+      paneId: "pane-b",
+      zone: "bottom",
     });
 
     // On the far right (x = 900, y = 300):
-    const hitRight = resolveVirtualPaneDropTargetAtPoint(900, 300, viewportRect, regions);
+    const hitRight = resolveVirtualPaneDropTargetAtPoint(900, 300, viewportRect, regions, 0, true);
     expect(hitRight).toEqual({
       kind: "pane",
       tabId: "tab-1",
       paneId: "pane-b",
       zone: "right",
+    });
+
+    // For sidebar drag (directionalOnly: false), center remains replace:
+    const hitCenterReplace = resolveVirtualPaneDropTargetAtPoint(
+      500,
+      300,
+      viewportRect,
+      regions,
+      0,
+      false,
+    );
+    expect(hitCenterReplace).toEqual({
+      kind: "pane",
+      tabId: "tab-1",
+      paneId: "pane-b",
+      zone: "replace",
     });
   });
 

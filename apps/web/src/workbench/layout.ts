@@ -400,6 +400,25 @@ export function paneEdgeFromPoint(
 }
 
 /** Resolve the split edge or central replace zone for a Pane drop. */
+
+/**
+ * Resolve one of the 4 directional edges (left, right, top, bottom) for a Pane drop,
+ * with no central replace zone. Suitable for intra-workbench pane repositioning.
+ */
+export function paneDirectionalZoneFromPoint(
+  x: number,
+  y: number,
+  rect: { left: number; top: number; width: number; height: number },
+): PaneEdge {
+  if (rect.width <= 0 || rect.height <= 0) return "left";
+  const nx = (x - rect.left) / rect.width;
+  const ny = (y - rect.top) / rect.height;
+
+  if (nx < 0.35) return "left";
+  if (nx > 0.65) return "right";
+  return ny < 0.5 ? "top" : "bottom";
+}
+
 export function paneDropZoneFromPoint(
   x: number,
   y: number,
