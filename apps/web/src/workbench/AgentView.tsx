@@ -31,7 +31,7 @@ export function AgentView({ target, paneId, focused, focusRequestId = 0, availab
     target.workspaceId,
     target.agentSessionId,
   );
-  const { onBrowseFiles, onNewTerminalSession } = useWorkspaceViewActions({
+  const { onBrowseFiles, onReviewChanges, onNewTerminalSession } = useWorkspaceViewActions({
     environmentId: target.environmentId,
     workspaceId: target.workspaceId,
     paneId,
@@ -66,6 +66,7 @@ export function AgentView({ target, paneId, focused, focusRequestId = 0, availab
           focusRequestId={focusRequestId}
           availableSize={availableSize}
           onBrowseFiles={onBrowseFiles}
+          onReviewChanges={onReviewChanges}
           onNewTerminalSession={onNewTerminalSession}
         />
       </div>

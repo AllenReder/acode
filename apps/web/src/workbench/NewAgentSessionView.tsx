@@ -51,7 +51,7 @@ export function NewAgentSessionView({
   const replaceTarget = useWorkbenchStore((state) => state.replaceTarget);
   const draft = useComposerDraftStore((state) => state.getDraftSession(target.draftId));
   const projects = useAcodeProjects();
-  const { onBrowseFiles, onNewTerminalSession } = useWorkspaceViewActions({
+  const { onBrowseFiles, onReviewChanges, onNewTerminalSession } = useWorkspaceViewActions({
     environmentId: target.environmentId,
     workspaceId: target.workspaceId,
     paneId,
@@ -134,6 +134,7 @@ export function NewAgentSessionView({
       focusRequestId={focusRequestId}
       availableSize={availableSize}
       onBrowseFiles={onBrowseFiles}
+      onReviewChanges={onReviewChanges}
       onNewTerminalSession={onNewTerminalSession}
       />
     </div>

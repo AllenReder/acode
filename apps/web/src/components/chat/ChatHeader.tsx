@@ -11,7 +11,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { ChevronDownIcon, EllipsisIcon, FolderIcon, TerminalIcon } from "lucide-react";
+import { ChevronDownIcon, EllipsisIcon, FolderIcon, GitBranchIcon, TerminalIcon } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -67,6 +67,7 @@ interface ChatHeaderProps {
   workbenchMode?: boolean;
   gitCwd: string | null;
   readonly onBrowseFiles?: (() => void) | undefined;
+  readonly onReviewChanges?: (() => void) | undefined;
   readonly onNewTerminalSession?: (() => void) | undefined;
   readonly onOpenPullRequest?: ((number: number) => void) | undefined;
   onNewThreadInProject: () => void;
@@ -139,6 +140,7 @@ export const ChatHeader = memo(function ChatHeader({
   workbenchMode = false,
   gitCwd,
   onBrowseFiles,
+  onReviewChanges,
   onNewTerminalSession,
   onOpenPullRequest,
   onNewThreadInProject,
@@ -510,6 +512,12 @@ export const ChatHeader = memo(function ChatHeader({
                 <FolderIcon className="size-4" />
                 <span>Browse Files</span>
               </MenuItem>
+              {onReviewChanges ? (
+                <MenuItem onClick={onReviewChanges}>
+                  <GitBranchIcon className="size-4" />
+                  <span>Review Changes</span>
+                </MenuItem>
+              ) : null}
             </MenuPopup>
           </Menu>
         ) : null}

@@ -58,6 +58,7 @@ type ProjectMenuId =
 
 type WorkspaceMenuId =
   | "browse-files"
+  | "review-changes"
   | "new-agent-session"
   | "new-terminal-session"
   | "rename-workspace"
@@ -106,6 +107,7 @@ export function workspaceMenuItems(input: {
 }): ReadonlyArray<ContextMenuItem<WorkspaceMenuId>> {
   return [
     { id: "browse-files", label: "Browse Files", icon: "folder" },
+    { id: "review-changes", label: "Review Changes", icon: "git-branch" },
     { id: "new-agent-session", label: "New Agent Session", icon: "message-square-plus" },
     { id: "new-terminal-session", label: "New Terminal Session", icon: "terminal" },
     { id: "rename-workspace", label: "Rename", icon: "pencil", separatorBefore: true },
@@ -372,6 +374,14 @@ export function AcodeSidebar() {
           useWorkbenchStore.getState().openTarget({
             kind: "workspace",
             definitionId: "fileView",
+            environmentId: project.environmentId,
+            workspaceId: workspace.id,
+          });
+        }
+        if (clicked === "review-changes") {
+          useWorkbenchStore.getState().openTarget({
+            kind: "workspace",
+            definitionId: "gitView",
             environmentId: project.environmentId,
             workspaceId: workspace.id,
           });

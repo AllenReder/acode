@@ -3756,6 +3756,7 @@ pending_approval_requests AS (
     getActiveProjectByWorkspaceRoot,
     getProjectShellById,
     getProjectShells,
+    listAcodeProjects: acodeProjectRepository.listTree,
     getAcodeProjectByT3ProjectId: acodeProjectRepository.getByT3ProjectId,
     getAcodeProjectById: acodeProjectRepository.getProjectById,
     getAcodeWorkspaceById: acodeProjectRepository.getWorkspaceById,

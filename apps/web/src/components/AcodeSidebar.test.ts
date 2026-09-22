@@ -51,6 +51,7 @@ describe("ACode Sidebar menus", () => {
     ]);
     expect(workspaceMenuItems({ canDeleteDirectory: true }).map((item) => item.id)).toEqual([
       "browse-files",
+      "review-changes",
       "new-agent-session",
       "new-terminal-session",
       "rename-workspace",

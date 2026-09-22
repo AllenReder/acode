@@ -182,6 +182,10 @@ export interface ProjectionSnapshotQueryShape {
   ) => Effect.Effect<ReadonlyArray<OrchestrationProjectShell>, ProjectionRepositoryError>;
 
   /** Read the ACode navigation Project containing one T3 project mapping. */
+  readonly listAcodeProjects?: () => Effect.Effect<
+    ReadonlyArray<import("@t3tools/contracts").AcodeProjectShell>,
+    ProjectionRepositoryError
+  >;
   readonly getAcodeProjectByT3ProjectId?: (
     projectId: ProjectId,
   ) => Effect.Effect<

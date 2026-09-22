@@ -82,7 +82,7 @@ interface AnnotatableCodeViewProps {
   }>;
   sectionId: string;
   sectionTitle: string;
-  composerDraftTarget: ScopedThreadRef | DraftId;
+  composerDraftTarget?: ScopedThreadRef | DraftId | undefined;
   options: StyledDiffCodeViewOptions<DiffCommentAnnotationGroup>;
   viewerRef?: Ref<AnnotatableCodeViewHandle>;
   className?: string;
@@ -113,7 +113,7 @@ export function AnnotatableCodeView({
   const addReviewComment = useComposerDraftStore((store) => store.addReviewComment);
   const removeReviewComment = useComposerDraftStore((store) => store.removeReviewComment);
   const reviewComments = useComposerDraftStore(
-    (store) => store.getComposerDraft(composerDraftTarget)?.reviewComments ?? EMPTY_REVIEW_COMMENTS,
+    (store) => (composerDraftTarget ? store.getComposerDraft(composerDraftTarget)?.reviewComments ?? EMPTY_REVIEW_COMMENTS : EMPTY_REVIEW_COMMENTS),
   );
   const [selectedLines, setSelectedLines] = useState<{
     id: string;
@@ -176,7 +176,7 @@ export function AnnotatableCodeView({
         setDraft(null);
         setDraftText("");
       } else {
-        removeReviewComment(composerDraftTarget, entryId);
+        if (composerDraftTarget) removeReviewComment(composerDraftTarget, entryId);
       }
     },
     [composerDraftTarget, draft, removeReviewComment],
@@ -198,7 +198,7 @@ export function AnnotatableCodeView({
         range: entry.range,
         text,
       });
-      if (comment) addReviewComment(composerDraftTarget, comment);
+      if (comment && composerDraftTarget) addReviewComment(composerDraftTarget, comment);
       setSelectedLines(null);
       setDraft(null);
       setDraftText("");
@@ -250,8 +250,8 @@ export function AnnotatableCodeView({
       onSelectedLinesChange={setSelectedLines}
       options={{
         ...options,
-        enableGutterUtility: !hasOpenComment,
-        enableLineSelection: !hasOpenComment,
+        enableGutterUtility: !hasOpenComment && Boolean(composerDraftTarget),
+        enableLineSelection: !hasOpenComment && Boolean(composerDraftTarget),
         onGutterUtilityClick: beginComment,
       }}
       renderHeaderFilenameSuffix={(item) =>

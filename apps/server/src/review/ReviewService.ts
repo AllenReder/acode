@@ -18,6 +18,8 @@ import {
 import * as ServerConfig from "../config.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
+import * as Option from "effect/Option";
+import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 
 export class ReviewService extends Context.Service<
   ReviewService,
@@ -38,6 +40,9 @@ export const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   const vcsRegistry = yield* VcsDriverRegistry.VcsDriverRegistry;
   const git = yield* GitVcsDriver.GitVcsDriver;
+  const projectionQuery = yield* Effect.serviceOption(
+    ProjectionSnapshotQuery.ProjectionSnapshotQuery,
+  );
 
   const canonicalizePath = (value: string) => {
     const resolvedPath = path.resolve(value);
@@ -67,14 +72,51 @@ export const make = Effect.gen(function* () {
     operation: "ReviewService.getDiffPreview" | "ReviewService.getDiffFileContents",
     cwd: string,
   ) {
-    const [candidate, workspaceRoot, worktreesRoot] = yield* Effect.all([
-      canonicalizePath(cwd),
+    const candidate = yield* canonicalizePath(cwd);
+    const [workspaceRoot, worktreesRoot] = yield* Effect.all([
       canonicalizePath(config.cwd),
       canonicalizePath(config.worktreesDir),
     ]);
 
     if (isWithinRoot(candidate, workspaceRoot) || isWithinRoot(candidate, worktreesRoot)) {
       return;
+    }
+
+    if (Option.isSome(projectionQuery)) {
+      const activeProject = yield* projectionQuery.value
+        .getActiveProjectByWorkspaceRoot(candidate)
+        .pipe(Effect.orElseSucceed(() => Option.none()));
+      if (Option.isSome(activeProject)) {
+        return;
+      }
+
+      const projectShells = yield* projectionQuery.value
+        .getProjectShells()
+        .pipe(Effect.orElseSucceed(() => []));
+      for (const project of projectShells) {
+        const root = yield* canonicalizePath(project.workspaceRoot).pipe(
+          Effect.orElseSucceed(() => null),
+        );
+        if (root && isWithinRoot(candidate, root)) {
+          return;
+        }
+      }
+
+      if (projectionQuery.value.listAcodeProjects) {
+        const acodeTrees = yield* projectionQuery.value
+          .listAcodeProjects()
+          .pipe(Effect.orElseSucceed(() => []));
+        for (const acodeProject of acodeTrees) {
+          for (const ws of acodeProject.workspaces) {
+            const root = yield* canonicalizePath(ws.workspaceRoot).pipe(
+              Effect.orElseSucceed(() => null),
+            );
+            if (root && isWithinRoot(candidate, root)) {
+              return;
+            }
+          }
+        }
+      }
     }
 
     return yield* new VcsRepositoryDetectionError({
