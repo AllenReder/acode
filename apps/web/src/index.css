@@ -705,7 +705,7 @@ html.material-stage-opaque #root {
   }
   html,
   body {
-    background-color: var(--app-chrome-background);
+    background-color: transparent;
   }
   body {
     @apply text-foreground relative;
@@ -2224,7 +2224,7 @@ html[data-workbench-window-chrome] {
   min-height: 0;
   overflow: auto;
   overscroll-behavior-x: contain;
-  background: color-mix(in oklch, var(--muted) 45%, var(--background));
+  background: transparent;
   scrollbar-width: thin;
   scroll-padding: 12px;
 }
@@ -2278,7 +2278,7 @@ html[data-workbench-dragging] .workbench-sash {
   overflow: hidden;
   border: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
   border-radius: var(--pane-radius, 0px);
-  background: var(--background);
+  background: transparent;
   box-shadow: var(--pane-shadow, none);
   transition:
     border-color 160ms ease,
