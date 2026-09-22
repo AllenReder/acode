@@ -661,7 +661,12 @@ async function readPackageNoticeText(packageRoot: string): Promise<string | null
     });
     await Promise.all(
       directoryEntries.map(async (entry) => {
-        const relativePath = NodePath.join(directory, entry.name);
+        // This path is not only read back but also written into the generated
+        // manifest as a notice label, and it is the sort key for the section
+        // order. Keep it POSIX everywhere, as `moduleFilePath` already does:
+        // platform separators here make `third-party-licenses.json` a
+        // different artifact on Windows than on macOS/Linux.
+        const relativePath = NodePath.join(directory, entry.name).replaceAll("\\", "/");
         if (entry.isFile() && isNoticeTextFile(entry.name)) {
           noticeFiles.push(relativePath);
           return;
