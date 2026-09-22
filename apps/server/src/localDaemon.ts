@@ -16,7 +16,11 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodeNet from "node:net";
 import * as NodePath from "node:path";
 
-import { describeInvalidDaemonPort, resolveDaemonPortRequest } from "@t3tools/shared/daemonPort";
+import {
+  describeInvalidDaemonPort,
+  resolveDaemonPortRequest,
+  type DaemonPortRequest,
+} from "@t3tools/shared/daemonPort";
 
 import {
   LOCAL_DAEMON_HANDSHAKE_PATH,
@@ -523,27 +527,31 @@ const canListenOnLoopback = async (port: number): Promise<boolean> => {
  * The daemon port a caller asked for, and whether that request is a contract.
  *
  * The key list and its precedence live in `@t3tools/shared/daemonPort`, because
- * the desktop dev wrapper must resolve the very same port for the web dev proxy.
- * Two copies silently disagreed, so the proxy dialed a port nothing served while
- * a healthy daemon listened elsewhere. This maps the shared request onto the
- * launcher's own error type.
+ * the desktop dev wrapper must resolve the very same port for the web dev proxy;
+ * two copies silently disagreed and left the proxy dialing a port nothing served
+ * while a healthy daemon listened elsewhere. This is the launcher's validated
+ * read of that contract: the shared shape, with an unusable value already
+ * reported as the launcher's own error.
  */
-export type RequestedDaemonPort =
-  | { readonly port: undefined; readonly required: false; readonly source: undefined }
-  | { readonly port: number; readonly required: boolean; readonly source: string };
-
-export function requestedDaemonPort(env: NodeJS.ProcessEnv = process.env): RequestedDaemonPort {
+export function requestedDaemonPort(env: NodeJS.ProcessEnv = process.env): DaemonPortRequest {
   const request = resolveDaemonPortRequest(env);
   if (request._tag === "invalid") {
     throw new LocalDaemonError("daemon-port-invalid", describeInvalidDaemonPort(request));
   }
-  return request._tag === "set"
-    ? { port: request.port, required: request.required, source: request.key }
-    : { port: undefined, required: false, source: undefined };
+  return request;
 }
 
-const daemonPortUnavailableMessage = (source: string, port: number): string =>
-  `${source}=${String(port)} is already in use, and a configured daemon port is a contract: the desktop shell and the web dev server both address the daemon there, so binding another port would leave every proxied request unanswered. Free it (\`lsof -nP -iTCP:${String(port)} -sTCP:LISTEN\`) or unset ${source} to let the launcher choose a free port.`;
+type SetDaemonPortRequest = Extract<DaemonPortRequest, { readonly _tag: "set" }>;
+
+const daemonPortUnavailableMessage = (key: string, port: number): string =>
+  `${key}=${String(port)} is already in use, and a configured daemon port is a contract: the desktop shell and the web dev server both address the daemon there, so binding another port would leave every proxied request unanswered. Free it (\`lsof -nP -iTCP:${String(port)} -sTCP:LISTEN\`) or unset ${key} to let the launcher choose a free port.`;
+
+const throwDaemonPortUnavailable = (requested: SetDaemonPortRequest): never => {
+  throw new LocalDaemonError(
+    "daemon-port-unavailable",
+    daemonPortUnavailableMessage(requested.key, requested.port),
+  );
+};
 
 /**
  * Refuse a start that cannot honour a *required* daemon port before it stops
@@ -556,26 +564,20 @@ const daemonPortUnavailableMessage = (source: string, port: number): string =>
  * preference port is deliberately not checked here: falling back to a free port
  * is its documented behaviour.
  */
-async function assertRequestedPortAvailable(requested: RequestedDaemonPort): Promise<void> {
-  if (!requested.required) return;
+async function assertRequestedPortAvailable(requested: DaemonPortRequest): Promise<void> {
+  if (requested._tag !== "set" || !requested.required) return;
   if (await canListenOnLoopback(requested.port)) return;
-  throw new LocalDaemonError(
-    "daemon-port-unavailable",
-    daemonPortUnavailableMessage(requested.source, requested.port),
-  );
+  throwDaemonPortUnavailable(requested);
 }
 
 async function reserveLoopbackPort(): Promise<number> {
   const requested = requestedDaemonPort();
-  if (requested.port !== undefined) {
+  if (requested._tag === "set") {
     if (await canListenOnLoopback(requested.port)) {
       return requested.port;
     }
     if (requested.required) {
-      throw new LocalDaemonError(
-        "daemon-port-unavailable",
-        daemonPortUnavailableMessage(requested.source, requested.port),
-      );
+      throwDaemonPortUnavailable(requested);
     }
   }
 
@@ -770,7 +772,7 @@ export async function startLocalDaemon(
     const requested = requestedDaemonPort();
 
     if (existing.status === "ready") {
-      if (requested.port !== undefined) {
+      if (requested._tag === "set") {
         const existingPort = Number(new URL(existing.state.origin).port);
         if (existingPort === requested.port) {
           return descriptorFromState(existing.state);

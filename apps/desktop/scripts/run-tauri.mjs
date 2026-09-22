@@ -16,10 +16,8 @@ const repositoryRoot = NodePath.resolve(desktopRoot, "../..");
 const inheritedHome = process.env.ACODE_HOME?.trim() || process.env.T3CODE_HOME?.trim();
 const developmentHome = inheritedHome || NodePath.resolve(repositoryRoot, ".acode");
 
-// Resolved through the same authority the daemon launcher binds with, so the
-// daemon port, the web dev proxy target, and the window URL cannot disagree. The
-// proxy matters because in dev the web client sends every `/api`, `/ws`, and
-// `/oauth` request through the Vite server.
+// Daemon port, web dev proxy target, and the window URL all come from the one
+// resolution in `@t3tools/shared/daemonPort`, so they cannot disagree.
 const resolvedPorts = resolveDesktopDevPorts(process.env);
 if (resolvedPorts._tag === "invalid") {
   console.error(`[acode] ${resolvedPorts.message}`);
@@ -34,11 +32,8 @@ const tauriArgs =
         cliArgs[0],
         "--config",
         NodePath.resolve(desktopRoot, "src-tauri/tauri.dev.conf.json"),
-        // `devUrl` in tauri.conf.json is a literal, so it has to follow the web
-        // dev port instead of assuming offset 0. Otherwise a session on a
-        // non-zero offset serves 5733+offset while the window loads 5733 —
-        // another session's server, or nothing at all. Merged after the dev
-        // config on purpose: later `--config` values win.
+        // The window must load the web dev port, not the literal `devUrl` in
+        // tauri.conf.json. Merged last on purpose: a later `--config` value wins.
         "--config",
         JSON.stringify({ build: { devUrl: `http://localhost:${String(webPort)}` } }),
         ...cliArgs.slice(1),

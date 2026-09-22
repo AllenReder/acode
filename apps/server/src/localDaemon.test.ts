@@ -112,27 +112,26 @@ describe("local daemon launch lock", () => {
 describe("requested daemon port", () => {
   it("treats daemon-specific keys as contracts and the server port as a preference", () => {
     expect(requestedDaemonPort({ ACODE_DAEMON_PORT: "13773" })).toEqual({
+      _tag: "set",
+      key: "ACODE_DAEMON_PORT",
       port: 13_773,
       required: true,
-      source: "ACODE_DAEMON_PORT",
     });
     expect(requestedDaemonPort({ T3CODE_DAEMON_PORT: "13773" })).toEqual({
+      _tag: "set",
+      key: "T3CODE_DAEMON_PORT",
       port: 13_773,
       required: true,
-      source: "T3CODE_DAEMON_PORT",
     });
     // `T3CODE_PORT` is the web dev runner's general server port: a leftover
     // listener must not stop `pnpm dev` from taking a free port instead.
     expect(requestedDaemonPort({ T3CODE_PORT: "13773" })).toEqual({
+      _tag: "set",
+      key: "T3CODE_PORT",
       port: 13_773,
       required: false,
-      source: "T3CODE_PORT",
     });
-    expect(requestedDaemonPort({})).toEqual({
-      port: undefined,
-      required: false,
-      source: undefined,
-    });
+    expect(requestedDaemonPort({})).toEqual({ _tag: "unset" });
   });
 
   it("keeps the documented precedence and skips blank values", () => {
@@ -142,11 +141,12 @@ describe("requested daemon port", () => {
         ACODE_PORT: "2222",
         T3CODE_DAEMON_PORT: "3333",
         T3CODE_PORT: "4444",
-      }).source,
-    ).toBe("ACODE_DAEMON_PORT");
-    expect(requestedDaemonPort({ ACODE_DAEMON_PORT: "  ", T3CODE_PORT: "4444" }).source).toBe(
-      "T3CODE_PORT",
-    );
+      }),
+    ).toMatchObject({ _tag: "set", key: "ACODE_DAEMON_PORT" });
+    expect(requestedDaemonPort({ ACODE_DAEMON_PORT: "  ", T3CODE_PORT: "4444" })).toMatchObject({
+      _tag: "set",
+      key: "T3CODE_PORT",
+    });
   });
 
   it("rejects an unusable value instead of silently ignoring it", () => {

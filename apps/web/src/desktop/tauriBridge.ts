@@ -358,12 +358,9 @@ if (isTauri) {
       // Keep rendering so the client can show its normal disconnected/auth
       // state instead of turning a missing daemon descriptor into a blank app.
       localEnvironmentConfigError = error;
-      // ...but say why, loudly. Without this the missing bootstrap only shows up
-      // as the primary target falling back to the window origin, where the web
-      // dev server proxies to a backend port nothing serves — a 502 with a JS
-      // stack and no hint that the local daemon never started. The shell reports
-      // the launcher's own code (for example `daemon-port-unavailable`), which is
-      // what tells a developer to free the port. See `readTauriDesktopConfigError`.
+      // Say why, loudly: a missing bootstrap otherwise only shows up as the
+      // primary target falling back to the window origin, where the proxy dials a
+      // backend port nothing serves. The shell reports the launcher's own code.
       console.error(
         `[acode] the local daemon runtime config failed: ${error instanceof Error ? error.message : String(error)}`,
         error,

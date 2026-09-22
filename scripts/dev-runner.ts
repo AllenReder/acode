@@ -603,7 +603,9 @@ export function resolveModePortOffsets<R = NetService.NetService>({
   return Effect.gen(function* () {
     const checkPort = (checkPortAvailability ??
       defaultCheckPortAvailability) as PortAvailabilityCheck<R>;
-    const pinSource = "T3CODE_STRICT_DEV_PORTS=1";
+    // Name the knob, not a `key=value` pair: the value comes from a boolean
+    // config, so quoting "=1" would misreport a run that set it to "true".
+    const pinSource = "T3CODE_STRICT_DEV_PORTS";
 
     if (mode === "dev:web") {
       if (hasExplicitDevUrl) {
