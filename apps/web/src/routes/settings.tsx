@@ -14,6 +14,8 @@ import { useSettingsRestore } from "../components/settings/SettingsPanels";
 
 import { SettingsBreadcrumb } from "../components/settings/SettingsBreadcrumb";
 import { SidebarInset } from "../components/ui/sidebar";
+import { WindowControls } from "../components/desktop/WindowControls";
+import { handleTopbarDoubleClick } from "../lib/windowControls";
 import { TopbarInset } from "../workbench/TopbarInset";
 import {
   SettingsScopeProvider,
@@ -161,23 +163,27 @@ function SettingsContentLayout() {
         kind="topbar"
         className="drag-region flex h-[var(--workbench-titlebar-height,36px)] shrink-0 items-center border-b border-[var(--material-edge)]"
         data-tauri-drag-region="deep"
+        onDoubleClick={handleTopbarDoubleClick}
       >
         <TopbarInset />
-        <div className="flex min-w-0 flex-1 items-center gap-3 px-3 [-webkit-app-region:no-drag]">
-          <SettingsBreadcrumb
-            pathname={location.pathname}
-            scope={
-              showScope ? { value: search, groups, environments, onChange: selectScope } : undefined
-            }
-          />
+        <div className="flex min-w-0 flex-1 items-center gap-3 px-3" data-tauri-drag-region>
+          <div className="[-webkit-app-region:no-drag]">
+            <SettingsBreadcrumb
+              pathname={location.pathname}
+              scope={
+                showScope ? { value: search, groups, environments, onChange: selectScope } : undefined
+              }
+            />
+          </div>
           {location.pathname === "/settings/general" ? (
-            <div className="ms-auto flex shrink-0 items-center">
+            <div className="ms-auto flex shrink-0 items-center [-webkit-app-region:no-drag]">
               <RestoreDeviceDefaultsButton
                 onRestored={() => setRestoreSignal((value) => value + 1)}
               />
             </div>
           ) : null}
         </div>
+        <WindowControls />
       </MaterialSurface>
       <MaterialSurface kind="workbench" className="relative isolate flex min-h-0 flex-1 flex-col">
         <div className="workbench-artwork" aria-hidden="true" />

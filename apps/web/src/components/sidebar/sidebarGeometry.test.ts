@@ -26,6 +26,7 @@ describe("sidebarGeometry", () => {
     expect(TRAFFIC_LIGHTS_ZONE).toBe(BASE_SPACING + TRAFFIC_LIGHTS_WIDTH);
     expect(TITLEBAR_BUTTON_SIZE).toBe(28);
     expect(SIDEBAR_TRIGGER_LEFT_MAC).toBe(TRAFFIC_LIGHTS_ZONE + TRAFFIC_LIGHT_GAP);
+    expect(SIDEBAR_TRIGGER_LEFT_WIN).toBe(BASE_SPACING);
     expect(DOCK_LEFT_MAC).toBe(SIDEBAR_TRIGGER_LEFT_MAC + TITLEBAR_BUTTON_SIZE + BUTTON_GAP);
     expect(DOCK_LEFT_WIN).toBe(SIDEBAR_TRIGGER_LEFT_WIN + TITLEBAR_BUTTON_SIZE + BUTTON_GAP);
     expect(COLLAPSED_TABS_INSET_MAC).toBe(
@@ -48,8 +49,9 @@ describe("sidebarGeometry", () => {
     expect(resolveSidebarMinimumWidth({ isMac: true })).toBe(expected);
   });
 
-  it("calculates non-macOS sidebar minimum width aligned directly to left window boundary", () => {
+  it("calculates non-macOS sidebar minimum width including base left spacing", () => {
     const expected =
+      SIDEBAR_TRIGGER_LEFT_WIN +
       TITLEBAR_BUTTON_SIZE +
       BUTTON_GAP +
       TITLEBAR_BUTTON_SIZE +

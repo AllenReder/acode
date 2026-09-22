@@ -21,4 +21,4 @@ A unified spacing constant $S$ (12px, derived from the window left edge to the t
 - The global `html[data-workbench-window-chrome]` CSS rules that previously offset `sidebar-container` and `sidebar-inset` are removed.
 - Sidebar minimum width is reduced to 156px while preserving content legibility.
 - Control buttons (Sidebar trigger, Settings, Back) share unified 28x28 styling, Apple-style active press scaling (`active:scale-[0.98]`), and `-webkit-app-region: no-drag`.
-- On non-macOS platforms (Windows/Linux), the same layout applies without the left traffic-light inset, aligning the controls to the window's left border.
+- On non-macOS platforms (Windows/Linux), the same layout applies without the left traffic-light inset, aligning the controls to the window's left border (amended by ADR 0011 to adopt a 12px baseline margin on Windows).
