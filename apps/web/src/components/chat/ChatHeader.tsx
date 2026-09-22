@@ -11,7 +11,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { ChevronDownIcon, FolderIcon, PanelRightOpenIcon, TerminalIcon } from "lucide-react";
+import { ChevronDownIcon, EllipsisIcon, FolderIcon, TerminalIcon } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -27,6 +27,7 @@ import { isTrailingDoubleClick } from "../Sidebar.logic";
 import { type DraftId } from "~/composerDraftStore";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
+import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import ProjectScriptsControl, {
   type NewProjectScriptInput,
@@ -474,14 +475,17 @@ export const ChatHeader = memo(function ChatHeader({
           <Tooltip>
             <TooltipTrigger
               render={
-                <button
-                  type="button"
+                <Button
+                  size="xs"
+                  variant="outline"
                   aria-label="New terminal session"
                   onClick={onNewTerminalSession}
-                  className="inline-flex size-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <TerminalIcon className="size-3.5" />
-                </button>
+                  <span className="sr-only @3xl/header-actions:not-sr-only @3xl/header-actions:ml-0.5">
+                    Terminal
+                  </span>
+                </Button>
               }
             />
             <TooltipPopup side="top">New terminal session</TooltipPopup>
@@ -494,13 +498,13 @@ export const ChatHeader = memo(function ChatHeader({
                 render={
                   <MenuTrigger
                     render={
-                      <button
-                        type="button"
+                      <Button
+                        size="icon-xs"
+                        variant="outline"
                         aria-label="Workspace views"
-                        className="inline-flex size-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring data-popup-open:bg-accent data-popup-open:text-foreground"
                       >
-                        <PanelRightOpenIcon className="size-3.5" />
-                      </button>
+                        <EllipsisIcon className="size-3.5" />
+                      </Button>
                     }
                   />
                 }

@@ -120,6 +120,8 @@ describe("ChatHeader in workbenchMode", () => {
     const root = renderer!.root;
     const terminalButton = root.findByProps({ "aria-label": "New terminal session" });
     expect(terminalButton).toBeDefined();
+    expect(terminalButton.props.variant).toBe("outline");
+    expect(terminalButton.props.size).toBe("xs");
     act(() => {
       terminalButton.props.onClick();
     });
@@ -127,5 +129,7 @@ describe("ChatHeader in workbenchMode", () => {
 
     const viewsMenuTrigger = root.findByProps({ "aria-label": "Workspace views" });
     expect(viewsMenuTrigger).toBeDefined();
+    expect(viewsMenuTrigger.props.variant).toBe("outline");
+    expect(viewsMenuTrigger.props.size).toBe("icon-xs");
   });
 });
