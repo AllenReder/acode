@@ -3,14 +3,15 @@ import * as Schema from "effect/Schema";
 import "culori/css";
 import { converter, parse } from "culori/fn";
 import {
+  ACODE_DEFAULT_THEME,
   BUILT_IN_THEMES,
-  EMBER_THEME,
-  GROVE_THEME,
-  IRIS_THEME,
+  FOREST_THEME,
+  MIDNIGHT_THEME,
   OCEAN_THEME,
-  T3_CHAT_THEME,
   RESERVED_THEME_IDS,
+  SLATE_THEME,
   THEME_COLOR_ROLES,
+  ZINC_THEME,
   type ThemeAppearance,
   type ThemeColorRole,
   type ThemeColors,
@@ -18,21 +19,31 @@ import {
   type ThemeVariants,
 } from "@t3tools/shared/themePalettes";
 
-export { EMBER_THEME, GROVE_THEME, IRIS_THEME, OCEAN_THEME, T3_CHAT_THEME, THEME_COLOR_ROLES };
+export {
+  ACODE_DEFAULT_THEME,
+  BUILT_IN_THEMES,
+  FOREST_THEME,
+  MIDNIGHT_THEME,
+  OCEAN_THEME,
+  SLATE_THEME,
+  THEME_COLOR_ROLES,
+  ZINC_THEME,
+};
 export type { ThemeAppearance, ThemeColorRole, ThemeColors, ThemeDefinition, ThemeVariants };
 
-export const T3_CHAT_THEME_ID = "t3-chat" as const;
-const GROVE_THEME_ID = "grove" as const;
+export const ACODE_DEFAULT_THEME_ID = "acode-default" as const;
+export const ZINC_THEME_ID = "zinc" as const;
+export const SLATE_THEME_ID = "slate" as const;
+export const MIDNIGHT_THEME_ID = "midnight" as const;
+export const FOREST_THEME_ID = "forest" as const;
 export const OCEAN_THEME_ID = "ocean" as const;
-const EMBER_THEME_ID = "ember" as const;
-const IRIS_THEME_ID = "iris" as const;
-export const THEME_FILE_VERSION = 1 as const;
-export const CUSTOM_THEMES_STORAGE_KEY = "t3code:themes:v1";
-export const THEME_FOLLOW_SYSTEM_STORAGE_KEY = "t3code:theme-follow-system";
-export const THEME_APPEARANCE_MODE_STORAGE_KEY = "t3code:theme-appearance-mode";
-export const THEME_HALVES_STORAGE_KEY = "t3code:theme-halves:v1";
 
-const LEGACY_T3_CHAT_DARK_THEME_ID = "t3-chat-dark";
+export const THEME_FILE_VERSION = 1 as const;
+export const CUSTOM_THEMES_STORAGE_KEY = "acode:themes:v1";
+export const THEME_FOLLOW_SYSTEM_STORAGE_KEY = "acode:theme-follow-system";
+export const THEME_APPEARANCE_MODE_STORAGE_KEY = "acode:theme-appearance-mode";
+export const THEME_HALVES_STORAGE_KEY = "acode:theme-halves:v1";
+export const THEME_STORAGE_KEY = "acode:theme";
 
 export const ThemePreference = Schema.String;
 export type ThemePreference = typeof ThemePreference.Type;
@@ -293,44 +304,14 @@ export function subscribeToCustomThemes(listener: () => void): () => void {
 // Earlier builds shipped every maintainer theme under a t3- prefix; only the
 // genuinely T3-branded palette keeps it. Stored preferences and mixes with the
 // old ids stay readable through this alias table.
-const LEGACY_THEME_ID_ALIASES: Readonly<Record<string, string>> = {
-  [LEGACY_T3_CHAT_DARK_THEME_ID]: T3_CHAT_THEME_ID,
-  "t3-grove": GROVE_THEME_ID,
-  "t3-ocean": OCEAN_THEME_ID,
-  "t3-ember": EMBER_THEME_ID,
-  "t3-iris": IRIS_THEME_ID,
-};
-
-function normalizeThemeId(themeId: string): string {
-  return LEGACY_THEME_ID_ALIASES[themeId] ?? themeId;
-}
-
-/**
- * Map a stored preference onto the id the runtime applies, so selection state
- * matches the theme cards. The legacy dark-variant id stays as-is because it
- * still carries the appearance hint getThemePreferenceMode reads.
- */
 export function canonicalThemePreference(theme: string): string {
-  return theme === LEGACY_T3_CHAT_DARK_THEME_ID ? theme : normalizeThemeId(theme);
+  return theme;
 }
 
 function themeIdFromPreference(theme: ThemePreference): string {
-  return normalizeThemeId(theme);
+  return theme;
 }
 
-// Older builds stored the dark T3 Chat palette as a separate theme. Keep
-// those preferences readable while mapping them to the dark variant.
-function legacyThemeMode(theme: ThemePreference): ThemeAppearance | null {
-  return theme === LEGACY_T3_CHAT_DARK_THEME_ID ? "dark" : null;
-}
-
-/**
- * The palette T3 Code wears with no theme installed, captured from the app's
- * stock tokens (index.css) so a draft seeded from the default look paints the
- * pixels the user is already seeing. Alpha-bearing tokens are flattened over
- * their real backdrops (canvas, or the sidebar for its rows) because theme
- * colors are stored as opaque OKLCH tokens.
- */
 const T3_CODE_LIGHT_THEME_COLORS: ThemeColors = {
   canvas: "#fcfcfc",
   chrome: "#fcfcfc",
@@ -995,7 +976,9 @@ function standardMutedThemeText(
 
 /** Theme-file defaults follow the flagship palette for the requested mode. */
 export function getDefaultThemeColors(appearance: ThemeAppearance): ThemeColors {
-  return appearance === "dark" ? T3_CHAT_THEME.variants!.dark! : T3_CHAT_THEME.colors;
+  return appearance === "light"
+    ? (ACODE_DEFAULT_THEME.variants?.light ?? ACODE_DEFAULT_THEME.colors)
+    : (ACODE_DEFAULT_THEME.variants?.dark ?? ACODE_DEFAULT_THEME.colors);
 }
 
 /**
@@ -1239,8 +1222,6 @@ export function getThemeModes(theme: ThemeDefinition): ReadonlyArray<ThemeAppear
 export function getThemePreferenceMode(theme: ThemePreference): ThemeAppearance | null {
   if (theme === "system") return null;
   if (theme === "light" || theme === "dark") return theme;
-  const legacyMode = legacyThemeMode(theme);
-  if (legacyMode) return legacyMode;
   return getThemeDefinition(theme)?.appearance ?? null;
 }
 
@@ -1643,21 +1624,13 @@ export function applyThemePalette(theme: ThemePreference, appearance?: ThemeAppe
   if (!root?.style) return;
 
   setThemePreviewSidebarArtwork(null);
-  const palette = getThemeDefinition(theme);
+  const palette = getThemeDefinition(theme) ?? ACODE_DEFAULT_THEME;
 
-  if (palette) {
-    root.dataset.themeId = palette.id;
-    const mode = appearance ?? legacyThemeMode(theme) ?? palette.appearance;
-    const colors = getThemeColorsForMode(palette, mode) ?? palette.colors;
-    for (const [role, value] of Object.entries(colors) as Array<[ThemeColorRole, string]>) {
-      root.style.setProperty(APP_THEME_VARIABLES[role], value);
-    }
-    return;
-  }
-
-  delete root.dataset.themeId;
-  for (const variable of Object.values(APP_THEME_VARIABLES)) {
-    root.style.removeProperty(variable);
+  root.dataset.themeId = palette.id;
+  const mode = appearance ?? palette.appearance;
+  const colors = getThemeColorsForMode(palette, mode) ?? palette.colors;
+  for (const [role, value] of Object.entries(colors) as Array<[ThemeColorRole, string]>) {
+    root.style.setProperty(APP_THEME_VARIABLES[role], value);
   }
 }
 
@@ -1674,19 +1647,19 @@ export function resolveThemeAppearance(
     // A configured half guarantees the appearance is renderable even when the
     // base theme lacks that mode.
     if (halves?.[systemAppearance]) return systemAppearance;
-    const definition = getThemeDefinition(theme);
-    return definition && getThemeColorsForMode(definition, systemAppearance) === null
+    const definition = getThemeDefinition(theme) ?? ACODE_DEFAULT_THEME;
+    return getThemeColorsForMode(definition, systemAppearance) === null
       ? definition.appearance
       : systemAppearance;
   }
   if (mode === "light" || mode === "dark") {
     if (halves?.[mode]) return mode;
-    const definition = getThemeDefinition(theme);
-    return definition && getThemeColorsForMode(definition, mode) === null
+    const definition = getThemeDefinition(theme) ?? ACODE_DEFAULT_THEME;
+    return getThemeColorsForMode(definition, mode) === null
       ? definition.appearance
       : mode;
   }
-  return getThemePreferenceMode(theme) ?? "light";
+  return getThemePreferenceMode(theme) ?? (systemDark ? "dark" : "light");
 }
 
 export function resolveDesktopTheme(
@@ -1757,5 +1730,8 @@ export function resolveThemeHalf(
   halves: ThemeHalves | null,
   appearance: ThemeAppearance,
 ): ThemePreference {
-  return halves?.[appearance] ?? theme;
+  const half = halves?.[appearance];
+  if (half && getThemeDefinition(half) !== null) return half;
+  if (getThemeDefinition(theme) !== null) return theme;
+  return ACODE_DEFAULT_THEME_ID;
 }

@@ -687,8 +687,8 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
               >
                 Repository
               </label>
-              <div className="flex items-stretch overflow-hidden rounded-md border border-input bg-background focus-within:outline-2 focus-within:-outline-offset-1 focus-within:outline-ring">
-                <span className="flex shrink-0 items-center gap-1.5 border-r border-input bg-muted/50 px-2.5 font-mono text-xs text-muted-foreground">
+              <div className="flex items-stretch overflow-hidden rounded-md border border-border bg-background focus-within:outline-2 focus-within:-outline-offset-1 focus-within:outline-ring">
+                <span className="flex shrink-0 items-center gap-1.5 border-r border-border bg-muted/50 px-2.5 font-mono text-xs text-muted-foreground">
                   <currentPublishProvider.Icon className="size-3.5" />
                   {publishHost}/
                 </span>
@@ -838,7 +838,7 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
               <div
                 role="status"
                 aria-live="polite"
-                className="flex items-center gap-2 rounded-md border border-input bg-muted/40 px-3 py-2 text-xs text-muted-foreground dark:border-transparent dark:bg-white/[0.035]"
+                className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground dark:border-transparent dark:bg-white/[0.035]"
               >
                 <Spinner className="size-3.5" aria-hidden />
                 Publishing repository to {publishProviderLabel}...
@@ -873,7 +873,7 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
                       : `Remote "${publishResult.remoteName}" is set up. Make a commit and push it to share your code.`}
                   </p>
                 </div>
-                <div className="flex items-center gap-2 rounded-lg border border-input bg-muted/40 px-3 py-2 dark:border-transparent dark:bg-white/[0.035]">
+                <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 dark:border-transparent dark:bg-white/[0.035]">
                   <currentPublishProvider.Icon className="size-3.5 shrink-0 text-muted-foreground" />
                   <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground">
                     {publishResult.repository.nameWithOwner}
@@ -891,7 +891,7 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
                 </Button>
               </>
             ) : (
-              <div className="rounded-md border border-input bg-background px-3 py-2 text-xs text-muted-foreground dark:border-transparent dark:bg-white/[0.035]">
+              <div className="rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground dark:border-transparent dark:bg-white/[0.035]">
                 Publish result unavailable.
               </div>
             )}

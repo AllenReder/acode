@@ -9,12 +9,12 @@ import {
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { RotateCcwIcon } from "lucide-react";
 import { Button } from "../components/ui/button";
+import { MaterialSurface } from "../components/MaterialSurface";
 import { useSettingsRestore } from "../components/settings/SettingsPanels";
 
 import { SettingsBreadcrumb } from "../components/settings/SettingsBreadcrumb";
 import { SidebarInset } from "../components/ui/sidebar";
-import { WorkspacePageHeader } from "../components/WorkspacePageHeader";
-import { isElectron } from "../env";
+import { TopbarInset } from "../workbench/TopbarInset";
 import {
   SettingsScopeProvider,
   useSettingsScope,
@@ -153,37 +153,45 @@ function SettingsContentLayout() {
   }, [navigateBackWithinApp]);
 
   return (
-    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground isolate">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
-        <WorkspacePageHeader electron={isElectron}>
-          <div className="flex w-full items-center gap-3">
-            <SettingsBreadcrumb
-              pathname={location.pathname}
-              scope={
-                showScope
-                  ? { value: search, groups, environments, onChange: selectScope }
-                  : undefined
-              }
-            />
-            {location.pathname === "/settings/general" ? (
-              <div className="ms-auto flex shrink-0 items-center">
-                <RestoreDeviceDefaultsButton
-                  onRestored={() => setRestoreSignal((value) => value + 1)}
-                />
-              </div>
-            ) : null}
-          </div>
-        </WorkspacePageHeader>
-
-        <div
-          key={`${JSON.stringify(search)}:${restoreSignal}`}
-          className="min-h-0 flex flex-1 flex-col"
-        >
-          <SettingsScopeBoundary pathname={location.pathname}>
-            <Outlet />
-          </SettingsScopeBoundary>
+    <SidebarInset
+      data-workbench-root=""
+      className="h-dvh min-h-0 overflow-hidden overscroll-y-none text-foreground isolate"
+    >
+      <MaterialSurface
+        kind="topbar"
+        className="drag-region flex h-[var(--workbench-titlebar-height,36px)] shrink-0 items-center border-b border-[var(--material-edge)]"
+        data-tauri-drag-region="deep"
+      >
+        <TopbarInset />
+        <div className="flex min-w-0 flex-1 items-center gap-3 px-3 [-webkit-app-region:no-drag]">
+          <SettingsBreadcrumb
+            pathname={location.pathname}
+            scope={
+              showScope ? { value: search, groups, environments, onChange: selectScope } : undefined
+            }
+          />
+          {location.pathname === "/settings/general" ? (
+            <div className="ms-auto flex shrink-0 items-center">
+              <RestoreDeviceDefaultsButton
+                onRestored={() => setRestoreSignal((value) => value + 1)}
+              />
+            </div>
+          ) : null}
         </div>
-      </div>
+      </MaterialSurface>
+      <MaterialSurface kind="workbench" className="relative isolate flex min-h-0 flex-1 flex-col">
+        <div className="workbench-artwork" aria-hidden="true" />
+        <div className="relative z-[1] flex min-h-0 min-w-0 flex-1 flex-col text-foreground">
+          <div
+            key={`${JSON.stringify(search)}:${restoreSignal}`}
+            className="min-h-0 flex flex-1 flex-col"
+          >
+            <SettingsScopeBoundary pathname={location.pathname}>
+              <Outlet />
+            </SettingsScopeBoundary>
+          </div>
+        </div>
+      </MaterialSurface>
     </SidebarInset>
   );
 }

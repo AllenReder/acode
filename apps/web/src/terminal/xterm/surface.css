@@ -1,0 +1,15 @@
+.acode-terminal-surface {
+  width: 100%;
+  height: 100%;
+}
+
+/* xterm's viewport ships with a black CSS fallback even when its canvas
+   theme is transparent. The surrounding Material Surface owns that fill. */
+.acode-terminal-surface .xterm .xterm-viewport {
+  background-color: transparent;
+}
+
+.acode-terminal-surface[data-terminal-top-fade="true"] .xterm-screen {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 16px);
+  mask-image: linear-gradient(to bottom, transparent, black 16px);
+}

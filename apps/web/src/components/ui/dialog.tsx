@@ -1,3 +1,4 @@
+import { GlassBackdrop } from "~/components/ui/GlassBackdrop";
 "use client";
 
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
@@ -94,6 +95,7 @@ function DialogPopup({
           data-slot="dialog-popup"
           {...props}
         >
+          {variant !== "media" && <GlassBackdrop />}
           {children}
           {showCloseButton && (
             <DialogPrimitive.Close

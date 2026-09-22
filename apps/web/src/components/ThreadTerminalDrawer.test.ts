@@ -87,7 +87,7 @@ describe("terminalThemeFromApp", () => {
 
     const theme = terminalThemeFromApp();
 
-    expect(theme.background).toBe("#000");
+    expect(theme.background).toBe("#00000000");
     expect(theme.foreground).toBe("#fff");
     expect(theme.cursor).toBe("#ddd");
     expect(theme.black).toBe("#18181b");

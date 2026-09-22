@@ -108,7 +108,7 @@ function ChatRouteLayout() {
     <>
       <ChatRouteGlobalShortcuts />
       {isWorkbenchRoute ? (
-        <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground md:h-dvh">
+        <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none text-foreground md:h-dvh">
           <Workbench />
         </SidebarInset>
       ) : (

@@ -1,7 +1,11 @@
 /** True when the WebView is running inside the ACode Tauri shell. */
 export const isTauri =
   typeof window !== "undefined" &&
-  ("__TAURI_INTERNALS__" in window || window.location?.protocol === "tauri:");
+  ("__TAURI_INTERNALS__" in window ||
+    "isTauri" in window ||
+    Boolean((window as any).isTauri) ||
+    window.location?.protocol === "tauri:" ||
+    window.location?.port === "5733");
 
 /**
  * True only for the existing Electron desktop runtime. Tauri uses the same

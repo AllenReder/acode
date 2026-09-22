@@ -14,7 +14,7 @@ import { cn } from "~/lib/utils";
  * not grow separate chrome.
  */
 export const FILE_SURFACE_SUBHEADER_CLASS =
-  "flex h-10 min-h-10 shrink-0 items-center gap-2 border-b border-border/60 bg-background px-3 in-data-[preview-panel-mode=inline]:mb-3 in-data-[preview-panel-mode=inline]:h-7 in-data-[preview-panel-mode=inline]:min-h-7 in-data-[preview-panel-mode=inline]:border-b-transparent";
+  "flex h-10 min-h-10 shrink-0 items-center gap-2 border-b border-border/60 bg-transparent px-3 in-data-[preview-panel-mode=inline]:mb-3 in-data-[preview-panel-mode=inline]:h-7 in-data-[preview-panel-mode=inline]:min-h-7 in-data-[preview-panel-mode=inline]:border-b-transparent";
 
 export const FILE_LINK_REVEAL_ATTRIBUTE = "data-file-link-reveal";
 
@@ -22,10 +22,12 @@ export const FILE_LINK_REVEAL_UNSAFE_CSS = `
   ${DIFF_SURFACE_THEME_UNSAFE_CSS}
 
   diffs-container {
-    --diffs-bg: var(--code-background, var(--background)) !important;
-    --diffs-light-bg: var(--code-background, var(--background)) !important;
-    --diffs-dark-bg: var(--code-background, var(--background)) !important;
-    background-color: var(--code-background, var(--background)) !important;
+    -webkit-user-select: text;
+    user-select: text;
+    --diffs-bg: transparent !important;
+    --diffs-light-bg: transparent !important;
+    --diffs-dark-bg: transparent !important;
+    background-color: transparent !important;
     color: var(--code-foreground, var(--foreground)) !important;
   }
 
@@ -150,7 +152,7 @@ export function FileSurfaceFailure(props: {
         <button
           type="button"
           onClick={props.onRetry}
-          className="rounded-md border border-input px-2.5 py-1 text-xs text-foreground hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+          className="rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
         >
           Try again
         </button>

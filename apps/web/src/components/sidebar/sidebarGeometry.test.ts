@@ -34,7 +34,7 @@ describe("sidebarGeometry", () => {
     expect(COLLAPSED_TABS_INSET_WIN).toBe(
       DOCK_LEFT_WIN + TITLEBAR_BUTTON_SIZE + SEPARATOR_LEFT_GAP + 1 + SEPARATOR_RIGHT_GAP,
     );
-    expect(EXPANDED_TABS_INSET).toBe(BASE_SPACING);
+    expect(EXPANDED_TABS_INSET).toBe(0);
   });
 
   it("calculates macOS sidebar minimum width matching the unified formula", () => {

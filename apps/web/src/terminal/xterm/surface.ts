@@ -1,4 +1,7 @@
 import "@xterm/xterm/css/xterm.css";
+import "./surface.css";
+import { transparentXtermTheme } from "./theme";
+import { TransparentTerminalOutput } from "./transparentOutput";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -9,6 +12,7 @@ export interface XtermTerminalSurfaceOptions {
   theme: ITheme;
   font: { family?: string; size: number };
   visible?: boolean;
+  topFade?: boolean;
   onData: (data: string) => void;
   onResize: (cols: number, rows: number) => void;
   onSelectionChange?: () => void;
@@ -55,13 +59,20 @@ export class XtermTerminalSurface {
   /** Invalidates an older replay's completion callback when a newer one starts. */
   private replySuppressionToken = 0;
   private disposed = false;
+  private readonly output = new TransparentTerminalOutput();
 
-  private constructor(mount: HTMLElement, options: XtermTerminalSurfaceOptions) {
+  private constructor(host: HTMLElement, options: XtermTerminalSurfaceOptions) {
+    // Async setup can overlap a cancelled instance during StrictMode or View
+    // remounts. Each instance owns its DOM so stale disposal cannot strip the
+    // live renderer's transparency/fade markers from a shared React host.
+    const mount = document.createElement("div");
+    host.appendChild(mount);
     this.mount = mount;
     this.options = options;
 
     this.terminal = new Terminal({
       allowProposedApi: true,
+      allowTransparency: true,
       convertEol: false,
       cursorBlink: true,
       cursorStyle: "bar",
@@ -71,7 +82,7 @@ export class XtermTerminalSurface {
       macOptionIsMeta: true,
       minimumContrastRatio: 1,
       rescaleOverlappingGlyphs: true,
-      theme: options.theme,
+      theme: transparentXtermTheme(options.theme),
     });
 
     this.fitAddon = new FitAddon();
@@ -120,7 +131,19 @@ export class XtermTerminalSurface {
       shouldXtermHandleKey(event, this.options.beforeKey),
     );
 
+    mount.classList.add("acode-terminal-surface");
     this.terminal.open(mount);
+    if (options.topFade) {
+      const update = () => this.updateTopFade();
+      const listeners = [
+        this.terminal.onScroll(update),
+        this.terminal.onRender(update),
+        this.terminal.onCursorMove(update),
+        this.terminal.buffer.onBufferChange(update),
+      ];
+      this.cleanups.push(() => listeners.forEach((listener) => listener.dispose()));
+      update();
+    }
 
     // Attempt WebGL acceleration when available
     if (typeof window !== "undefined" && typeof window.WebGLRenderingContext !== "undefined") {
@@ -157,13 +180,14 @@ export class XtermTerminalSurface {
 
   write(data: string | Uint8Array): void {
     if (this.disposed) return;
-    this.terminal.write(data);
+    this.terminal.write(this.output.write(data));
   }
 
   resetAndWrite(data: string | Uint8Array): void {
     if (this.disposed) return;
     this.suppressReplies = true;
     const token = ++this.replySuppressionToken;
+    this.output.reset();
     this.terminal.reset();
     if (data.length === 0) {
       this.suppressReplies = false;
@@ -172,13 +196,18 @@ export class XtermTerminalSurface {
     // xterm parses writes asynchronously, so the flag has to survive until this
     // write commits rather than just this call, and a superseded replay must
     // not clear the flag for the one that replaced it.
-    this.terminal.write(data, () => {
+    this.terminal.write(this.output.write(data), () => {
       if (this.replySuppressionToken === token) this.suppressReplies = false;
     });
   }
 
   fit(): boolean {
-    if (this.disposed || !this.mount || this.mount.clientWidth <= 0 || this.mount.clientHeight <= 0) {
+    if (
+      this.disposed ||
+      !this.mount ||
+      this.mount.clientWidth <= 0 ||
+      this.mount.clientHeight <= 0
+    ) {
       return false;
     }
     try {
@@ -208,7 +237,7 @@ export class XtermTerminalSurface {
 
   setTheme(theme: ITheme): void {
     if (this.disposed) return;
-    this.terminal.options.theme = theme;
+    this.terminal.options.theme = transparentXtermTheme(theme);
   }
 
   setFont(font: { family?: string; size: number }): void {
@@ -220,6 +249,18 @@ export class XtermTerminalSurface {
       this.terminal.options.fontSize = font.size;
     }
     this.fit();
+  }
+
+  private updateTopFade(): void {
+    if (this.disposed) return;
+    const buffer = this.terminal.buffer.active;
+    const screen = this.mount.querySelector(".xterm-screen");
+    const rowHeight = (screen?.getBoundingClientRect().height ?? 0) / this.terminal.rows;
+    const cursorRow = buffer.baseY + buffer.cursorY - buffer.viewportY;
+    const cursorInFade = cursorRow >= 0 && cursorRow * rowHeight < 16;
+    const show = buffer.type === "normal" && buffer.viewportY > 0 && rowHeight > 0 && !cursorInFade;
+    const value = show ? "true" : "false";
+    if (this.mount.dataset.terminalTopFade !== value) this.mount.dataset.terminalTopFade = value;
   }
 
   isAtBottom(): boolean {
@@ -306,5 +347,6 @@ export class XtermTerminalSurface {
     } catch {
       // ignore
     }
+    this.mount.remove();
   }
 }

@@ -1175,7 +1175,7 @@ const AuthorizedClientsHeaderAction = memo(function AuthorizedClientsHeaderActio
                   </Button>
                 </div>
               </div>
-              <div className="divide-y divide-border/60 rounded-lg border border-input bg-muted/25">
+              <div className="divide-y divide-border/60 rounded-lg border border-border bg-muted/25">
                 {PAIRING_SCOPE_OPTIONS.map(({ scope, title, description }) => (
                   <label
                     key={scope}

@@ -1,7 +1,4 @@
-import {
-  ArrowLeftIcon,
-  SettingsIcon,
-} from "lucide-react";
+import { ArrowLeftIcon, SettingsIcon } from "lucide-react";
 import { memo, useCallback } from "react";
 import { useCanGoBack, useLocation, useNavigate } from "@tanstack/react-router";
 
@@ -13,11 +10,7 @@ import {
   useEnvironmentStageLabel,
 } from "../SidebarStageBackdrop";
 import { Badge } from "../ui/badge";
-import {
-  SidebarFooter,
-  SidebarHeader,
-  useSidebar,
-} from "../ui/sidebar";
+import { SidebarFooter, SidebarHeader, useSidebar } from "../ui/sidebar";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarTitlebarButton } from "./SidebarTitlebarControl";
 import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
@@ -37,8 +30,7 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader() {
 
   return (
     <SidebarHeader
-      className="drag-region flex h-[var(--workbench-titlebar-height,36px)] shrink-0 flex-row items-center bg-sidebar p-0"
-      data-tauri-drag-region
+      className="drag-region flex h-[var(--workbench-titlebar-height,36px)] shrink-0 flex-row items-center bg-transparent p-0"
       data-sidebar-header=""
       style={{
         paddingLeft: isMac
@@ -62,7 +54,7 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader() {
           {pillLabel}
         </Badge>
       ) : null}
-      <div className="flex-1 min-w-0 h-full pointer-events-none" data-tauri-drag-region />
+      <div className="flex-1 min-w-0 h-full pointer-events-none" />
       <div
         className="size-7 shrink-0 pointer-events-none"
         data-slot="sidebar-header-action-placeholder"
@@ -85,7 +77,8 @@ export function SidebarActionControl({
   const isMac = typeof navigator !== "undefined" && isMacPlatform(navigator.platform);
   const locationPath = useLocation({ select: (location) => location.pathname });
   const currentPath = pathname ?? locationPath;
-  const isOnSettings = mode === "settings" || currentPath === "/settings" || currentPath.startsWith("/settings/");
+  const isOnSettings =
+    mode === "settings" || currentPath === "/settings" || currentPath.startsWith("/settings/");
 
   const handleSettingsClick = useCallback(() => {
     void navigate({ to: "/settings" });
@@ -137,7 +130,7 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   return (
     <SidebarFooter
       data-testid="sidebar-footer"
-      className="border-t border-sidebar-border/40 px-[var(--sidebar-content-inset)] py-1.5 backdrop-blur-sm empty:hidden"
+      className="border-t border-sidebar-border/40 px-[var(--sidebar-content-inset)] py-1.5 empty:hidden"
     >
       <SidebarProviderUpdatePill />
       <SidebarUpdateArchitectureWarning />

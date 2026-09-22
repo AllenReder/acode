@@ -299,8 +299,8 @@ describe("VS Code theme import", () => {
         type,
         colors: { "editor.background": type === "dark" ? "#101014" : "#fdfdfd" },
       });
-    const themes = pairVsCodeThemes([make("grove-light", "light"), make("grove-dark", "dark")]);
-    expect(themes.map((theme) => theme.label).sort()).toEqual(["Grove Dark", "Grove Light"]);
+    const themes = pairVsCodeThemes([make("ocean-light", "light"), make("ocean-dark", "dark")]);
+    expect(themes.map((theme) => theme.label).sort()).toEqual(["Ocean Dark", "Ocean Light"]);
   });
 
   it("explains a file with no editor background", () => {

@@ -46,6 +46,7 @@ export function TerminalView({
 
   return (
     <TerminalViewport
+      topFade
       advancedTypography={false}
       environmentId={target.environmentId}
       workspaceId={target.workspaceId}

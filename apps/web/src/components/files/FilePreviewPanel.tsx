@@ -782,8 +782,8 @@ function EditableFileSurface({
   const hasOpenCommentForm =
     enableCommentAnnotations &&
     lineAnnotations.some((annotation) =>
-    annotation.metadata.entries.some((entry) => entry.kind === "draft"),
-  );
+      annotation.metadata.entries.some((entry) => entry.kind === "draft"),
+    );
   useEffect(() => {
     if (!enableCommentAnnotations) return;
     const root = surfaceRef.current;
@@ -1320,7 +1320,7 @@ export default function FilePreviewPanel({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent">
       {relativePath && attachment === undefined ? (
         <div className={FILE_SURFACE_SUBHEADER_CLASS} data-surface-subheader>
           <ScrollArea
@@ -1420,21 +1420,13 @@ export default function FilePreviewPanel({
         >
           <span>Conflict: This file was modified externally on disk.</span>
           <div className="flex items-center gap-2">
-            <Button
-              size="xs"
-              variant="outline"
-              onClick={() => setShowDiffModal(true)}
-            >
+            <Button size="xs" variant="outline" onClick={() => setShowDiffModal(true)}>
               Compare Diff
             </Button>
             <Button size="xs" variant="destructive" onClick={() => void handleSave(true)}>
               Overwrite
             </Button>
-            <Button
-              size="xs"
-              variant="outline"
-              onClick={() => void handleDiscardAndReload()}
-            >
+            <Button size="xs" variant="outline" onClick={() => void handleDiscardAndReload()}>
               Discard & Reload
             </Button>
           </div>
@@ -1564,7 +1556,7 @@ export default function FilePreviewPanel({
         {showExplorer ? (
           <aside
             className={cn(
-              "flex min-h-0 shrink-0 bg-background",
+              "flex min-h-0 shrink-0 bg-transparent",
               relativePath
                 ? "w-[min(22rem,46%)] min-w-64 border-l border-border/60"
                 : "min-w-0 flex-1",
@@ -1733,18 +1725,10 @@ export default function FilePreviewPanel({
               )}
             </div>
             <DialogFooter variant="bare">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowDiffModal(false)}
-              >
+              <Button variant="outline" size="sm" onClick={() => setShowDiffModal(false)}>
                 Close
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void handleDiscardAndReload()}
-              >
+              <Button variant="outline" size="sm" onClick={() => void handleDiscardAndReload()}>
                 Discard & Reload
               </Button>
               <Button

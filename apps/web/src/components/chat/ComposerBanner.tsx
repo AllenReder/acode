@@ -19,8 +19,7 @@ const neutralOutline = cn(
   "[--chat-composer-attached-outline:var(--chat-composer-outline,color-mix(in_srgb,var(--contrast-foreground)_8%,transparent))]",
   "dark:[--chat-composer-attached-outline:var(--chat-composer-outline,color-mix(in_srgb,var(--color-white)_5%,transparent))]",
   "[html[data-theme-id]_&]:[--chat-composer-attached-outline:var(--chat-composer-outline,var(--app-theme-toolbar-border))]",
-  "dark:[html[data-theme-id]:not([data-theme-id=t3-chat])_&]:[--chat-composer-attached-outline:var(--chat-composer-outline,color-mix(in_srgb,var(--app-theme-input)_30%,var(--background)))]",
-  "dark:[html[data-theme-id=t3-chat]_&]:[--chat-composer-attached-outline:#241e28]",
+  "dark:[html[data-theme-id]_&]:[--chat-composer-attached-outline:var(--chat-composer-outline,color-mix(in_srgb,var(--app-theme-input)_30%,var(--background)))]",
 );
 
 const variantColors: Record<ComposerBannerVariant, string> = {
@@ -60,9 +59,10 @@ function Surface({
         // device-pixel row of a filtered backdrop when the cut-off lands off the
         // device-pixel grid, and the composer's surface starts exactly there. The
         // composer's own glass covers the extra row, so the overlap never shows.
-        "before:mask-[linear-gradient(to_top,transparent_0_calc(var(--chat-composer-attachment-overlap)-1px),black_calc(var(--chat-composer-attachment-overlap)-1px))] before:shadow-[0_12px_28px_-18px_rgb(0_0_0/40%)] dark:before:shadow-[0_14px_32px_-18px_rgb(0_0_0/75%)]",
-        "dark:supports-[(backdrop-filter:blur(1px))_or_(-webkit-backdrop-filter:blur(1px))]:before:bg-[linear-gradient(var(--chat-composer-attached-tint),var(--chat-composer-attached-tint)),linear-gradient(to_top,transparent_0_var(--chat-composer-attachment-overlap),rgb(0_0_0/18%)_var(--chat-composer-attachment-overlap),transparent_calc(var(--chat-composer-attachment-overlap)+10px))]",
+        "before:mask-[linear-gradient(to_top,transparent_0_calc(var(--chat-composer-attachment-overlap)-1px),black_calc(var(--chat-composer-attachment-overlap)-1px))] before:shadow-[0_12px_28px_-18px_rgb(0_0_0/40%)]",
         "not-supports-[((backdrop-filter:blur(1px))_or_(-webkit-backdrop-filter:blur(1px)))]:before:bg-(--chat-composer-attached-surface)",
+        placement === "attached" &&
+          "in-data-[slot=composer-shell]:before:bg-none in-data-[slot=composer-shell]:before:bg-transparent in-data-[slot=composer-shell]:before:backdrop-filter-none in-data-[slot=composer-shell]:before:shadow-none",
         className,
       )}
       {...props}
@@ -94,6 +94,7 @@ function Peek({
         "absolute inset-x-0 bottom-0 z-0 mx-auto h-3 w-[96%] cursor-pointer rounded-t-2xl border border-b-0 shadow-[0_6px_18px_rgb(0_0_0/6%)]",
         "bg-[color-mix(in_srgb,var(--chat-composer-attached-surface)_var(--glass-opacity),transparent)] backdrop-blur-(--glass-blur) backdrop-saturate-(--glass-saturation)",
         "not-supports-[((backdrop-filter:blur(1px))_or_(-webkit-backdrop-filter:blur(1px)))]:bg-(--chat-composer-attached-surface)",
+        "in-data-[slot=composer-shell]:bg-transparent in-data-[slot=composer-shell]:backdrop-filter-none in-data-[slot=composer-shell]:shadow-none",
         "transition-opacity duration-150 ease-out focus-visible:outline-2 focus-visible:outline-ring",
         peekBorder[variant],
         className,

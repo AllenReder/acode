@@ -1,3 +1,4 @@
+import { applyMaterialSettings, applyWorkbenchArtwork } from "../appearanceSync";
 import { type ServerLifecycleWelcomePayload } from "@t3tools/contracts";
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
@@ -268,17 +269,50 @@ function ContrastAppearanceSync() {
 }
 
 function GlassAppearanceSync() {
-  const glassOpacity = useClientSettings((settings) => settings.glassOpacity);
+  const backgroundMaskLightOpacity = useClientSettings(
+    (settings) => settings.backgroundMaskLightOpacity,
+  );
+  const backgroundMaskDarkOpacity = useClientSettings(
+    (settings) => settings.backgroundMaskDarkOpacity,
+  );
+  const blurRadius = useClientSettings((settings) => settings.sidebarBlur);
+  const sidebarOpacity = useClientSettings((settings) => settings.sidebarOpacity);
+  const topbarOpacity = useClientSettings((settings) => settings.topbarOpacity);
+  const workbenchOpacity = useClientSettings((settings) => settings.workbenchOpacity);
+  const workbenchGlass = useClientSettings((settings) => settings.workbenchGlass);
+  const overlayOpacity = useClientSettings((settings) => settings.glassOpacity);
+  const artworkPath = useClientSettings((settings) => settings.chatBackgroundPath);
+  const artworkOpacity = useClientSettings((settings) => settings.chatBackgroundOpacity);
 
   useEffect(() => {
-    const style = document.documentElement.style;
-    style.setProperty("--glass-opacity", `${glassOpacity}%`);
-    if (glassOpacity === 100) {
-      style.setProperty("--glass-blur", "0px");
-    } else {
-      style.removeProperty("--glass-blur");
-    }
-  }, [glassOpacity]);
+    applyMaterialSettings({
+      stageEnabled: true,
+      backgroundMaskLightOpacity,
+      backgroundMaskDarkOpacity,
+      blurRadius,
+      sidebarOpacity,
+      topbarOpacity,
+      workbenchOpacity,
+      workbenchGlass,
+      overlayOpacity,
+    });
+  }, [
+    blurRadius,
+    backgroundMaskLightOpacity,
+    backgroundMaskDarkOpacity,
+    sidebarOpacity,
+    topbarOpacity,
+    workbenchOpacity,
+    workbenchGlass,
+    overlayOpacity,
+  ]);
+
+  useEffect(() => {
+    applyWorkbenchArtwork({
+      path: artworkPath,
+      opacity: artworkOpacity,
+    });
+  }, [artworkPath, artworkOpacity]);
 
   return null;
 }

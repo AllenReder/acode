@@ -24,9 +24,10 @@
           "x": 11,
           "y": 20
         },
-        "backgroundColor": "#0a0a0a",
+        "backgroundColor": null,
         "backgroundThrottling": "throttle",
-        "shadow": true
+        "shadow": true,
+        "transparent": true
       }
     ],
     "security": {
@@ -38,7 +39,8 @@
           "$RESOURCE/**"
         ]
       }
-    }
+    },
+    "macOSPrivateApi": true
   },
   "bundle": {
     "active": true,

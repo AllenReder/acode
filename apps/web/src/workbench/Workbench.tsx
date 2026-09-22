@@ -7,6 +7,7 @@ import { useEnvironmentCatalogSnapshot } from "../state/environmentCatalogSnapsh
 import { useEnvironments } from "../state/environments";
 import { PaneTree } from "./PaneTree";
 import { WorkbenchWindowChrome } from "./WorkbenchWindowChrome";
+import { MaterialSurface } from "../components/MaterialSurface";
 import { WorkbenchDropOverlay } from "./workbenchDrag";
 import {
   deepLinkInputFromParams,
@@ -168,15 +169,23 @@ export function Workbench({ navigate: navigateTo }: WorkbenchProps = {}) {
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
       <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
-      <DeepLinkStatus
-        resolution={resolution}
-        dismissed={missingDismissed}
-        onDismiss={() => setMissingDismissed(true)}
-      />
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-        <PaneTree snapshot={snapshot} projects={projects} />
-        <WorkbenchDropOverlay />
-      </div>
+      <MaterialSurface
+        kind="workbench"
+        className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col"
+      >
+        <div className="workbench-artwork" aria-hidden="true" />
+        <div className="relative z-[1] flex min-h-0 min-w-0 flex-1 flex-col">
+          <DeepLinkStatus
+            resolution={resolution}
+            dismissed={missingDismissed}
+            onDismiss={() => setMissingDismissed(true)}
+          />
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+            <PaneTree snapshot={snapshot} projects={projects} />
+            <WorkbenchDropOverlay />
+          </div>
+        </div>
+      </MaterialSurface>
     </div>
   );
 }

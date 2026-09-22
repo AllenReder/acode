@@ -343,7 +343,7 @@ export function AddProviderInstanceDialog({
                 value={normalizeProviderAccentColor(accentColor) ?? PROVIDER_ACCENT_SWATCHES[0]}
                 onChange={(event) => setAccentColor(event.target.value)}
                 aria-label="Provider instance accent color"
-                className="h-8 w-10 cursor-pointer rounded-xl border border-input bg-background p-0.5"
+                className="h-8 w-10 cursor-pointer rounded-xl border border-border bg-background p-0.5"
               />
               <div className="flex flex-wrap gap-1.5">
                 {PROVIDER_ACCENT_SWATCHES.map((swatch) => {

@@ -116,7 +116,7 @@ export function SessionRow({
         isFocused
           ? "bg-sidebar-row-active font-medium text-sidebar-foreground"
           : isOpenInActiveTab
-            ? "bg-sidebar-row-selected text-sidebar-foreground"
+            ? "text-sidebar-foreground"
             : undefined,
         isClosed && "opacity-75",
         className,
@@ -163,6 +163,9 @@ export function SessionRow({
         onPointerDown?.(event);
       }}
     >
+      {isOpenInActiveTab && !isFocused ? (
+        <span aria-hidden="true" className="absolute left-0.5 size-1 rounded-full bg-primary" />
+      ) : null}
       {props.children}
       {dropPosition === "before" ? (
         <span

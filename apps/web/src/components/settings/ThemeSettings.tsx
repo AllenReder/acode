@@ -22,10 +22,11 @@ import {
   type ThemeAppearance,
   type ThemeDefinition,
   type ThemeHalves,
-  T3_CHAT_THEME,
-  EMBER_THEME,
-  GROVE_THEME,
-  IRIS_THEME,
+  ACODE_DEFAULT_THEME,
+  ZINC_THEME,
+  SLATE_THEME,
+  MIDNIGHT_THEME,
+  FOREST_THEME,
   OCEAN_THEME,
 } from "../../themePalette";
 import {
@@ -55,11 +56,12 @@ import {
 import { ThemeWireframe } from "./ThemeWireframe";
 
 const MAINTAINER_THEMES: ReadonlyArray<ThemeDefinition> = [
-  T3_CHAT_THEME,
-  GROVE_THEME,
+  ACODE_DEFAULT_THEME,
+  ZINC_THEME,
+  SLATE_THEME,
+  MIDNIGHT_THEME,
+  FOREST_THEME,
   OCEAN_THEME,
-  EMBER_THEME,
-  IRIS_THEME,
 ];
 
 function collectionVariantLabels(themes: ReadonlyArray<ThemeDefinition>): ReadonlyArray<string> {
@@ -626,7 +628,7 @@ export function ThemeLibrary({
   // ----- Automatic-mode mixing -------------------------------------------
   // The pair model: one theme owns light, one owns dark, and the global
   // appearance mode (light / dark / auto) decides which is showing.
-  const baseCardId = getThemeDefinition(theme)?.id ?? null;
+  const baseCardId = getThemeDefinition(theme)?.id ?? ACODE_DEFAULT_THEME.id;
   const lightOwner = themeHalves?.light ?? baseCardId;
   const darkOwner = themeHalves?.dark ?? baseCardId;
 
@@ -671,9 +673,8 @@ export function ThemeLibrary({
     getThemeDefinition((initialAppearance === "light" ? lightOwner : darkOwner) ?? "") ?? null;
 
   const cardDefById = (id: string | null): ThemeCardDefinition => {
-    if (id === null) return STANDARD_THEME_CARDS[0]!;
-    const definition = getThemeDefinition(id);
-    return definition ? getThemeCardDefinition(definition) : STANDARD_THEME_CARDS[0]!;
+    const definition = (id ? getThemeDefinition(id) : null) ?? ACODE_DEFAULT_THEME;
+    return getThemeCardDefinition(definition);
   };
 
   const pickColors = (id: string | null, appearance: ThemeAppearance) => {
@@ -990,7 +991,7 @@ export function ThemeLibrary({
                     <span className="absolute right-2 top-2 inline-grid size-5 grid-cols-1 sm:size-4">
                       <input
                         checked={checked}
-                        className="col-start-1 row-start-1 size-full appearance-none rounded-sm border border-input bg-background outline-none checked:border-primary checked:bg-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring dark:not-checked:bg-input/32 forced-colors:appearance-auto"
+                        className="col-start-1 row-start-1 size-full appearance-none rounded-sm border border-border bg-background outline-none checked:border-primary checked:bg-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring dark:not-checked:bg-input/32 forced-colors:appearance-auto"
                         id={checkboxId}
                         name="themes-to-remove"
                         type="checkbox"

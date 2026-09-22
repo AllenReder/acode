@@ -2,14 +2,9 @@ import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/mode
 import { Columns3Icon, PanelsTopLeftIcon, PlusIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { cn, isMacPlatform } from "../lib/utils";
-import { useSidebarVisibility } from "../components/ui/sidebar";
-import {
-  COLLAPSED_TABS_INSET_MAC,
-  COLLAPSED_TABS_INSET_WIN,
-  EXPANDED_TABS_INSET,
-  SEPARATOR_RIGHT_GAP,
-} from "../components/sidebar/sidebarGeometry";
+import { cn } from "../lib/utils";
+import { MaterialSurface } from "../components/MaterialSurface";
+import { TopbarInset } from "./TopbarInset";
 import { firstLeafId } from "./layout";
 import { targetKey, type ViewTarget } from "./viewRegistry";
 import { tabDisplayTitle, type WorkbenchSnapshot, type WorkbenchTab } from "./workbenchState";
@@ -43,9 +38,6 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
 
-  const isSidebarOpen = useSidebarVisibility();
-  const isMac = typeof navigator !== "undefined" && isMacPlatform(navigator.platform);
-
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.workbenchWindowChrome = "true";
@@ -66,42 +58,18 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
     setDraftTitle("");
   };
 
-  const tabsInsetWidth = isSidebarOpen
-    ? EXPANDED_TABS_INSET
-    : isMac
-      ? COLLAPSED_TABS_INSET_MAC
-      : COLLAPSED_TABS_INSET_WIN;
-
   return (
-    <header
-      className="drag-region flex h-[var(--workbench-titlebar-height,36px)] w-full shrink-0 items-center border-b border-border/60 bg-background/95 backdrop-blur z-30"
-      data-tauri-drag-region
+    <MaterialSurface
+      kind="topbar"
+      className="drag-region flex h-[var(--workbench-titlebar-height,36px)] w-full shrink-0 items-center border-b border-[var(--material-edge)] z-30"
+      data-tauri-drag-region="deep"
       data-workbench-window-chrome=""
     >
-      <div
-        className="flex shrink-0 items-center overflow-hidden transition-[width] duration-200 ease-out [-webkit-app-region:no-drag]"
-        data-slot="workbench-tabs-inset-spacer"
-        style={{
-          width: `${tabsInsetWidth}px`,
-        }}
-      >
-        {!isSidebarOpen ? (
-          <div
-            className="flex h-full w-full items-center justify-end transition-opacity duration-200 ease-out"
-            style={{ paddingRight: `${SEPARATOR_RIGHT_GAP}px` }}
-          >
-            <div
-              className="h-3.5 w-px bg-border/60 shrink-0"
-              data-slot="workbench-titlebar-separator"
-            />
-          </div>
-        ) : null}
-      </div>
+      <TopbarInset />
 
-      <div className="flex h-full min-w-0 flex-1 items-center pr-3 [-webkit-app-region:no-drag]">
+      <div className="flex h-full min-w-0 flex-1 items-center gap-2 pr-3 [-webkit-app-region:no-drag]">
         <div
           className="flex h-full min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          data-tauri-drag-region
           data-workbench-tab-strip-drop=""
           role="tablist"
           aria-label="Workbench tabs"
@@ -126,8 +94,8 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
                 className={cn(
                   "group relative flex h-full w-44 min-w-28 shrink cursor-pointer items-center gap-2 border-r border-border/60 px-3 text-left transition-colors duration-150 select-none",
                   active
-                    ? "bg-background text-foreground font-medium"
-                    : "bg-muted/15 text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+                    ? "bg-foreground/5 text-foreground font-medium"
+                    : "bg-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
                 )}
                 onClick={() => {
                   if (!active) activateTab(tab.id);
@@ -163,7 +131,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
                     autoFocus
                     value={draftTitle}
                     aria-label="Tab title"
-                    className="mx-1 min-w-0 flex-1 rounded border border-border bg-background px-1.5 py-0.5 text-xs outline-none focus:ring-1 focus:ring-ring"
+                    className="mx-1 min-w-0 flex-1 rounded border border-border bg-background/20 px-1.5 py-0.5 text-xs outline-none focus:ring-1 focus:ring-ring"
                     onChange={(event) => setDraftTitle(event.target.value)}
                     onClick={(event) => event.stopPropagation()}
                     onBlur={() => commitRename(tab.id)}
@@ -205,7 +173,12 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
           })}
         </div>
 
-        <div className="workbench-layout-switch ml-2" role="group" aria-label="Tab layout">
+        <div
+          className="workbench-layout-switch shrink-0"
+          data-layout={activeTab.layoutMode ?? "bsp"}
+          role="group"
+          aria-label="Tab layout"
+        >
           <button
             type="button"
             aria-label="BSP layout"
@@ -233,6 +206,6 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
           <PlusIcon className="size-4" />
         </button>
       </div>
-    </header>
+    </MaterialSurface>
   );
 }

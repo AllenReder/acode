@@ -91,11 +91,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --control-radius: 0.5rem;
   --sidebar-content-inset: 0.5rem;
   --sidebar-control-gap: 0.5rem;
-  --sidebar-icon-color: color-mix(
-    in srgb,
-    var(--contrast-sidebar-muted-foreground) 60%,
-    var(--sidebar)
-  );
+  --sidebar-icon-color: var(--contrast-sidebar-muted-foreground);
   --sidebar-row-content-inset: 0.625rem;
   --command-shell-inset: 0.5rem;
   --command-content-inset: 1rem;
@@ -267,8 +263,144 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   }
 }
 
+/* Chrome does not participate in browser drag-selection. Restore selection
+   only at content boundaries; nested controls stay native application chrome. */
+@layer base {
+  body {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  :where(
+    input,
+    textarea,
+    [contenteditable="true"],
+    [contenteditable="plaintext-only"],
+    .select-text,
+    .chat-markdown,
+    [data-selectable-content],
+    pre,
+    .xterm
+  ) {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  :where(
+    button,
+    [role="button"],
+    [role="tab"],
+    [role="menuitem"],
+    .chat-markdown-codeblock-header,
+    .select-none
+  ) {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
+:root {
+  --material-edge: rgb(0 0 0 / 10%);
+  --material-background-mask-color: white;
+  --material-background-mask-opacity: var(--material-background-mask-light-opacity, 0.1);
+  @variant dark {
+    --material-edge: color-mix(in srgb, var(--background) 28%, transparent);
+    --material-background-mask-color: black;
+    --material-background-mask-opacity: var(--material-background-mask-dark-opacity, 0.35);
+  }
+}
+
+html.material-stage-native,
+html.material-stage-native body,
+html.material-stage-native #root {
+  background: transparent;
+}
+
+/* One viewport-wide tint, beneath all Material Surfaces and portal content. */
+html.material-stage-native body {
+  background-color: color-mix(
+    in srgb,
+    var(--material-background-mask-color) calc(var(--material-background-mask-opacity, 0) * 100%),
+    transparent
+  );
+}
+
+html.material-stage-opaque,
+html.material-stage-opaque body,
+html.material-stage-opaque #root {
+  background: var(--background);
+}
+
+.material-surface-sidebar {
+  background: color-mix(
+    in srgb,
+    var(--sidebar) calc(var(--material-sidebar-opacity, 0.5) * 100%),
+    transparent
+  );
+  background-color: color-mix(
+    in srgb,
+    var(--sidebar) calc(var(--material-sidebar-opacity, 0.5) * 100%),
+    transparent
+  );
+}
+
+.material-surface-topbar {
+  background: color-mix(
+    in srgb,
+    var(--app-chrome-background) calc(var(--material-topbar-opacity, 0.5) * 100%),
+    transparent
+  );
+  background-color: color-mix(
+    in srgb,
+    var(--app-chrome-background) calc(var(--material-topbar-opacity, 0.5) * 100%),
+    transparent
+  );
+}
+
+.material-surface-workbench {
+  background: color-mix(
+    in srgb,
+    var(--canvas) calc(var(--material-workbench-opacity, 0.5) * 100%),
+    transparent
+  );
+  background-color: color-mix(
+    in srgb,
+    var(--canvas) calc(var(--material-workbench-opacity, 0.5) * 100%),
+    transparent
+  );
+}
+
+.material-surface-overlay {
+  background: color-mix(
+    in srgb,
+    var(--material-overlay-tint) calc(var(--material-overlay-opacity, 0.9) * 100%),
+    transparent
+  );
+  background-color: color-mix(
+    in srgb,
+    var(--material-overlay-tint) calc(var(--material-overlay-opacity, 0.9) * 100%),
+    transparent
+  );
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+}
+
+.workbench-artwork {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--workbench-artwork-image, none);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  opacity: var(--workbench-artwork-opacity, 0.24);
+  z-index: 0;
+}
+
 @utility surface-glass {
-  background: color-mix(in srgb, var(--background) var(--glass-opacity), transparent);
+  background: color-mix(
+    in srgb,
+    var(--background) calc(var(--material-overlay-opacity, 0.9) * 100%),
+    transparent
+  );
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
 
@@ -284,7 +416,11 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
       color-mix(in srgb, var(--alert-glass-tint) 4%, transparent),
       color-mix(in srgb, var(--alert-glass-tint) 4%, transparent)
     ),
-    color-mix(in srgb, var(--background) var(--glass-opacity), transparent) !important;
+    color-mix(
+      in srgb,
+      var(--background) calc(var(--material-overlay-opacity, 0.9) * 100%),
+      transparent
+    ) !important;
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
 
@@ -310,7 +446,11 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
 }
 
 @utility dialog-glass {
-  background: color-mix(in srgb, var(--background) var(--glass-opacity), transparent);
+  background: color-mix(
+    in srgb,
+    var(--background) calc(var(--material-overlay-opacity, 0.9) * 100%),
+    transparent
+  );
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   border-color: color-mix(in srgb, var(--contrast-foreground) 10%, transparent);
@@ -329,20 +469,16 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
 }
 
 @utility dialog-backdrop {
-  background: color-mix(in srgb, var(--background) 60%, transparent);
+  background: rgb(0 0 0 / 20%);
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
-
-  @variant dark {
-    background: color-mix(in srgb, var(--background) 64%, transparent);
-  }
 }
 
 @utility dropdown-glass {
   background: color-mix(
     in srgb,
-    var(--popover) 18%,
-    color-mix(in srgb, var(--popover) var(--glass-opacity), transparent)
+    var(--material-overlay-tint) calc(var(--material-overlay-opacity, 0.9) * 100%),
+    transparent
   );
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
@@ -611,7 +747,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   }
   html,
   body {
-    background-color: var(--app-chrome-background);
+    background-color: transparent;
   }
   body {
     @apply text-foreground relative;
@@ -635,7 +771,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
      vellum, forest drafting paper, marine cyanotype, copper, and violet ink.
      These colors stay deliberately deep at the top edge so the white stage
      wordmark and controls retain contrast in both appearance modes. */
-  html[data-theme-id="t3-chat"] {
+  html[data-theme-id="acode-default"] {
     --stage-art-top: oklch(0.760675 0.141361 348.019);
     --stage-art-mid: oklch(0.588093 0.188832 353.138);
     --stage-art-bottom: oklch(0.383959 0.135096 348.656);
@@ -763,7 +899,11 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     }
   }
 
-  :is(html[data-theme-id="t3-chat"], html[data-theme-id="ocean"], html[data-theme-id="iris"]) {
+  :is(
+    html[data-theme-id="acode-default"],
+    html[data-theme-id="ocean"],
+    html[data-theme-id="slate"]
+  ) {
     --stage-night-top: color-mix(in oklch, var(--stage-art-top) 38%, var(--stage-night-base-top));
     --stage-night-mid: color-mix(in oklch, var(--stage-art-mid) 38%, var(--stage-night-base-mid));
     --stage-night-bottom: color-mix(
@@ -786,11 +926,12 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   }
 
   :is(
-    html[data-theme-id="t3-chat"],
-    html[data-theme-id="grove"],
-    html[data-theme-id="ocean"],
-    html[data-theme-id="ember"],
-    html[data-theme-id="iris"]
+    html[data-theme-id="acode-default"],
+    html[data-theme-id="zinc"],
+    html[data-theme-id="slate"],
+    html[data-theme-id="midnight"],
+    html[data-theme-id="forest"],
+    html[data-theme-id="ocean"]
   ) {
     --stage-art-celeste-highlight: var(--stage-art-highlight);
     --stage-art-celeste-secondary: var(--stage-art-secondary);
@@ -977,6 +1118,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   color-scheme: light;
   --radius: 0.625rem;
   --background: var(--color-zinc-25);
+  --canvas: var(--background);
   --app-chrome-background: var(--background);
   --toolbar-background: var(--app-chrome-background);
   --toolbar-foreground: var(--foreground);
@@ -1048,6 +1190,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     /* Keep controls and floating surfaces close to the neutral-black canvas.
        Borders and hover states provide separation without milky gray fills. */
     --background: var(--color-neutral-950);
+    --canvas: var(--background);
     --surface-raised: color-mix(in srgb, var(--background) 97%, var(--color-white));
     --foreground: var(--color-neutral-100);
     --card: color-mix(in srgb, var(--background) 97%, var(--color-white));
@@ -1089,6 +1232,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
    surfaces. */
 [data-app-sidebar] {
   --background: var(--color-zinc-25);
+  --canvas: var(--background);
   --foreground: var(--color-zinc-800);
   --card: var(--color-white);
   --card-foreground: var(--color-zinc-800);
@@ -1141,6 +1285,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
    dark variant without reintroducing raw `.dark` selectors. */
 html[data-theme-id]:not([data-theme-id=""]) {
   --background: var(--app-theme-canvas);
+  --canvas: var(--app-theme-canvas);
   --app-chrome-background: var(--app-theme-chrome);
   --toolbar-background: var(--app-theme-toolbar);
   --toolbar-foreground: var(--app-theme-toolbar-foreground);
@@ -1283,7 +1428,7 @@ html[data-theme-token-probe] *::after {
    roles explicit prevents the thread toolbar from falling back to the default
    dark-mode whites while preserving the same theme file across clients. */
 html[data-theme-id] [data-chat-header] {
-  background-color: var(--toolbar-background);
+  background-color: transparent;
   color: var(--contrast-toolbar-foreground);
 }
 
@@ -1291,7 +1436,7 @@ html[data-theme-id] [data-chat-header] [data-slot="button"],
 html[data-theme-id] [data-chat-header] [data-slot="menu-trigger"],
 html[data-theme-id] [data-chat-header] [data-toolbar-control] {
   --control-icon-color: var(--contrast-toolbar-control-foreground);
-  background-color: var(--toolbar-control);
+  background-color: color-mix(in srgb, var(--toolbar-control) 20%, transparent);
   border-color: var(--contrast-toolbar-border);
   color: var(--contrast-toolbar-control-foreground);
 }
@@ -1338,13 +1483,13 @@ html[data-theme-id] [data-chat-header] [data-slot="separator"] {
    default look keeps its secondary/input tints; themed palettes tint those
    surfaces with the accent, which fights syntax highlighting. */
 html[data-theme-id] .chat-markdown .chat-markdown-codeblock {
-  background-color: var(--code-background);
+  background-color: color-mix(in srgb, var(--code-background) 18%, transparent);
   border-color: var(--contrast-border);
   color: var(--code-foreground);
 }
 
 html[data-theme-id] .chat-markdown pre {
-  background-color: var(--code-background);
+  background-color: color-mix(in srgb, var(--code-background) 18%, transparent);
   color: var(--code-foreground);
 }
 
@@ -1357,28 +1502,6 @@ html[data-theme-id] .chat-markdown .chat-markdown-chrome-action {
   color: color-mix(in srgb, var(--code-foreground) 72%, transparent);
 }
 
-/* T3 Chat renders inline code and compact chat artifacts with its translucent
-   secondary surface flattened over the light chat canvas. The raw muted and
-   secondary tokens are substantially darker than those visible pixels. */
-html[data-theme-id="t3-chat"] {
-  @variant light {
-    & .chat-markdown :not(pre) > code,
-    & [data-changed-files-state],
-    & [data-changed-files-header] {
-      background-color: var(--message-surface);
-    }
-
-    & .chat-markdown :not(pre) > code,
-    & [data-changed-files-state] {
-      border-color: transparent;
-    }
-
-    & .chat-markdown :not(pre) > code {
-      color: var(--contrast-message-foreground);
-    }
-  }
-}
-
 html[data-theme-id] .chat-markdown .chat-markdown-chrome-action:hover,
 html[data-theme-id] .chat-markdown .chat-markdown-chrome-action[aria-pressed="true"] {
   color: var(--code-foreground);
@@ -1386,6 +1509,7 @@ html[data-theme-id] .chat-markdown .chat-markdown-chrome-action[aria-pressed="tr
 
 html[data-theme-id] [data-app-sidebar] {
   --background: var(--app-theme-canvas);
+  --canvas: var(--app-theme-canvas);
   --foreground: var(--app-theme-text);
   --card: var(--app-theme-surface);
   --card-foreground: var(--app-theme-text);
@@ -1404,19 +1528,6 @@ html[data-theme-id] [data-app-sidebar] {
   --sidebar-row-selected: var(--app-theme-sidebar-row-selected);
   --sidebar-border: var(--app-theme-sidebar-border);
   --sidebar-stage-fade: var(--app-theme-sidebar);
-  border-color: color-mix(in srgb, var(--contrast-sidebar-foreground) 10%, transparent);
-
-  @variant dark {
-    border-color: color-mix(in srgb, var(--contrast-sidebar-foreground) 8%, transparent);
-  }
-}
-
-/* T3 Chat's panel divider is deliberately pink, and its resize affordance
-   keeps that color while hovered. Do not neutralize this branded edge. */
-html[data-theme-id="t3-chat"] [data-app-sidebar] {
-  @variant dark {
-    border-color: var(--contrast-sidebar-border);
-  }
 }
 
 /* Recompute contrast wherever a subtree owns its own semantic color palette. */
@@ -1581,10 +1692,8 @@ body {
   --surface-grain-size: 256px 256px;
 }
 
-/* The live T3 Chat texture is a 128px grayscale tile with a constant 7/255
-   alpha. Keep our procedural texture cheap while matching that scale and
-   strength for the branded preset. */
-html[data-theme-id="t3-chat"] {
+/* Subtle surface grain texture. */
+html[data-theme-id="acode-default"] {
   --surface-grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 128 128' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.02745'/%3E%3C/svg%3E");
   --surface-grain-size: 128px 128px;
 }
@@ -1654,14 +1763,11 @@ html[data-workbench-dragging] * {
   -webkit-user-select: none;
 }
 
-/* The Workbench owns one frameless title strip across the Sidebar and main area. */
+/* The Workbench title strip sits alongside the full-height Sidebar. */
 html[data-workbench-window-chrome] {
   --workbench-titlebar-height: 36px;
   --workbench-titlebar-center: calc(var(--workbench-titlebar-height) / 2);
 }
-
-
-
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
@@ -2039,7 +2145,7 @@ html[data-workbench-window-chrome] {
   border: 0;
   border-radius: 0;
   overflow: clip;
-  background: var(--code-background);
+  background: color-mix(in srgb, var(--code-background) 18%, transparent);
   color: var(--code-foreground);
 }
 
@@ -2155,7 +2261,7 @@ html[data-workbench-window-chrome] {
   min-height: 0;
   overflow: auto;
   overscroll-behavior-x: contain;
-  background: color-mix(in oklch, var(--muted) 45%, var(--background));
+  background: transparent;
   scrollbar-width: thin;
   scroll-padding: 12px;
 }
@@ -2207,19 +2313,17 @@ html[data-workbench-dragging] .workbench-sash {
 }
 .workbench-pane {
   overflow: hidden;
-  border: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
+  border: 1px solid var(--control-border);
   border-radius: var(--pane-radius, 0px);
-  background: var(--background);
+  background: transparent;
   box-shadow: var(--pane-shadow, none);
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease;
 }
 .workbench-pane[data-pane-focused="true"] {
-  border-color: color-mix(in oklch, var(--ring) 50%, var(--border));
+  border-color: color-mix(in srgb, var(--ring) 22%, transparent);
   box-shadow: var(--pane-shadow, none);
-  outline: 1px solid color-mix(in oklch, var(--ring) 35%, transparent);
-  outline-offset: -1px;
 }
 .workbench-pane > div[tabindex] {
   height: 34px;
@@ -2262,13 +2366,37 @@ html[data-workbench-resizing] .workbench-sash:active::after {
   outline: none;
 }
 .workbench-layout-switch {
+  position: relative;
+  isolation: isolate;
   display: flex;
   gap: 2px;
   padding: 3px;
   border-radius: 8px;
   background: color-mix(in oklch, var(--muted) 65%, transparent);
 }
+.workbench-layout-switch::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 28px;
+  height: 22px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
+  box-shadow: 0 1px 3px #00000012;
+  pointer-events: none;
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.workbench-layout-switch[data-layout="scrolling"]::before {
+  transform: translateX(30px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .workbench-layout-switch::before {
+    transition: none;
+  }
+}
 .workbench-layout-switch button {
+  position: relative;
   display: grid;
   place-items: center;
   width: 28px;
@@ -2282,8 +2410,6 @@ html[data-workbench-resizing] .workbench-sash:active::after {
 }
 .workbench-layout-switch button[aria-pressed="true"] {
   color: var(--foreground);
-  background: var(--background);
-  box-shadow: 0 1px 3px #00000012;
 }
 .workbench-layout-switch svg {
   width: 14px;
@@ -2323,4 +2449,24 @@ html[data-workbench-resizing] .workbench-pane-preview {
 
 html[data-sidebar-resizing] [data-sidebar-action-control] {
   transition: none !important;
+}
+
+/* Material roles derive from theme colors, but own their alpha and state contrast. */
+:root,
+html[data-theme-id]:not([data-theme-id=""]),
+html[data-theme-id] [data-app-sidebar] {
+  --control-border: color-mix(in srgb, var(--foreground) 12%, transparent);
+  --control-border-hover: color-mix(in srgb, var(--foreground) 20%, transparent);
+  --border: var(--control-border);
+  --toolbar-border: var(--control-border);
+  --sidebar-border: var(--material-edge);
+  --sidebar-icon-color: var(--contrast-sidebar-muted-foreground);
+  --sidebar-row-hover: rgb(0 0 0 / 3%);
+  --sidebar-row-active: color-mix(in srgb, var(--ring) 12%, transparent);
+  --sidebar-row-selected: color-mix(in srgb, var(--ring) 8%, transparent);
+  --material-overlay-tint: var(--popover);
+  @variant dark {
+    --sidebar-row-hover: rgb(255 255 255 / 8%);
+    --material-overlay-tint: color-mix(in srgb, var(--popover) 88%, var(--foreground));
+  }
 }

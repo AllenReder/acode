@@ -232,6 +232,63 @@ screen with ANSI styling, cursor state, alternate-screen behavior, selection,
 scrollback, and responsive dimensions.
 _Avoid_: Terminal text, Preformatted output, Agent timeline
 
+**Appearance**:
+The client presentation preferences governing color scheme, interface contrast,
+typography, and desktop window translucency.
+_Avoid_: Display settings, Styling preferences
+
+**Theme**:
+A coherent set of semantic color tokens mapping canonical UI roles to concrete
+color values for light or dark modes.
+_Avoid_: Skin, Palette file, CSS style
+
+**Window Glass**:
+The desktop-translucent frosted glass effect achieved through native OS window
+composition (macOS WindowServer blur or Windows Acrylic/Mica) and client tinting.
+_Avoid_: CSS blur, Backdrop filter, Translucency hack
+
+**Glass Stage**:
+The native desktop composition layer behind the web view that supplies the
+window-wide frosted-glass base. It is a platform capability, not a Theme,
+Sidebar, Workbench, or View.
+_Avoid_: Glass background, CSS stage, Global blur layer
+
+**Background Mask**:
+A window-wide tint that brightens the blurred desktop in light mode or darkens
+it in dark mode. Its separately remembered light and dark strengths combine
+with Material Surface opacity without fading the content above those surfaces.
+_Avoid_: Content opacity, Blur strength, Workbench Artwork
+
+**Material Surface**:
+A user-visible chrome layer that intentionally supplies a background material
+over the Glass Stage. Sidebar, Topbar, Workbench, and Overlay are Material
+Surfaces; they own their material settings and edges.
+_Avoid_: Panel background, Widget background, Arbitrary glass layer
+
+**Content Layer**:
+The text, controls, and View content rendered above Material Surfaces. A
+Content Layer renders with a transparent base background and does not own the
+background material for its containing area.
+_Avoid_: Pane background, View background, Opaque content shell
+
+**Workbench Glass**:
+The presentation toggle determining whether the Workbench main pane adopts
+Window Glass translucency or stays opaque.
+_Avoid_: Body glass, Main pane glass
+
+**Topbar Surface**:
+The horizontal title and tab chrome above the Workbench, alongside the
+full-height Sidebar when expanded; it carries Settings navigation when Settings
+replaces the working content. It is a distinct Material Surface whose visual
+continuity with the Sidebar does not merge their layout ownership.
+_Avoid_: Header, Toolbar, Tab strip
+
+**Workbench Artwork**:
+An optional image layer shown beneath all Workbench content and above the
+Workbench Material Surface. It belongs to the Workbench rather than any one
+View, Session, or Tab.
+_Avoid_: Chat wallpaper, Session background, View background
+
 ## Core invariants
 
 - A Project owns zero or more Workspaces.

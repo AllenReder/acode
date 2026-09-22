@@ -94,7 +94,77 @@ export const GlassOpacity = Schema.Int.check(
   }),
 );
 export type GlassOpacity = typeof GlassOpacity.Type;
-const DEFAULT_GLASS_OPACITY: GlassOpacity = 80;
+const DEFAULT_GLASS_OPACITY: GlassOpacity = 90;
+
+export const MIN_SIDEBAR_OPACITY = 10;
+export const MAX_SIDEBAR_OPACITY = 100;
+export const SidebarOpacity = Schema.Int.check(
+  Schema.isBetween({
+    minimum: MIN_SIDEBAR_OPACITY,
+    maximum: MAX_SIDEBAR_OPACITY,
+  }),
+);
+export type SidebarOpacity = typeof SidebarOpacity.Type;
+export const DEFAULT_SIDEBAR_OPACITY: SidebarOpacity = 50;
+
+export const MIN_TOPBAR_OPACITY = 10;
+export const MAX_TOPBAR_OPACITY = 100;
+export const TopbarOpacity = Schema.Int.check(
+  Schema.isBetween({ minimum: MIN_TOPBAR_OPACITY, maximum: MAX_TOPBAR_OPACITY }),
+);
+export type TopbarOpacity = typeof TopbarOpacity.Type;
+export const DEFAULT_TOPBAR_OPACITY: TopbarOpacity = 50;
+
+export const BackgroundMaskOpacity = Schema.Int.check(
+  Schema.isBetween({ minimum: 0, maximum: 100 }),
+);
+export const DEFAULT_BACKGROUND_MASK_LIGHT_OPACITY = 10;
+export const DEFAULT_BACKGROUND_MASK_DARK_OPACITY = 35;
+
+export const MIN_SIDEBAR_BLUR = 1;
+export const MAX_SIDEBAR_BLUR = 64;
+export const SidebarBlur = Schema.Int.check(
+  Schema.isBetween({
+    minimum: MIN_SIDEBAR_BLUR,
+    maximum: MAX_SIDEBAR_BLUR,
+  }),
+);
+export type SidebarBlur = typeof SidebarBlur.Type;
+export const DEFAULT_SIDEBAR_BLUR: SidebarBlur = 24;
+
+export const WorkbenchGlass = Schema.Boolean;
+export type WorkbenchGlass = typeof WorkbenchGlass.Type;
+export const DEFAULT_WORKBENCH_GLASS: WorkbenchGlass = true;
+
+export const MIN_WORKBENCH_OPACITY = 10;
+export const MAX_WORKBENCH_OPACITY = 100;
+export const WorkbenchOpacity = Schema.Int.check(
+  Schema.isBetween({
+    minimum: MIN_WORKBENCH_OPACITY,
+    maximum: MAX_WORKBENCH_OPACITY,
+  }),
+);
+export type WorkbenchOpacity = typeof WorkbenchOpacity.Type;
+export const DEFAULT_WORKBENCH_OPACITY: WorkbenchOpacity = 50;
+
+export const ChatBackgroundPath = Schema.NullOr(TrimmedNonEmptyString);
+export type ChatBackgroundPath = typeof ChatBackgroundPath.Type;
+export const DEFAULT_CHAT_BACKGROUND_PATH: ChatBackgroundPath = null;
+
+export const MIN_CHAT_BACKGROUND_OPACITY = 5;
+export const MAX_CHAT_BACKGROUND_OPACITY = 65;
+export const ChatBackgroundOpacity = Schema.Int.check(
+  Schema.isBetween({
+    minimum: MIN_CHAT_BACKGROUND_OPACITY,
+    maximum: MAX_CHAT_BACKGROUND_OPACITY,
+  }),
+);
+export type ChatBackgroundOpacity = typeof ChatBackgroundOpacity.Type;
+export const DEFAULT_CHAT_BACKGROUND_OPACITY: ChatBackgroundOpacity = 24;
+
+export const ChatBackgroundScope = Schema.Literals(["empty", "all"]);
+export type ChatBackgroundScope = typeof ChatBackgroundScope.Type;
+export const DEFAULT_CHAT_BACKGROUND_SCOPE: ChatBackgroundScope = "all";
 
 export const MIN_APPEARANCE_CONTRAST = 50;
 export const MAX_APPEARANCE_CONTRAST = 200;
@@ -387,6 +457,34 @@ export const ClientSettingsSchema = Schema.Struct({
   ),
   glassOpacity: GlassOpacity.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_GLASS_OPACITY)),
+  ),
+  sidebarOpacity: SidebarOpacity.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_OPACITY)),
+  ),
+  topbarOpacity: TopbarOpacity.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_TOPBAR_OPACITY)),
+  ),
+  backgroundMaskLightOpacity: BackgroundMaskOpacity.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_BACKGROUND_MASK_LIGHT_OPACITY)),
+  ),
+  backgroundMaskDarkOpacity: BackgroundMaskOpacity.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_BACKGROUND_MASK_DARK_OPACITY)),
+  ),
+  sidebarBlur: SidebarBlur.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_BLUR))),
+  workbenchGlass: WorkbenchGlass.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_WORKBENCH_GLASS)),
+  ),
+  workbenchOpacity: WorkbenchOpacity.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_WORKBENCH_OPACITY)),
+  ),
+  chatBackgroundPath: ChatBackgroundPath.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_CHAT_BACKGROUND_PATH)),
+  ),
+  chatBackgroundOpacity: ChatBackgroundOpacity.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_CHAT_BACKGROUND_OPACITY)),
+  ),
+  chatBackgroundScope: ChatBackgroundScope.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_CHAT_BACKGROUND_SCOPE)),
   ),
   fontSizeInterface: InterfaceFontSize.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_INTERFACE_FONT_SIZE)),
@@ -1486,6 +1584,16 @@ export const ClientSettingsPatch = Schema.Struct({
   diffLayout: Schema.optionalKey(DiffLayout),
   environmentIdentificationMode: Schema.optionalKey(EnvironmentIdentificationMode),
   glassOpacity: Schema.optionalKey(GlassOpacity),
+  sidebarOpacity: Schema.optionalKey(SidebarOpacity),
+  topbarOpacity: Schema.optionalKey(TopbarOpacity),
+  backgroundMaskLightOpacity: Schema.optionalKey(BackgroundMaskOpacity),
+  backgroundMaskDarkOpacity: Schema.optionalKey(BackgroundMaskOpacity),
+  sidebarBlur: Schema.optionalKey(SidebarBlur),
+  workbenchGlass: Schema.optionalKey(WorkbenchGlass),
+  workbenchOpacity: Schema.optionalKey(WorkbenchOpacity),
+  chatBackgroundPath: Schema.optionalKey(ChatBackgroundPath),
+  chatBackgroundOpacity: Schema.optionalKey(ChatBackgroundOpacity),
+  chatBackgroundScope: Schema.optionalKey(ChatBackgroundScope),
   onboardingCompletedAt: Schema.optionalKey(Schema.NullOr(Schema.String)),
   fontSizeInterface: Schema.optionalKey(InterfaceFontSize),
   fontSizePrompt: Schema.optionalKey(PromptFontSize),

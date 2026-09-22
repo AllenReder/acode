@@ -8,17 +8,18 @@ import {
   invalidateCustomThemes,
   isKnownThemePreference,
   resolveThemeAppearance,
-  T3_CHAT_THEME,
-  EMBER_THEME,
-  GROVE_THEME,
-  IRIS_THEME,
+  ACODE_DEFAULT_THEME,
+  ZINC_THEME,
+  SLATE_THEME,
+  MIDNIGHT_THEME,
+  FOREST_THEME,
   OCEAN_THEME,
   THEME_APPEARANCE_MODE_STORAGE_KEY,
   THEME_FOLLOW_SYSTEM_STORAGE_KEY,
   toCanonicalThemeColor,
 } from "./themePalette";
 
-const THEME_STORAGE_KEY = "t3code:theme";
+const THEME_STORAGE_KEY = "acode:theme";
 // A custom theme that omits chrome falls back to the runtime default, so the
 // boot copy of that default stays derived from the real palette.
 const DEFAULT_DARK_CHROME = getDefaultThemeColors("dark").chrome;
@@ -156,47 +157,42 @@ describe("index.html boot script", () => {
   }> = [
     { name: "no stored preference on a dark OS", storage: {}, prefersDark: true },
     {
-      name: "T3 Chat follows a dark OS",
-      storage: { [THEME_STORAGE_KEY]: "t3-chat", [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "true" },
+      name: "ACode Default follows a dark OS",
+      storage: { [THEME_STORAGE_KEY]: "acode-default", [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "true" },
       prefersDark: true,
     },
     {
-      name: "an explicit global dark mode applies to T3 Chat",
+      name: "an explicit global dark mode applies to ACode Default",
       storage: {
-        [THEME_STORAGE_KEY]: "t3-chat",
+        [THEME_STORAGE_KEY]: "acode-default",
         [THEME_APPEARANCE_MODE_STORAGE_KEY]: "dark",
         [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "false",
       },
       prefersDark: false,
     },
     {
-      name: "Grove follows a dark OS",
-      storage: { [THEME_STORAGE_KEY]: "grove", [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "true" },
+      name: "Zinc follows a dark OS",
+      storage: { [THEME_STORAGE_KEY]: "zinc", [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "true" },
+      prefersDark: true,
+    },
+    {
+      name: "Slate follows a dark OS",
+      storage: { [THEME_STORAGE_KEY]: "slate", [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "true" },
+      prefersDark: true,
+    },
+    {
+      name: "Midnight follows a dark OS",
+      storage: { [THEME_STORAGE_KEY]: "midnight", [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "true" },
+      prefersDark: true,
+    },
+    {
+      name: "Forest follows a dark OS",
+      storage: { [THEME_STORAGE_KEY]: "forest", [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "true" },
       prefersDark: true,
     },
     {
       name: "Ocean follows a dark OS",
       storage: { [THEME_STORAGE_KEY]: "ocean", [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "true" },
-      prefersDark: true,
-    },
-    {
-      name: "Ember follows a dark OS",
-      storage: { [THEME_STORAGE_KEY]: "ember", [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "true" },
-      prefersDark: true,
-    },
-    {
-      name: "Iris follows a dark OS",
-      storage: { [THEME_STORAGE_KEY]: "iris", [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "true" },
-      prefersDark: true,
-    },
-    {
-      name: "a legacy t3-grove preference resolves through the alias",
-      storage: { [THEME_STORAGE_KEY]: "t3-grove", [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "true" },
-      prefersDark: true,
-    },
-    {
-      name: "legacy t3-chat-dark resolves to dark T3 Chat",
-      storage: { [THEME_STORAGE_KEY]: "t3-chat-dark" },
       prefersDark: true,
     },
     {
@@ -259,10 +255,10 @@ describe("index.html boot script", () => {
 
   it("marks built-in and custom themes on the document element", () => {
     const chat = runBootScript({
-      storage: { [THEME_STORAGE_KEY]: "t3-chat", [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "true" },
+      storage: { [THEME_STORAGE_KEY]: "acode-default", [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "true" },
       prefersDark: true,
     });
-    expect(chat.themeId).toBe("t3-chat");
+    expect(chat.themeId).toBe("acode-default");
     expect(chat.themeSelected).toBe("true");
     expect(chat.isDark).toBe(true);
 
@@ -342,9 +338,8 @@ describe("index.html boot script", () => {
   // boot script's hand-maintained copy into a CI-enforced contract: any
   // palette change breaks this test until the copy in index.html is updated.
   it("keeps every built-in boot splash in sync with the real palettes", () => {
-    for (const theme of [T3_CHAT_THEME, GROVE_THEME, OCEAN_THEME, EMBER_THEME, IRIS_THEME]) {
-      // The boot script resolves every built-in from a light base appearance.
-      expect(theme.appearance).toBe("light");
+    for (const theme of [ACODE_DEFAULT_THEME, ZINC_THEME, SLATE_THEME, MIDNIGHT_THEME, FOREST_THEME, OCEAN_THEME]) {
+      expect(theme.appearance).toBe("dark");
       for (const mode of ["light", "dark"] as const) {
         const colors = getThemeColorsForMode(theme, mode);
         expect(colors).not.toBeNull();
@@ -368,23 +363,23 @@ describe("index.html boot script", () => {
 
   it("applies the matching half of an automatic mix to the splash", () => {
     const storage = {
-      [THEME_STORAGE_KEY]: "t3-chat",
+      [THEME_STORAGE_KEY]: "acode-default",
       [THEME_APPEARANCE_MODE_STORAGE_KEY]: "system",
-      "t3code:theme-halves:v1": JSON.stringify({ dark: GROVE_THEME.id }),
+      "acode:theme-halves:v1": JSON.stringify({ dark: FOREST_THEME.id }),
     };
 
     const dark = runBootScript({ storage, prefersDark: true });
     expect(dark.isDark).toBe(true);
-    expect(dark.themeId).toBe(GROVE_THEME.id);
+    expect(dark.themeId).toBe(FOREST_THEME.id);
     expect(dark.bootVariables["--boot-background"]).toBe(
-      getThemeColorsForMode(GROVE_THEME, "dark")!.canvas,
+      getThemeColorsForMode(FOREST_THEME, "dark")!.canvas,
     );
 
     const light = runBootScript({ storage, prefersDark: false });
     expect(light.isDark).toBe(false);
-    expect(light.themeId).toBe("t3-chat");
+    expect(light.themeId).toBe("acode-default");
     expect(light.bootVariables["--boot-background"]).toBe(
-      getThemeColorsForMode(T3_CHAT_THEME, "light")!.canvas,
+      getThemeColorsForMode(ACODE_DEFAULT_THEME, "light")!.canvas,
     );
   });
 
@@ -401,12 +396,12 @@ describe("index.html boot script", () => {
             colors: { canvas: "#f8fbff", text: "#10243d", accent: "#5b6cff" },
           },
         ]),
-        "t3code:theme-halves:v1": JSON.stringify({ dark: GROVE_THEME.id }),
+        "acode:theme-halves:v1": JSON.stringify({ dark: FOREST_THEME.id }),
       },
       prefersDark: true,
     });
     expect(boot.isDark).toBe(true);
-    expect(boot.themeId).toBe(GROVE_THEME.id);
+    expect(boot.themeId).toBe(FOREST_THEME.id);
   });
 
   it("paints the half's splash when the base theme no longer exists", () => {
@@ -414,44 +409,28 @@ describe("index.html boot script", () => {
       storage: {
         [THEME_STORAGE_KEY]: "gone-theme",
         [THEME_APPEARANCE_MODE_STORAGE_KEY]: "system",
-        "t3code:theme-halves:v1": JSON.stringify({ dark: GROVE_THEME.id }),
+        "acode:theme-halves:v1": JSON.stringify({ dark: FOREST_THEME.id }),
       },
       prefersDark: true,
     });
     expect(boot.isDark).toBe(true);
-    expect(boot.themeId).toBe(GROVE_THEME.id);
+    expect(boot.themeId).toBe(FOREST_THEME.id);
     expect(boot.themeSelected).toBe("true");
     expect(boot.bootVariables["--boot-background"]).toBe(
-      getThemeColorsForMode(GROVE_THEME, "dark")!.canvas,
-    );
-  });
-
-  it("resolves a legacy-prefixed mix half onto the renamed theme", () => {
-    const boot = runBootScript({
-      storage: {
-        [THEME_STORAGE_KEY]: "t3-chat",
-        [THEME_APPEARANCE_MODE_STORAGE_KEY]: "system",
-        "t3code:theme-halves:v1": JSON.stringify({ dark: "t3-grove" }),
-      },
-      prefersDark: true,
-    });
-    expect(boot.isDark).toBe(true);
-    expect(boot.themeId).toBe(GROVE_THEME.id);
-    expect(boot.bootVariables["--boot-background"]).toBe(
-      getThemeColorsForMode(GROVE_THEME, "dark")!.canvas,
+      getThemeColorsForMode(FOREST_THEME, "dark")!.canvas,
     );
   });
 
   it("ignores a mix half that names an unknown theme", () => {
     const boot = runBootScript({
       storage: {
-        [THEME_STORAGE_KEY]: "t3-chat",
+        [THEME_STORAGE_KEY]: "acode-default",
         [THEME_APPEARANCE_MODE_STORAGE_KEY]: "system",
-        "t3code:theme-halves:v1": JSON.stringify({ dark: "gone-theme" }),
+        "acode:theme-halves:v1": JSON.stringify({ dark: "gone-theme" }),
       },
       prefersDark: true,
     });
-    expect(boot.themeId).toBe("t3-chat");
+    expect(boot.themeId).toBe("acode-default");
     expect(boot.isDark).toBe(true);
   });
 

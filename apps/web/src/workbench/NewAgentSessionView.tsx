@@ -123,7 +123,8 @@ export function NewAgentSessionView({
   }
 
   return (
-    <ChatView
+    <div className="relative flex h-full min-h-0 flex-col">
+      <ChatView
       environmentId={target.environmentId}
       threadId={draft.threadId}
       routeKind="draft"
@@ -134,6 +135,7 @@ export function NewAgentSessionView({
       availableSize={availableSize}
       onBrowseFiles={onBrowseFiles}
       onNewTerminalSession={onNewTerminalSession}
-    />
+      />
+    </div>
   );
 }

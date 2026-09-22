@@ -16,7 +16,7 @@ const LIGHT_THEME = {
 } as const satisfies EnvironmentTheme;
 
 async function setupThemeSync(mode: "dark" | "system" = "dark") {
-  const storage = new Map<string, string>([["t3code:theme", NIGHTFALL_THEME.id]]);
+  const storage = new Map<string, string>([["acode:theme", NIGHTFALL_THEME.id]]);
   const styles = new Map<string, string>();
   const classes = new Set<string>();
   const root = {
@@ -141,7 +141,7 @@ describe("published theme refresh", () => {
     expectPreview();
     publish([LIGHT_THEME, { ...NIGHTFALL_THEME, id: "unused-theme" }]);
     expectPreview();
-    expect(publish([]).theme).toBe("system");
+    expect(publish([]).theme).toBe(palette.ACODE_DEFAULT_THEME_ID);
     expectPreview();
 
     const current = publish([{ ...NIGHTFALL_THEME, canvas: "#112233" }]);

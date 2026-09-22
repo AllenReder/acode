@@ -1,4 +1,5 @@
 import type { ITheme } from "@xterm/xterm";
+import { formatHex8, parse } from "culori";
 
 export interface TerminalPaletteConfig {
   background: string;
@@ -47,9 +48,17 @@ export const lightTerminalAnsi = {
   brightWhite: "#fafafa",
 } as const;
 
+/** Keep the palette RGB available to OSC queries without painting the canvas. */
+export function transparentXtermTheme(theme: ITheme): ITheme {
+  const color = parse(theme.background ?? "#000000");
+  return { ...theme, background: color ? formatHex8({ ...color, alpha: 0 }) : "#00000000" };
+}
+
 export function buildXtermTheme(config: TerminalPaletteConfig): ITheme {
   const ansi = config.isDark ? darkTerminalAnsi : lightTerminalAnsi;
-  return {
+  return transparentXtermTheme({
+    // The Workbench supplies the canvas, even with glass disabled. ANSI cell
+    // backgrounds remain intact; only the terminal's default fill is clear.
     background: config.background,
     foreground: config.foreground,
     cursor: config.cursor,
@@ -59,5 +68,5 @@ export function buildXtermTheme(config: TerminalPaletteConfig): ITheme {
       (config.isDark ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.15)"),
     selectionForeground: config.selectionForeground ?? config.foreground,
     ...ansi,
-  };
+  });
 }
