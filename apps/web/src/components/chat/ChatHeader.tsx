@@ -396,13 +396,9 @@ export const ChatHeader = memo(function ChatHeader({
                   <button
                     ref={titleButtonRef}
                     type="button"
-                    aria-label={
-                      workbenchMode
-                        ? `Rename Agent Session ${activeThreadTitle}`
-                        : `Thread actions for ${activeThreadTitle}`
-                    }
-                    {...(workbenchMode ? {} : { "aria-haspopup": "menu" as const })}
-                    onClick={workbenchMode ? undefined : openMenuFromTitle}
+                    aria-label={`Thread actions for ${activeThreadTitle}`}
+                    aria-haspopup="menu"
+                    onClick={openMenuFromTitle}
                     onDoubleClick={handleTitleDoubleClick}
                     onBlur={cancelPendingTitleMenu}
                     className="group/thread-title inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1 rounded-sm text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
@@ -410,13 +406,11 @@ export const ChatHeader = memo(function ChatHeader({
                 }
               >
                 <h2 className="min-w-0 truncate">{activeThreadTitle}</h2>
-                {!workbenchMode ? (
-                  <ChevronDownIcon
-                    aria-hidden
-                    data-thread-title-chevron
-                    className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/thread-title:opacity-100 group-focus-visible/thread-title:opacity-100"
-                  />
-                ) : null}
+                <ChevronDownIcon
+                  aria-hidden
+                  data-thread-title-chevron
+                  className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/thread-title:opacity-100 group-focus-visible/thread-title:opacity-100"
+                />
               </TooltipTrigger>
               <TooltipPopup side="top">{activeThreadTitle}</TooltipPopup>
             </Tooltip>

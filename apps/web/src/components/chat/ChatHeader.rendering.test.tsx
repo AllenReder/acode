@@ -1,6 +1,7 @@
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, ThreadId, type ResolvedKeybindingsConfig } from "@t3tools/contracts";
+import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import type { ReactNode } from "react";
 import { ChatHeader } from "./ChatHeader";
 
@@ -65,16 +66,27 @@ vi.mock("../ui/menu", () => ({
 }));
 
 describe("ChatHeader in workbenchMode", () => {
+  const activeProject: EnvironmentProject = {
+    environmentId: EnvironmentId.make("env-1"),
+    id: ProjectId.make("p1"),
+    title: "My Project",
+    workspaceRoot: "/root",
+    defaultModelSelection: null,
+    scripts: [],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  const keybindings: ResolvedKeybindingsConfig = [];
   const defaultProps = {
     activeThreadEnvironmentId: EnvironmentId.make("env-1"),
     activeThreadId: ThreadId.make("thread-1"),
     activeThreadTitle: "Session 1",
     isServerThread: true,
-    activeProject: { id: "p1", title: "My Project", workspaceRoot: "/root" } as any,
+    activeProject,
     openInCwd: "/root",
     activeProjectScripts: undefined,
     preferredScriptId: null,
-    keybindings: {} as any,
+    keybindings,
     availableEditors: [],
     rightPanelOpen: false,
     gitCwd: "/root",
