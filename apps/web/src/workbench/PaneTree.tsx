@@ -491,7 +491,7 @@ function PaneHeader({
       aria-label="Pane header"
       data-pane-header-focused={focused}
       data-workbench-pane-drag-handle=""
-      className="flex select-none items-center justify-between border-b border-border/70 px-3 py-1.5 text-xs touch-none cursor-grab active:cursor-grabbing"
+      className="flex select-none items-center justify-between px-3 py-1.5 text-xs touch-none cursor-grab active:cursor-grabbing"
       onMouseDown={(event) => {
         const targetElement = event.target as HTMLElement;
         if (targetElement.closest("button") === null) {

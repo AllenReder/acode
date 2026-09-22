@@ -11,7 +11,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, FolderIcon, PanelRightOpenIcon, TerminalIcon } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -27,6 +27,7 @@ import { isTrailingDoubleClick } from "../Sidebar.logic";
 import { type DraftId } from "~/composerDraftStore";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import ProjectScriptsControl, {
   type NewProjectScriptInput,
   type ProjectScriptActionResult,
@@ -64,6 +65,8 @@ interface ChatHeaderProps {
   rightPanelOpen: boolean;
   workbenchMode?: boolean;
   gitCwd: string | null;
+  readonly onBrowseFiles?: (() => void) | undefined;
+  readonly onNewTerminalSession?: (() => void) | undefined;
   readonly onOpenPullRequest?: ((number: number) => void) | undefined;
   onNewThreadInProject: () => void;
   onOpenProjectSettings?: (() => void) | undefined;
@@ -134,6 +137,8 @@ export const ChatHeader = memo(function ChatHeader({
   rightPanelOpen,
   workbenchMode = false,
   gitCwd,
+  onBrowseFiles,
+  onNewTerminalSession,
   onOpenPullRequest,
   onNewThreadInProject,
   onOpenProjectSettings,
@@ -335,7 +340,7 @@ export const ChatHeader = memo(function ChatHeader({
         {/* The project always leads the header: knowing which project a
             thread lives in is priority zero, and the thread title alone
             doesn't answer it. */}
-        {activeProject ? (
+        {activeProject && !workbenchMode ? (
           <>
             <WorkspaceBreadcrumbItem className="shrink">
               <Tooltip>
@@ -372,6 +377,17 @@ export const ChatHeader = memo(function ChatHeader({
               onFocus={(event) => event.currentTarget.select()}
               onKeyDown={handleRenameKeyDown}
             />
+          ) : workbenchMode ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <h2 aria-label={activeThreadTitle} className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                    {activeThreadTitle}
+                  </h2>
+                }
+              />
+              <TooltipPopup side="top">{activeThreadTitle}</TooltipPopup>
+            </Tooltip>
           ) : isServerThread ? (
             <Tooltip>
               <TooltipTrigger
@@ -422,7 +438,7 @@ export const ChatHeader = memo(function ChatHeader({
         data-chat-header-actions
         className={cn(
           "flex shrink-0 items-center justify-end gap-2 @3xl/header-actions:gap-3",
-          rightPanelOpen ? "pr-0" : "pr-16",
+          rightPanelOpen || workbenchMode ? "pr-0" : "pr-16",
           "[[data-panel-animations=true]_&]:motion-safe:transition-[padding-right] [[data-panel-animations=true]_&]:motion-safe:[transition-duration:var(--panel-animation-duration)] [[data-panel-animations=true]_&]:motion-safe:ease-out",
         )}
       >
@@ -454,6 +470,51 @@ export const ChatHeader = memo(function ChatHeader({
             {...(draftId ? { draftId } : {})}
           />
         )}
+        {workbenchMode && onNewTerminalSession ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label="New terminal session"
+                  onClick={onNewTerminalSession}
+                  className="inline-flex size-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <TerminalIcon className="size-3.5" />
+                </button>
+              }
+            />
+            <TooltipPopup side="top">New terminal session</TooltipPopup>
+          </Tooltip>
+        ) : null}
+        {workbenchMode && onBrowseFiles ? (
+          <Menu>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <MenuTrigger
+                    render={
+                      <button
+                        type="button"
+                        aria-label="Workspace views"
+                        className="inline-flex size-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring data-popup-open:bg-accent data-popup-open:text-foreground"
+                      >
+                        <PanelRightOpenIcon className="size-3.5" />
+                      </button>
+                    }
+                  />
+                }
+              />
+              <TooltipPopup side="top">Workspace views</TooltipPopup>
+            </Tooltip>
+            <MenuPopup align="end" side="bottom" className="w-44">
+              <MenuItem onClick={onBrowseFiles}>
+                <FolderIcon className="size-4" />
+                <span>Browse Files</span>
+              </MenuItem>
+            </MenuPopup>
+          </Menu>
+        ) : null}
       </div>
     </div>
   );

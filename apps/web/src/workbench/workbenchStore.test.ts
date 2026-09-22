@@ -153,3 +153,32 @@ it("intercepts pane closure with registered close guard when dirty", async () =>
   expect(closed2).toBe(true);
   expect(getActiveTab(store.getState()).panes.has(paneId)).toBe(false);
 });
+
+it("splits relative to a specific pane and focuses existing targets if already present", () => {
+  const ids = makeIds();
+  const initial = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids);
+  const tab = getActiveTab(initial);
+  const sourcePaneId = tab.focusedPaneId;
+  const store = createWorkbenchStore({ initialSnapshot: initial, generateId: ids });
+
+  const fileTarget: ViewTarget = {
+    kind: "workspace",
+    definitionId: "fileView",
+    environmentId: ENV_A,
+    workspaceId: WS_A,
+  };
+
+  store.getState().splitPane(sourcePaneId, fileTarget, "right");
+  const tabAfterSplit = getActiveTab(store.getState());
+  expect(tabAfterSplit.panes.size).toBe(2);
+  const filePaneId = tabAfterSplit.focusedPaneId;
+  expect(tabAfterSplit.panes.get(filePaneId)?.target).toEqual(fileTarget);
+
+  store.getState().setFocused(sourcePaneId);
+  expect(getActiveTab(store.getState()).focusedPaneId).toBe(sourcePaneId);
+
+  store.getState().splitPane(sourcePaneId, fileTarget, "right");
+  const tabAfterRefocus = getActiveTab(store.getState());
+  expect(tabAfterRefocus.panes.size).toBe(2);
+  expect(tabAfterRefocus.focusedPaneId).toBe(filePaneId);
+});

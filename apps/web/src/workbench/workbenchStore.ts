@@ -23,6 +23,7 @@ import {
   applyRemoveWorkspaceViews,
   applySetFocused,
   applySetSplitRatio,
+  applySplitPane,
   applySplitFocused,
   applyViewDrop,
   emptyWorkbenchSnapshot,
@@ -62,6 +63,7 @@ export interface WorkbenchStore extends WorkbenchSnapshot {
     observedEnvironmentIds?: ReadonlyArray<string>,
   ) => void;
   splitFocused: (target: ViewTarget, dir: SplitDir) => void;
+  splitPane: (paneId: string, target: ViewTarget, dir: SplitDir) => void;
   setFocused: (paneId: string) => void;
   setSplitRatio: (splitId: string, index: number, ratio: number) => void;
   registerCloseGuard: (paneId: string, guard: PaneCloseGuard) => () => void;
@@ -166,6 +168,11 @@ export function createWorkbenchStore(options: WorkbenchStoreOptions = {}) {
     splitFocused: (target, dir) =>
       set((snapshot) => ({
         ...applySplitFocused(snapshot, target, dir, generateId),
+        focusRequestId: snapshot.focusRequestId + 1,
+      })),
+    splitPane: (paneId, target, dir) =>
+      set((snapshot) => ({
+        ...applySplitPane(snapshot, paneId, target, dir, generateId),
         focusRequestId: snapshot.focusRequestId + 1,
       })),
     setFocused: (paneId) => set((snapshot) => applySetFocused(snapshot, paneId)),

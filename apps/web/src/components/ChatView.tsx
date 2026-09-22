@@ -722,6 +722,8 @@ type ChatViewProps = {
   focusRequestId?: number;
   availableSize?: { readonly width: number; readonly height: number };
   workbenchMode?: boolean;
+  onBrowseFiles?: () => void;
+  onNewTerminalSession?: () => void;
 } & (
   | {
       environmentId: EnvironmentId;
@@ -1474,6 +1476,8 @@ export default function ChatView(props: ChatViewProps) {
     focusRequestId = 0,
     availableSize,
     workbenchMode = false,
+    onBrowseFiles,
+    onNewTerminalSession,
   } = props;
   const focusedRef = useRef(focused);
   focusedRef.current = focused;
@@ -9484,6 +9488,8 @@ export default function ChatView(props: ChatViewProps) {
             rightPanelOpen={rightPanelOpen}
             workbenchMode={workbenchMode}
             gitCwd={gitCwd}
+            onBrowseFiles={onBrowseFiles}
+            onNewTerminalSession={onNewTerminalSession}
             onNewThreadInProject={handleNewThreadInActiveProject}
             {...(activeDraftLogicalProjectKey
               ? { onOpenProjectSettings: handleOpenDraftProjectSettings }

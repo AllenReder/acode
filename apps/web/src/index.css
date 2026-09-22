@@ -2198,7 +2198,7 @@ html[data-workbench-dragging="active"] .workbench-pane-frame {
 .workbench-pane > div[tabindex] {
   height: 34px;
   flex-shrink: 0;
-  background: color-mix(in oklch, var(--muted) 22%, transparent);
+  background: transparent;
 }
 .workbench-sash {
   position: absolute;

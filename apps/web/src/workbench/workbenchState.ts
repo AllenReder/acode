@@ -383,8 +383,9 @@ export function applyOpenDeepLinkTarget(
   return applyOpenTarget(snapshot, target, generateId);
 }
 
-export function applySplitFocused(
+export function applySplitPane(
   snapshot: WorkbenchSnapshot,
+  sourcePaneId: string,
   target: ViewTarget,
   dir: SplitDir,
   generateId: () => string,
@@ -397,8 +398,9 @@ export function applySplitFocused(
   }
 
   const tab = getActiveTab(snapshot);
-  if (tab.panes.get(tab.focusedPaneId)?.target.kind === "welcome")
+  if (!tab.panes.has(sourcePaneId) || tab.panes.get(sourcePaneId)?.target.kind === "welcome") {
     return applyOpenTarget(snapshot, target, generateId);
+  }
   const existing = findPaneByTarget(tab, target);
   if (existing !== null) return applySetFocused(snapshot, existing);
   const paneId = generateId();
@@ -407,9 +409,19 @@ export function applySplitFocused(
   return updateTab(snapshot, {
     ...tab,
     panes,
-    ...placedLayout(tab, paneId, tab.focusedPaneId, dir === "down" ? "bottom" : "right"),
+    ...placedLayout(tab, paneId, sourcePaneId, dir === "down" ? "bottom" : "right"),
     focusedPaneId: paneId,
   });
+}
+
+export function applySplitFocused(
+  snapshot: WorkbenchSnapshot,
+  target: ViewTarget,
+  dir: SplitDir,
+  generateId: () => string,
+): WorkbenchSnapshot {
+  const tab = getActiveTab(snapshot);
+  return applySplitPane(snapshot, tab.focusedPaneId, target, dir, generateId);
 }
 
 /** Closing presentation never stops or deletes its Session. */

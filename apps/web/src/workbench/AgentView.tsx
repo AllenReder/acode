@@ -1,5 +1,6 @@
 import ChatView from "../components/ChatView";
 import { useAcodeAgentSessionShell } from "../state/entities";
+import { useWorkspaceViewActions } from "./useWorkspaceViewActions";
 import type { ViewTarget } from "./viewRegistry";
 
 interface AgentViewProps {
@@ -24,12 +25,17 @@ interface AgentViewProps {
  * the daemon, so re-opening the same Session from the Sidebar reattaches to
  * the live Agent Session rather than creating a fresh one.
  */
-export function AgentView({ target, focused, focusRequestId = 0, availableSize }: AgentViewProps) {
+export function AgentView({ target, paneId, focused, focusRequestId = 0, availableSize }: AgentViewProps) {
   const session = useAcodeAgentSessionShell(
     target.environmentId,
     target.workspaceId,
     target.agentSessionId,
   );
+  const { onBrowseFiles, onNewTerminalSession } = useWorkspaceViewActions({
+    environmentId: target.environmentId,
+    workspaceId: target.workspaceId,
+    paneId,
+  });
 
   if (session === null) {
     return (
@@ -59,6 +65,8 @@ export function AgentView({ target, focused, focusRequestId = 0, availableSize }
           focused={focused}
           focusRequestId={focusRequestId}
           availableSize={availableSize}
+          onBrowseFiles={onBrowseFiles}
+          onNewTerminalSession={onNewTerminalSession}
         />
       </div>
     </div>
