@@ -340,6 +340,60 @@ describe("local daemon port contract", () => {
     }
   });
 
+  // A start that cannot honour the required port must fail without taking the
+  // daemon that is running on another port with it. Reconciliation stops that
+  // daemon before reserving the replacement port, so the port is validated first;
+  // otherwise a foreign process holding 13773 left the developer with no daemon at
+  // all instead of a working one plus a clear error.
+  it("leaves the running daemon alone when the required port is unavailable", async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "acode-daemon-keep-old-"));
+    const running = await spawnIdleProcess();
+    const pid = running.pid;
+    if (pid === undefined) throw new Error("idle holder did not expose a pid");
+    const server = await listenForHandshake(() => ({
+      status: 200,
+      body: {
+        protocolVersion: LOCAL_DAEMON_PROTOCOL_VERSION,
+        owner: "acode-local-daemon",
+        daemonId: "running-daemon",
+        pid,
+        managed: true,
+      },
+    }));
+    const taken = await listenOnLoopback();
+    const previousPort = process.env.ACODE_DAEMON_PORT;
+    process.env.ACODE_DAEMON_PORT = String(taken.port);
+    try {
+      const paths = await writeDiscovery(
+        root,
+        makeLocalDaemonDiscovery({
+          daemonId: "running-daemon",
+          pid,
+          origin: server.origin,
+          startedAt: "2026-09-18T00:00:00.000Z",
+          workingDirectory: "/running",
+        }),
+      );
+      await NodeFSP.mkdir(NodePath.dirname(paths.credentialPath), { recursive: true });
+      await NodeFSP.writeFile(paths.credentialPath, "bootstrap-token\n", { mode: 0o600 });
+
+      await expect(startLocalDaemon({ baseDir: root })).rejects.toMatchObject({
+        code: "daemon-port-unavailable",
+      });
+
+      expect(processIsAlive(pid)).toBe(true);
+      await expect(NodeFSP.readFile(paths.runtimeStatePath, "utf8")).resolves.toContain(
+        "running-daemon",
+      );
+    } finally {
+      if (previousPort === undefined) delete process.env.ACODE_DAEMON_PORT;
+      else process.env.ACODE_DAEMON_PORT = previousPort;
+      running.kill("SIGKILL");
+      await server.close();
+      await taken.close();
+    }
+  });
+
   // The reconciliation path used to nest `stopLocalDaemon` inside a held launch
   // lock. The lock record names the holding pid — here, our own — so the nested
   // acquisition could never break it and only ended in `launch-lock-timeout`

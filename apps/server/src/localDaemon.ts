@@ -528,11 +528,9 @@ const canListenOnLoopback = async (port: number): Promise<boolean> => {
  * a healthy daemon listened elsewhere. This maps the shared request onto the
  * launcher's own error type.
  */
-export interface RequestedDaemonPort {
-  readonly port: number | undefined;
-  readonly required: boolean;
-  readonly source: string | undefined;
-}
+export type RequestedDaemonPort =
+  | { readonly port: undefined; readonly required: false; readonly source: undefined }
+  | { readonly port: number; readonly required: boolean; readonly source: string };
 
 export function requestedDaemonPort(env: NodeJS.ProcessEnv = process.env): RequestedDaemonPort {
   const request = resolveDaemonPortRequest(env);
@@ -544,6 +542,29 @@ export function requestedDaemonPort(env: NodeJS.ProcessEnv = process.env): Reque
     : { port: undefined, required: false, source: undefined };
 }
 
+const daemonPortUnavailableMessage = (source: string, port: number): string =>
+  `${source}=${String(port)} is already in use, and a configured daemon port is a contract: the desktop shell and the web dev server both address the daemon there, so binding another port would leave every proxied request unanswered. Free it (\`lsof -nP -iTCP:${String(port)} -sTCP:LISTEN\`) or unset ${source} to let the launcher choose a free port.`;
+
+/**
+ * Refuse a start that cannot honour a *required* daemon port before it stops
+ * anything.
+ *
+ * Reconciliation below stops the daemon that runs on a different port, and only
+ * then reserves the port to replace it — where a foreign process holding that
+ * number fails the start. Failing after the stop would take a working daemon
+ * down and leave nothing running, so the contract is checked up front. A
+ * preference port is deliberately not checked here: falling back to a free port
+ * is its documented behaviour.
+ */
+async function assertRequestedPortAvailable(requested: RequestedDaemonPort): Promise<void> {
+  if (!requested.required) return;
+  if (await canListenOnLoopback(requested.port)) return;
+  throw new LocalDaemonError(
+    "daemon-port-unavailable",
+    daemonPortUnavailableMessage(requested.source, requested.port),
+  );
+}
+
 async function reserveLoopbackPort(): Promise<number> {
   const requested = requestedDaemonPort();
   if (requested.port !== undefined) {
@@ -553,7 +574,7 @@ async function reserveLoopbackPort(): Promise<number> {
     if (requested.required) {
       throw new LocalDaemonError(
         "daemon-port-unavailable",
-        `${requested.source}=${String(requested.port)} is already in use, and a configured daemon port is a contract: the desktop shell and the web dev server both address the daemon there, so binding another port would leave every proxied request unanswered. Free it (\`lsof -nP -iTCP:${String(requested.port)} -sTCP:LISTEN\`) or unset ${requested.source} to let the launcher choose a free port.`,
+        daemonPortUnavailableMessage(requested.source, requested.port),
       );
     }
   }
@@ -746,14 +767,15 @@ export async function startLocalDaemon(
     // Resolved through the same helper as `reserveLoopbackPort`, because a
     // disagreement between the two would make the launcher stop a daemon and
     // then rebind the very port it just gave up.
-    const requestedPort = requestedDaemonPort().port;
+    const requested = requestedDaemonPort();
 
     if (existing.status === "ready") {
-      if (requestedPort !== undefined) {
+      if (requested.port !== undefined) {
         const existingPort = Number(new URL(existing.state.origin).port);
-        if (existingPort === requestedPort) {
+        if (existingPort === requested.port) {
           return descriptorFromState(existing.state);
         }
+        await assertRequestedPortAvailable(requested);
         // Already inside the launch lock: re-entering it from this process can
         // never succeed, because the lock record names this very pid, so a
         // nested `stopLocalDaemon` would spin until `launch-lock-timeout`.
