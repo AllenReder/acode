@@ -8,6 +8,9 @@ import * as NodePath from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
 import { buildServerPackage, isExactServerPackageVersion } from "./build-server-package.ts";
+import productPackage from "../package.json" with { type: "json" };
+
+const CURRENT_VERSION = productPackage.version;
 
 describe("buildServerPackage", () => {
   it("accepts only exact server package versions", () => {
@@ -20,8 +23,9 @@ describe("buildServerPackage", () => {
   });
 
   it("rejects a release version that differs from the packaged daemon", () => {
-    expect(() => buildServerPackage({ version: "0.0.43-rc.1", skipBuild: true })).toThrow(
-      /does not match the bundled daemon version/u,
+    const otherVersion = CURRENT_VERSION === "1.0.0" ? "2.0.0" : "1.0.0";
+    expect(() => buildServerPackage({ version: otherVersion, skipBuild: true })).toThrow(
+      /does not match the product version/u,
     );
   });
 
@@ -32,14 +36,16 @@ describe("buildServerPackage", () => {
         outputDir,
         platform: "linux",
         arch: "x64",
-        version: "0.0.42",
+        version: CURRENT_VERSION,
         skipBuild: true,
       });
 
-      expect(NodePath.basename(result.archivePath)).toBe("acode-server-0.0.42-linux-x64.tar.gz");
-      expect(NodeFS.readFileSync(result.checksumPath, "utf8")).toMatch(
-        /^[0-9a-f]{64}  acode-server-0\.0\.42-linux-x64\.tar\.gz\n$/u,
+      expect(NodePath.basename(result.archivePath)).toBe(
+        `acode-server-${CURRENT_VERSION}-linux-x64.tar.gz`,
       );
+      const checksum = NodeFS.readFileSync(result.checksumPath, "utf8");
+      expect(checksum).toMatch(/^[0-9a-f]{64}  /u);
+      expect(checksum).toContain(`  acode-server-${CURRENT_VERSION}-linux-x64.tar.gz\n`);
     } finally {
       NodeFS.rmSync(outputDir, { recursive: true, force: true });
     }
@@ -60,7 +66,9 @@ describe("buildServerPackage", () => {
         .digest("hex");
       const checksumContents = NodeFS.readFileSync(result.checksumPath, "utf8");
 
-      expect(checksumContents).toBe(`${expectedHash}  acode-server-0.0.42-linux-x64.tar.gz\n`);
+      expect(checksumContents).toBe(
+        `${expectedHash}  acode-server-${CURRENT_VERSION}-linux-x64.tar.gz\n`,
+      );
       expect(NodePath.basename(result.checksumPath)).toBe("SHA256SUMS");
     } finally {
       NodeFS.rmSync(outputDir, { recursive: true, force: true });

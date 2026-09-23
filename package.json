@@ -1,5 +1,6 @@
 {
   "name": "@t3tools/monorepo",
+  "version": "0.0.43",
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,6 +16,8 @@
     "build": "vp run --filter @t3tools/web --filter t3 build",
     "build:desktop": "pnpm --filter @acode/desktop build",
     "build:server-package": "node scripts/build-server-package.ts",
+    "version:set": "node scripts/version.ts set",
+    "version:check": "node scripts/version.ts check",
     "typecheck": "vp run -r --concurrency-limit 2 typecheck",
     "tc": "vp run -r --concurrency-limit 2 typecheck",
     "lint": "vp lint --report-unused-disable-directives",

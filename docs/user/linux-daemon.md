@@ -35,7 +35,8 @@ sha256sum --check SHA256SUMS
 ```
 
 For CI releases, maintainers can run the manual **Release server package**
-workflow with an exact version and commit SHA. It publishes a prerelease only;
+workflow with a commit SHA. The workflow reads the product version from that
+commit and publishes a prerelease only;
 it never changes `latest` or nightly aliases. Test prereleases may be deleted.
 Installed daemons keep running after deletion, but a new remote install of that
 exact version then needs the local package fallback or a newer release.

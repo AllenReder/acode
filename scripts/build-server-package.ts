@@ -17,6 +17,7 @@ import * as NodePath from "node:path";
 import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Effect from "effect/Effect";
 import packageJson from "../apps/server/package.json" with { type: "json" };
+import productPackageJson from "../package.json" with { type: "json" };
 
 const REPO_ROOT = NodePath.resolve(import.meta.dirname, "..");
 const DEFAULT_OUTPUT_DIR = NodePath.join(REPO_ROOT, "release-server");
@@ -65,9 +66,14 @@ export function buildServerPackage(options: BuildServerPackageOptions = {}) {
     options.platform ??
     (hostPlatform === "darwin" ? "darwin" : hostPlatform === "win32" ? "win32" : "linux");
   const arch = options.arch ?? (hostArch === "arm64" ? "arm64" : "x64");
-  const version = options.version ?? packageJson.version;
+  const version = options.version ?? productPackageJson.version;
   if (!isExactServerPackageVersion(version)) {
     throw new Error(`Server package version must be exact, received '${version}'.`);
+  }
+  if (version !== productPackageJson.version) {
+    throw new Error(
+      `Server package version ${version} does not match the product version ${productPackageJson.version}.`,
+    );
   }
   if (version !== packageJson.version) {
     throw new Error(

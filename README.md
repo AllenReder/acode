@@ -26,6 +26,11 @@ authoritative and were not replaced by upstream guidance.
 The checked-in package manager installs the local `vite-plus` tool, so no
 global `vp` installation is required.
 
+The root `package.json` is the product version source. Use
+`pnpm version:set <version>` to update the desktop, Web, daemon, and contracts copies, then
+`pnpm version:check` to verify them. See
+[`docs/agents/releases.md`](./docs/agents/releases.md) for the prerelease process.
+
 ## Install and run
 
 From the repository root:

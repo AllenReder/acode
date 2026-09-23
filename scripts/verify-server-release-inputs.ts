@@ -2,11 +2,19 @@
 // @effect-diagnostics globalConsole:off
 import { isExactServerPackageVersion } from "./build-server-package.ts";
 import packageJson from "../apps/server/package.json" with { type: "json" };
+import productPackageJson from "../package.json" with { type: "json" };
 
 const [version, tag] = process.argv.slice(2);
 
 if (!isExactServerPackageVersion(version ?? "")) {
   console.error("Version must be an exact semver-like value, not latest or a dist-tag.");
+  process.exit(1);
+}
+
+if (version !== productPackageJson.version) {
+  console.error(
+    `Version ${version} does not match the product version ${productPackageJson.version}.`,
+  );
   process.exit(1);
 }
 
