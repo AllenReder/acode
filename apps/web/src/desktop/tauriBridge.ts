@@ -4,6 +4,7 @@ import { bootstrapRemoteBearerSession } from "@t3tools/client-runtime/authorizat
 import { remoteHttpClientLayer } from "@t3tools/client-runtime/rpc";
 import {
   AuthStandardClientScopes,
+  DesktopSshPasswordPromptCancelledType,
   type AdvertisedEndpoint,
   type AuthAccessTokenResult,
   type AuthSessionState,
@@ -12,8 +13,12 @@ import {
   type ContextMenuItem,
   type DesktopAppBranding,
   type DesktopBridge,
+  type DesktopDiscoveredSshHost,
   type DesktopEnvironmentBootstrap,
   type DesktopServerExposureState,
+  type DesktopSshHostKeyTrust,
+  type DesktopSshEnvironmentPlan,
+  type DesktopSshEnvironmentProgress,
   type DesktopSshEnvironmentBootstrap,
   type DesktopSshEnvironmentTarget,
   type DesktopSshPasswordPromptRequest,
@@ -30,6 +35,7 @@ import * as Effect from "effect/Effect";
 
 import { readBrowserClientSettings, writeBrowserClientSettings } from "../clientPersistenceStorage";
 import { showContextMenuFallback } from "../contextMenuFallback";
+import { SshPasswordPromptCancelledError } from "./sshErrors";
 import { isTauri } from "../env";
 
 interface TauriRuntimeConfig {
@@ -58,9 +64,65 @@ export function isSafeExternalUrl(rawUrl: string): boolean {
   }
 }
 
+export interface DesktopSshApiClientOptions {
+  readonly getBaseUrl: () => string | undefined;
+  readonly getBearerToken: () => Promise<string>;
+  readonly fetchFn?: typeof fetch;
+}
+
+interface DesktopSshApiRequestOptions {
+  readonly method?: string;
+  readonly body?: unknown;
+  readonly signal?: AbortSignal;
+}
+
+export function createDesktopSshApiClient(options: DesktopSshApiClientOptions) {
+  const fetchFn = options.fetchFn ?? globalThis.fetch.bind(globalThis);
+
+  return {
+    request: async <T>(path: string, requestOptions: DesktopSshApiRequestOptions = {}) => {
+      const baseUrl = options.getBaseUrl();
+      if (!baseUrl) {
+        throw new Error("The local daemon endpoint is unavailable.");
+      }
+      const token = await options.getBearerToken();
+      const response = await fetchFn(new URL(path, baseUrl), {
+        method: requestOptions.method ?? "GET",
+        ...(requestOptions.signal ? { signal: requestOptions.signal } : {}),
+        headers: {
+          authorization: `Bearer ${token}`,
+          ...(requestOptions.body === undefined ? {} : { "content-type": "application/json" }),
+        },
+        ...(requestOptions.body === undefined ? {} : { body: JSON.stringify(requestOptions.body) }),
+      });
+
+      if (!response.ok) {
+        let message = `Local daemon SSH request failed with HTTP ${response.status}.`;
+        try {
+          const body = (await response.clone().json()) as {
+            readonly error?: { readonly message?: string };
+          };
+          if (body.error?.message) {
+            message = body.error.message;
+          }
+        } catch {
+          // Keep the HTTP status fallback when the daemon returns no JSON body.
+        }
+        throw new Error(message);
+      }
+      if (response.status === 204) {
+        return undefined as T;
+      }
+      return (await response.json()) as T;
+    },
+  };
+}
+
 function unsupported(capability: string): Promise<never> {
   return Promise.reject(new Error(`ACode Tauri shell does not support ${capability} yet.`));
 }
+
+export { SshPasswordPromptCancelledError } from "./sshErrors";
 
 function disabledWslState(): DesktopWslState {
   return {
@@ -151,6 +213,20 @@ export async function exchangeTauriPrimaryCredential(credential: string): Promis
 
 const createTauriDesktopBridge = (): DesktopBridge => {
   let updateState = disabledUpdateState();
+  const readLocalEnvironmentBearerToken = async () => {
+    if (localEnvironmentBearerToken.length > 0) {
+      return localEnvironmentBearerToken;
+    }
+    const bootstrap = primaryBootstrap();
+    if (!bootstrap?.httpBaseUrl || !bootstrap.bootstrapToken) {
+      return "";
+    }
+    return exchangeBearerCredential(bootstrap.httpBaseUrl, bootstrap.bootstrapToken);
+  };
+  const desktopSshApi = createDesktopSshApiClient({
+    getBaseUrl: () => primaryBootstrap()?.httpBaseUrl ?? undefined,
+    getBearerToken: readLocalEnvironmentBearerToken,
+  });
 
   return {
     getAppBranding: (): DesktopAppBranding => {
@@ -165,52 +241,147 @@ const createTauriDesktopBridge = (): DesktopBridge => {
     getSystemLocale: () => navigator.language || null,
     getLocalEnvironmentBootstraps: () => localEnvironmentBootstraps,
     getLocalEnvironmentEnabled: () => true,
-    getLocalEnvironmentBearerToken: async () => {
-      if (localEnvironmentBearerToken.length > 0) {
-        return localEnvironmentBearerToken;
-      }
-      const bootstrap = primaryBootstrap();
-      if (!bootstrap?.httpBaseUrl || !bootstrap.bootstrapToken) {
-        return "";
-      }
-      return exchangeBearerCredential(bootstrap.httpBaseUrl, bootstrap.bootstrapToken);
-    },
+    getLocalEnvironmentBearerToken: readLocalEnvironmentBearerToken,
     getClientSettings: async (): Promise<ClientSettings | null> => readBrowserClientSettings(),
     setClientSettings: async (settings: ClientSettings): Promise<void> => {
       writeBrowserClientSettings(settings);
     },
-    discoverSshHosts: async () => [],
-    resolveSshHost: async (_alias: string): Promise<DesktopSshEnvironmentTarget> =>
-      unsupported("SSH host discovery"),
+    discoverSshHosts: async () =>
+      desktopSshApi.request<readonly DesktopDiscoveredSshHost[]>("/api/desktop/ssh/hosts"),
+    resolveSshHost: async (alias: string): Promise<DesktopSshEnvironmentTarget> =>
+      desktopSshApi.request("/api/desktop/ssh/hosts/resolve", {
+        method: "POST",
+        body: { alias },
+      }),
+    inspectSshHostTrust: async (
+      target: DesktopSshEnvironmentTarget,
+    ): Promise<DesktopSshHostKeyTrust> =>
+      desktopSshApi.request("/api/desktop/ssh/trust", {
+        method: "POST",
+        body: target,
+      }),
+    inspectSshEnvironmentPlan: async (
+      target: DesktopSshEnvironmentTarget,
+    ): Promise<DesktopSshEnvironmentPlan> =>
+      desktopSshApi.request("/api/desktop/ssh/plan", {
+        method: "POST",
+        body: target,
+      }),
+    trustSshHost: async (
+      target: DesktopSshEnvironmentTarget,
+      keyType: string,
+      fingerprint: string,
+    ): Promise<void> => {
+      await desktopSshApi.request("/api/desktop/ssh/trust/accept", {
+        method: "POST",
+        body: { target, keyType, fingerprint },
+      });
+    },
     ensureSshEnvironment: async (
-      _target: DesktopSshEnvironmentTarget,
-      _options?: { issuePairingToken?: boolean },
-    ): Promise<DesktopSshEnvironmentBootstrap> => unsupported("SSH environments"),
-    disconnectSshEnvironment: async (_target: DesktopSshEnvironmentTarget): Promise<void> => {
-      await unsupported("SSH environments");
+      target: DesktopSshEnvironmentTarget,
+      options?: { issuePairingToken?: boolean; operationId?: string; signal?: AbortSignal },
+    ): Promise<DesktopSshEnvironmentBootstrap> => {
+      const result = await desktopSshApi.request<
+        | DesktopSshEnvironmentBootstrap
+        | { readonly type: typeof DesktopSshPasswordPromptCancelledType; readonly message: string }
+      >("/api/desktop/ssh/ensure", {
+        method: "POST",
+        body: {
+          target,
+          options: options
+            ? { issuePairingToken: options.issuePairingToken, operationId: options.operationId }
+            : undefined,
+        },
+        ...(options?.signal ? { signal: options.signal } : {}),
+      });
+      if ("type" in result && result.type === DesktopSshPasswordPromptCancelledType) {
+        throw new SshPasswordPromptCancelledError(result.message);
+      }
+      return result as DesktopSshEnvironmentBootstrap;
+    },
+    getSshEnvironmentProgress: (
+      operationId: string,
+    ): Promise<DesktopSshEnvironmentProgress | null> =>
+      desktopSshApi.request("/api/desktop/ssh/progress", {
+        method: "POST",
+        body: { operationId },
+      }),
+    cancelSshEnvironment: async (operationId: string): Promise<void> => {
+      await desktopSshApi.request("/api/desktop/ssh/cancel", {
+        method: "POST",
+        body: { operationId },
+      });
+    },
+    disconnectSshEnvironment: async (target: DesktopSshEnvironmentTarget): Promise<void> => {
+      await desktopSshApi.request("/api/desktop/ssh/disconnect", {
+        method: "POST",
+        body: target,
+      });
     },
     fetchSshEnvironmentDescriptor: async (
-      _httpBaseUrl: string,
-    ): Promise<ExecutionEnvironmentDescriptor> => unsupported("SSH environments"),
+      httpBaseUrl: string,
+    ): Promise<ExecutionEnvironmentDescriptor> =>
+      desktopSshApi.request("/api/desktop/ssh/descriptor", {
+        method: "POST",
+        body: { httpBaseUrl },
+      }),
     bootstrapSshBearerSession: async (
-      _httpBaseUrl: string,
-      _credential: string,
-    ): Promise<AuthAccessTokenResult> => unsupported("SSH environments"),
+      httpBaseUrl: string,
+      credential: string,
+    ): Promise<AuthAccessTokenResult> =>
+      desktopSshApi.request("/api/desktop/ssh/bearer/bootstrap", {
+        method: "POST",
+        body: { httpBaseUrl, credential },
+      }),
     fetchSshSessionState: async (
-      _httpBaseUrl: string,
-      _bearerToken: string,
-    ): Promise<AuthSessionState> => unsupported("SSH environments"),
+      httpBaseUrl: string,
+      bearerToken: string,
+    ): Promise<AuthSessionState> =>
+      desktopSshApi.request("/api/desktop/ssh/bearer/session", {
+        method: "POST",
+        body: { httpBaseUrl, bearerToken },
+      }),
     issueSshWebSocketTicket: async (
-      _httpBaseUrl: string,
-      _bearerToken: string,
-    ): Promise<AuthWebSocketTicketResult> => unsupported("SSH environments"),
-    onSshPasswordPrompt: (_listener: (request: DesktopSshPasswordPromptRequest) => void) => () =>
-      undefined,
-    resolveSshPasswordPrompt: async (
-      _requestId: string,
-      _password: string | null,
-    ): Promise<void> => {
-      await unsupported("SSH password prompts");
+      httpBaseUrl: string,
+      bearerToken: string,
+    ): Promise<AuthWebSocketTicketResult> =>
+      desktopSshApi.request("/api/desktop/ssh/bearer/ws-ticket", {
+        method: "POST",
+        body: { httpBaseUrl, bearerToken },
+      }),
+    onSshPasswordPrompt: (listener: (request: DesktopSshPasswordPromptRequest) => void) => {
+      const seenRequestIds = new Set<string>();
+      let stopped = false;
+      const poll = async () => {
+        if (stopped) return;
+        try {
+          const pending = await desktopSshApi.request<readonly DesktopSshPasswordPromptRequest[]>(
+            "/api/desktop/ssh/password-prompts",
+          );
+          for (const request of pending) {
+            if (!seenRequestIds.has(request.requestId)) {
+              seenRequestIds.add(request.requestId);
+              listener(request);
+            }
+          }
+        } catch {
+          // Retry on the next interval; connection setup itself reports its own failure.
+        }
+      };
+      void poll();
+      const interval = window.setInterval(() => {
+        void poll();
+      }, 250);
+      return () => {
+        stopped = true;
+        window.clearInterval(interval);
+      };
+    },
+    resolveSshPasswordPrompt: async (requestId: string, password: string | null): Promise<void> => {
+      await desktopSshApi.request("/api/desktop/ssh/password-prompts/resolve", {
+        method: "POST",
+        body: { requestId, password },
+      });
     },
     getServerExposureState: async () => localOnlyExposureState(),
     setServerExposureMode: async (_mode) => unsupported("server exposure changes"),

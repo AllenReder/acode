@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { projectDeleteInputs, projectMenuItems, workspaceMenuItems } from "./AcodeSidebar";
+import {
+  isRemoteEnvironmentTarget,
+  projectDeleteInputs,
+  projectMenuItems,
+  workspaceMenuItems,
+} from "./AcodeSidebar";
 import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
+import type { ConnectionTarget } from "@t3tools/client-runtime/connection";
 
 const project = {
   id: "acode-project",
@@ -64,5 +70,32 @@ describe("ACode Sidebar menus", () => {
     expect(workspaceMenuItems({ canDeleteDirectory: false }).map((item) => item.id)).not.toContain(
       "delete-directory",
     );
+  });
+});
+
+describe("remote project icon classification", () => {
+  const target = (value: object) => value as ConnectionTarget;
+
+  it("treats SSH, bearer, and relay targets as remote", () => {
+    expect(
+      isRemoteEnvironmentTarget(
+        target({ _tag: "SshConnectionTarget", connectionId: "ssh:devbox" }),
+      ),
+    ).toBe(true);
+    expect(
+      isRemoteEnvironmentTarget(
+        target({ _tag: "BearerConnectionTarget", connectionId: "pairing:abc" }),
+      ),
+    ).toBe(true);
+    expect(isRemoteEnvironmentTarget(target({ _tag: "RelayConnectionTarget" }))).toBe(true);
+  });
+
+  it("keeps the primary and desktop-local backends local", () => {
+    expect(isRemoteEnvironmentTarget(target({ _tag: "PrimaryConnectionTarget" }))).toBe(false);
+    expect(
+      isRemoteEnvironmentTarget(
+        target({ _tag: "BearerConnectionTarget", connectionId: "local:wsl:Ubuntu" }),
+      ),
+    ).toBe(false);
   });
 });

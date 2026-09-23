@@ -7,6 +7,7 @@ import type {
   WorkspaceId,
 } from "@t3tools/contracts";
 import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
+import type { ConnectionTarget } from "@t3tools/client-runtime/connection";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -15,6 +16,7 @@ import { useAtomValue } from "@effect/atom-react";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
+  CloudIcon,
   FolderIcon,
   GitBranchIcon,
   PlusIcon,
@@ -43,6 +45,7 @@ import { nextWorkspaceTerminalId } from "./Sidebar.logic";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { SidebarContent, SidebarGroup } from "./ui/sidebar";
 import { sessionRouteForTarget } from "../workbench/deepLinks";
+import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { runtimeTerminalIdForTarget, terminalTargetForRuntime } from "../workbench/sessionTarget";
 import type { ViewTarget } from "../workbench/viewRegistry";
 import { useWorkbenchStore } from "../workbench/workbenchStore";
@@ -152,6 +155,15 @@ function rowKeydown(handler: (rect: DOMRect) => void) {
   };
 }
 
+/**
+ * Remote = any registered target that is neither this machine's primary
+ * environment nor a desktop-local secondary backend (WSL). Remote projects
+ * wear a cloud icon in the sidebar tree so they read as off-machine.
+ */
+export function isRemoteEnvironmentTarget(target: ConnectionTarget): boolean {
+  return target._tag !== "PrimaryConnectionTarget" && !isDesktopLocalConnectionTarget(target);
+}
+
 export function AcodeSidebar() {
   const navigate = useNavigate();
   const projects = useAcodeProjects();
@@ -161,6 +173,15 @@ export function AcodeSidebar() {
       new Set(
         environments
           .filter((environment) => environment.connection.phase === "connected")
+          .map((environment) => environment.environmentId),
+      ),
+    [environments],
+  );
+  const remoteEnvironmentIds = useMemo(
+    () =>
+      new Set(
+        environments
+          .filter((environment) => isRemoteEnvironmentTarget(environment.entry.target))
           .map((environment) => environment.environmentId),
       ),
     [environments],
@@ -532,7 +553,14 @@ export function AcodeSidebar() {
                   ) : (
                     <ChevronDownIcon className="size-3.5 shrink-0" />
                   )}
-                  <FolderIcon className="size-3.5 shrink-0 text-sidebar-muted-foreground" />
+                  {remoteEnvironmentIds.has(project.environmentId) ? (
+                    <CloudIcon
+                      aria-label="Remote project"
+                      className="size-3.5 shrink-0 text-sidebar-muted-foreground"
+                    />
+                  ) : (
+                    <FolderIcon className="size-3.5 shrink-0 text-sidebar-muted-foreground" />
+                  )}
                   <span className="min-w-0 flex-1 truncate">{project.title}</span>
                 </button>
                 {!projectCollapsed ? (

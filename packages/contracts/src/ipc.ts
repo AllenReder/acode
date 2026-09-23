@@ -492,6 +492,37 @@ export interface DesktopSshEnvironmentBootstrap {
   remoteServerKind?: "external" | "managed";
 }
 
+export type DesktopSshHostKeyTrustStatus = "trusted" | "new" | "changed";
+export interface DesktopSshHostKeyTrust {
+  readonly status: DesktopSshHostKeyTrustStatus;
+  readonly fingerprint: string | null;
+  readonly keyType: string | null;
+}
+
+export const DesktopSshHostKeyTrustStatusSchema = Schema.Literals(["trusted", "new", "changed"]);
+export const DesktopSshHostKeyTrustSchema = Schema.Struct({
+  status: DesktopSshHostKeyTrustStatusSchema,
+  fingerprint: Schema.NullOr(Schema.String),
+  keyType: Schema.NullOr(Schema.String),
+});
+
+export const DesktopSshHostKeyAcceptanceSchema = Schema.Struct({
+  target: DesktopSshEnvironmentTargetSchema,
+  keyType: Schema.String,
+  fingerprint: Schema.String,
+});
+
+export const DesktopSshEnvironmentPlanSchema = Schema.Struct({
+  version: Schema.String,
+  os: Schema.String,
+  arch: Schema.String,
+  nodeVersion: Schema.NullOr(Schema.String),
+  nodeSupported: Schema.Boolean,
+  gitAvailable: Schema.Boolean,
+  daemon: Schema.Literals(["reuse", "install"]),
+});
+export type DesktopSshEnvironmentPlan = typeof DesktopSshEnvironmentPlanSchema.Type;
+
 export const DesktopSshEnvironmentBootstrapSchema = Schema.Struct({
   target: DesktopSshEnvironmentTargetSchema,
   httpBaseUrl: Schema.String,
@@ -518,7 +549,25 @@ export const DesktopSshPasswordPromptCancelledResultSchema = Schema.Struct({
 
 export const DesktopSshEnvironmentEnsureOptionsSchema = Schema.Struct({
   issuePairingToken: Schema.optionalKey(Schema.Boolean),
+  operationId: Schema.optionalKey(Schema.String),
 });
+
+export const DesktopSshEnvironmentProgressSchema = Schema.Struct({
+  stage: Schema.Literals([
+    "connecting",
+    "checking",
+    "remote-download",
+    "local-download",
+    "uploading",
+    "installing",
+    "starting",
+    "pairing",
+  ]),
+  transferredBytes: Schema.NullOr(Schema.Number),
+  totalBytes: Schema.NullOr(Schema.Number),
+  detail: Schema.NullOr(Schema.String),
+});
+export type DesktopSshEnvironmentProgress = typeof DesktopSshEnvironmentProgressSchema.Type;
 
 export const DesktopSshEnvironmentEnsureInputSchema = Schema.Struct({
   target: DesktopSshEnvironmentTargetSchema,
@@ -1241,6 +1290,15 @@ export interface DesktopBridge {
   discoverSshHosts: () => Promise<readonly DesktopDiscoveredSshHost[]>;
   /** Resolves a suggested SSH alias before populating the connection form. */
   resolveSshHost: (alias: string) => Promise<DesktopSshEnvironmentTarget>;
+  inspectSshHostTrust?: (target: DesktopSshEnvironmentTarget) => Promise<DesktopSshHostKeyTrust>;
+  inspectSshEnvironmentPlan?: (
+    target: DesktopSshEnvironmentTarget,
+  ) => Promise<DesktopSshEnvironmentPlan>;
+  trustSshHost?: (
+    target: DesktopSshEnvironmentTarget,
+    keyType: string,
+    fingerprint: string,
+  ) => Promise<void>;
   requestSnapShotPermissions?: (includeAccessibility: boolean) => Promise<void>;
   getSnapShotState?: () => Promise<DesktopSnapShotState>;
   setupSnapShot?: (action: DesktopSnapShotSetupAction) => Promise<void>;
@@ -1261,8 +1319,12 @@ export interface DesktopBridge {
   acknowledgeSnapShot?: (id: string) => Promise<void>;
   ensureSshEnvironment: (
     target: DesktopSshEnvironmentTarget,
-    options?: { issuePairingToken?: boolean },
+    options?: { issuePairingToken?: boolean; operationId?: string; signal?: AbortSignal },
   ) => Promise<DesktopSshEnvironmentBootstrap>;
+  getSshEnvironmentProgress?: (
+    operationId: string,
+  ) => Promise<DesktopSshEnvironmentProgress | null>;
+  cancelSshEnvironment?: (operationId: string) => Promise<void>;
   disconnectSshEnvironment: (target: DesktopSshEnvironmentTarget) => Promise<void>;
   fetchSshEnvironmentDescriptor: (httpBaseUrl: string) => Promise<ExecutionEnvironmentDescriptor>;
   bootstrapSshBearerSession: (
@@ -1298,7 +1360,10 @@ export interface DesktopBridge {
   pickThemeFiles?: () => Promise<readonly PickedThemeFile[] | null>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
   pickFile?: (options?: {
-    readonly filters?: ReadonlyArray<{ readonly name: string; readonly extensions: ReadonlyArray<string> }>;
+    readonly filters?: ReadonlyArray<{
+      readonly name: string;
+      readonly extensions: ReadonlyArray<string>;
+    }>;
     readonly initialPath?: string;
   }) => Promise<string | null>;
   setWindowGlassEnabled?: (enabled: boolean) => Promise<void>;

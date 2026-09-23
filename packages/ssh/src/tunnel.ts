@@ -1,27 +1,39 @@
 import type {
   DesktopSshEnvironmentBootstrap,
   DesktopSshEnvironmentTarget,
+  DesktopSshEnvironmentPlan,
 } from "@t3tools/contracts";
 import {
   describeReadinessCause,
   waitForHttpReady as waitForHttpReadyShared,
 } from "@t3tools/shared/httpReadiness";
-import { cliReleaseDownloadBaseUrl } from "@t3tools/shared/cliRelease";
+import { parseChecksums } from "@t3tools/shared/cliRelease";
+import {
+  SERVER_RELEASE_CHECKSUMS_FILE,
+  serverReleaseArchiveName,
+  serverReleaseDownloadBaseUrl,
+} from "@t3tools/shared/serverRelease";
 import * as NetService from "@t3tools/shared/Net";
 import { extractJsonObject, fromLenientJson } from "@t3tools/shared/schemaJson";
 import { satisfiesSemverRange } from "@t3tools/shared/semver";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
-import { HttpClient } from "effect/unstable/http";
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import * as NodeCrypto from "node:crypto";
+import * as Option from "effect/Option";
 
 import {
   buildSshChildEnvironment,
@@ -30,6 +42,7 @@ import {
   isSshAuthFailure,
 } from "./auth.ts";
 import {
+  baseScpArgs,
   baseSshArgs,
   buildSshHostSpecEffect,
   collectProcessOutput,
@@ -40,6 +53,12 @@ import {
   runSshCommand,
   targetConnectionKey,
 } from "./command.ts";
+import { reportSshProgress, sshProgress, SshEnvironmentProgress } from "./progress.ts";
+
+const scpCommandForPlatform = (platform: NodeJS.Platform): string =>
+  platform === "win32" ? "scp.exe" : "scp";
+
+export const resolveScpCommand = Effect.map(HostProcessPlatform, scpCommandForPlatform);
 import {
   SshCommandError,
   SshHttpBridgeError,
@@ -68,6 +87,40 @@ const REMOTE_ARCHIVE_DOWNLOAD_SECONDS = 240;
 const REMOTE_ARCHIVE_LOCK_WAIT_SECONDS = 360;
 const REMOTE_ARCHIVE_LAUNCH_TIMEOUT_MS = 900_000;
 const REMOTE_REUSE_READY_TIMEOUT_MS = 2_000;
+interface LocalServerPackage {
+  readonly version: string;
+  readonly archiveName: string;
+  readonly archivePath: string;
+  readonly checksumsPath: string;
+  readonly releaseBaseUrl: string;
+}
+
+interface StagedRemoteServerPackage extends LocalServerPackage {
+  readonly remoteArchivePath: string;
+  readonly remoteChecksumsPath: string;
+  readonly stateKey: string;
+}
+
+export const resolveRemoteLocalArchivePaths = (staged: {
+  readonly stateKey: string;
+  readonly version: string;
+  readonly archiveName: string;
+}): { readonly archivePath: string; readonly checksumsPath: string } => ({
+  archivePath: `ssh-launch/${staged.stateKey}/packages/${staged.version}/${staged.archiveName}`,
+  checksumsPath: `ssh-launch/${staged.stateKey}/packages/${staged.version}/${SERVER_RELEASE_CHECKSUMS_FILE}`,
+});
+
+export function parseRemotePackageStageHome(stdout: string): string | null {
+  const prefix = "ACODE_STAGE_HOME=";
+  const line = stdout.split(/\r?\n/u).findLast((entry) => entry.startsWith(prefix));
+  const home = line?.slice(prefix.length);
+  return home !== undefined && home.startsWith("/") && !home.includes("\0") ? home : null;
+}
+
+export class SshLocalPackageError extends Data.TaggedError("SshLocalPackageError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface RemoteT3RunnerOptions {
   /**
@@ -83,6 +136,8 @@ export interface RemoteT3RunnerOptions {
    */
   readonly archiveVersion?: string | null;
   readonly releaseBaseUrl?: string | null;
+  readonly localArchivePath?: string | null;
+  readonly localChecksumsPath?: string | null;
 }
 
 export interface SshEnvironmentManagerOptions {
@@ -113,6 +168,9 @@ type SshEnvironmentEffectError =
   | SshCommandError
   | SshInvalidTargetError
   | SshLaunchError
+  | SshLocalPackageError
+  | PlatformError.PlatformError
+  | HttpClientError.HttpClientError
   | SshPairingError
   | SshReadinessError
   | SshPasswordPromptError
@@ -141,6 +199,363 @@ function sshRunnerLogFields(runner: RemoteT3RunnerOptions | undefined) {
   return { runner: "archive" };
 }
 
+const localServerPackageCacheDir = Effect.fn("ssh/tunnel.localServerPackageCacheDir")(function* (
+  version: string,
+) {
+  const path = yield* Path.Path;
+  const home = yield* Effect.sync(() => process.env.HOME ?? process.cwd());
+  return path.join(home, ".acode", "caches", "server-packages", version);
+});
+
+const ensureLocalServerPackage = Effect.fn("ssh/tunnel.ensureLocalServerPackage")(function* (
+  runner: RemoteT3RunnerOptions,
+) {
+  const version = runner.archiveVersion?.trim() || "";
+  if (version === "") {
+    return null;
+  }
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const httpClient = yield* HttpClient.HttpClient;
+  const archiveName = serverReleaseArchiveName(version);
+  const cacheDir = yield* localServerPackageCacheDir(version);
+  const archivePath = path.join(cacheDir, archiveName);
+  const checksumsPath = path.join(cacheDir, SERVER_RELEASE_CHECKSUMS_FILE);
+  const releaseBaseUrl = runner.releaseBaseUrl ?? undefined;
+
+  const verifyCachedPackage = Effect.gen(function* () {
+    const [archiveExists, checksumsExists] = yield* Effect.all([
+      fs.exists(archivePath),
+      fs.exists(checksumsPath),
+    ]);
+    if (!archiveExists || !checksumsExists) return false;
+    const [archiveBytes, checksumsText] = yield* Effect.all([
+      fs.readFile(archivePath),
+      fs.readFileString(checksumsPath),
+    ]);
+    const expected = parseChecksums(checksumsText).get(archiveName);
+    if (expected === undefined) return false;
+    const actual = NodeCrypto.createHash("sha256").update(archiveBytes).digest("hex");
+    return actual === expected;
+  });
+
+  if (yield* verifyCachedPackage) {
+    return {
+      version,
+      archiveName,
+      archivePath,
+      checksumsPath,
+      releaseBaseUrl: serverReleaseDownloadBaseUrl(version, releaseBaseUrl),
+    };
+  }
+
+  // A locally built package (scripts/build-server-package.ts output, or the
+  // equivalent) is the last-resort source when the GitHub prerelease is gone.
+  // It goes through the same SHA256SUMS verification as a downloaded one.
+  const localPackageDir = yield* Effect.sync(
+    () => process.env.ACODE_SERVER_PACKAGE_DIR?.trim() || null,
+  );
+  if (localPackageDir !== null) {
+    const builtArchivePath = path.join(localPackageDir, archiveName);
+    const builtChecksumsPath = path.join(localPackageDir, SERVER_RELEASE_CHECKSUMS_FILE);
+    const [builtArchiveExists, builtChecksumsExist] = yield* Effect.all([
+      fs.exists(builtArchivePath).pipe(Effect.orElseSucceed(() => false)),
+      fs.exists(builtChecksumsPath).pipe(Effect.orElseSucceed(() => false)),
+    ]);
+    if (builtArchiveExists && builtChecksumsExist) {
+      yield* fs.makeDirectory(cacheDir, { recursive: true });
+      yield* Effect.all([
+        fs.copyFile(builtArchivePath, archivePath),
+        fs.copyFile(builtChecksumsPath, checksumsPath),
+      ]);
+      if (yield* verifyCachedPackage) {
+        yield* Effect.logInfo("ssh.tunnel.localPackage.fromBuildArtifact", {
+          version,
+          archiveName,
+          sourceDir: localPackageDir,
+        });
+        return {
+          version,
+          archiveName,
+          archivePath,
+          checksumsPath,
+          releaseBaseUrl: serverReleaseDownloadBaseUrl(version, releaseBaseUrl),
+        };
+      }
+      return yield* new SshLocalPackageError({
+        message: `Local ACode server package ${archiveName} in ${localPackageDir} failed SHA256 verification.`,
+      });
+    }
+  }
+
+  yield* fs.makeDirectory(cacheDir, { recursive: true });
+  const download = Effect.fn("ssh/tunnel.downloadServerPackage")(function* (
+    fileName: string,
+    destination: string,
+  ) {
+    yield* reportSshProgress(sshProgress("local-download"));
+    const response = yield* httpClient
+      .get(`${serverReleaseDownloadBaseUrl(version, releaseBaseUrl)}/${fileName}`)
+      .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
+    const contentLength = Number(response.headers["content-length"]);
+    const encoded = response.headers["content-encoding"]?.trim().toLowerCase();
+    const totalBytes =
+      (!encoded || encoded === "identity") && Number.isFinite(contentLength) && contentLength > 0
+        ? contentLength
+        : null;
+    let transferredBytes = 0;
+    const chunks = yield* response.stream.pipe(
+      Stream.tap((chunk) => {
+        transferredBytes += chunk.byteLength;
+        return reportSshProgress(sshProgress("local-download", { transferredBytes, totalBytes }));
+      }),
+      Stream.runCollect,
+    );
+    const bytes = new Uint8Array(transferredBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    yield* fs.writeFile(destination, bytes);
+  });
+
+  yield* download(SERVER_RELEASE_CHECKSUMS_FILE, checksumsPath);
+  yield* download(archiveName, archivePath);
+  if (!(yield* verifyCachedPackage)) {
+    return yield* new SshLocalPackageError({
+      message: `Downloaded ACode server package ${archiveName} failed SHA256 verification.`,
+    });
+  }
+  return {
+    version,
+    archiveName,
+    archivePath,
+    checksumsPath,
+    releaseBaseUrl: serverReleaseDownloadBaseUrl(version, releaseBaseUrl),
+  };
+});
+
+const runScpUpload = Effect.fn("ssh/tunnel.runScpUpload")(function* (
+  target: DesktopSshEnvironmentTarget,
+  input: SshAuthOptions & {
+    readonly sourcePath: string;
+    readonly destinationPath: string;
+    readonly timeoutMs?: number;
+  },
+): Effect.fn.Return<
+  void,
+  SshCommandError | SshInvalidTargetError,
+  ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
+> {
+  const hostSpec = yield* buildSshHostSpecEffect(target);
+  const progressService = yield* Effect.serviceOption(SshEnvironmentProgress);
+  const progressDetail = "Remote download failed; using a local upload.";
+  const fs = yield* FileSystem.FileSystem;
+  const totalBytes = yield* fs.stat(input.sourcePath).pipe(
+    Effect.map((info) => Number(info.size)),
+    Effect.orElseSucceed(() => null),
+  );
+  yield* reportSshProgress(
+    sshProgress("uploading", { detail: progressDetail, transferredBytes: 0, totalBytes }),
+  );
+  const environment = yield* buildSshChildEnvironment({
+    ...(input.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
+    ...(input.authSecret === undefined ? {} : { authSecret: input.authSecret }),
+  }).pipe(
+    Effect.mapError(
+      (cause) =>
+        new SshCommandError({
+          command: ["scp"],
+          exitCode: null,
+          stderr: "",
+          message: "Failed to prepare SSH authentication helpers.",
+          cause,
+        }),
+    ),
+  );
+  const args = [
+    ...baseScpArgs(target, {
+      batchMode: input.batchMode ?? "no",
+    }),
+    input.sourcePath,
+    `${hostSpec}:${input.destinationPath}`,
+  ];
+  const command = yield* resolveScpCommand;
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const output = yield* Effect.scopedWith((scope) =>
+    Effect.gen(function* () {
+      const child = yield* spawner
+        .spawn(
+          ChildProcess.make(command, args, {
+            env: environment,
+            extendEnv: true,
+            stdin: { stream: Stream.empty, endOnDone: true },
+          }),
+        )
+        .pipe(
+          Effect.provideService(Scope.Scope, scope),
+          Effect.mapError(
+            (cause) =>
+              new SshCommandError({
+                command: [command, ...args],
+                exitCode: null,
+                stderr: "",
+                message:
+                  cause instanceof Error
+                    ? cause.message
+                    : `Failed to spawn SCP command for ${hostSpec}.`,
+                cause,
+              }),
+          ),
+        );
+      let transferredBytes = 0;
+      const sampleRemoteSize = Effect.gen(function* () {
+        while (true) {
+          const sample = yield* runSshCommand(target, {
+            remoteCommandArgs: ["sh", "-s"],
+            stdin: `if [ -f ${shellSingleQuote(input.destinationPath)} ]; then wc -c < ${shellSingleQuote(input.destinationPath)}; fi`,
+            timeoutMs: 5_000,
+            batchMode: input.authSecret === undefined ? "yes" : "no",
+            childEnvironment: environment,
+          }).pipe(
+            Effect.map((result) => Number(getLastNonEmptyOutputLine(result.stdout))),
+            Effect.catch(() => Effect.succeed(null)),
+          );
+          if (
+            sample !== null &&
+            Number.isFinite(sample) &&
+            sample > transferredBytes &&
+            (totalBytes === null || sample <= totalBytes)
+          ) {
+            transferredBytes = sample;
+            yield* reportSshProgress(
+              sshProgress("uploading", { detail: progressDetail, transferredBytes, totalBytes }),
+            );
+          }
+          yield* Effect.sleep(1_000);
+        }
+      });
+      if (Option.isSome(progressService)) yield* sampleRemoteSize.pipe(Effect.forkIn(scope));
+      return yield* Effect.all(
+        [
+          collectProcessOutput(child.stdout),
+          collectProcessOutput(child.stderr),
+          child.exitCode.pipe(Effect.map(Number)),
+        ],
+        { concurrency: "unbounded" },
+      ).pipe(
+        Effect.timeout(Duration.millis(input.timeoutMs ?? REMOTE_ARCHIVE_DOWNLOAD_SECONDS * 1000)),
+        Effect.mapError((cause) =>
+          cause instanceof SshCommandError
+            ? cause
+            : new SshCommandError({
+                command: [command, ...args],
+                exitCode: null,
+                stderr: "",
+                message:
+                  cause instanceof Error
+                    ? cause.message
+                    : `Failed to run SCP command for ${hostSpec}.`,
+                cause,
+              }),
+        ),
+      );
+    }),
+  );
+  if (output === undefined) {
+    return yield* new SshCommandError({
+      command: [command, ...args],
+      exitCode: null,
+      stderr: "",
+      message: `SCP upload timed out for ${hostSpec}.`,
+    });
+  }
+  const [stdout, stderr, exitCode] = output;
+  if (exitCode !== 0) {
+    return yield* new SshCommandError({
+      command: [command, ...args],
+      exitCode,
+      stdout,
+      stderr,
+      message: normalizeSshErrorMessage(stderr, `SCP upload failed for ${hostSpec}.`),
+    });
+  }
+  if (totalBytes !== null) {
+    yield* reportSshProgress(
+      sshProgress("uploading", {
+        detail: progressDetail,
+        transferredBytes: totalBytes,
+        totalBytes,
+      }),
+    );
+  }
+});
+
+const stageLocalServerPackageOnRemote = Effect.fn("ssh/tunnel.stageLocalServerPackageOnRemote")(
+  function* (
+    target: DesktopSshEnvironmentTarget,
+    authOptions: SshAuthOptions,
+    localPackage: LocalServerPackage,
+  ): Effect.fn.Return<
+    StagedRemoteServerPackage,
+    SshCommandError | SshInvalidTargetError,
+    ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
+  > {
+    const stateKey = remoteStateKey(target);
+    const remotePaths = resolveRemoteLocalArchivePaths({
+      stateKey,
+      version: localPackage.version,
+      archiveName: localPackage.archiveName,
+    });
+    const staging = yield* runSshCommand(target, {
+      remoteCommandArgs: ["sh", "-s"],
+      stdin: `set -eu\nACODE_HOME="\${ACODE_HOME:-\${HOME}/.acode}"\nmkdir -p "$ACODE_HOME/ssh-launch/${stateKey}/packages/${localPackage.version}"\nrm -f "$ACODE_HOME/${remotePaths.archivePath}" "$ACODE_HOME/${remotePaths.checksumsPath}"\nprintf 'ACODE_STAGE_HOME=%s\\n' "$(cd "$ACODE_HOME" && pwd -P)"\n`,
+      timeoutMs: 30_000,
+      ...spreadAuthOptions(authOptions),
+    });
+    const remoteHome = parseRemotePackageStageHome(staging.stdout);
+    if (remoteHome === null) {
+      return yield* new SshCommandError({
+        command: ["ssh"],
+        exitCode: null,
+        stderr: staging.stderr,
+        message: "SSH staging did not return the remote ACode home directory.",
+      });
+    }
+    const remoteRoot = remoteHome.replace(/\/+$/u, "");
+    const remoteArchivePath = `${remoteRoot}/${remotePaths.archivePath}`;
+    const remoteChecksumsPath = `${remoteRoot}/${remotePaths.checksumsPath}`;
+    yield* runScpUpload(target, {
+      sourcePath: localPackage.archivePath,
+      destinationPath: remoteArchivePath,
+      ...spreadAuthOptions(authOptions),
+    });
+    yield* runScpUpload(target, {
+      sourcePath: localPackage.checksumsPath,
+      destinationPath: remoteChecksumsPath,
+      timeoutMs: 30_000,
+      ...spreadAuthOptions(authOptions),
+    });
+    return {
+      ...localPackage,
+      remoteArchivePath,
+      remoteChecksumsPath,
+      stateKey,
+    };
+  },
+);
+
+// RunSshCommandOptions extends SshAuthOptions; spreading conditionally keeps
+// exactOptionalPropertyTypes happy without repeating the triplet everywhere.
+const spreadAuthOptions = (authOptions: SshAuthOptions) => ({
+  ...(authOptions.authSecret === undefined ? {} : { authSecret: authOptions.authSecret }),
+  ...(authOptions.batchMode === undefined ? {} : { batchMode: authOptions.batchMode }),
+  ...(authOptions.interactiveAuth === undefined
+    ? {}
+    : { interactiveAuth: authOptions.interactiveAuth }),
+});
+
 interface SshAuthOperationInput<T> {
   readonly key: string;
   readonly target: DesktopSshEnvironmentTarget;
@@ -155,6 +570,13 @@ interface SshAuthAttemptInput<T> extends SshAuthOperationInput<T> {
 }
 
 export interface SshEnvironmentManagerShape {
+  readonly inspectEnvironment: (
+    target: DesktopSshEnvironmentTarget,
+  ) => Effect.Effect<
+    DesktopSshEnvironmentPlan,
+    SshEnvironmentEffectError,
+    SshEnvironmentEffectContext
+  >;
   readonly ensureEnvironment: (
     target: DesktopSshEnvironmentTarget,
     options?: { readonly issuePairingToken?: boolean },
@@ -298,13 +720,16 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Probe the public environment descriptor, not "/": reuse must only adopt a
+// daemon that actually speaks the ACode discovery API, not any server that
+// happens to answer on the recorded port.
 function probe() {
   return new Promise((resolve) => {
     const request = http.get(
       {
         hostname: "127.0.0.1",
         port,
-        path: "/",
+        path: "/.well-known/t3/environment",
         timeout: probeTimeoutMs,
       },
       (response) => {
@@ -343,12 +768,12 @@ const REMOTE_NODE_ENV_SCRIPT = `prepend_path_if_dir() {
 }
 
 remote_node_satisfies_engine() {
-  T3_NODE_ENGINE_RANGE=@@T3_NODE_ENGINE_RANGE@@
-  if [ -z "$T3_NODE_ENGINE_RANGE" ]; then
+  ACODE_NODE_ENGINE_RANGE=@@ACODE_NODE_ENGINE_RANGE@@
+  if [ -z "$ACODE_NODE_ENGINE_RANGE" ]; then
     return 0
   fi
-  node - "$T3_NODE_ENGINE_RANGE" <<'NODE'
-@@T3_NODE_ENGINE_CHECK_SCRIPT@@
+  node - "$ACODE_NODE_ENGINE_RANGE" <<'NODE'
+@@ACODE_NODE_ENGINE_CHECK_SCRIPT@@
 NODE
 }
 
@@ -414,9 +839,9 @@ ensure_remote_node_path() {
   fi
 
   if ! command -v node >/dev/null 2>&1 && [ -d "$NVM_DIR/versions/node" ]; then
-    for T3_NODE_BIN in "$NVM_DIR"/versions/node/*/bin; do
-      if [ -x "$T3_NODE_BIN/node" ]; then
-        PATH="$T3_NODE_BIN:$PATH"
+    for ACODE_NODE_BIN in "$NVM_DIR"/versions/node/*/bin; do
+      if [ -x "$ACODE_NODE_BIN/node" ]; then
+        PATH="$ACODE_NODE_BIN:$PATH"
         export PATH
       fi
     done
@@ -428,130 +853,166 @@ ensure_remote_node_path() {
 
 const REMOTE_RUNNER_SCRIPT = `#!/bin/sh
 set -eu
-@@T3_NODE_ENV_SCRIPT@@
-T3_NODE_SCRIPT_PATH=@@T3_NODE_SCRIPT_PATH@@
-if [ -n "$T3_NODE_SCRIPT_PATH" ]; then
-  # Dev mode: a source checkout on the remote. This is the only path that
-  # needs Node, so Node discovery runs here and nowhere else.
+@@ACODE_NODE_ENV_SCRIPT@@
+ACODE_NODE_SCRIPT_PATH=@@ACODE_NODE_SCRIPT_PATH@@
+if [ -n "$ACODE_NODE_SCRIPT_PATH" ]; then
   ensure_remote_node_path || true
   if ! command -v node >/dev/null 2>&1; then
     printf 'Remote host is missing node on PATH. Install Node or configure a supported version manager for non-interactive shells.\\n' >&2
     exit 1
   fi
-  exec node "$T3_NODE_SCRIPT_PATH" "$@"
+  exec node "$ACODE_NODE_SCRIPT_PATH" "$@"
 fi
-T3_ARCHIVE_VERSION=@@T3_ARCHIVE_VERSION@@
-if [ -z "$T3_ARCHIVE_VERSION" ]; then
-  printf 'No t3 release version was provided for the remote runtime.\\n' >&2
+ACODE_ARCHIVE_VERSION=@@ACODE_ARCHIVE_VERSION@@
+if [ -z "$ACODE_ARCHIVE_VERSION" ]; then
+  printf 'No ACode server release version was provided for the remote runtime.\\n' >&2
   exit 1
 fi
-# Self-contained release archive: no Node, npm, or compiler on the remote.
-# Unpacked into the pinned-runtime layout so \`t3 service install\` reuses it.
-T3_RELEASE_BASE_URL=@@T3_RELEASE_BASE_URL@@
-T3_RUNTIME_DIR="$HOME/.t3/runtime/versions/$T3_ARCHIVE_VERSION"
-t3_runtime_ready() {
-  [ -x "$T3_RUNTIME_DIR/t3" ] && [ "$(cat "$T3_RUNTIME_DIR/.install-complete" 2>/dev/null)" = "$T3_ARCHIVE_VERSION" ]
+if [ "$(uname -s)" != "Linux" ]; then
+  printf 'ACode remote daemon install currently supports Linux x64 only; remote OS is %s.\\n' "$(uname -s)" >&2
+  exit 1
+fi
+case "$(uname -m)" in
+  x86_64 | amd64) ;;
+  *) printf 'ACode remote daemon install currently supports Linux x64 only; remote architecture is %s.\\n' "$(uname -m)" >&2; exit 1 ;;
+esac
+if ! ensure_remote_node_path; then
+  printf 'Remote host is missing Node.js 22 or newer on PATH. Install Node.js or configure a supported version manager for non-interactive shells.\\n' >&2
+  exit 1
+fi
+if ! command -v git >/dev/null 2>&1; then
+  printf 'Remote host is missing Git on PATH. Install Git before connecting ACode.\\n' >&2
+  exit 1
+fi
+ACODE_RELEASE_BASE_URL=@@ACODE_RELEASE_BASE_URL@@
+ACODE_LOCAL_ARCHIVE_PATH=@@ACODE_LOCAL_ARCHIVE_PATH@@
+ACODE_LOCAL_CHECKSUMS_PATH=@@ACODE_LOCAL_CHECKSUMS_PATH@@
+ACODE_HOME="\${ACODE_HOME:-\${HOME}/.acode}"
+ACODE_RUNTIME_DIR="$ACODE_HOME/runtime/versions/$ACODE_ARCHIVE_VERSION"
+acode_runtime_ready() {
+  [ -x "$ACODE_RUNTIME_DIR/bin/acode" ] && [ "$(cat "$ACODE_RUNTIME_DIR/.install-complete" 2>/dev/null)" = "$ACODE_ARCHIVE_VERSION" ]
 }
-if ! t3_runtime_ready; then
-  mkdir -p "$HOME/.t3/runtime/versions"
-  # Concurrent launches (two clients, a retry racing a slow first run) must
-  # not both install: mkdir is the atomic lock and the ready check repeats
-  # under it.
-  T3_LOCK="$HOME/.t3/runtime/versions/.$T3_ARCHIVE_VERSION.install.lock"
-  # mkdir is the only portable atomic exclusive create (mv would silently
-  # nest a candidate inside an existing lock). The owner publishes its pid
-  # right after, so a lock with a live owner is never reclaimed however
-  # slow its download is, and a lock whose owner is dead is reclaimed at
-  # once. A lock with no pid at all is a crash between mkdir and the pid
-  # write; it is reclaimed after a short grace so a live owner has time to
-  # publish.
-  T3_LOCK_WAITED=0
-  T3_LOCK_UNOWNED=0
-  while ! mkdir "$T3_LOCK" 2>/dev/null; do
-    T3_LOCK_OWNER="$(cat "$T3_LOCK/pid" 2>/dev/null || true)"
-    if [ -n "$T3_LOCK_OWNER" ]; then
-      T3_LOCK_UNOWNED=0
-      if ! kill -0 "$T3_LOCK_OWNER" 2>/dev/null; then
-        rm -rf "$T3_LOCK"
+if ! acode_runtime_ready; then
+  mkdir -p "$ACODE_HOME/runtime/versions"
+  ACODE_LOCK="$ACODE_HOME/runtime/versions/.$ACODE_ARCHIVE_VERSION.install.lock"
+  ACODE_LOCK_WAITED=0
+  ACODE_LOCK_UNOWNED=0
+  while ! mkdir "$ACODE_LOCK" 2>/dev/null; do
+    ACODE_LOCK_OWNER="$(cat "$ACODE_LOCK/pid" 2>/dev/null || true)"
+    if [ -n "$ACODE_LOCK_OWNER" ]; then
+      ACODE_LOCK_UNOWNED=0
+      if ! kill -0 "$ACODE_LOCK_OWNER" 2>/dev/null; then
+        rm -rf "$ACODE_LOCK"
         continue
       fi
     else
-      T3_LOCK_UNOWNED=$((T3_LOCK_UNOWNED + 1))
-      if [ "$T3_LOCK_UNOWNED" -ge 5 ]; then
-        rm -rf "$T3_LOCK"
+      ACODE_LOCK_UNOWNED=$((ACODE_LOCK_UNOWNED + 1))
+      if [ "$ACODE_LOCK_UNOWNED" -ge 5 ]; then
+        rm -rf "$ACODE_LOCK"
         continue
       fi
     fi
-    if [ "$T3_LOCK_WAITED" -ge @@T3_ARCHIVE_LOCK_WAIT_SECONDS@@ ]; then
-      printf 'Another t3 %s installation has held %s for too long.\\n' "$T3_ARCHIVE_VERSION" "$T3_LOCK" >&2
+    if [ "$ACODE_LOCK_WAITED" -ge @@ACODE_ARCHIVE_LOCK_WAIT_SECONDS@@ ]; then
+      printf 'Another ACode %s installation has held %s for too long.\\n' "$ACODE_ARCHIVE_VERSION" "$ACODE_LOCK" >&2
       exit 1
     fi
     sleep 1
-    T3_LOCK_WAITED=$((T3_LOCK_WAITED + 1))
+    ACODE_LOCK_WAITED=$((ACODE_LOCK_WAITED + 1))
   done
-  printf '%s\\n' "$$" > "$T3_LOCK/pid.tmp" && mv "$T3_LOCK/pid.tmp" "$T3_LOCK/pid"
-  trap 'rm -rf "$T3_LOCK"' EXIT
+  printf '%s\\n' "$$" > "$ACODE_LOCK/pid.tmp" && mv "$ACODE_LOCK/pid.tmp" "$ACODE_LOCK/pid"
+  trap 'rm -rf "$ACODE_LOCK"' EXIT
 fi
-if ! t3_runtime_ready; then
-  case "$(uname -s)" in
-    Darwin) T3_PLATFORM="darwin" ;;
-    Linux) T3_PLATFORM="linux" ;;
-    *) printf 'Remote host %s has no t3 release archive.\\n' "$(uname -s)" >&2; exit 1 ;;
-  esac
-  case "$(uname -m)" in
-    arm64 | aarch64) T3_ARCH="arm64" ;;
-    x86_64 | amd64) T3_ARCH="x64" ;;
-    *) printf 'Remote host %s has no t3 release archive.\\n' "$(uname -m)" >&2; exit 1 ;;
-  esac
-  T3_ARCHIVE="t3-$T3_ARCHIVE_VERSION-$T3_PLATFORM-$T3_ARCH.tar.gz"
-  T3_STAGING="$(mktemp -d "$HOME/.t3/runtime/versions/.staging-XXXXXX")"
-  trap 'rm -rf "$T3_STAGING" "$T3_LOCK"' EXIT
-  t3_fetch() {
-    if command -v curl >/dev/null 2>&1; then curl -fsSL --connect-timeout 30 --max-time "$3" "$1" -o "$2"
-    elif command -v wget >/dev/null 2>&1; then wget -q --timeout=30 --tries=1 "$1" -O "$2"
-    else printf 'Remote host needs curl or wget to download %s.\\n' "$T3_ARCHIVE" >&2; exit 1
-    fi
-  }
-  t3_fetch "$T3_RELEASE_BASE_URL/v$T3_ARCHIVE_VERSION/SHA256SUMS" "$T3_STAGING/SHA256SUMS" @@T3_ARCHIVE_CHECKSUMS_SECONDS@@
-  t3_fetch "$T3_RELEASE_BASE_URL/v$T3_ARCHIVE_VERSION/$T3_ARCHIVE" "$T3_STAGING/$T3_ARCHIVE" @@T3_ARCHIVE_DOWNLOAD_SECONDS@@
-  T3_EXPECTED="$(grep " \\*\\{0,1\\}$T3_ARCHIVE$" "$T3_STAGING/SHA256SUMS" | cut -d' ' -f1)"
-  if command -v sha256sum >/dev/null 2>&1; then
-    T3_ACTUAL="$(sha256sum "$T3_STAGING/$T3_ARCHIVE" | cut -d' ' -f1)"
+if ! acode_runtime_ready; then
+  ACODE_ARCHIVE="acode-server-$ACODE_ARCHIVE_VERSION-linux-x64.tar.gz"
+  ACODE_STAGING="$(mktemp -d "$ACODE_HOME/runtime/versions/.staging-XXXXXX")"
+  trap 'rm -rf "$ACODE_STAGING" "$ACODE_LOCK"' EXIT
+  if [ -n "$ACODE_LOCAL_ARCHIVE_PATH" ] && [ -n "$ACODE_LOCAL_CHECKSUMS_PATH" ]; then
+ACODE_HOME_FALLBACK="\${ACODE_HOME:-\${HOME}/.acode}"
+    cp "$ACODE_HOME_FALLBACK/$ACODE_LOCAL_ARCHIVE_PATH" "$ACODE_STAGING/$ACODE_ARCHIVE"
+    cp "$ACODE_HOME_FALLBACK/$ACODE_LOCAL_CHECKSUMS_PATH" "$ACODE_STAGING/SHA256SUMS"
   else
-    T3_ACTUAL="$(shasum -a 256 "$T3_STAGING/$T3_ARCHIVE" | cut -d' ' -f1)"
+    acode_fetch() {
+      ACODE_PROGRESS_FLAG="$ACODE_STAGING/.progress-active"
+      if [ "$2" = "$ACODE_STAGING/$ACODE_ARCHIVE" ]; then
+        : > "$ACODE_PROGRESS_FLAG"
+        (
+          while [ -f "$ACODE_PROGRESS_FLAG" ]; do
+            if [ -f "$2" ]; then
+              ACODE_PROGRESS_TOTAL=0
+              if [ -f "$ACODE_STAGING/.download-headers" ]; then
+                ACODE_PROGRESS_TOTAL="$(awk '/^HTTP\\// { size=0 } tolower($1) == "content-length:" { gsub("\\r", "", $2); size=$2 } END { print size+0 }' "$ACODE_STAGING/.download-headers")"
+              fi
+              printf 'ACODE_PROGRESS download %s %s\\n' "$(wc -c < "$2" | tr -d ' ')" "$ACODE_PROGRESS_TOTAL" >&2
+            fi
+            sleep 1
+          done
+        ) &
+        ACODE_PROGRESS_PID=$!
+      fi
+      if command -v curl >/dev/null 2>&1; then
+        curl -fsSL --connect-timeout 30 --max-time "$3" "$1" -o "$2" -D "$ACODE_STAGING/.download-headers" && ACODE_FETCH_OK=1 || ACODE_FETCH_OK=0
+      elif command -v wget >/dev/null 2>&1; then
+        wget -q --timeout=30 --tries=1 "$1" -O "$2" && ACODE_FETCH_OK=1 || ACODE_FETCH_OK=0
+      else
+        printf 'Remote host needs curl or wget to download %s.\\n' "$ACODE_ARCHIVE" >&2
+        ACODE_FETCH_OK=0
+      fi
+      if [ -n "\${ACODE_PROGRESS_PID:-}" ]; then
+        rm -f "$ACODE_PROGRESS_FLAG"
+        kill "$ACODE_PROGRESS_PID" 2>/dev/null || true
+        wait "$ACODE_PROGRESS_PID" 2>/dev/null || true
+        ACODE_PROGRESS_TOTAL=0
+        if [ -f "$ACODE_STAGING/.download-headers" ]; then
+          ACODE_PROGRESS_TOTAL="$(awk '/^HTTP\\// { size=0 } tolower($1) == "content-length:" { gsub("\\r", "", $2); size=$2 } END { print size+0 }' "$ACODE_STAGING/.download-headers")"
+        fi
+        printf 'ACODE_PROGRESS download %s %s\\n' "$(wc -c < "$2" 2>/dev/null | tr -d ' ')" "$ACODE_PROGRESS_TOTAL" >&2
+        unset ACODE_PROGRESS_PID
+      fi
+      rm -f "$ACODE_STAGING/.download-headers"
+      [ "$ACODE_FETCH_OK" -eq 1 ]
+    }
+    acode_fetch "$ACODE_RELEASE_BASE_URL/v$ACODE_ARCHIVE_VERSION/SHA256SUMS" "$ACODE_STAGING/SHA256SUMS" @@ACODE_ARCHIVE_CHECKSUMS_SECONDS@@
+    acode_fetch "$ACODE_RELEASE_BASE_URL/v$ACODE_ARCHIVE_VERSION/$ACODE_ARCHIVE" "$ACODE_STAGING/$ACODE_ARCHIVE" @@ACODE_ARCHIVE_DOWNLOAD_SECONDS@@
   fi
-  if [ -z "$T3_EXPECTED" ] || [ "$T3_ACTUAL" != "$T3_EXPECTED" ]; then
-    printf 'Checksum mismatch for %s.\\n' "$T3_ARCHIVE" >&2; exit 1
+  printf 'ACODE_PROGRESS stage installing\\n' >&2
+  ACODE_EXPECTED="$(grep " \\*\\{0,1\\}$ACODE_ARCHIVE$" "$ACODE_STAGING/SHA256SUMS" | cut -d' ' -f1)"
+  if command -v sha256sum >/dev/null 2>&1; then
+    ACODE_ACTUAL="$(sha256sum "$ACODE_STAGING/$ACODE_ARCHIVE" | cut -d' ' -f1)"
+  else
+    ACODE_ACTUAL="$(shasum -a 256 "$ACODE_STAGING/$ACODE_ARCHIVE" | cut -d' ' -f1)"
   fi
-  tar -xzf "$T3_STAGING/$T3_ARCHIVE" -C "$T3_STAGING" --strip-components=1
-  rm -f "$T3_STAGING/$T3_ARCHIVE" "$T3_STAGING/SHA256SUMS"
-  # Prove the binary runs here (libc, arch) before marking it ready, or every
-  # later launch would exec a broken install instead of retrying.
-  if ! "$T3_STAGING/t3" --version >/dev/null 2>&1; then
-    printf 'The t3 %s executable does not run on this host.\\n' "$T3_ARCHIVE_VERSION" >&2; exit 1
+  if [ -z "$ACODE_EXPECTED" ] || [ "$ACODE_ACTUAL" != "$ACODE_EXPECTED" ]; then
+    printf 'Checksum mismatch for %s.\\n' "$ACODE_ARCHIVE" >&2; exit 1
   fi
-  printf '%s\\n' "$T3_ARCHIVE_VERSION" > "$T3_STAGING/.install-complete"
-  rm -rf "$T3_RUNTIME_DIR"
-  mv "$T3_STAGING" "$T3_RUNTIME_DIR"
+  tar -xzf "$ACODE_STAGING/$ACODE_ARCHIVE" -C "$ACODE_STAGING" --strip-components=1
+  rm -f "$ACODE_STAGING/$ACODE_ARCHIVE" "$ACODE_STAGING/SHA256SUMS"
+  if ! "$ACODE_STAGING/bin/acode" --version >/dev/null 2>&1; then
+    printf 'The ACode %s executable does not run on this host.\\n' "$ACODE_ARCHIVE_VERSION" >&2; exit 1
+  fi
+  printf '%s\\n' "$ACODE_ARCHIVE_VERSION" > "$ACODE_STAGING/.install-complete"
+  rm -rf "$ACODE_RUNTIME_DIR"
+  mv "$ACODE_STAGING" "$ACODE_RUNTIME_DIR"
 fi
-if [ -n "\${T3_LOCK:-}" ]; then
-  rm -rf "$T3_LOCK"
+if [ -n "\${ACODE_LOCK:-}" ]; then
+  rm -rf "$ACODE_LOCK"
   trap - EXIT
 fi
-exec "$T3_RUNTIME_DIR/t3" "$@"
+printf 'ACODE_PROGRESS stage starting\\n' >&2
+exec "$ACODE_RUNTIME_DIR/bin/acode" "$@"
 `;
 
 const REMOTE_LAUNCH_SCRIPT = `set -eu
-@@T3_NODE_ENV_SCRIPT@@
+@@ACODE_NODE_ENV_SCRIPT@@
 STATE_KEY="$1"
-STATE_DIR="$HOME/.t3/ssh-launch/$STATE_KEY"
-DEFAULT_SERVER_HOME="$HOME/.t3"
+ACODE_HOME="\${ACODE_HOME:-\${HOME}/.acode}"
+STATE_DIR="$ACODE_HOME/ssh-launch/$STATE_KEY"
+DEFAULT_SERVER_HOME="$ACODE_HOME"
 DEFAULT_RUNTIME_FILE="$DEFAULT_SERVER_HOME/userdata/server-runtime.json"
 PORT_FILE="$STATE_DIR/port"
 PID_FILE="$STATE_DIR/pid"
 MANAGED_FILE="$STATE_DIR/managed"
 LOG_FILE="$STATE_DIR/server.log"
-RUNNER_FILE="$STATE_DIR/run-t3.sh"
+RUNNER_FILE="$STATE_DIR/run-acode.sh"
 RUNNER_NEXT="$STATE_DIR/run-t3.next.$$"
 mkdir -p "$STATE_DIR"
 cleanup_runner_next() {
@@ -559,40 +1020,33 @@ cleanup_runner_next() {
 }
 trap cleanup_runner_next EXIT
 cat >"$RUNNER_NEXT" <<'SH'
-@@T3_RUNNER_SCRIPT@@
+@@ACODE_RUNNER_SCRIPT@@
 SH
-RUNNER_CHANGED=0
-if [ ! -f "$RUNNER_FILE" ] || ! cmp -s "$RUNNER_NEXT" "$RUNNER_FILE"; then
-  RUNNER_CHANGED=1
-fi
 mv "$RUNNER_NEXT" "$RUNNER_FILE"
 chmod 700 "$RUNNER_FILE"
-T3_ARCHIVE_MODE=@@T3_ARCHIVE_MODE@@
-if [ "$T3_ARCHIVE_MODE" = "1" ]; then
-  # The archive ships the helpers below inside the executable; the remote
-  # needs no Node at all. Resolving the runner once here also downloads the
-  # archive before the port and readiness probes rely on it.
+ACODE_ARCHIVE_MODE=@@ACODE_ARCHIVE_MODE@@
+if [ "$ACODE_ARCHIVE_MODE" = "1" ]; then
   "$RUNNER_FILE" --version >/dev/null
 elif ! ensure_remote_node_path; then
   printf 'Remote host is missing node on PATH. Install Node or configure a supported version manager for non-interactive shells.\\n' >&2
   exit 1
 fi
 pick_port() {
-  if [ "$T3_ARCHIVE_MODE" = "1" ]; then
-    "$RUNNER_FILE" __ssh-helper pick-port "$PORT_FILE" "@@T3_DEFAULT_REMOTE_PORT@@" "@@T3_REMOTE_PORT_SCAN_WINDOW@@"
+  if [ "$ACODE_ARCHIVE_MODE" = "1" ]; then
+    "$RUNNER_FILE" __ssh-helper pick-port "$PORT_FILE" "@@ACODE_DEFAULT_REMOTE_PORT@@" "@@ACODE_REMOTE_PORT_SCAN_WINDOW@@"
     return
   fi
-  node - "$PORT_FILE" "@@T3_DEFAULT_REMOTE_PORT@@" "@@T3_REMOTE_PORT_SCAN_WINDOW@@" <<'NODE'
-@@T3_PICK_PORT_SCRIPT@@
+  node - "$PORT_FILE" "@@ACODE_DEFAULT_REMOTE_PORT@@" "@@ACODE_REMOTE_PORT_SCAN_WINDOW@@" <<'NODE'
+@@ACODE_PICK_PORT_SCRIPT@@
 NODE
 }
 wait_ready() {
-  if [ "$T3_ARCHIVE_MODE" = "1" ]; then
-    "$RUNNER_FILE" __ssh-helper wait-ready "$REMOTE_PORT" "$1" "@@T3_READY_PROBE_TIMEOUT_MS@@"
+  if [ "$ACODE_ARCHIVE_MODE" = "1" ]; then
+    "$RUNNER_FILE" __ssh-helper wait-ready "$REMOTE_PORT" "$1" "@@ACODE_READY_PROBE_TIMEOUT_MS@@"
     return
   fi
-  node - "$REMOTE_PORT" "$1" "@@T3_READY_PROBE_TIMEOUT_MS@@" <<'NODE'
-@@T3_WAIT_READY_SCRIPT@@
+  node - "$REMOTE_PORT" "$1" "@@ACODE_READY_PROBE_TIMEOUT_MS@@" <<'NODE'
+@@ACODE_WAIT_READY_SCRIPT@@
 NODE
 }
 wait_for_pid_exit() {
@@ -604,7 +1058,7 @@ wait_for_pid_exit() {
   done
 }
 resolve_default_runtime_port() {
-  if [ "$T3_ARCHIVE_MODE" = "1" ]; then
+  if [ "$ACODE_ARCHIVE_MODE" = "1" ]; then
     "$RUNNER_FILE" __ssh-helper runtime-port "$DEFAULT_RUNTIME_FILE"
     return
   fi
@@ -633,21 +1087,21 @@ REMOTE_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
 REMOTE_PORT="$(cat "$PORT_FILE" 2>/dev/null || true)"
 REMOTE_MANAGED="$(cat "$MANAGED_FILE" 2>/dev/null || true)"
 DEFAULT_RUNTIME_INFO="$(resolve_default_runtime_port 2>/dev/null || true)"
-DEFAULT_RUNTIME_PID=""
 DEFAULT_REMOTE_PORT=""
 if [ -n "$DEFAULT_RUNTIME_INFO" ]; then
-  DEFAULT_RUNTIME_PID="\${DEFAULT_RUNTIME_INFO%% *}"
   DEFAULT_REMOTE_PORT="\${DEFAULT_RUNTIME_INFO#* }"
 fi
 if [ -n "$DEFAULT_REMOTE_PORT" ]; then
-  REMOTE_PORT="$DEFAULT_REMOTE_PORT"
-  if wait_ready "@@T3_REUSE_READY_TIMEOUT_MS@@"; then
-    if [ "$REMOTE_MANAGED" = "managed" ]; then
-      PID_TO_STOP="\${REMOTE_PID:-$DEFAULT_RUNTIME_PID}"
-      if [ -n "$PID_TO_STOP" ] && kill -0 "$PID_TO_STOP" 2>/dev/null; then
-        kill "$PID_TO_STOP" 2>/dev/null || true
-        wait_for_pid_exit "$PID_TO_STOP"
-      fi
+  MANAGED_ALIVE=0
+  if [ "$REMOTE_MANAGED" = "managed" ] && [ -n "$REMOTE_PID" ] && kill -0 "$REMOTE_PID" 2>/dev/null; then
+    MANAGED_ALIVE=1
+  fi
+  # A live ACode-managed daemon wins over the default runtime record: adopting
+  # the external daemon would mean stopping ours, and ACode never silently
+  # stops a daemon that may own active Sessions.
+  if [ "$MANAGED_ALIVE" != "1" ]; then
+    REMOTE_PORT="$DEFAULT_REMOTE_PORT"
+    if wait_ready "@@ACODE_REUSE_READY_TIMEOUT_MS@@"; then
       REMOTE_PID=""
       REMOTE_PORT="$DEFAULT_REMOTE_PORT"
       REMOTE_MANAGED="external"
@@ -655,31 +1109,23 @@ if [ -n "$DEFAULT_REMOTE_PORT" ]; then
       printf '%s\\n' "$REMOTE_PORT" >"$PORT_FILE"
       printf 'external\\n' >"$MANAGED_FILE"
     else
-      printf '%s\\n' "$REMOTE_PORT" >"$PORT_FILE"
-      printf 'external\\n' >"$MANAGED_FILE"
-      REMOTE_PID=""
-      REMOTE_MANAGED="external"
+      REMOTE_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
+      REMOTE_PORT="$(cat "$PORT_FILE" 2>/dev/null || true)"
+      REMOTE_MANAGED="$(cat "$MANAGED_FILE" 2>/dev/null || true)"
     fi
-  else
-    REMOTE_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
-    REMOTE_PORT="$(cat "$PORT_FILE" 2>/dev/null || true)"
-    REMOTE_MANAGED="$(cat "$MANAGED_FILE" 2>/dev/null || true)"
   fi
 fi
 if [ "$REMOTE_MANAGED" = "external" ]; then
-  if [ -z "$REMOTE_PORT" ] || ! wait_ready "@@T3_REUSE_READY_TIMEOUT_MS@@"; then
+  if [ -z "$REMOTE_PORT" ] || ! wait_ready "@@ACODE_REUSE_READY_TIMEOUT_MS@@"; then
     REMOTE_PID=""
     REMOTE_PORT=""
     REMOTE_MANAGED=""
   fi
 elif [ -n "$REMOTE_PID" ] && [ -n "$REMOTE_PORT" ] && kill -0 "$REMOTE_PID" 2>/dev/null; then
-  if [ "$RUNNER_CHANGED" -eq 1 ]; then
-    kill "$REMOTE_PID" 2>/dev/null || true
-    wait_for_pid_exit "$REMOTE_PID"
-    REMOTE_PID=""
-    REMOTE_PORT=""
-    REMOTE_MANAGED=""
-  elif ! wait_ready "@@T3_REUSE_READY_TIMEOUT_MS@@"; then
+  # A live managed daemon is reused even when the runner script changed; the
+  # updated runner takes effect on the daemon's next natural start. Only an
+  # unhealthy daemon is restarted here.
+  if ! wait_ready "@@ACODE_REUSE_READY_TIMEOUT_MS@@"; then
     kill "$REMOTE_PID" 2>/dev/null || true
     wait_for_pid_exit "$REMOTE_PID"
     REMOTE_PID=""
@@ -694,20 +1140,20 @@ fi
 if [ -z "$REMOTE_PORT" ]; then
   REMOTE_PORT="$(pick_port)" || true
   if [ -z "$REMOTE_PORT" ]; then
-    if [ "$T3_ARCHIVE_MODE" = "1" ]; then
+    if [ "$ACODE_ARCHIVE_MODE" = "1" ]; then
       printf 'Failed to find an available port on the remote host.\\n' >&2
     else
       printf 'Failed to find an available port on the remote host. Ensure node is available on PATH.\\n' >&2
     fi
     exit 1
   fi
-  nohup env T3CODE_NO_BROWSER=1 "$RUNNER_FILE" serve --host 127.0.0.1 --port "$REMOTE_PORT" --base-dir "$DEFAULT_SERVER_HOME" >>"$LOG_FILE" 2>&1 < /dev/null &
+  nohup env T3CODE_NO_BROWSER=1 ACODE_HOME="$ACODE_HOME" "$RUNNER_FILE" serve --host 127.0.0.1 --port "$REMOTE_PORT" --base-dir "$DEFAULT_SERVER_HOME" >>"$LOG_FILE" 2>&1 < /dev/null &
   REMOTE_PID="$!"
   printf '%s\\n' "$REMOTE_PID" >"$PID_FILE"
   printf '%s\\n' "$REMOTE_PORT" >"$PORT_FILE"
   printf 'managed\\n' >"$MANAGED_FILE"
-  if ! wait_ready "@@T3_READY_TIMEOUT_MS@@"; then
-    printf 'Remote T3 server did not become ready on 127.0.0.1:%s.\\n' "$REMOTE_PORT" >&2
+  if ! wait_ready "@@ACODE_READY_TIMEOUT_MS@@"; then
+    printf 'Remote ACode daemon did not become ready on 127.0.0.1:%s.\\n' "$REMOTE_PORT" >&2
     if [ -s "$LOG_FILE" ]; then
       tail -n 80 "$LOG_FILE" >&2 2>/dev/null || true
     else
@@ -722,44 +1168,80 @@ fi
 printf '{"remotePort":%s,"serverKind":"%s"}\\n' "$REMOTE_PORT" "\${REMOTE_MANAGED:-managed}"
 `;
 
+const REMOTE_INSPECT_SCRIPT = `set -eu
+STATE_KEY="$1"
+ACODE_HOME="$(printenv ACODE_HOME || true)"
+if [ -z "$ACODE_HOME" ]; then ACODE_HOME="$HOME/.acode"; fi
+OS="$(uname -s 2>/dev/null || true)"
+ARCH="$(uname -m 2>/dev/null || true)"
+ensure_remote_node_path || true
+NODE_VERSION="$(node -v 2>/dev/null || true)"
+if command -v git >/dev/null 2>&1; then GIT_AVAILABLE=yes; else GIT_AVAILABLE=no; fi
+DAEMON=install
+PORT="$(cat "$ACODE_HOME/ssh-launch/$STATE_KEY/port" 2>/dev/null || true)"
+if command -v node >/dev/null 2>&1; then
+  DEFAULT_PORT="$(node - "$ACODE_HOME/userdata/server-runtime.json" <<'NODE' 2>/dev/null || true
+const fs = require("node:fs");
+try {
+  const runtime = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+  const origin = new URL(runtime.origin);
+  if (origin.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(origin.hostname)) process.exit(1);
+  process.kill(Number(runtime.pid), 0);
+  process.stdout.write(String(runtime.port));
+} catch { process.exit(1); }
+NODE
+)"
+  for CANDIDATE_PORT in "$PORT" "$DEFAULT_PORT"; do
+    if [ -n "$CANDIDATE_PORT" ] && node -e 'const port = Number(process.argv[1]); if (!Number.isInteger(port) || port < 1 || port > 65535) process.exit(1); fetch("http://127.0.0.1:" + port + "/.well-known/t3/environment", { signal: AbortSignal.timeout(1500) }).then(async response => { const body = await response.json(); process.exit(response.ok && typeof body.environmentId === "string" ? 0 : 1) }).catch(() => process.exit(1))' "$CANDIDATE_PORT" >/dev/null 2>&1; then
+      DAEMON=reuse
+      break
+    fi
+  done
+fi
+printf 'ACODE_PREFLIGHT\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "$OS" "$ARCH" "$NODE_VERSION" "$GIT_AVAILABLE" "$DAEMON"
+`;
+
+export function parseSshEnvironmentInspection(
+  stdout: string,
+  runner?: RemoteT3RunnerOptions,
+): DesktopSshEnvironmentPlan | null {
+  const line = stdout.split(/\r?\n/u).findLast((entry) => entry.startsWith("ACODE_PREFLIGHT\t"));
+  const fields = line?.split("\t");
+  if (fields?.length !== 6) return null;
+  const [, os, arch, rawNodeVersion, gitAvailable, daemon] = fields;
+  if (gitAvailable !== "yes" && gitAvailable !== "no") return null;
+  if (daemon !== "reuse" && daemon !== "install") return null;
+  const nodeVersion = rawNodeVersion || null;
+  return {
+    version: runner?.archiveVersion ?? "",
+    os: os ?? "",
+    arch: arch ?? "",
+    nodeVersion,
+    nodeSupported:
+      nodeVersion !== null &&
+      satisfiesSemverRange(nodeVersion, runner?.nodeEngineRange ?? ">=22.16"),
+    gitAvailable: gitAvailable === "yes",
+    daemon,
+  };
+}
+
 const REMOTE_PAIRING_SCRIPT = `set -eu
-STATE_DIR="$HOME/.t3/ssh-launch/@@T3_STATE_KEY@@"
-DEFAULT_SERVER_HOME="$HOME/.t3"
-RUNNER_FILE="$STATE_DIR/run-t3.sh"
+ACODE_HOME="\${ACODE_HOME:-\${HOME}/.acode}"
+STATE_DIR="$ACODE_HOME/ssh-launch/@@T3_STATE_KEY@@"
+DEFAULT_SERVER_HOME="$ACODE_HOME"
+RUNNER_FILE="$STATE_DIR/run-acode.sh"
 mkdir -p "$STATE_DIR"
 cat >"$RUNNER_FILE" <<'SH'
-@@T3_RUNNER_SCRIPT@@
+@@ACODE_RUNNER_SCRIPT@@
 SH
 chmod 700 "$RUNNER_FILE"
 PAIRING_BASE_DIR="$DEFAULT_SERVER_HOME"
-"$RUNNER_FILE" auth pairing create --base-dir "$PAIRING_BASE_DIR" --json
-`;
-
-const REMOTE_STOP_SCRIPT = `set -eu
-STATE_DIR="$HOME/.t3/ssh-launch/@@T3_STATE_KEY@@"
-PID_FILE="$STATE_DIR/pid"
-PORT_FILE="$STATE_DIR/port"
-MANAGED_FILE="$STATE_DIR/managed"
-REMOTE_MANAGED="$(cat "$MANAGED_FILE" 2>/dev/null || true)"
-REMOTE_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
-if [ "$REMOTE_MANAGED" != "external" ] && [ -n "$REMOTE_PID" ] && kill -0 "$REMOTE_PID" 2>/dev/null; then
-  kill "$REMOTE_PID" 2>/dev/null || true
-  WAIT_COUNT=0
-  while kill -0 "$REMOTE_PID" 2>/dev/null && [ "$WAIT_COUNT" -lt 20 ]; do
-    WAIT_COUNT=$((WAIT_COUNT + 1))
-    sleep 0.1
-  done
-  if kill -0 "$REMOTE_PID" 2>/dev/null; then
-    printf 'Remote T3 server with PID %s did not stop within 2 seconds. Its ownership files were kept.\\n' "$REMOTE_PID" >&2
-    exit 1
-  fi
-fi
-rm -f "$PID_FILE" "$PORT_FILE" "$MANAGED_FILE"
-printf '{"stopped":true}\\n'
+ACODE_HOME="$ACODE_HOME" "$RUNNER_FILE" auth pairing create --base-dir "$PAIRING_BASE_DIR" --json
 `;
 
 const REMOTE_LOG_TAIL_SCRIPT = `set -eu
-STATE_DIR="$HOME/.t3/ssh-launch/@@T3_STATE_KEY@@"
+ACODE_HOME="\${ACODE_HOME:-\${HOME}/.acode}"
+STATE_DIR="$ACODE_HOME/ssh-launch/@@T3_STATE_KEY@@"
 LOG_FILE="$STATE_DIR/server.log"
 if [ -f "$LOG_FILE" ]; then
   tail -n 80 "$LOG_FILE" 2>/dev/null || true
@@ -800,19 +1282,26 @@ export function buildRemoteT3RunnerScript(input?: RemoteT3RunnerOptions): string
     throw new SshInvalidArchiveVersionError({ archiveVersion });
   }
   // Strip the `/v<version>` the helper appends: the script builds URLs itself.
-  const releaseBaseUrl = cliReleaseDownloadBaseUrl("", input?.releaseBaseUrl ?? undefined).replace(
-    /\/v$/u,
+  const releaseBaseUrl = serverReleaseDownloadBaseUrl(
     "",
-  );
+    input?.releaseBaseUrl ?? undefined,
+  ).replace(/\/v$/u, "");
+  const localArchivePath = input?.localArchivePath?.trim() || "";
+  const localChecksumsPath = input?.localChecksumsPath?.trim() || "";
+  if (localArchivePath !== "" && localChecksumsPath === "") {
+    throw new SshMissingRunnerError();
+  }
   return stripTrailingNewlines(
     applyScriptPlaceholders(REMOTE_RUNNER_SCRIPT, {
-      T3_NODE_SCRIPT_PATH: shellSingleQuote(nodeScriptPath),
-      T3_ARCHIVE_VERSION: shellSingleQuote(archiveVersion),
-      T3_RELEASE_BASE_URL: shellSingleQuote(releaseBaseUrl),
-      T3_ARCHIVE_LOCK_WAIT_SECONDS: String(REMOTE_ARCHIVE_LOCK_WAIT_SECONDS),
-      T3_ARCHIVE_DOWNLOAD_SECONDS: String(REMOTE_ARCHIVE_DOWNLOAD_SECONDS),
-      T3_ARCHIVE_CHECKSUMS_SECONDS: String(REMOTE_ARCHIVE_CHECKSUMS_SECONDS),
-      T3_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
+      ACODE_NODE_SCRIPT_PATH: shellSingleQuote(nodeScriptPath),
+      ACODE_ARCHIVE_VERSION: shellSingleQuote(archiveVersion),
+      ACODE_RELEASE_BASE_URL: shellSingleQuote(releaseBaseUrl),
+      ACODE_LOCAL_ARCHIVE_PATH: shellSingleQuote(localArchivePath),
+      ACODE_LOCAL_CHECKSUMS_PATH: shellSingleQuote(localChecksumsPath),
+      ACODE_ARCHIVE_LOCK_WAIT_SECONDS: String(REMOTE_ARCHIVE_LOCK_WAIT_SECONDS),
+      ACODE_ARCHIVE_DOWNLOAD_SECONDS: String(REMOTE_ARCHIVE_DOWNLOAD_SECONDS),
+      ACODE_ARCHIVE_CHECKSUMS_SECONDS: String(REMOTE_ARCHIVE_CHECKSUMS_SECONDS),
+      ACODE_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
     }),
   );
 }
@@ -820,24 +1309,24 @@ export function buildRemoteT3RunnerScript(input?: RemoteT3RunnerOptions): string
 export function buildRemoteNodeEnvScript(input?: RemoteT3RunnerOptions): string {
   return stripTrailingNewlines(
     applyScriptPlaceholders(REMOTE_NODE_ENV_SCRIPT, {
-      T3_NODE_ENGINE_RANGE: shellSingleQuote(input?.nodeEngineRange?.trim() || ""),
-      T3_NODE_ENGINE_CHECK_SCRIPT: stripTrailingNewlines(buildRemoteNodeEngineCheckScript()),
+      ACODE_NODE_ENGINE_RANGE: shellSingleQuote(input?.nodeEngineRange?.trim() || ""),
+      ACODE_NODE_ENGINE_CHECK_SCRIPT: stripTrailingNewlines(buildRemoteNodeEngineCheckScript()),
     }),
   );
 }
 
 export function buildRemoteLaunchScript(input?: RemoteT3RunnerOptions): string {
   return applyScriptPlaceholders(REMOTE_LAUNCH_SCRIPT, {
-    T3_ARCHIVE_MODE: isNodeScriptRunner(input) ? "0" : "1",
-    T3_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
-    T3_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteT3RunnerScript(input)),
-    T3_PICK_PORT_SCRIPT: stripTrailingNewlines(REMOTE_PICK_PORT_SCRIPT),
-    T3_WAIT_READY_SCRIPT: stripTrailingNewlines(REMOTE_WAIT_READY_SCRIPT),
-    T3_DEFAULT_REMOTE_PORT: String(DEFAULT_REMOTE_PORT),
-    T3_REMOTE_PORT_SCAN_WINDOW: String(REMOTE_PORT_SCAN_WINDOW),
-    T3_READY_TIMEOUT_MS: String(REMOTE_READY_TIMEOUT_MS),
-    T3_REUSE_READY_TIMEOUT_MS: String(REMOTE_REUSE_READY_TIMEOUT_MS),
-    T3_READY_PROBE_TIMEOUT_MS: String(SSH_READY_PROBE_TIMEOUT_MS),
+    ACODE_ARCHIVE_MODE: isNodeScriptRunner(input) ? "0" : "1",
+    ACODE_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
+    ACODE_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteT3RunnerScript(input)),
+    ACODE_PICK_PORT_SCRIPT: stripTrailingNewlines(REMOTE_PICK_PORT_SCRIPT),
+    ACODE_WAIT_READY_SCRIPT: stripTrailingNewlines(REMOTE_WAIT_READY_SCRIPT),
+    ACODE_DEFAULT_REMOTE_PORT: String(DEFAULT_REMOTE_PORT),
+    ACODE_REMOTE_PORT_SCAN_WINDOW: String(REMOTE_PORT_SCAN_WINDOW),
+    ACODE_READY_TIMEOUT_MS: String(REMOTE_READY_TIMEOUT_MS),
+    ACODE_REUSE_READY_TIMEOUT_MS: String(REMOTE_REUSE_READY_TIMEOUT_MS),
+    ACODE_READY_PROBE_TIMEOUT_MS: String(SSH_READY_PROBE_TIMEOUT_MS),
   });
 }
 
@@ -847,13 +1336,7 @@ export function buildRemotePairingScript(
 ): string {
   return applyScriptPlaceholders(REMOTE_PAIRING_SCRIPT, {
     T3_STATE_KEY: remoteStateKey(target),
-    T3_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteT3RunnerScript(input)),
-  });
-}
-
-export function buildRemoteStopScript(target: DesktopSshEnvironmentTarget): string {
-  return applyScriptPlaceholders(REMOTE_STOP_SCRIPT, {
-    T3_STATE_KEY: remoteStateKey(target),
+    ACODE_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteT3RunnerScript(input)),
   });
 }
 
@@ -878,15 +1361,37 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
       ...sshRunnerLogFields(runner),
       stateKey: remoteStateKey(target),
     });
+    yield* reportSshProgress(sshProgress("starting"));
+    const progressService = yield* Effect.serviceOption(SshEnvironmentProgress);
+    let stderrRemainder = "";
     const result = yield* runSshCommand(target, {
       remoteCommandArgs: ["sh", "-l", "-s", "--", remoteStateKey(target)],
       stdin: buildRemoteLaunchScript(runner),
       timeoutMs: isNodeScriptRunner(runner)
         ? REMOTE_LAUNCH_TIMEOUT_MS
         : REMOTE_ARCHIVE_LAUNCH_TIMEOUT_MS,
-      ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
-      ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
-      ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
+      onStderrChunk: (chunk) => {
+        stderrRemainder += chunk;
+        const lines = stderrRemainder.split(/\r?\n/u);
+        stderrRemainder = lines.pop() ?? "";
+        for (const line of lines) {
+          const match = /^ACODE_PROGRESS download (\d+) (\d+)$/u.exec(line);
+          if (match && Option.isSome(progressService)) {
+            const totalBytes = Number(match[2]);
+            progressService.value.report(
+              sshProgress("remote-download", {
+                transferredBytes: Number(match[1]),
+                totalBytes: totalBytes > 0 ? totalBytes : null,
+              }),
+            );
+          } else if (line === "ACODE_PROGRESS stage installing" && Option.isSome(progressService)) {
+            progressService.value.report(sshProgress("installing"));
+          } else if (line === "ACODE_PROGRESS stage starting" && Option.isSome(progressService)) {
+            progressService.value.report(sshProgress("starting"));
+          }
+        }
+      },
+      ...spreadAuthOptions(input ?? {}),
     });
     if (!getLastNonEmptyOutputLine(result.stdout)) {
       return yield* new SshLaunchError({
@@ -944,9 +1449,7 @@ export const issueRemotePairingToken = Effect.fn("ssh/tunnel.issueRemotePairingT
     // Pairing may be the first command on a cold remote, so it can install
     // the archive on the way.
     ...(isNodeScriptRunner(runner) ? {} : { timeoutMs: REMOTE_ARCHIVE_LAUNCH_TIMEOUT_MS }),
-    ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
-    ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
-    ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
+    ...spreadAuthOptions(input ?? {}),
   });
   if (!getLastNonEmptyOutputLine(result.stdout)) {
     return yield* new SshPairingError({
@@ -979,31 +1482,6 @@ export const issueRemotePairingToken = Effect.fn("ssh/tunnel.issueRemotePairingT
   };
 });
 
-const stopRemoteServer = Effect.fn("ssh/tunnel.stopRemoteServer")(function* (
-  target: DesktopSshEnvironmentTarget,
-  input?: SshAuthOptions,
-): Effect.fn.Return<
-  void,
-  SshCommandError | SshInvalidTargetError,
-  ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
-> {
-  yield* Effect.logInfo("ssh.remoteServer.stop.start", {
-    ...sshTargetLogFields(target),
-    stateKey: remoteStateKey(target),
-  });
-  yield* runSshCommand(target, {
-    remoteCommandArgs: ["sh", "-s"],
-    stdin: buildRemoteStopScript(target),
-    ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
-    ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
-    ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
-  });
-  yield* Effect.logInfo("ssh.remoteServer.stop.succeeded", {
-    ...sshTargetLogFields(target),
-    stateKey: remoteStateKey(target),
-  });
-});
-
 const readRemoteServerLogTail = Effect.fn("ssh/tunnel.readRemoteServerLogTail")(function* (
   target: DesktopSshEnvironmentTarget,
   input?: SshAuthOptions,
@@ -1016,9 +1494,7 @@ const readRemoteServerLogTail = Effect.fn("ssh/tunnel.readRemoteServerLogTail")(
     remoteCommandArgs: ["sh", "-s"],
     stdin: buildRemoteLogTailScript(target),
     timeoutMs: 10_000,
-    ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
-    ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
-    ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
+    ...spreadAuthOptions(input ?? {}),
   });
   return result.stdout.trim();
 });
@@ -1032,7 +1508,7 @@ export const waitForHttpReady = (input: {
 }): Effect.Effect<void, SshReadinessError, HttpClient.HttpClient> =>
   waitForHttpReadyShared({
     baseUrl: input.baseUrl,
-    ...(input.path === undefined ? {} : { path: input.path }),
+    path: input.path ?? "/.well-known/t3/environment",
     ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
     ...(input.intervalMs === undefined ? {} : { intervalMs: input.intervalMs }),
     probeTimeoutMs: input.probeTimeoutMs ?? SSH_READY_PROBE_TIMEOUT_MS,
@@ -1501,9 +1977,50 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
       key: input.key,
       target: input.resolvedTarget,
       operation: (authOptions) =>
-        launchOrReuseRemoteServer(input.resolvedTarget, authOptions, input.runner),
+        launchOrReuseRemoteServer(input.resolvedTarget, authOptions, input.runner).pipe(
+          Effect.catch((error) =>
+            Effect.gen(function* () {
+              // Authentication failures must surface as-is so the password
+              // prompt retry sees them; downloading and uploading a ~70 MB
+              // package first would only delay and muddy that signal.
+              if (isSshAuthFailure(error)) {
+                return yield* error;
+              }
+              if (!isNodeScriptRunner(input.runner) && input.runner?.archiveVersion) {
+                yield* reportSshProgress(
+                  sshProgress("local-download", {
+                    detail: "Remote download failed; using a local upload.",
+                  }),
+                );
+                yield* Effect.logWarning("ssh.environment.releaseDownload.fallback", {
+                  ...sshTargetLogFields(input.resolvedTarget),
+                  ...sshRunnerLogFields(input.runner),
+                  cause: error,
+                });
+                const localPackage = yield* ensureLocalServerPackage(input.runner);
+                if (localPackage === null) {
+                  return yield* error;
+                }
+                const staged = yield* stageLocalServerPackageOnRemote(
+                  input.resolvedTarget,
+                  authOptions,
+                  localPackage,
+                );
+                const stagedPaths = resolveRemoteLocalArchivePaths(staged);
+                return yield* launchOrReuseRemoteServer(input.resolvedTarget, authOptions, {
+                  ...input.runner,
+                  releaseBaseUrl: staged.releaseBaseUrl,
+                  localArchivePath: stagedPaths.archivePath,
+                  localChecksumsPath: stagedPaths.checksumsPath,
+                });
+              }
+              return yield* error;
+            }),
+          ),
+        ),
     });
     const remotePort = remoteLaunch.remotePort;
+    yield* reportSshProgress(sshProgress("connecting"));
     yield* Effect.logDebug("ssh.environment.remotePort.ready", {
       ...sshTargetLogFields(input.resolvedTarget),
       key: input.key,
@@ -1540,14 +2057,13 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
       ),
     );
     tunnels.set(input.key, tunnelEntry);
-    const spawnerService = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const fileSystemService = yield* FileSystem.FileSystem;
-    const pathService = yield* Path.Path;
     yield* Scope.addFinalizer(
       entryScope,
+      // Only the local forwarding process is torn down. The remote daemon is
+      // deliberately left running so its Sessions survive a disconnect; the
+      // next ensure reuses it through the launch script's reuse path.
       Effect.gen(function* () {
-        const stopRemote = tunnels.get(tunnelEntry.key) === tunnelEntry;
-        if (stopRemote) {
+        if (tunnels.get(tunnelEntry.key) === tunnelEntry) {
           tunnels.delete(tunnelEntry.key);
         }
         yield* tunnelEntry.process
@@ -1556,33 +2072,6 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
             forceKillAfter: TUNNEL_SHUTDOWN_TIMEOUT_MS,
           })
           .pipe(Effect.ignore);
-        if (!stopRemote) {
-          return;
-        }
-        yield* Effect.logDebug("ssh.environment.tunnel.finalizer.start", {
-          ...sshTargetLogFields(tunnelEntry.target),
-          key: tunnelEntry.key,
-          localPort: tunnelEntry.localPort,
-          remotePort: tunnelEntry.remotePort,
-        });
-        const authSecret = authSecrets.get(tunnelEntry.key) ?? null;
-        yield* stopRemoteServer(
-          tunnelEntry.target,
-          authSecret === null
-            ? {
-                batchMode: "yes",
-                interactiveAuth: false,
-              }
-            : {
-                authSecret,
-                batchMode: "no",
-                interactiveAuth: true,
-              },
-        ).pipe(
-          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawnerService),
-          Effect.provideService(FileSystem.FileSystem, fileSystemService),
-          Effect.provideService(Path.Path, pathService),
-        );
         yield* Effect.logDebug("ssh.environment.tunnel.finalizer.succeeded", {
           ...sshTargetLogFields(tunnelEntry.target),
           key: tunnelEntry.key,
@@ -1651,6 +2140,41 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     );
   });
 
+  const inspectEnvironment = Effect.fn("ssh/tunnel.inspectEnvironment")(function* (
+    target: DesktopSshEnvironmentTarget,
+  ): Effect.fn.Return<
+    DesktopSshEnvironmentPlan,
+    SshEnvironmentEffectError,
+    SshEnvironmentEffectContext
+  > {
+    const baseResolved = yield* resolveSshTarget(target.alias || target.hostname);
+    const resolvedTarget: DesktopSshEnvironmentTarget = {
+      ...baseResolved,
+      ...(target.username !== null ? { username: target.username } : {}),
+      ...(target.port !== null ? { port: target.port } : {}),
+    };
+    const runner =
+      options.resolveCliRunner === undefined ? undefined : yield* options.resolveCliRunner;
+    const result = yield* runWithSshAuth({
+      key: targetConnectionKey(resolvedTarget),
+      target: resolvedTarget,
+      operation: (authOptions) =>
+        runSshCommand(resolvedTarget, {
+          remoteCommandArgs: ["sh", "-l", "-s", "--", remoteStateKey(resolvedTarget)],
+          stdin: `${buildRemoteNodeEnvScript(runner)}\n${REMOTE_INSPECT_SCRIPT}`,
+          ...spreadAuthOptions(authOptions),
+        }),
+    });
+    const plan = parseSshEnvironmentInspection(result.stdout, runner);
+    if (plan === null) {
+      return yield* new SshLaunchError({
+        message: "SSH prerequisite inspection returned an invalid result.",
+        stdout: result.stdout,
+      });
+    }
+    return plan;
+  });
+
   const ensureEnvironment = Effect.fn("ssh/tunnel.ensureEnvironment")(function* (
     target: DesktopSshEnvironmentTarget,
     requestOptions?: { readonly issuePairingToken?: boolean },
@@ -1663,6 +2187,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
       ...sshTargetLogFields(target),
       issuePairingToken: requestOptions?.issuePairingToken === true,
     });
+    yield* reportSshProgress(sshProgress("connecting"));
     const baseResolved = yield* resolveSshTarget(target.alias || target.hostname);
     const resolvedTarget: DesktopSshEnvironmentTarget = {
       ...baseResolved,
@@ -1686,6 +2211,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
       Effect.gen(function* () {
         const entry = yield* ensureTunnelEntry(key, resolvedTarget, runner);
 
+        yield* reportSshProgress(sshProgress("pairing"));
         const pairingResult = requestOptions?.issuePairingToken
           ? yield* runWithSshAuth({
               key,
@@ -1737,17 +2263,14 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
           hasTunnel: entry !== null,
         });
         if (entry !== null) {
-          // Explicit disconnect owns the remote stop so its failure reaches the caller.
           yield* Effect.gen(function* () {
             tunnels.delete(key);
             yield* closeTunnelEntry(entry);
           }).pipe(Effect.uninterruptible);
         }
-        yield* runWithSshAuth({
-          key,
-          target: resolvedTarget,
-          operation: (authOptions) => stopRemoteServer(resolvedTarget, authOptions),
-        });
+        // Disconnecting only tears down the local forwarding. The remote
+        // daemon keeps running so its Sessions survive; a later connect
+        // reuses it instead of reinstalling.
         yield* Effect.logInfo("ssh.environment.disconnect.succeeded", {
           ...sshTargetLogFields(resolvedTarget),
           key,
@@ -1756,7 +2279,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     );
   });
 
-  return SshEnvironmentManager.of({ ensureEnvironment, disconnectEnvironment });
+  return SshEnvironmentManager.of({ inspectEnvironment, ensureEnvironment, disconnectEnvironment });
 });
 
 /**

@@ -178,6 +178,8 @@ import * as GitWorkflowService from "./git/GitWorkflowService.ts";
 import * as ReviewService from "./review/ReviewService.ts";
 import * as SourceControlRepositoryService from "./sourceControl/SourceControlRepositoryService.ts";
 import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
+import * as DesktopSshEnvironment from "./desktop/sshEnvironment.ts";
+import * as DesktopSshPasswordPrompts from "./desktop/sshPasswordPrompts.ts";
 import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
 import * as PairingGrantStore from "./auth/PairingGrantStore.ts";
 import * as CloudManagedEndpointRuntime from "./cloud/ManagedEndpointRuntime.ts";
@@ -1185,13 +1187,41 @@ const buildAppUnderTest = (options?: {
         ),
       ),
       Layer.provide(
-        Layer.mock(CloudCliTokenManager.CloudCliTokenManager)({
-          get: Effect.die(new Error("Unexpected T3 Connect CLI authorization request.")),
-          getExisting: Effect.succeed(Option.none()),
-          hasCredential: Effect.succeed(false),
-          clear: Effect.void,
-          ...options?.layers?.cloudCliTokenManager,
-        }),
+        Layer.mergeAll(
+          Layer.succeed(
+            DesktopSshEnvironment.DesktopSshEnvironment,
+            DesktopSshEnvironment.DesktopSshEnvironment.of({
+              discoverHosts: () => Effect.succeed([]),
+              resolveHost: (alias) =>
+                Effect.succeed({
+                  alias,
+                  hostname: alias,
+                  username: null,
+                  port: null,
+                }),
+              ensureEnvironment: () => Effect.die("SSH ensure is not stubbed in this test"),
+              inspectEnvironment: () => Effect.die("SSH plan is not stubbed in this test"),
+              inspectTrust: () => Effect.die("SSH trust inspection is not stubbed in this test"),
+              trustHost: () => Effect.die("SSH trust acceptance is not stubbed in this test"),
+              disconnectEnvironment: () => Effect.void,
+            }),
+          ),
+          Layer.succeed(
+            DesktopSshPasswordPrompts.DesktopSshPasswordPrompts,
+            DesktopSshPasswordPrompts.DesktopSshPasswordPrompts.of({
+              listPending: Effect.succeed([]),
+              request: () => Effect.die("SSH password prompts are not stubbed in this test"),
+              resolve: () => Effect.void,
+            }),
+          ),
+          Layer.mock(CloudCliTokenManager.CloudCliTokenManager)({
+            get: Effect.die(new Error("Unexpected T3 Connect CLI authorization request.")),
+            getExisting: Effect.succeed(Option.none()),
+            hasCredential: Effect.succeed(false),
+            clear: Effect.void,
+            ...options?.layers?.cloudCliTokenManager,
+          }),
+        ),
       ),
       Layer.updateService(PairingGrantStore.PairingGrantStore, (grants) => {
         const subscribed = options?.onPairingChangesSubscribed;

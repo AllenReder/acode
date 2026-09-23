@@ -11,6 +11,7 @@ import * as TestClock from "effect/testing/TestClock";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
 import {
+  baseScpArgs,
   baseSshArgs,
   getLastNonEmptyOutputLine,
   parseSshResolveOutput,
@@ -93,7 +94,42 @@ describe("ssh command", () => {
           },
           { batchMode: "no" },
         ),
-        ["-o", "BatchMode=no", "-o", "ConnectTimeout=10", "-p", "2222"],
+        [
+          "-o",
+          "BatchMode=no",
+          "-o",
+          "StrictHostKeyChecking=yes",
+          "-o",
+          "ConnectTimeout=10",
+          "-p",
+          "2222",
+        ],
+      );
+    }),
+  );
+
+  it.effect("uses the SCP port flag for non-default ports", () =>
+    Effect.sync(() => {
+      assert.deepEqual(
+        baseScpArgs(
+          {
+            alias: "devbox",
+            hostname: "devbox.example.com",
+            username: "julius",
+            port: 6000,
+          },
+          { batchMode: "yes" },
+        ),
+        [
+          "-o",
+          "BatchMode=yes",
+          "-o",
+          "StrictHostKeyChecking=yes",
+          "-o",
+          "ConnectTimeout=10",
+          "-P",
+          "6000",
+        ],
       );
     }),
   );
@@ -195,6 +231,33 @@ describe("ssh command", () => {
       assert.isTrue(Result.isFailure(result));
       if (Result.isFailure(result)) {
         assert.include(result.failure.message, "SSH command timed out after 1ms.");
+      }
+    }).pipe(Effect.provide(processLayer));
+  });
+
+  it.effect("reports stderr while retaining it for command failures", () => {
+    const observed: string[] = [];
+    const spawner = ChildProcessSpawner.make(() =>
+      Effect.succeed(
+        makeFailedProcess({ stdout: "", stderr: "ACODE_PROGRESS download 1024\nfailed\n" }),
+      ),
+    );
+    const processLayer = Layer.mergeAll(
+      NodeServices.layer,
+      Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+    );
+
+    return Effect.gen(function* () {
+      const result = yield* Effect.result(
+        runSshCommand(
+          { alias: "devbox", hostname: "devbox.example.com", username: "julius", port: 2222 },
+          { onStderrChunk: (chunk) => observed.push(chunk) },
+        ),
+      );
+      assert.deepEqual(observed, ["ACODE_PROGRESS download 1024\nfailed\n"]);
+      assert.isTrue(Result.isFailure(result));
+      if (Result.isFailure(result) && result.failure instanceof SshCommandError) {
+        assert.include(result.failure.stderr, "failed");
       }
     }).pipe(Effect.provide(processLayer));
   });

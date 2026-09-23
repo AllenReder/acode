@@ -10,6 +10,7 @@
  *   node_modules/ (production dependencies)
  */
 import * as NodeChildProcess from "node:child_process";
+import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
@@ -26,15 +27,13 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 SERVER_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 
 if ! command -v node >/dev/null 2>&1; then
-  echo "Error: Node.js (version 22 or higher) is required to run ACode daemon." >&2
+  echo "Error: Node.js ^22.16, ^23.11, or >=24.10 is required to run ACode daemon." >&2
   echo "Please install Node.js (https://nodejs.org) on this system." >&2
   exit 1
 fi
 
-NODE_VERSION=$(node -v | sed 's/^v//')
-MAJOR_VERSION=$(echo "$NODE_VERSION" | cut -d. -f1)
-if [ "$MAJOR_VERSION" -lt 22 ]; then
-  echo "Error: Node.js version 22+ is required (found v$NODE_VERSION)." >&2
+if ! node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit((major === 22 && minor >= 16) || (major === 23 && minor >= 11) || (major === 24 && minor >= 10) || major > 24 ? 0 : 1)' >/dev/null 2>&1; then
+  echo "Error: Node.js ^22.16, ^23.11, or >=24.10 is required (found $(node -v))." >&2
   exit 1
 fi
 
@@ -48,7 +47,14 @@ export interface BuildServerPackageOptions {
   readonly outputDir?: string | undefined;
   readonly platform?: string;
   readonly arch?: string;
+  readonly version?: string;
   readonly skipBuild?: boolean;
+}
+
+export function isExactServerPackageVersion(version: string): boolean {
+  return /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u.test(
+    version,
+  );
 }
 
 export function buildServerPackage(options: BuildServerPackageOptions = {}) {
@@ -59,7 +65,15 @@ export function buildServerPackage(options: BuildServerPackageOptions = {}) {
     options.platform ??
     (hostPlatform === "darwin" ? "darwin" : hostPlatform === "win32" ? "win32" : "linux");
   const arch = options.arch ?? (hostArch === "arm64" ? "arm64" : "x64");
-  const version = packageJson.version;
+  const version = options.version ?? packageJson.version;
+  if (!isExactServerPackageVersion(version)) {
+    throw new Error(`Server package version must be exact, received '${version}'.`);
+  }
+  if (version !== packageJson.version) {
+    throw new Error(
+      `Server package version ${version} does not match the bundled daemon version ${packageJson.version}.`,
+    );
+  }
   const stem = `acode-server-${version}-${platform}-${arch}`;
 
   if (!options.skipBuild) {
@@ -129,14 +143,20 @@ Standalone headless server package for ACode daemon.
     NodeFS.mkdirSync(outputDir, { recursive: true });
     const archiveFileName = `${stem}.tar.gz`;
     const archivePath = NodePath.join(outputDir, archiveFileName);
+    const checksumPath = NodePath.join(outputDir, "SHA256SUMS");
 
     console.log(`[build-server-package] Creating archive ${archivePath}...`);
     NodeChildProcess.execSync(`tar -czf "${archivePath}" -C "${stageRoot}" "${stem}"`, {
       stdio: "inherit",
     });
+    const archiveHash = NodeCrypto.createHash("sha256")
+      .update(NodeFS.readFileSync(archivePath))
+      .digest("hex");
+    NodeFS.writeFileSync(checksumPath, `${archiveHash}  ${archiveFileName}\n`);
 
     console.log(`[build-server-package] Successfully created ${archivePath}`);
-    return { archivePath, stageDir, stem, version };
+    console.log(`[build-server-package] Wrote ${checksumPath}`);
+    return { archivePath, checksumPath, stageDir, stem, version };
   } finally {
     NodeFS.rmSync(stageRoot, { recursive: true, force: true });
   }
@@ -144,7 +164,18 @@ Standalone headless server package for ACode daemon.
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2);
-  const outputDirIndex = args.indexOf("--output-dir");
-  const outputDir = outputDirIndex !== -1 ? args[outputDirIndex + 1] : undefined;
-  buildServerPackage({ outputDir });
+  const optionValue = (name: string) => {
+    const index = args.indexOf(`--${name}`);
+    return index !== -1 ? args[index + 1] : undefined;
+  };
+  const outputDir = optionValue("output-dir");
+  const platform = optionValue("platform");
+  const arch = optionValue("arch");
+  const version = optionValue("version");
+  buildServerPackage({
+    ...(outputDir !== undefined ? { outputDir } : {}),
+    ...(platform !== undefined ? { platform } : {}),
+    ...(arch !== undefined ? { arch } : {}),
+    ...(version !== undefined ? { version } : {}),
+  });
 }

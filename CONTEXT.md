@@ -12,6 +12,14 @@ scopes Project, Workspace, and Session identities and capabilities; it is not
 itself a Project or Sidebar grouping.
 _Avoid_: Host, Machine, Daemon
 
+**Connection**:
+A client-side access configuration and transport tunnel targeting an
+Environment. It manages address discovery, SSH forwarding, authentication
+credentials, and network lifecycle; it does not own Projects, Workspaces, or
+Sessions. Dynamic port remapping or reconnecting through a different tunnel
+preserves the target Environment's identity.
+_Avoid_: Machine config, Server profile, Remote host
+
 **ACode Deep Link**:
 A canonical navigation address that identifies one ACode target by its
 Environment- and target-level identities. It opens or focuses a View but is
@@ -291,6 +299,7 @@ _Avoid_: Chat wallpaper, Session background, View background
 
 ## Core invariants
 
+- A Connection is a client-side access transport to an Environment; reconnecting or changing forwarded ports does not change Environment or Workspace identity.
 - A Project owns zero or more Workspaces.
 - A Workspace belongs to exactly one Project.
 - Workspace identity is independent of Git branch, commit, or HEAD state.

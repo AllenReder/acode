@@ -27,7 +27,18 @@ On a build machine or in CI, produce the headless server archive:
 pnpm run build:server-package
 ```
 
-This outputs `release-server/acode-server-<version>-linux-x64.tar.gz`.
+This outputs `release-server/acode-server-<version>-linux-x64.tar.gz` and
+`release-server/SHA256SUMS`:
+
+```bash
+sha256sum --check SHA256SUMS
+```
+
+For CI releases, maintainers can run the manual **Release server package**
+workflow with an exact version and commit SHA. It publishes a prerelease only;
+it never changes `latest` or nightly aliases. Test prereleases may be deleted.
+Installed daemons keep running after deletion, but a new remote install of that
+exact version then needs the local package fallback or a newer release.
 
 ### 2. Transfer and Extract
 

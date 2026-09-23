@@ -61,6 +61,8 @@ export class SshEnvironmentGateway extends Context.Service<
   {
     readonly provision: (
       target: DesktopSshEnvironmentTarget,
+      operationId?: string,
+      signal?: AbortSignal,
     ) => Effect.Effect<ProvisionedSshEnvironment, ConnectionAttemptError>;
     readonly prepare: (input: {
       readonly connectionId: string;
