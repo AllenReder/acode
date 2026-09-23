@@ -17,6 +17,8 @@ import {
   type DesktopEnvironmentBootstrap,
   type DesktopServerExposureState,
   type DesktopSshHostKeyTrust,
+  type DesktopSshEnvironmentPlan,
+  type DesktopSshEnvironmentProgress,
   type DesktopSshEnvironmentBootstrap,
   type DesktopSshEnvironmentTarget,
   type DesktopSshPasswordPromptRequest,
@@ -71,6 +73,7 @@ export interface DesktopSshApiClientOptions {
 interface DesktopSshApiRequestOptions {
   readonly method?: string;
   readonly body?: unknown;
+  readonly signal?: AbortSignal;
 }
 
 export function createDesktopSshApiClient(options: DesktopSshApiClientOptions) {
@@ -85,6 +88,7 @@ export function createDesktopSshApiClient(options: DesktopSshApiClientOptions) {
       const token = await options.getBearerToken();
       const response = await fetchFn(new URL(path, baseUrl), {
         method: requestOptions.method ?? "GET",
+        ...(requestOptions.signal ? { signal: requestOptions.signal } : {}),
         headers: {
           authorization: `Bearer ${token}`,
           ...(requestOptions.body === undefined ? {} : { "content-type": "application/json" }),
@@ -256,27 +260,57 @@ const createTauriDesktopBridge = (): DesktopBridge => {
         method: "POST",
         body: target,
       }),
-    trustSshHost: async (target: DesktopSshEnvironmentTarget): Promise<void> => {
-      await desktopSshApi.request("/api/desktop/ssh/trust/accept", {
+    inspectSshEnvironmentPlan: async (
+      target: DesktopSshEnvironmentTarget,
+    ): Promise<DesktopSshEnvironmentPlan> =>
+      desktopSshApi.request("/api/desktop/ssh/plan", {
         method: "POST",
         body: target,
+      }),
+    trustSshHost: async (
+      target: DesktopSshEnvironmentTarget,
+      keyType: string,
+      fingerprint: string,
+    ): Promise<void> => {
+      await desktopSshApi.request("/api/desktop/ssh/trust/accept", {
+        method: "POST",
+        body: { target, keyType, fingerprint },
       });
     },
     ensureSshEnvironment: async (
       target: DesktopSshEnvironmentTarget,
-      options?: { issuePairingToken?: boolean },
+      options?: { issuePairingToken?: boolean; operationId?: string; signal?: AbortSignal },
     ): Promise<DesktopSshEnvironmentBootstrap> => {
       const result = await desktopSshApi.request<
         | DesktopSshEnvironmentBootstrap
         | { readonly type: typeof DesktopSshPasswordPromptCancelledType; readonly message: string }
       >("/api/desktop/ssh/ensure", {
         method: "POST",
-        body: { target, options },
+        body: {
+          target,
+          options: options
+            ? { issuePairingToken: options.issuePairingToken, operationId: options.operationId }
+            : undefined,
+        },
+        ...(options?.signal ? { signal: options.signal } : {}),
       });
       if ("type" in result && result.type === DesktopSshPasswordPromptCancelledType) {
         throw new SshPasswordPromptCancelledError(result.message);
       }
       return result as DesktopSshEnvironmentBootstrap;
+    },
+    getSshEnvironmentProgress: (
+      operationId: string,
+    ): Promise<DesktopSshEnvironmentProgress | null> =>
+      desktopSshApi.request("/api/desktop/ssh/progress", {
+        method: "POST",
+        body: { operationId },
+      }),
+    cancelSshEnvironment: async (operationId: string): Promise<void> => {
+      await desktopSshApi.request("/api/desktop/ssh/cancel", {
+        method: "POST",
+        body: { operationId },
+      });
     },
     disconnectSshEnvironment: async (target: DesktopSshEnvironmentTarget): Promise<void> => {
       await desktopSshApi.request("/api/desktop/ssh/disconnect", {
@@ -343,10 +377,7 @@ const createTauriDesktopBridge = (): DesktopBridge => {
         window.clearInterval(interval);
       };
     },
-    resolveSshPasswordPrompt: async (
-      requestId: string,
-      password: string | null,
-    ): Promise<void> => {
+    resolveSshPasswordPrompt: async (requestId: string, password: string | null): Promise<void> => {
       await desktopSshApi.request("/api/desktop/ssh/password-prompts/resolve", {
         method: "POST",
         body: { requestId, password },
@@ -369,7 +400,10 @@ const createTauriDesktopBridge = (): DesktopBridge => {
       return typeof selected === "string" ? selected : null;
     },
     pickFile: async (options?: {
-      readonly filters?: ReadonlyArray<{ readonly name: string; readonly extensions: ReadonlyArray<string> }>;
+      readonly filters?: ReadonlyArray<{
+        readonly name: string;
+        readonly extensions: ReadonlyArray<string>;
+      }>;
       readonly initialPath?: string;
     }): Promise<string | null> => {
       const selected = await openDialog({

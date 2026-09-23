@@ -1,6 +1,7 @@
 import type {
   DesktopSshEnvironmentTarget,
   DesktopSshHostKeyTrust,
+  DesktopSshEnvironmentPlan,
 } from "@t3tools/contracts";
 
 import { formatDesktopSshTarget } from "./EnvironmentRow";
@@ -13,10 +14,16 @@ import { formatDesktopSshTarget } from "./EnvironmentRow";
  * first remote write.
  */
 export interface SshConnectionGateDeps {
-  readonly inspectTrust: (
+  readonly resolveTarget: (
     target: DesktopSshEnvironmentTarget,
-  ) => Promise<DesktopSshHostKeyTrust>;
-  readonly trustHost: (target: DesktopSshEnvironmentTarget) => Promise<void>;
+  ) => Promise<DesktopSshEnvironmentTarget>;
+  readonly inspectTrust: (target: DesktopSshEnvironmentTarget) => Promise<DesktopSshHostKeyTrust>;
+  readonly inspectPlan: (target: DesktopSshEnvironmentTarget) => Promise<DesktopSshEnvironmentPlan>;
+  readonly trustHost: (
+    target: DesktopSshEnvironmentTarget,
+    keyType: string,
+    fingerprint: string,
+  ) => Promise<void>;
   /** Returns undefined when no themed confirm host is mounted; gates fail closed. */
   readonly confirm: (
     message: string,
@@ -25,7 +32,7 @@ export interface SshConnectionGateDeps {
 }
 
 export type SshConnectionGateResult =
-  | { readonly status: "proceed" }
+  | { readonly status: "proceed"; readonly target: DesktopSshEnvironmentTarget }
   | { readonly status: "blocked"; readonly message: string }
   | { readonly status: "cancelled"; readonly message: string };
 
@@ -46,9 +53,15 @@ export async function gateSshEnvironmentConnection(input: {
   readonly deps: SshConnectionGateDeps;
 }): Promise<SshConnectionGateResult> {
   const { target, version, deps } = input;
-  const host = formatDesktopSshTarget(target);
+  const resolvedTarget = await deps.resolveTarget(target);
+  const connectionTarget = {
+    ...resolvedTarget,
+    username: target.username ?? resolvedTarget.username,
+    port: target.port ?? resolvedTarget.port,
+  };
+  const host = formatDesktopSshTarget(connectionTarget);
 
-  const trust = await deps.inspectTrust(target);
+  const trust = await deps.inspectTrust(connectionTarget);
   if (trust.status === "changed") {
     return {
       status: "blocked",
@@ -58,6 +71,12 @@ export async function gateSshEnvironmentConnection(input: {
     };
   }
   if (trust.status === "new") {
+    if (!trust.keyType || !trust.fingerprint) {
+      return {
+        status: "blocked",
+        message: `Could not read the SSH host key fingerprint for ${host}.`,
+      };
+    }
     const confirmed = await deps.confirm(
       `Trust this SSH host?\n\nHost: ${host}\n${formatFingerprintLine(trust)}\n\nOnly continue if you expected this key. ACode stores it in known_hosts.`,
     );
@@ -70,15 +89,40 @@ export async function gateSshEnvironmentConnection(input: {
     if (!confirmed) {
       return { status: "cancelled", message: `Host key for ${host} was not trusted.` };
     }
-    await deps.trustHost(target);
+    await deps.trustHost(connectionTarget, trust.keyType, trust.fingerprint);
   }
 
+  const plan = await deps.inspectPlan(connectionTarget);
+  if (plan.version !== version) {
+    return {
+      status: "blocked",
+      message: `The local daemon version ${plan.version} does not match this desktop version ${version}.`,
+    };
+  }
+  const prerequisites = [
+    `OS: ${plan.os || "unavailable"}`,
+    `Architecture: ${plan.arch || "unavailable"}`,
+    `Node.js: ${plan.nodeVersion ?? "missing"}${plan.nodeSupported ? " (supported)" : " (requires ^22.16, ^23.11, or >=24.10)"}`,
+    `Git: ${plan.gitAvailable ? "available" : "missing"}`,
+  ].join("\n");
+  if (
+    plan.os !== "Linux" ||
+    !["x86_64", "amd64"].includes(plan.arch) ||
+    !plan.nodeSupported ||
+    !plan.gitAvailable
+  ) {
+    return {
+      status: "blocked",
+      message: `The SSH host does not meet ACode's prerequisites.\n\n${prerequisites}`,
+    };
+  }
   const installConfirmed = await deps.confirm(
-    `Set up the ACode daemon on ${host}?\n\n` +
+    `${plan.daemon === "reuse" ? "Connect to the existing ACode daemon" : "Set up the ACode daemon"} on ${host}?\n\n` +
       `Version: ${version}\n` +
       `Install path: ~/.acode/runtime/versions/${version}/\n` +
+      `Plan: ${plan.daemon === "reuse" ? "Reuse the responding daemon; install if it becomes unavailable." : "Install or repair the daemon."}\n` +
       `Package: acode-server-${version}-linux-x64.tar.gz from GitHub Releases, verified against SHA256SUMS. If the remote download fails, this device uploads its cached copy instead.\n\n` +
-      "The host must be Linux x64 with Node.js 22 or newer and Git already installed; ACode does not install system packages. A healthy existing daemon of a compatible version is reused as-is.",
+      `${prerequisites}\n\nACode does not install system packages.`,
   );
   if (installConfirmed === undefined) {
     return {
@@ -89,5 +133,5 @@ export async function gateSshEnvironmentConnection(input: {
   if (!installConfirmed) {
     return { status: "cancelled", message: `Setup on ${host} was not confirmed.` };
   }
-  return { status: "proceed" };
+  return { status: "proceed", target: connectionTarget };
 }

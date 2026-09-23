@@ -27,15 +27,13 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 SERVER_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 
 if ! command -v node >/dev/null 2>&1; then
-  echo "Error: Node.js (version 22 or higher) is required to run ACode daemon." >&2
+  echo "Error: Node.js ^22.16, ^23.11, or >=24.10 is required to run ACode daemon." >&2
   echo "Please install Node.js (https://nodejs.org) on this system." >&2
   exit 1
 fi
 
-NODE_VERSION=$(node -v | sed 's/^v//')
-MAJOR_VERSION=$(echo "$NODE_VERSION" | cut -d. -f1)
-if [ "$MAJOR_VERSION" -lt 22 ]; then
-  echo "Error: Node.js version 22+ is required (found v$NODE_VERSION)." >&2
+if ! node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit((major === 22 && minor >= 16) || (major === 23 && minor >= 11) || (major === 24 && minor >= 10) || major > 24 ? 0 : 1)' >/dev/null 2>&1; then
+  echo "Error: Node.js ^22.16, ^23.11, or >=24.10 is required (found $(node -v))." >&2
   exit 1
 fi
 
@@ -54,7 +52,9 @@ export interface BuildServerPackageOptions {
 }
 
 export function isExactServerPackageVersion(version: string): boolean {
-  return /^\d+\.\d+\.\d+(?:[-+.][0-9A-Za-z.-]+)?$/u.test(version);
+  return /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u.test(
+    version,
+  );
 }
 
 export function buildServerPackage(options: BuildServerPackageOptions = {}) {
@@ -68,6 +68,11 @@ export function buildServerPackage(options: BuildServerPackageOptions = {}) {
   const version = options.version ?? packageJson.version;
   if (!isExactServerPackageVersion(version)) {
     throw new Error(`Server package version must be exact, received '${version}'.`);
+  }
+  if (version !== packageJson.version) {
+    throw new Error(
+      `Server package version ${version} does not match the bundled daemon version ${packageJson.version}.`,
+    );
   }
   const stem = `acode-server-${version}-${platform}-${arch}`;
 

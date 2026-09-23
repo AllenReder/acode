@@ -36,6 +36,7 @@ import {
   type AdvertisedEndpoint,
   type DesktopDiscoveredSshHost,
   type DesktopSshEnvironmentTarget,
+  type DesktopSshEnvironmentProgress,
   type DesktopServerExposureState,
   type DesktopWslState,
   type EnvironmentId,
@@ -50,7 +51,7 @@ import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
 
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
-import { cn } from "../../lib/utils";
+import { cn, randomUUID } from "../../lib/utils";
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
 import { formatElapsedDurationLabel, formatExpiresInLabel } from "../../timestampFormat";
 import { resolveDesktopPairingUrl, resolveHostedPairingUrl } from "./pairingUrls";
@@ -414,6 +415,77 @@ function formatDesktopSshConnectionError(error: unknown): string {
   );
   const withoutTaggedErrorPrefix = withoutIpcPrefix.replace(/^Ssh[A-Za-z]+Error:\s*/u, "");
   return withoutTaggedErrorPrefix.trim() || fallback;
+}
+
+const SSH_PROGRESS_LABELS: Record<DesktopSshEnvironmentProgress["stage"], string> = {
+  connecting: "Connecting over SSH",
+  checking: "Checking remote environment",
+  "remote-download": "Downloading on remote host",
+  "local-download": "Downloading on this device",
+  uploading: "Uploading service package",
+  installing: "Verifying and installing service",
+  starting: "Starting remote service",
+  pairing: "Pairing environment",
+};
+
+function SshAddProgress({
+  progress,
+  active,
+}: {
+  readonly progress: DesktopSshEnvironmentProgress;
+  readonly active: boolean;
+}) {
+  const totalBytes =
+    progress.totalBytes !== null &&
+    (progress.transferredBytes === null || progress.transferredBytes <= progress.totalBytes)
+      ? progress.totalBytes
+      : null;
+  const percentage =
+    totalBytes && progress.transferredBytes !== null
+      ? Math.round((progress.transferredBytes / totalBytes) * 100)
+      : null;
+  const byteLabel =
+    progress.transferredBytes === null
+      ? null
+      : `${(progress.transferredBytes / 1_048_576).toFixed(1)} MB${totalBytes === null ? "" : ` / ${(totalBytes / 1_048_576).toFixed(1)} MB`}`;
+  return (
+    <div
+      className={cn(
+        "rounded-md border border-border/70 bg-muted/25 px-3 py-2.5",
+        !active && "opacity-70",
+      )}
+    >
+      <div className="flex items-center gap-3 text-xs">
+        <span className="min-w-0 flex-1 font-medium" role="status" aria-live="polite">
+          {SSH_PROGRESS_LABELS[progress.stage]}
+        </span>
+        <div
+          role="progressbar"
+          aria-label={SSH_PROGRESS_LABELS[progress.stage]}
+          aria-valuemin={percentage === null ? undefined : 0}
+          aria-valuemax={percentage === null ? undefined : 100}
+          aria-valuenow={percentage ?? undefined}
+          className="h-1.5 w-32 overflow-hidden rounded-full bg-muted sm:w-48"
+        >
+          <div
+            className={cn(
+              "h-full rounded-full bg-primary",
+              percentage === null && "w-full",
+              percentage === null && active && "animate-pulse",
+            )}
+            style={percentage === null ? undefined : { width: `${percentage}%` }}
+          />
+        </div>
+      </div>
+      {progress.detail || byteLabel ? (
+        <p className="mt-1.5 text-[11px] text-muted-foreground">
+          {[progress.detail, byteLabel, percentage === null ? null : `${percentage}%`]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 const ENDPOINT_ROW_CLASSNAME = "first:rounded-t-xl last:rounded-b-xl px-3 py-2.5 sm:px-4";
@@ -1963,11 +2035,15 @@ export function ConnectionsSettings() {
   const [savedBackendSshHost, setSavedBackendSshHost] = useState("");
   const [savedBackendSshUsername, setSavedBackendSshUsername] = useState("");
   const [savedBackendSshPort, setSavedBackendSshPort] = useState("");
+  const [resolvedSshConfigHost, setResolvedSshConfigHost] =
+    useState<DesktopSshEnvironmentTarget | null>(null);
   const [sshHostSuggestionsOpen, setSshHostSuggestionsOpen] = useState(false);
   // Tracks the arrow-key/hover highlight so Enter selects it instead of submitting the typed text.
   const highlightedSshHostRef = useRef<DesktopDiscoveredSshHost | undefined>(undefined);
   const [savedBackendError, setSavedBackendError] = useState<string | null>(null);
   const [isAddingSavedBackend, setIsAddingSavedBackend] = useState(false);
+  const [sshAddProgress, setSshAddProgress] = useState<DesktopSshEnvironmentProgress | null>(null);
+  const sshAddOperationRef = useRef<{ id: string; controller: AbortController } | null>(null);
   const [removingSavedEnvironmentId, setRemovingSavedEnvironmentId] =
     useState<EnvironmentId | null>(null);
   const [isUpdatingDesktopServerExposure, setIsUpdatingDesktopServerExposure] = useState(false);
@@ -2051,6 +2127,27 @@ export function ConnectionsSettings() {
   const desktopWslError = desktopWslMutationError ?? desktopWsl.error;
   const isLoadingWslState = desktopWsl.isPending && desktopWsl.data === null;
   const discoveredSshHosts = desktopSshHosts.data ?? EMPTY_DISCOVERED_SSH_HOSTS;
+  const sshConfigAlias =
+    discoveredSshHosts.find(
+      (host) => host.source === "ssh-config" && host.alias === savedBackendSshHost.trim(),
+    )?.alias ?? null;
+  useEffect(() => {
+    if (!isSshDiscoveryActive || !desktopBridge || sshConfigAlias === null) return;
+    let active = true;
+    void desktopBridge.resolveSshHost(sshConfigAlias).then(
+      (resolved) => {
+        if (active) setResolvedSshConfigHost(resolved);
+      },
+      () => {
+        if (active) setResolvedSshConfigHost(null);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [desktopBridge, isSshDiscoveryActive, sshConfigAlias]);
+  const sshConfigDefaults =
+    resolvedSshConfigHost?.alias === sshConfigAlias ? resolvedSshConfigHost : null;
   const unsavedDiscoveredSshHosts = useMemo(
     () =>
       discoveredSshHosts.filter((target) => {
@@ -2297,29 +2394,73 @@ export function ConnectionsSettings() {
   // Shared by manual SSH submission and discovered-host selection.
   const connectSavedBackendSshTarget = useCallback(
     async (target: DesktopSshEnvironmentTarget) => {
+      const operation = { id: randomUUID(), controller: new AbortController() };
+      sshAddOperationRef.current = operation;
       setIsAddingSavedBackend(true);
       setSavedBackendError(null);
-      // Host-key trust and the remote install plan are confirmed here, before
-      // provisioning starts, so the user never approves a connection after
-      // ACode has already written to the remote host. The connection platform
-      // re-blocks untrusted or changed keys as a fail-safe.
-      if (desktopBridge?.inspectSshHostTrust && desktopBridge.trustSshHost) {
+      setSshAddProgress({
+        stage: "connecting",
+        detail: null,
+        transferredBytes: null,
+        totalBytes: null,
+      });
+      let progressPoll: ReturnType<typeof setInterval> | null = null;
+      operation.controller.signal.addEventListener(
+        "abort",
+        () => {
+          if (progressPoll) clearInterval(progressPoll);
+        },
+        { once: true },
+      );
+      const showStage = (stage: DesktopSshEnvironmentProgress["stage"]) => {
+        if (sshAddOperationRef.current === operation) {
+          setSshAddProgress({ stage, detail: null, transferredBytes: null, totalBytes: null });
+        }
+      };
+      try {
+        // Host-key trust and the remote install plan are confirmed here, before
+        // provisioning starts, so the user never approves a connection after
+        // ACode has already written to the remote host. The connection platform
+        // re-blocks untrusted or changed keys as a fail-safe.
+        if (
+          !desktopBridge?.inspectSshHostTrust ||
+          !desktopBridge.trustSshHost ||
+          !desktopBridge.inspectSshEnvironmentPlan
+        ) {
+          setSavedBackendError(
+            "SSH trust and setup checks are unavailable in this desktop session.",
+          );
+          return;
+        }
         let gate: Awaited<ReturnType<typeof gateSshEnvironmentConnection>>;
         try {
           gate = await gateSshEnvironmentConnection({
             target,
             version: APP_VERSION,
             deps: {
-              inspectTrust: (gateTarget) => desktopBridge.inspectSshHostTrust!(gateTarget),
-              trustHost: (gateTarget) => desktopBridge.trustSshHost!(gateTarget),
+              resolveTarget: (gateTarget) => {
+                showStage("connecting");
+                return desktopBridge.resolveSshHost(gateTarget.alias);
+              },
+              inspectTrust: (gateTarget) => {
+                showStage("checking");
+                return desktopBridge.inspectSshHostTrust!(gateTarget);
+              },
+              inspectPlan: (gateTarget) => {
+                showStage("checking");
+                return desktopBridge.inspectSshEnvironmentPlan!(gateTarget);
+              },
+              trustHost: (gateTarget, keyType, fingerprint) =>
+                desktopBridge.trustSshHost!(gateTarget, keyType, fingerprint),
               confirm: (message, options) => requestConfirmDialog(message, options),
             },
           });
         } catch (error) {
-          setSavedBackendError(formatDesktopSshConnectionError(error));
-          setIsAddingSavedBackend(false);
+          if (!operation.controller.signal.aborted)
+            setSavedBackendError(formatDesktopSshConnectionError(error));
           return;
         }
+        if (operation.controller.signal.aborted) return;
         if (gate.status === "blocked") {
           setSavedBackendError(gate.message);
           toastManager.add(
@@ -2329,38 +2470,85 @@ export function ConnectionsSettings() {
               description: gate.message,
             }),
           );
-          setIsAddingSavedBackend(false);
           return;
         }
         if (gate.status === "cancelled") {
-          setIsAddingSavedBackend(false);
+          setSshAddProgress(null);
           return;
         }
-      }
-      const result = await connectSshEnvironment({ target, label: "" });
-      if (result._tag === "Failure") {
-        if (!isAtomCommandInterrupted(result)) {
-          setSavedBackendError(formatDesktopSshConnectionError(squashAtomCommandFailure(result)));
+        showStage("starting");
+        if (desktopBridge.getSshEnvironmentProgress) {
+          let polling = false;
+          progressPoll = setInterval(() => {
+            if (polling) return;
+            polling = true;
+            void desktopBridge
+              .getSshEnvironmentProgress?.(operation.id)
+              .then((progress) => {
+                if (progress && sshAddOperationRef.current === operation) {
+                  setSshAddProgress((current) => ({
+                    ...progress,
+                    detail:
+                      progress.detail ??
+                      (current?.stage === progress.stage ? current.detail : null),
+                  }));
+                }
+              })
+              .catch(() => {})
+              .finally(() => {
+                polling = false;
+              });
+          }, 400);
         }
-        setIsAddingSavedBackend(false);
-        return;
-      }
+        const result = await connectSshEnvironment({
+          target: gate.target,
+          label: "",
+          operationId: operation.id,
+          signal: operation.controller.signal,
+        });
+        if (operation.controller.signal.aborted) return;
+        if (result._tag === "Failure") {
+          if (!isAtomCommandInterrupted(result)) {
+            setSavedBackendError(formatDesktopSshConnectionError(squashAtomCommandFailure(result)));
+          }
+          return;
+        }
 
-      setSavedBackendHost("");
-      setSavedBackendPairingCode("");
-      setSavedBackendSshHost("");
-      setSavedBackendSshUsername("");
-      setSavedBackendSshPort("");
-      setAddBackendDialogOpen(false);
-      toastManager.add({
-        type: "success",
-        title: "Environment connected",
-        description: `${target.alias} is ready over an SSH-managed tunnel.`,
-      });
-      setIsAddingSavedBackend(false);
+        setSavedBackendHost("");
+        setSavedBackendPairingCode("");
+        setSavedBackendSshHost("");
+        setSavedBackendSshUsername("");
+        setSavedBackendSshPort("");
+        setSshAddProgress(null);
+        setAddBackendDialogOpen(false);
+        toastManager.add({
+          type: "success",
+          title: "Environment connected",
+          description: `${target.alias} is ready over an SSH-managed tunnel.`,
+        });
+      } finally {
+        if (progressPoll) clearInterval(progressPoll);
+        if (sshAddOperationRef.current === operation) {
+          sshAddOperationRef.current = null;
+          setIsAddingSavedBackend(false);
+        }
+      }
     },
     [connectSshEnvironment, desktopBridge],
   );
+
+  const cancelSavedBackendSshConnection = useCallback(() => {
+    const operation = sshAddOperationRef.current;
+    if (!operation) return;
+    operation.controller.abort();
+    sshAddOperationRef.current = null;
+    setIsAddingSavedBackend(false);
+    setSshAddProgress(null);
+    setAddBackendDialogOpen(false);
+    if (desktopBridge?.cancelSshEnvironment) {
+      void desktopBridge.cancelSshEnvironment(operation.id).catch(() => {});
+    }
+  }, [desktopBridge]);
 
   const handleAddSavedBackend = useCallback(async () => {
     if (savedBackendMode === "ssh") {
@@ -2373,6 +2561,7 @@ export function ConnectionsSettings() {
         });
       } catch (error) {
         setSavedBackendError(formatDesktopSshConnectionError(error));
+        setSshAddProgress(null);
         return;
       }
 
@@ -2462,19 +2651,28 @@ export function ConnectionsSettings() {
       setIsAddingSavedBackend(true);
       setSavedBackendError(null);
       setSavedBackendSshHost(target.alias);
-      let resolved: DesktopSshEnvironmentTarget;
+      let requested: DesktopSshEnvironmentTarget;
       try {
-        resolved = await desktopBridge.resolveSshHost(target.alias);
+        requested = parseManualDesktopSshTarget({
+          host: target.alias,
+          username: savedBackendSshUsername,
+          port: savedBackendSshPort,
+        });
       } catch (error) {
         setSavedBackendError(formatDesktopSshConnectionError(error));
+        setSshAddProgress(null);
         setIsAddingSavedBackend(false);
         return;
       }
-      setSavedBackendSshUsername(resolved.username ?? "");
-      setSavedBackendSshPort(resolved.port === null ? "" : String(resolved.port));
-      await connectSavedBackendSshTarget(resolved);
+      await connectSavedBackendSshTarget(requested);
     },
-    [connectSavedBackendSshTarget, desktopBridge, isAddingSavedBackend],
+    [
+      connectSavedBackendSshTarget,
+      desktopBridge,
+      isAddingSavedBackend,
+      savedBackendSshPort,
+      savedBackendSshUsername,
+    ],
   );
 
   const handleSavedBackendSshHostKeyDown = useCallback(
@@ -2814,7 +3012,7 @@ export function ConnectionsSettings() {
               value={savedBackendSshUsername}
               onChange={(event) => setSavedBackendSshUsername(event.target.value)}
               onKeyDown={handleSavedBackendSshFieldKeyDown}
-              placeholder="root"
+              placeholder={sshConfigDefaults?.username ?? ""}
               disabled={isAddingSavedBackend}
               spellCheck={false}
             />
@@ -2825,7 +3023,7 @@ export function ConnectionsSettings() {
               value={savedBackendSshPort}
               onChange={(event) => setSavedBackendSshPort(event.target.value)}
               onKeyDown={handleSavedBackendSshFieldKeyDown}
-              placeholder="22"
+              placeholder={sshConfigDefaults?.port?.toString() ?? ""}
               inputMode="numeric"
               disabled={isAddingSavedBackend}
               spellCheck={false}
@@ -2837,6 +3035,9 @@ export function ConnectionsSettings() {
             {savedBackendError ?? discoveredSshHostsError}
           </div>
         ) : null}
+        {sshAddProgress ? (
+          <SshAddProgress progress={sshAddProgress} active={isAddingSavedBackend} />
+        ) : null}
         <Button
           variant="outline"
           className="w-full"
@@ -2846,6 +3047,11 @@ export function ConnectionsSettings() {
           <PlusIcon className="size-3.5" />
           {isAddingSavedBackend ? "Adding…" : "Add environment"}
         </Button>
+        {isAddingSavedBackend ? (
+          <Button variant="ghost" className="w-full" onClick={cancelSavedBackendSshConnection}>
+            Cancel
+          </Button>
+        ) : null}
       </div>
     </div>
   );
@@ -3742,9 +3948,11 @@ export function ConnectionsSettings() {
             <Dialog
               open={addBackendDialogOpen}
               onOpenChange={(open) => {
+                if (!open && isAddingSavedBackend && savedBackendMode === "ssh") return;
                 setAddBackendDialogOpen(open);
                 if (!open) {
                   setSavedBackendError(null);
+                  setSshAddProgress(null);
                 }
               }}
             >
@@ -3768,7 +3976,10 @@ export function ConnectionsSettings() {
                 />
                 <TooltipPopup side="top">Add environment</TooltipPopup>
               </Tooltip>
-              <DialogPopup className="max-h-[80dvh] sm:max-w-3xl">
+              <DialogPopup
+                className="max-h-[80dvh] sm:max-w-3xl"
+                showCloseButton={!(isAddingSavedBackend && savedBackendMode === "ssh")}
+              >
                 <DialogHeader>
                   <DialogTitle>Add Environment</DialogTitle>
                   <DialogDescription>Pair another environment to this client.</DialogDescription>

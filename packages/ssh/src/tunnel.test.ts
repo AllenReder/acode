@@ -23,6 +23,7 @@ import * as NodeCrypto from "node:crypto";
 
 import { SshPasswordPrompt } from "./auth.ts";
 import { SshCommandError } from "./errors.ts";
+import { SshEnvironmentProgress } from "./progress.ts";
 import {
   buildRemoteLaunchScript,
   buildRemotePairingScript,
@@ -32,12 +33,63 @@ import {
   describeReadinessCause,
   issueRemotePairingToken,
   launchOrReuseRemoteServer,
+  parseRemotePackageStageHome,
+  parseSshEnvironmentInspection,
   REMOTE_PICK_PORT_SCRIPT,
   SshEnvironmentManager,
   waitForHttpReady,
 } from "./tunnel.ts";
 
 const TEST_NODE_ENGINE_RANGE = "^22.16 || ^23.11 || >=24.10";
+
+describe("remote package upload", () => {
+  it("reads the absolute ACode home used by the remote staging command", () => {
+    assert.equal(
+      parseRemotePackageStageHome("login banner\nACODE_STAGE_HOME=/home/allen/.acode\n"),
+      "/home/allen/.acode",
+    );
+    assert.equal(parseRemotePackageStageHome("ACODE_STAGE_HOME=relative/.acode\n"), null);
+  });
+});
+
+describe("SSH environment inspection", () => {
+  const runner = { archiveVersion: "0.0.42", nodeEngineRange: TEST_NODE_ENGINE_RANGE };
+
+  it("parses actual prerequisites and reuse state", () => {
+    assert.deepEqual(
+      parseSshEnvironmentInspection(
+        "login banner\nACODE_PREFLIGHT\tLinux\tx86_64\tv22.16.0\tyes\treuse\n",
+        runner,
+      ),
+      {
+        version: "0.0.42",
+        os: "Linux",
+        arch: "x86_64",
+        nodeVersion: "v22.16.0",
+        nodeSupported: true,
+        gitAvailable: true,
+        daemon: "reuse",
+      },
+    );
+  });
+
+  it("reports unsupported Node and rejects malformed output", () => {
+    assert.equal(
+      parseSshEnvironmentInspection(
+        "ACODE_PREFLIGHT\tLinux\tx86_64\tv22.15.0\tno\tinstall\n",
+        runner,
+      )?.nodeSupported,
+      false,
+    );
+    assert.equal(
+      parseSshEnvironmentInspection(
+        "ACODE_PREFLIGHT\tLinux\tx86_64\tv22.16.0\tyes\tunknown\n",
+        runner,
+      ),
+      null,
+    );
+  });
+});
 
 const makeSuccessfulProcess = (stdout: string) => {
   const stdoutStream = Stream.make(new TextEncoder().encode(stdout));
@@ -129,17 +181,17 @@ describe("ssh tunnel scripts", () => {
       script,
       "ACODE_RELEASE_BASE_URL='https://github.com/AllenReder/acode/releases/download'",
     );
-    assert.include(script, 'ACODE_RUNTIME_DIR="$ACODE_HOME/runtime/versions/$ACODE_ARCHIVE_VERSION"');
     assert.include(
       script,
-      'ACODE_ARCHIVE="acode-server-$ACODE_ARCHIVE_VERSION-linux-x64.tar.gz"',
+      'ACODE_RUNTIME_DIR="$ACODE_HOME/runtime/versions/$ACODE_ARCHIVE_VERSION"',
     );
+    assert.include(script, 'ACODE_ARCHIVE="acode-server-$ACODE_ARCHIVE_VERSION-linux-x64.tar.gz"');
     assert.include(script, "SHA256SUMS");
     assert.include(script, 'exec "$ACODE_RUNTIME_DIR/bin/acode" "$@"');
     assert.include(script, 'if [ "$(uname -s)" != "Linux" ]; then');
-    assert.include(script, 'x86_64 | amd64');
-    assert.include(script, 'if ! command -v git >/dev/null 2>&1; then');
-    assert.include(script, 'if ! ensure_remote_node_path; then');
+    assert.include(script, "x86_64 | amd64");
+    assert.include(script, "if ! command -v git >/dev/null 2>&1; then");
+    assert.include(script, "if ! ensure_remote_node_path; then");
     assert.notInclude(script, "npx");
     assert.notInclude(script, "npm exec");
     assert.notInclude(script, "acode@latest");
@@ -159,6 +211,9 @@ describe("ssh tunnel scripts", () => {
     assert.include(script, 'if [ "$ACODE_LOCK_WAITED" -ge 360 ]; then');
     assert.include(script, '"$ACODE_STAGING/SHA256SUMS" 30');
     assert.include(script, '"$ACODE_STAGING/$ACODE_ARCHIVE" 240');
+    assert.include(script, "ACODE_PROGRESS download %s");
+    assert.include(script, "ACODE_PROGRESS stage installing");
+    assert.include(script, "ACODE_PROGRESS stage starting");
     assert.notInclude(script, "ACODE_LOCK_CANDIDATE");
     assert.notInclude(script, "-mmin");
     assert.equal(script.split("if ! acode_runtime_ready; then").length - 1, 2);
@@ -408,6 +463,18 @@ describe("ssh tunnel scripts", () => {
 
   it("allows the remote port picker to run without a state file path", () => {
     assert.include(REMOTE_PICK_PORT_SCRIPT, 'const filePath = process.argv[2] ?? "";');
+  });
+
+  it.effect("checks the public environment descriptor for SSH readiness", () => {
+    const urls: string[] = [];
+    const httpClient = HttpClient.make((request) => {
+      urls.push(request.url);
+      return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("", { status: 200 })));
+    });
+    return Effect.gen(function* () {
+      yield* waitForHttpReady({ baseUrl: "http://127.0.0.1:41773/" });
+      assert.deepEqual(urls, ["http://127.0.0.1:41773/.well-known/t3/environment"]);
+    }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient));
   });
 
   it.effect("bounds each HTTP readiness probe so retries cannot hang on one request", () =>
@@ -721,93 +788,148 @@ describe("ssh tunnel scripts", () => {
     }).pipe(Effect.provide(layer), Effect.scoped);
   });
 
-  it.effect("stages a locally built package from ACODE_SERVER_PACKAGE_DIR after a download failure", () => {
-    const target = {
-      alias: "devbox",
-      hostname: "devbox.example.com",
-      username: "julius",
-      port: 2222,
-    } as const;
-    const archiveName = serverReleaseArchiveName(ARCHIVE.archiveVersion);
-    let launches = 0;
-    let scpUploads = 0;
-    const httpUrls: string[] = [];
-    const spawner = ChildProcessSpawner.make((command) =>
-      Effect.sync(() => {
-        const args = commandArgs(command);
-        if (commandName(command).startsWith("scp")) {
-          scpUploads += 1;
-          return makeSuccessfulProcess("");
-        }
-        if (args.includes("--")) {
-          launches += 1;
-          if (launches === 1) {
-            return {
-              ...makeSuccessfulProcess(""),
-              exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(1)),
-              stderr: Stream.make(new TextEncoder().encode("curl: (6) Could not resolve host\n")),
-            };
+  it.effect(
+    "stages a locally built package from ACODE_SERVER_PACKAGE_DIR after a download failure",
+    () => {
+      const target = {
+        alias: "devbox",
+        hostname: "devbox.example.com",
+        username: "julius",
+        port: 2222,
+      } as const;
+      const archiveName = serverReleaseArchiveName(ARCHIVE.archiveVersion);
+      let launches = 0;
+      let scpUploads = 0;
+      const firstUploadProgress = Effect.runSync(Deferred.make<void>());
+      const uploadProgress: Array<{ transferredBytes: number | null; totalBytes: number | null }> =
+        [];
+      const httpUrls: string[] = [];
+      const spawner = ChildProcessSpawner.make((command) =>
+        Effect.gen(function* () {
+          const args = commandArgs(command);
+          if (commandName(command).startsWith("scp")) {
+            assert.include(args, "-P");
+            assert.notInclude(args, "-p");
+            assert.include(args.at(-1) ?? "", "julius@devbox:/home/julius/.acode/ssh-launch/");
+            scpUploads += 1;
+            let released = false;
+            return yield* Effect.acquireRelease(
+              Effect.succeed({
+                ...makeSuccessfulProcess(""),
+                exitCode: Deferred.await(firstUploadProgress).pipe(
+                  Effect.andThen(
+                    Effect.sync(() => {
+                      if (released) throw new Error("SCP process scope closed before exit");
+                      return ChildProcessSpawner.ExitCode(0);
+                    }),
+                  ),
+                ),
+              }),
+              () =>
+                Effect.sync(() => {
+                  released = true;
+                }),
+            );
           }
-          return makeSuccessfulProcess('{"remotePort":3773}\n');
-        }
-        if (args.includes("-N")) {
-          return makeRunningProcess(() => undefined);
-        }
-        return makeSuccessfulProcess("\n");
-      }),
-    );
-    const deadHttpClient = HttpClient.make((request) => {
-      httpUrls.push(request.url);
-      // Only release downloads are forbidden; the loopback readiness probe
-      // through the tunnel still answers.
-      if (request.url.includes("github")) {
-        return Effect.die(new Error("no network in this test"));
-      }
-      return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("", { status: 200 })));
-    });
-    const layer = Layer.mergeAll(
-      NodeServices.layer,
-      Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
-      Layer.succeed(HttpClient.HttpClient, deadHttpClient),
-      Layer.succeed(NetService.NetService, testNetService),
-      SshPasswordPrompt.disabledLayer,
-      SshEnvironmentManager.layer({ resolveCliRunner: Effect.succeed(ARCHIVE) }),
-    );
-
-    return Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const packageDir = yield* fs.makeTempDirectoryScoped({ prefix: "acode-local-package-" });
-      const archiveBytes = new TextEncoder().encode("fake acode server archive");
-      const checksum = NodeCrypto.createHash("sha256").update(archiveBytes).digest("hex");
-      yield* fs.writeFile(path.join(packageDir, archiveName), archiveBytes);
-      yield* fs.writeFileString(
-        path.join(packageDir, SERVER_RELEASE_CHECKSUMS_FILE),
-        `${checksum}  ${archiveName}\n`,
-      );
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          process.env.ACODE_SERVER_PACKAGE_DIR = packageDir;
+          if (args.includes("--")) {
+            launches += 1;
+            if (launches === 1) {
+              return {
+                ...makeSuccessfulProcess(""),
+                exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(1)),
+                stderr: Stream.make(new TextEncoder().encode("curl: (6) Could not resolve host\n")),
+              };
+            }
+            return makeSuccessfulProcess('{"remotePort":3773}\n');
+          }
+          if (args.includes("-N")) {
+            return makeRunningProcess(() => undefined);
+          }
+          if (args.includes("sh")) {
+            return makeSuccessfulProcess(
+              scpUploads > 0 ? "10\n" : "ACODE_STAGE_HOME=/home/julius/.acode\n",
+            );
+          }
+          return makeSuccessfulProcess("\n");
         }),
-        () =>
-          Effect.sync(() => {
-            delete process.env.ACODE_SERVER_PACKAGE_DIR;
+      );
+      const deadHttpClient = HttpClient.make((request) => {
+        httpUrls.push(request.url);
+        // Only release downloads are forbidden; the loopback readiness probe
+        // through the tunnel still answers.
+        if (request.url.includes("github")) {
+          return Effect.die(new Error("no network in this test"));
+        }
+        return Effect.succeed(
+          HttpClientResponse.fromWeb(request, new Response("", { status: 200 })),
+        );
+      });
+      const layer = Layer.mergeAll(
+        NodeServices.layer,
+        Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        Layer.succeed(HttpClient.HttpClient, deadHttpClient),
+        Layer.succeed(NetService.NetService, testNetService),
+        SshPasswordPrompt.disabledLayer,
+        Layer.succeed(
+          SshEnvironmentProgress,
+          SshEnvironmentProgress.of({
+            report: (progress) => {
+              if (progress.stage === "uploading") {
+                uploadProgress.push(progress);
+                if (progress.transferredBytes === 10) {
+                  Effect.runSync(Deferred.succeed(firstUploadProgress, undefined));
+                }
+              }
+            },
           }),
+        ),
+        SshEnvironmentManager.layer({ resolveCliRunner: Effect.succeed(ARCHIVE) }),
       );
 
-      const manager = yield* SshEnvironmentManager;
-      const bootstrap = yield* manager.ensureEnvironment(target);
+      return Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const packageDir = yield* fs.makeTempDirectoryScoped({ prefix: "acode-local-package-" });
+        const archiveBytes = new TextEncoder().encode("fake acode server archive");
+        const checksum = NodeCrypto.createHash("sha256").update(archiveBytes).digest("hex");
+        yield* fs.writeFile(path.join(packageDir, archiveName), archiveBytes);
+        yield* fs.writeFileString(
+          path.join(packageDir, SERVER_RELEASE_CHECKSUMS_FILE),
+          `${checksum}  ${archiveName}\n`,
+        );
+        yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            process.env.ACODE_SERVER_PACKAGE_DIR = packageDir;
+          }),
+          () =>
+            Effect.sync(() => {
+              delete process.env.ACODE_SERVER_PACKAGE_DIR;
+            }),
+        );
 
-      assert.equal(bootstrap.httpBaseUrl, "http://127.0.0.1:41773/");
-      assert.equal(launches, 2);
-      // Archive plus SHA256SUMS uploaded; nothing came from the release feed.
-      assert.equal(scpUploads, 2);
-      assert.deepEqual(httpUrls.filter((url) => url.includes("github")), []);
-    }).pipe(Effect.provide(layer), Effect.scoped);
-  });
+        const manager = yield* SshEnvironmentManager;
+        const bootstrap = yield* manager.ensureEnvironment(target);
+
+        assert.equal(bootstrap.httpBaseUrl, "http://127.0.0.1:41773/");
+        assert.equal(launches, 2);
+        // Archive plus SHA256SUMS uploaded; nothing came from the release feed.
+        assert.equal(scpUploads, 2);
+        assert.isTrue(
+          uploadProgress.some(
+            (progress) =>
+              progress.transferredBytes === 10 && progress.totalBytes === archiveBytes.length,
+          ),
+        );
+        assert.deepEqual(
+          httpUrls.filter((url) => url.includes("github")),
+          [],
+        );
+      }).pipe(Effect.provide(layer), Effect.scoped);
+    },
+  );
 });
 
-  // The archive runner is generated shell; string assertions cannot prove the
+// The archive runner is generated shell; string assertions cannot prove the
 // lock excludes concurrent installers. Run the real script against a tiny
 // fake archive served from a file:// mirror.
 describe("archive runner script", () => {

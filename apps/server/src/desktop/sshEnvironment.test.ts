@@ -1,9 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import type {
-  DesktopDiscoveredSshHost,
-  DesktopSshEnvironmentTarget,
-} from "@t3tools/contracts";
+import type { DesktopDiscoveredSshHost, DesktopSshEnvironmentTarget } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
@@ -21,8 +18,19 @@ const TARGET: DesktopSshEnvironmentTarget = {
 };
 
 describe("desktop SSH environment", () => {
-  it.effect("delegates ensure and disconnect to the SSH tunnel manager", () => {    const calls: string[] = [];
+  it.effect("delegates ensure and disconnect to the SSH tunnel manager", () => {
+    const calls: string[] = [];
     const manager = SshTunnel.SshEnvironmentManager.of({
+      inspectEnvironment: () =>
+        Effect.succeed({
+          version: "0.0.42",
+          os: "Linux",
+          arch: "x86_64",
+          nodeVersion: "v22.16.0",
+          nodeSupported: true,
+          gitAvailable: true,
+          daemon: "install" as const,
+        }),
       ensureEnvironment: (target, options) => {
         calls.push(`ensure:${target.alias}:${options?.issuePairingToken === true}`);
         return Effect.succeed({

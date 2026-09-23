@@ -39,6 +39,8 @@ export interface RunSshCommandOptions extends SshAuthOptions {
   readonly remoteCommandArgs?: ReadonlyArray<string>;
   readonly stdin?: string;
   readonly timeoutMs?: number;
+  readonly onStderrChunk?: (chunk: string) => void;
+  readonly childEnvironment?: NodeJS.ProcessEnv;
 }
 
 export function parseSshResolveOutput(alias: string, stdout: string): DesktopSshEnvironmentTarget {
@@ -98,9 +100,10 @@ export const buildSshHostSpecEffect = (
       }),
   });
 
-export function baseSshArgs(
+function baseSshTransportArgs(
   target: DesktopSshEnvironmentTarget,
-  input?: { readonly batchMode?: "yes" | "no" },
+  input: { readonly batchMode?: "yes" | "no" } | undefined,
+  portFlag: "-p" | "-P",
 ): string[] {
   return [
     "-o",
@@ -112,8 +115,22 @@ export function baseSshArgs(
     "StrictHostKeyChecking=yes",
     "-o",
     "ConnectTimeout=10",
-    ...(target.port !== null ? ["-p", String(target.port)] : []),
+    ...(target.port !== null ? [portFlag, String(target.port)] : []),
   ];
+}
+
+export function baseSshArgs(
+  target: DesktopSshEnvironmentTarget,
+  input?: { readonly batchMode?: "yes" | "no" },
+): string[] {
+  return baseSshTransportArgs(target, input, "-p");
+}
+
+export function baseScpArgs(
+  target: DesktopSshEnvironmentTarget,
+  input?: { readonly batchMode?: "yes" | "no" },
+): string[] {
+  return baseSshTransportArgs(target, input, "-P");
 }
 
 export function getLastNonEmptyOutputLine(stdout: string): string | null {
@@ -184,21 +201,23 @@ const runSshCommandInScope = Effect.fn("ssh/command.runSshCommand.inScope")(func
   ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
 > {
   const hostSpec = yield* buildSshHostSpecEffect(target);
-  const environment = yield* buildSshChildEnvironment({
-    ...(input.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
-    ...(input.authSecret === undefined ? {} : { authSecret: input.authSecret }),
-  }).pipe(
-    Effect.mapError(
-      (cause) =>
-        new SshCommandError({
-          command: ["ssh"],
-          exitCode: null,
-          stderr: "",
-          message: "Failed to prepare SSH authentication helpers.",
-          cause,
-        }),
-    ),
-  );
+  const environment =
+    input.childEnvironment ??
+    (yield* buildSshChildEnvironment({
+      ...(input.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
+      ...(input.authSecret === undefined ? {} : { authSecret: input.authSecret }),
+    }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new SshCommandError({
+            command: ["ssh"],
+            exitCode: null,
+            stderr: "",
+            message: "Failed to prepare SSH authentication helpers.",
+            cause,
+          }),
+      ),
+    ));
   const args = [
     ...baseSshArgs(target, {
       batchMode: input.batchMode ?? (input.interactiveAuth ? "no" : "yes"),
@@ -246,7 +265,16 @@ const runSshCommandInScope = Effect.fn("ssh/command.runSshCommand.inScope")(func
   const [stdout, stderr, exitCode] = yield* Effect.all(
     [
       collectProcessOutput(child.stdout),
-      collectProcessOutput(child.stderr),
+      input.onStderrChunk
+        ? child.stderr.pipe(
+            Stream.decodeText(),
+            Stream.tap((chunk) => Effect.sync(() => input.onStderrChunk?.(chunk))),
+            Stream.runFold(
+              () => "",
+              (output, chunk) => output + chunk,
+            ),
+          )
+        : collectProcessOutput(child.stderr),
       child.exitCode.pipe(Effect.map(Number)),
     ],
     { concurrency: "unbounded" },

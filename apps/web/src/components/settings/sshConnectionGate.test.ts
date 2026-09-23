@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import type {
-  DesktopSshEnvironmentTarget,
-  DesktopSshHostKeyTrust,
-} from "@t3tools/contracts";
+import type { DesktopSshEnvironmentTarget, DesktopSshHostKeyTrust } from "@t3tools/contracts";
 
 import { gateSshEnvironmentConnection, type SshConnectionGateDeps } from "./sshConnectionGate";
 
@@ -16,11 +13,21 @@ const TARGET: DesktopSshEnvironmentTarget = {
 function makeDeps(overrides: Partial<SshConnectionGateDeps> = {}) {
   const confirm = vi.fn().mockResolvedValue(true);
   const deps: SshConnectionGateDeps = {
+    resolveTarget: vi.fn().mockImplementation(async (target) => target),
     inspectTrust: vi.fn().mockResolvedValue({
       status: "trusted",
       fingerprint: null,
       keyType: null,
     } satisfies DesktopSshHostKeyTrust),
+    inspectPlan: vi.fn().mockResolvedValue({
+      version: "1.2.3",
+      os: "Linux",
+      arch: "x86_64",
+      nodeVersion: "v22.16.0",
+      nodeSupported: true,
+      gitAvailable: true,
+      daemon: "install",
+    }),
     trustHost: vi.fn().mockResolvedValue(undefined),
     confirm,
     ...overrides,
@@ -50,6 +57,30 @@ describe("gateSshEnvironmentConnection", () => {
     expect(confirm).not.toHaveBeenCalled();
   });
 
+  it("resolves SSH config aliases before inspecting and returning the target", async () => {
+    const requestedTarget = { ...TARGET, hostname: "dev", port: 6000 };
+    const configuredTarget = {
+      ...TARGET,
+      hostname: "dev.example.test",
+      username: "configured-user",
+      port: 22,
+    };
+    const effectiveTarget = { ...configuredTarget, username: "allen", port: 6000 };
+    const { deps } = makeDeps({
+      resolveTarget: vi.fn().mockResolvedValue(configuredTarget),
+    });
+
+    const result = await gateSshEnvironmentConnection({
+      target: requestedTarget,
+      version: "1.2.3",
+      deps,
+    });
+
+    expect(deps.inspectTrust).toHaveBeenCalledWith(effectiveTarget);
+    expect(deps.inspectPlan).toHaveBeenCalledWith(effectiveTarget);
+    expect(result).toEqual({ status: "proceed", target: effectiveTarget });
+  });
+
   it("shows host, key type, and fingerprint before trusting a new host", async () => {
     const { deps, confirm } = makeDeps({
       inspectTrust: vi.fn().mockResolvedValue({
@@ -70,10 +101,10 @@ describe("gateSshEnvironmentConnection", () => {
     expect(trustMessage).toContain("allen@devbox.example.test:22");
     expect(trustMessage).toContain("ssh-ed25519");
     expect(trustMessage).toContain("SHA256:abc123");
-    expect(deps.trustHost).toHaveBeenCalledWith(TARGET);
+    expect(deps.trustHost).toHaveBeenCalledWith(TARGET, "ssh-ed25519", "SHA256:abc123");
   });
 
-  it("tolerates a null fingerprint for a new host", async () => {
+  it("blocks a new host when its fingerprint is unavailable", async () => {
     const { deps, confirm } = makeDeps({
       inspectTrust: vi.fn().mockResolvedValue({
         status: "new",
@@ -88,8 +119,9 @@ describe("gateSshEnvironmentConnection", () => {
       deps,
     });
 
-    expect(result.status).toBe("proceed");
-    expect(confirm.mock.calls[0]?.[0]).toContain("unavailable");
+    expect(result.status).toBe("blocked");
+    expect(confirm).not.toHaveBeenCalled();
+    expect(deps.trustHost).not.toHaveBeenCalled();
   });
 
   it("aborts without trusting when the user declines a new host key", async () => {
@@ -153,9 +185,46 @@ describe("gateSshEnvironmentConnection", () => {
     expect(message).toContain("~/.acode/runtime/versions/1.2.3/");
     expect(message).toContain("acode-server-1.2.3-linux-x64.tar.gz");
     expect(message).toContain("SHA256SUMS");
-    expect(message).toContain("Linux x64");
-    expect(message).toContain("Node.js 22");
+    expect(message).toContain("OS: Linux");
+    expect(message).toContain("Architecture: x86_64");
+    expect(message).toContain("Node.js: v22.16.0");
     expect(message).toContain("Git");
+  });
+
+  it("describes reuse without claiming an installation is required", async () => {
+    const { deps, confirm } = makeDeps({
+      inspectPlan: vi.fn().mockResolvedValue({
+        version: "1.2.3",
+        os: "Linux",
+        arch: "x86_64",
+        nodeVersion: "v22.16.0",
+        nodeSupported: true,
+        gitAvailable: true,
+        daemon: "reuse",
+      }),
+    });
+    const result = await gateSshEnvironmentConnection({ target: TARGET, version: "1.2.3", deps });
+    expect(result.status).toBe("proceed");
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(confirm.mock.calls[0]?.[0]).toContain("Reuse the responding daemon");
+  });
+
+  it("blocks missing remote prerequisites before install confirmation", async () => {
+    const { deps, confirm } = makeDeps({
+      inspectPlan: vi.fn().mockResolvedValue({
+        version: "1.2.3",
+        os: "Linux",
+        arch: "x86_64",
+        nodeVersion: "v22.15.0",
+        nodeSupported: false,
+        gitAvailable: false,
+        daemon: "install",
+      }),
+    });
+    const result = await gateSshEnvironmentConnection({ target: TARGET, version: "1.2.3", deps });
+    expect(result.status).toBe("blocked");
+    expect(result.status === "blocked" && result.message).toContain("v22.15.0");
+    expect(confirm).not.toHaveBeenCalled();
   });
 
   it("asks trust and install separately for a new host", async () => {

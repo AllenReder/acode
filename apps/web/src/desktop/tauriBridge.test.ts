@@ -30,17 +30,34 @@ describe("Tauri desktop SSH API client", () => {
     const client = createDesktopSshApiClient({
       getBaseUrl: () => "http://127.0.0.1:3773/",
       getBearerToken: async () => "local-token",
-      fetchFn: vi.fn().mockResolvedValue(
-        Response.json(
-          { error: { message: "SSH authentication cancelled." } },
-          { status: 401 },
+      fetchFn: vi
+        .fn()
+        .mockResolvedValue(
+          Response.json({ error: { message: "SSH authentication cancelled." } }, { status: 401 }),
         ),
-      ),
     });
 
     await expect(client.request("/api/desktop/ssh/ensure", { method: "POST" })).rejects.toThrow(
       "SSH authentication cancelled.",
     );
+  });
+
+  it("passes cancellation to the SSH request", async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(null));
+    const client = createDesktopSshApiClient({
+      getBaseUrl: () => "http://127.0.0.1:3773/",
+      getBearerToken: async () => "local-token",
+      fetchFn: fetchMock,
+    });
+
+    await client.request("/api/desktop/ssh/ensure", {
+      method: "POST",
+      body: { operationId: "test-operation" },
+      signal: controller.signal,
+    });
+
+    expect(fetchMock.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
   });
 });
 

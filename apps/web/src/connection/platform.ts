@@ -172,19 +172,27 @@ const assertSshHostTrusted = Effect.fn("web.connectionPlatform.ssh.assertTrusted
   if (trust.status === "new") {
     return yield* new ConnectionBlockedError({
       reason: "permission",
-      detail: "The SSH host key must be trusted before ACode can install or start the remote daemon.",
+      detail:
+        "The SSH host key must be trusted before ACode can install or start the remote daemon.",
     });
   }
 });
 
 /** Trust gate + ensure, shared by provision and prepare. */
 const ensureTrustedSshEnvironment = Effect.fn("web.connectionPlatform.ssh.ensureTrusted")(
-  function* (bridge: DesktopBridge, target: DesktopSshEnvironmentTarget) {
+  function* (
+    bridge: DesktopBridge,
+    target: DesktopSshEnvironmentTarget,
+    operationId?: string,
+    signal?: AbortSignal,
+  ) {
     yield* assertSshHostTrusted(bridge, target);
     const bootstrap = yield* Effect.tryPromise({
       try: () =>
         bridge.ensureSshEnvironment(target, {
           issuePairingToken: true,
+          ...(operationId ? { operationId } : {}),
+          ...(signal ? { signal } : {}),
         }),
       catch: sshPreparationError,
     });
@@ -212,15 +220,23 @@ const exchangeSshPairingCredential = Effect.fn("web.connectionPlatform.ssh.excha
 
 export const provisionDesktopSshEnvironment = Effect.fn(
   "web.connectionPlatform.ssh.provisionDesktop",
-)(function* (bridge: DesktopBridge, target: DesktopSshEnvironmentTarget) {
-  const bootstrap = yield* ensureTrustedSshEnvironment(bridge, target);
+)(function* (
+  bridge: DesktopBridge,
+  target: DesktopSshEnvironmentTarget,
+  operationId?: string,
+  signal?: AbortSignal,
+) {
+  const bootstrap = yield* ensureTrustedSshEnvironment(bridge, target, operationId, signal);
+  if (signal?.aborted) return yield* Effect.interrupt;
   // The descriptor confirms the environment identity before the one-time
   // pairing credential is consumed.
   const descriptor = yield* Effect.tryPromise({
     try: () => bridge.fetchSshEnvironmentDescriptor(bootstrap.httpBaseUrl),
     catch: sshPreparationError,
   });
+  if (signal?.aborted) return yield* Effect.interrupt;
   const bearerToken = yield* exchangeSshPairingCredential(bridge, bootstrap);
+  if (signal?.aborted) return yield* Effect.interrupt;
   return {
     environmentId: descriptor.environmentId,
     label: descriptor.label,
@@ -279,16 +295,18 @@ const capabilitiesLayer = Layer.effectContext(
       }).pipe(Effect.map(Option.fromNullishOr)),
     });
     const ssh = SshEnvironmentGateway.of({
-      provision: Effect.fn("web.connectionPlatform.ssh.provision")(function* (target) {
-        const bridge = window.desktopBridge;
-        if (bridge === undefined) {
-          return yield* new ConnectionBlockedError({
-            reason: "unsupported",
-            detail: "SSH environments are only available in the desktop app.",
-          });
-        }
-        return yield* provisionDesktopSshEnvironment(bridge, target);
-      }),
+      provision: Effect.fn("web.connectionPlatform.ssh.provision")(
+        function* (target, operationId, signal) {
+          const bridge = window.desktopBridge;
+          if (bridge === undefined) {
+            return yield* new ConnectionBlockedError({
+              reason: "unsupported",
+              detail: "SSH environments are only available in the desktop app.",
+            });
+          }
+          return yield* provisionDesktopSshEnvironment(bridge, target, operationId, signal);
+        },
+      ),
       prepare: Effect.fn("web.connectionPlatform.ssh.prepare")(function* (input) {
         const bridge = window.desktopBridge;
         if (bridge === undefined) {

@@ -10,6 +10,9 @@ import {
   DesktopSshBearerRequestInputSchema,
   DesktopSshEnvironmentEnsureInputSchema,
   DesktopSshEnvironmentEnsureResultSchema,
+  DesktopSshEnvironmentPlanSchema,
+  DesktopSshEnvironmentProgressSchema,
+  DesktopSshHostKeyAcceptanceSchema,
   DesktopSshEnvironmentTargetSchema,
   DesktopSshPasswordPromptCancelledType,
   DesktopSshPasswordPromptResolutionInputSchema,
@@ -39,6 +42,7 @@ import {
 } from "@t3tools/shared/remoteEnvironmentHttp";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as Schema from "effect/Schema";
@@ -55,9 +59,30 @@ import { authenticateRawRouteWithScope } from "../http.ts";
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as DesktopSshEnvironment from "./sshEnvironment.ts";
 import * as DesktopSshPasswordPrompts from "./sshPasswordPrompts.ts";
+import { SshEnvironmentProgress, sshProgress } from "@t3tools/ssh/progress";
 
 const DESKTOP_SSH_ROUTE_PREFIX = "/api/desktop/ssh";
 const DEFAULT_REMOTE_REQUEST_TIMEOUT_MS = 10_000;
+const encodeDesktopSshEnvironmentPlan = Schema.encodeEffect(DesktopSshEnvironmentPlanSchema);
+const sshEnsureOperations = new Map<
+  string,
+  {
+    progress: typeof DesktopSshEnvironmentProgressSchema.Type;
+    cancel: (() => Promise<void>) | null;
+  }
+>();
+const sshOperationInputSchema = Schema.Struct({ operationId: Schema.String });
+
+const executeSshRemoteRequest = <A, E, R>(
+  httpBaseUrl: string,
+  pathname: string,
+  request: Effect.Effect<A, E, R>,
+) =>
+  executeEnvironmentHttpRequest(
+    environmentEndpointUrl(httpBaseUrl, pathname),
+    DEFAULT_REMOTE_REQUEST_TIMEOUT_MS,
+    request,
+  );
 
 type DesktopSshEnvironmentRequestOperation =
   | "fetch-environment-descriptor"
@@ -169,44 +194,45 @@ const withRouteErrors = <E, R>(
     }),
   );
 
-const fetchRemoteEnvironmentDescriptor = Effect.fn(
-  "desktop.ssh.fetchRemoteEnvironmentDescriptor",
-)(function* (httpBaseUrl: string) {
-  const client = yield* makeEnvironmentHttpApiGroupClient(httpBaseUrl, "metadata");
-  return yield* executeEnvironmentHttpRequest(
-    environmentEndpointUrl(httpBaseUrl, "/.well-known/t3/environment"),
-    DEFAULT_REMOTE_REQUEST_TIMEOUT_MS,
-    client.descriptor(),
-  );
-});
+const fetchRemoteEnvironmentDescriptor = Effect.fn("desktop.ssh.fetchRemoteEnvironmentDescriptor")(
+  function* (httpBaseUrl: string) {
+    const client = yield* makeEnvironmentHttpApiGroupClient(httpBaseUrl, "metadata");
+    return yield* executeSshRemoteRequest(
+      httpBaseUrl,
+      "/.well-known/t3/environment",
+      client.descriptor(),
+    );
+  },
+);
 
-const bootstrapRemoteBearerSession = Effect.fn(
-  "desktop.ssh.bootstrapRemoteBearerSession",
-)(function* (input: { readonly httpBaseUrl: string; readonly credential: string }) {
-  const client = yield* makeEnvironmentHttpApiGroupClient(input.httpBaseUrl, "auth");
-  return yield* executeEnvironmentHttpRequest(
-    environmentEndpointUrl(input.httpBaseUrl, "/oauth/token"),
-    DEFAULT_REMOTE_REQUEST_TIMEOUT_MS,
-    client.token({
-      headers: {},
-      payload: {
-        grant_type: AuthTokenExchangeGrantType,
-        subject_token: input.credential,
-        subject_token_type: AuthEnvironmentBootstrapTokenType,
-        requested_token_type: AuthAccessTokenType,
-        scope: encodeOAuthScope([AuthOrchestrationReadScope, AuthOrchestrationOperateScope]),
-      },
-    }),
-  );
-});
+const bootstrapRemoteBearerSession = Effect.fn("desktop.ssh.bootstrapRemoteBearerSession")(
+  function* (input: { readonly httpBaseUrl: string; readonly credential: string }) {
+    const client = yield* makeEnvironmentHttpApiGroupClient(input.httpBaseUrl, "auth");
+    return yield* executeSshRemoteRequest(
+      input.httpBaseUrl,
+      "/oauth/token",
+      client.token({
+        headers: {},
+        payload: {
+          grant_type: AuthTokenExchangeGrantType,
+          subject_token: input.credential,
+          subject_token_type: AuthEnvironmentBootstrapTokenType,
+          requested_token_type: AuthAccessTokenType,
+          scope: encodeOAuthScope([AuthOrchestrationReadScope, AuthOrchestrationOperateScope]),
+        },
+      }),
+    );
+  },
+);
 
-const fetchRemoteSessionState = Effect.fn(
-  "desktop.ssh.fetchRemoteSessionState",
-)(function* (input: { readonly httpBaseUrl: string; readonly bearerToken: string }) {
+const fetchRemoteSessionState = Effect.fn("desktop.ssh.fetchRemoteSessionState")(function* (input: {
+  readonly httpBaseUrl: string;
+  readonly bearerToken: string;
+}) {
   const client = yield* makeEnvironmentHttpApiGroupClient(input.httpBaseUrl, "auth");
-  return yield* executeEnvironmentHttpRequest(
-    environmentEndpointUrl(input.httpBaseUrl, "/api/auth/session"),
-    DEFAULT_REMOTE_REQUEST_TIMEOUT_MS,
+  return yield* executeSshRemoteRequest(
+    input.httpBaseUrl,
+    "/api/auth/session",
     client.session({
       headers: {
         authorization: `Bearer ${input.bearerToken}`,
@@ -215,20 +241,20 @@ const fetchRemoteSessionState = Effect.fn(
   );
 });
 
-const issueRemoteWebSocketTicket = Effect.fn(
-  "desktop.ssh.issueRemoteWebSocketTicket",
-)(function* (input: { readonly httpBaseUrl: string; readonly bearerToken: string }) {
-  const client = yield* makeEnvironmentHttpApiGroupClient(input.httpBaseUrl, "auth");
-  return yield* executeEnvironmentHttpRequest(
-    environmentEndpointUrl(input.httpBaseUrl, "/api/auth/websocket-ticket"),
-    DEFAULT_REMOTE_REQUEST_TIMEOUT_MS,
-    client.webSocketTicket({
-      headers: {
-        authorization: `Bearer ${input.bearerToken}`,
-      },
-    }),
-  );
-});
+const issueRemoteWebSocketTicket = Effect.fn("desktop.ssh.issueRemoteWebSocketTicket")(
+  function* (input: { readonly httpBaseUrl: string; readonly bearerToken: string }) {
+    const client = yield* makeEnvironmentHttpApiGroupClient(input.httpBaseUrl, "auth");
+    return yield* executeSshRemoteRequest(
+      input.httpBaseUrl,
+      "/api/auth/websocket-ticket",
+      client.webSocketTicket({
+        headers: {
+          authorization: `Bearer ${input.bearerToken}`,
+        },
+      }),
+    );
+  },
+);
 
 export const desktopSshHostsRouteLayer = HttpRouter.add(
   "GET",
@@ -263,6 +289,22 @@ export const desktopSshResolveHostRouteLayer = HttpRouter.add(
   ),
 );
 
+export const desktopSshInspectRouteLayer = HttpRouter.add(
+  "POST",
+  `${DESKTOP_SSH_ROUTE_PREFIX}/plan`,
+  withRouteErrors(
+    Effect.gen(function* () {
+      yield* annotateEnvironmentRequest("desktop.ssh.plan");
+      yield* authenticateRawRouteWithScope(AuthOrchestrationReadScope);
+      const target = yield* decodeJsonBody(DesktopSshEnvironmentTargetSchema);
+      const ssh = yield* DesktopSshEnvironment.DesktopSshEnvironment;
+      return HttpServerResponse.jsonUnsafe(
+        yield* encodeDesktopSshEnvironmentPlan(yield* ssh.inspectEnvironment(target)),
+      );
+    }),
+  ),
+);
+
 export const desktopSshEnsureRouteLayer = HttpRouter.add(
   "POST",
   `${DESKTOP_SSH_ROUTE_PREFIX}/ensure`,
@@ -272,7 +314,27 @@ export const desktopSshEnsureRouteLayer = HttpRouter.add(
       yield* authenticateRawRouteWithScope(AuthOrchestrationOperateScope);
       const input = yield* decodeJsonBody(DesktopSshEnvironmentEnsureInputSchema);
       const ssh = yield* DesktopSshEnvironment.DesktopSshEnvironment;
-      const bootstrap = yield* ssh.ensureEnvironment(input.target, input.options).pipe(
+      const operationId = input.options?.operationId;
+      const operation = operationId
+        ? {
+            progress: sshProgress("connecting"),
+            cancel: null as (() => Promise<void>) | null,
+          }
+        : null;
+      if (operationId && operation) sshEnsureOperations.set(operationId, operation);
+      const ensureWithProgress = operation
+        ? ssh.ensureEnvironment(input.target, input.options).pipe(
+            Effect.provideService(
+              SshEnvironmentProgress,
+              SshEnvironmentProgress.of({
+                report: (progress) => {
+                  operation.progress = progress;
+                },
+              }),
+            ),
+          )
+        : ssh.ensureEnvironment(input.target, input.options);
+      const ensure = ensureWithProgress.pipe(
         Effect.catch((error) =>
           DesktopSshEnvironment.isDesktopSshPasswordPromptCancellation(error)
             ? Effect.succeed({
@@ -282,9 +344,53 @@ export const desktopSshEnsureRouteLayer = HttpRouter.add(
             : Effect.fail(error),
         ),
       );
+      const fiber = yield* ensure.pipe(Effect.forkChild);
+      if (operation)
+        operation.cancel = () => Effect.runPromise(Fiber.interrupt(fiber)).then(() => {});
+      const bootstrap = yield* Fiber.join(fiber).pipe(
+        Effect.ensuring(
+          Effect.gen(function* () {
+            if (operation) operation.cancel = null;
+            if (operationId) {
+              yield* Effect.sleep(60_000).pipe(
+                Effect.andThen(Effect.sync(() => sshEnsureOperations.delete(operationId))),
+                Effect.forkDetach,
+              );
+            }
+          }),
+        ),
+      );
       return HttpServerResponse.jsonUnsafe(
         yield* Schema.encodeEffect(DesktopSshEnvironmentEnsureResultSchema)(bootstrap),
       );
+    }),
+  ),
+);
+
+export const desktopSshProgressRouteLayer = HttpRouter.add(
+  "POST",
+  `${DESKTOP_SSH_ROUTE_PREFIX}/progress`,
+  withRouteErrors(
+    Effect.gen(function* () {
+      yield* annotateEnvironmentRequest("desktop.ssh.progress");
+      yield* authenticateRawRouteWithScope(AuthOrchestrationOperateScope);
+      const { operationId } = yield* decodeJsonBody(sshOperationInputSchema);
+      return HttpServerResponse.jsonUnsafe(sshEnsureOperations.get(operationId)?.progress ?? null);
+    }),
+  ),
+);
+
+export const desktopSshCancelRouteLayer = HttpRouter.add(
+  "POST",
+  `${DESKTOP_SSH_ROUTE_PREFIX}/cancel`,
+  withRouteErrors(
+    Effect.gen(function* () {
+      yield* annotateEnvironmentRequest("desktop.ssh.cancel");
+      yield* authenticateRawRouteWithScope(AuthOrchestrationOperateScope);
+      const { operationId } = yield* decodeJsonBody(sshOperationInputSchema);
+      const cancel = sshEnsureOperations.get(operationId)?.cancel;
+      if (cancel) yield* Effect.promise(cancel);
+      return HttpServerResponse.empty({ status: 204 });
     }),
   ),
 );
@@ -325,9 +431,9 @@ export const desktopSshTrustAcceptRouteLayer = HttpRouter.add(
     Effect.gen(function* () {
       yield* annotateEnvironmentRequest("desktop.ssh.trustAccept");
       yield* authenticateRawRouteWithScope(AuthOrchestrationOperateScope);
-      const target = yield* decodeJsonBody(DesktopSshEnvironmentTargetSchema);
+      const input = yield* decodeJsonBody(DesktopSshHostKeyAcceptanceSchema);
       const ssh = yield* DesktopSshEnvironment.DesktopSshEnvironment;
-      yield* ssh.trustHost(target);
+      yield* ssh.trustHost(input.target, input.keyType, input.fingerprint);
       return HttpServerResponse.empty({ status: 204 });
     }),
   ),
@@ -342,9 +448,10 @@ export const desktopSshDescriptorRouteLayer = HttpRouter.add(
       yield* authenticateRawRouteWithScope(AuthOrchestrationReadScope);
       const input = yield* decodeJsonBody(Schema.Struct({ httpBaseUrl: Schema.String }));
       return HttpServerResponse.jsonUnsafe(
-        yield* withLoopbackSshApi("fetch-environment-descriptor", fetchRemoteEnvironmentDescriptor)(
-          input.httpBaseUrl,
-        ),
+        yield* withLoopbackSshApi(
+          "fetch-environment-descriptor",
+          fetchRemoteEnvironmentDescriptor,
+        )(input.httpBaseUrl),
       );
     }),
   ),
@@ -442,7 +549,10 @@ type DesktopSshRouteLayer = Layer.Layer<
 export const desktopSshRouteLayer: DesktopSshRouteLayer = Layer.mergeAll(
   desktopSshHostsRouteLayer,
   desktopSshResolveHostRouteLayer,
+  desktopSshInspectRouteLayer,
   desktopSshEnsureRouteLayer,
+  desktopSshProgressRouteLayer,
+  desktopSshCancelRouteLayer,
   desktopSshTrustRouteLayer,
   desktopSshTrustAcceptRouteLayer,
   desktopSshDisconnectRouteLayer,

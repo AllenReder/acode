@@ -1200,6 +1200,7 @@ const buildAppUnderTest = (options?: {
                   port: null,
                 }),
               ensureEnvironment: () => Effect.die("SSH ensure is not stubbed in this test"),
+              inspectEnvironment: () => Effect.die("SSH plan is not stubbed in this test"),
               inspectTrust: () => Effect.die("SSH trust inspection is not stubbed in this test"),
               trustHost: () => Effect.die("SSH trust acceptance is not stubbed in this test"),
               disconnectEnvironment: () => Effect.void,

@@ -1,4 +1,5 @@
 import type { DesktopSshEnvironmentTarget, DesktopSshHostKeyTrust } from "@t3tools/contracts";
+import * as NodeCrypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -80,6 +81,11 @@ function targetHostname(target: DesktopSshEnvironmentTarget): string {
   return target.hostname.trim() || target.alias.trim();
 }
 
+export function knownHostsLookupHost(target: DesktopSshEnvironmentTarget): string {
+  const hostname = targetHostname(target);
+  return target.port !== null && target.port !== 22 ? `[${hostname}]:${target.port}` : hostname;
+}
+
 function keyscanArgs(target: DesktopSshEnvironmentTarget): string[] {
   return [
     "-T",
@@ -93,6 +99,10 @@ interface HostKey {
   readonly keyType: string;
   readonly key: string;
   readonly line: string;
+}
+
+export function fingerprintHostKey(key: string): string {
+  return `SHA256:${NodeCrypto.createHash("sha256").update(Buffer.from(key, "base64")).digest("base64").replace(/=+$/u, "")}`;
 }
 
 /** All keyscan lines that belong to the target (keyscan can echo neighbours). */
@@ -112,6 +122,20 @@ function parseKeyscan(stdout: string, target: DesktopSshEnvironmentTarget): Host
     }
   }
   return keys;
+}
+
+export function confirmedHostKeyLine(
+  keyscanOutput: string,
+  target: DesktopSshEnvironmentTarget,
+  expectedKeyType: string,
+  expectedFingerprint: string,
+): string | null {
+  return (
+    parseKeyscan(keyscanOutput, target).find(
+      (key) =>
+        key.keyType === expectedKeyType && fingerprintHostKey(key.key) === expectedFingerprint,
+    )?.line ?? null
+  );
 }
 
 /**
@@ -187,8 +211,7 @@ export const inspectSshHostTrust = Effect.fn("ssh/trust.inspectSshHostTrust")(fu
   SshTrustError,
   ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Scope.Scope
 > {
-  const hostSpec = yield* buildSshHostSpecEffect(target);
-  const knownHosts = yield* runTool("ssh-keygen", ["-F", hostSpec]).pipe(
+  const knownHosts = yield* runTool("ssh-keygen", ["-F", knownHostsLookupHost(target)]).pipe(
     Effect.orElseSucceed(() => ({ stdout: "", stderr: "", exitCode: 1 })),
   );
   const keyscan = yield* runTool("ssh-keyscan", keyscanArgs(target)).pipe(
@@ -199,13 +222,20 @@ export const inspectSshHostTrust = Effect.fn("ssh/trust.inspectSshHostTrust")(fu
     keyscan.exitCode === 0 ? keyscan.stdout : "",
     target,
   );
-  // The fingerprint stays null: the UI shows the key type and tolerates a
-  // missing fingerprint rather than shelling out a third tool.
-  return { status: classification.status, fingerprint: null, keyType: classification.keyType };
+  const presented = parseKeyscan(keyscan.exitCode === 0 ? keyscan.stdout : "", target).find(
+    (key) => key.keyType === classification.keyType,
+  );
+  return {
+    status: classification.status,
+    fingerprint: presented ? fingerprintHostKey(presented.key) : null,
+    keyType: classification.keyType,
+  };
 });
 
 export const trustSshHostKey = Effect.fn("ssh/trust.trustSshHostKey")(function* (
   target: DesktopSshEnvironmentTarget,
+  expectedKeyType: string,
+  expectedFingerprint: string,
 ): Effect.fn.Return<
   void,
   SshTrustError,
@@ -221,9 +251,15 @@ export const trustSshHostKey = Effect.fn("ssh/trust.trustSshHostKey")(function* 
     });
   }
   const keyscan = yield* runTool("ssh-keyscan", keyscanArgs(target));
-  if (keyscan.exitCode !== 0 || keyscan.stdout.trim().length === 0) {
+  const line = confirmedHostKeyLine(
+    keyscan.exitCode === 0 ? keyscan.stdout : "",
+    target,
+    expectedKeyType,
+    expectedFingerprint,
+  );
+  if (line === null) {
     return yield* new SshHostDiscoveryError({
-      message: `Could not read the SSH host key for ${hostSpec}.`,
+      message: `The SSH host key for ${hostSpec} changed since confirmation or could not be read.`,
       cause: keyscan.stderr,
     });
   }
@@ -233,14 +269,8 @@ export const trustSshHostKey = Effect.fn("ssh/trust.trustSshHostKey")(function* 
   const sshDir = path.join(home, ".ssh");
   const knownHostsPath = path.join(sshDir, "known_hosts");
   yield* fs.makeDirectory(sshDir, { recursive: true, mode: 0o700 });
-  const existing = yield* fs.readFileString(knownHostsPath).pipe(
-    Effect.orElseSucceed(() => ""),
-  );
-  const line = keyscan.stdout
-    .split(/\r?\n/u)
-    .map((entry) => entry.trim())
-    .find((entry) => entry.length > 0 && !entry.startsWith("#"));
-  if (line === undefined || existing.includes(line)) return;
+  const existing = yield* fs.readFileString(knownHostsPath).pipe(Effect.orElseSucceed(() => ""));
+  if (existing.includes(line)) return;
   yield* fs.writeFileString(
     knownHostsPath,
     `${existing.endsWith("\n") || existing.length === 0 ? existing : `${existing}\n`}${line}\n`,

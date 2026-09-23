@@ -1,7 +1,12 @@
 import { assert, describe, it } from "@effect/vitest";
 import type { DesktopSshEnvironmentTarget } from "@t3tools/contracts";
 
-import { classifySshHostKeyTrust } from "./trust.ts";
+import {
+  classifySshHostKeyTrust,
+  confirmedHostKeyLine,
+  fingerprintHostKey,
+  knownHostsLookupHost,
+} from "./trust.ts";
 
 const TARGET: DesktopSshEnvironmentTarget = {
   alias: "devbox",
@@ -23,13 +28,39 @@ const keyscanOutput = (key = KEY_A) =>
   ].join("\n");
 
 const knownHostsOutput = (key = KEY_A) =>
-  [
-    "# Host devbox.example.test found: line 3",
-    `devbox.example.test ssh-ed25519 ${key}`,
-    "",
-  ].join("\n");
+  ["# Host devbox.example.test found: line 3", `devbox.example.test ssh-ed25519 ${key}`, ""].join(
+    "\n",
+  );
 
 describe("classifySshHostKeyTrust", () => {
+  it("looks up known hosts by resolved hostname and non-default port, without username", () => {
+    assert.equal(knownHostsLookupHost(TARGET), "devbox.example.test");
+    assert.equal(
+      knownHostsLookupHost({ ...TARGET, port: 6000 }),
+      "[devbox.example.test]:6000",
+    );
+  });
+
+  it("formats OpenSSH SHA256 fingerprints from presented key bytes", () => {
+    const first = Buffer.from("first key").toString("base64");
+    const second = Buffer.from("second key").toString("base64");
+    assert.match(fingerprintHostKey(first), /^SHA256:[A-Za-z0-9+/]+$/u);
+    assert.notEqual(fingerprintHostKey(first), fingerprintHostKey(second));
+  });
+
+  it("accepts only the exact host key confirmed by the user", () => {
+    const key = Buffer.from("confirmed key").toString("base64");
+    const changed = Buffer.from("changed key").toString("base64");
+    const fingerprint = fingerprintHostKey(key);
+    assert.equal(
+      confirmedHostKeyLine(keyscanOutput(key), TARGET, "ssh-ed25519", fingerprint),
+      `devbox.example.test ssh-ed25519 ${key}`,
+    );
+    assert.equal(
+      confirmedHostKeyLine(keyscanOutput(changed), TARGET, "ssh-ed25519", fingerprint),
+      null,
+    );
+  });
   it("trusts a known host when a scanned key matches the known_hosts entry", () => {
     const result = classifySshHostKeyTrust(knownHostsOutput(), keyscanOutput(), TARGET);
     assert.deepEqual(result, { status: "trusted", keyType: null });

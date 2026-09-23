@@ -42,6 +42,8 @@ export interface PairingConnectionInput {
 export interface SshConnectionInput {
   readonly target: DesktopSshEnvironmentTarget;
   readonly label?: string;
+  readonly operationId?: string;
+  readonly signal?: AbortSignal;
 }
 
 export interface BearerConnectionUpdateInput {
@@ -217,7 +219,9 @@ export const prepareSshRegistration = Effect.fn(
   "clientRuntime.connection.onboarding.prepareSshRegistration",
 )(function* (input: SshConnectionInput) {
   const gateway = yield* ClientCapabilities.SshEnvironmentGateway;
-  const provisioned = yield* gateway.provision(input.target);
+  if (input.signal?.aborted) return yield* Effect.interrupt;
+  const provisioned = yield* gateway.provision(input.target, input.operationId, input.signal);
+  if (input.signal?.aborted) return yield* Effect.interrupt;
   const connectionId = `ssh:${provisioned.environmentId}`;
   const label = input.label?.trim() || provisioned.label || provisioned.bootstrap.target.alias;
 
@@ -240,6 +244,7 @@ const registerSshConnection = Effect.fn(
   "clientRuntime.connection.onboarding.registerSshConnection",
 )(function* (input: SshConnectionInput) {
   const registration = yield* prepareSshRegistration(input);
+  if (input.signal?.aborted) return yield* Effect.interrupt;
   const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
   yield* registry.register(registration);
   return registration.target.environmentId;

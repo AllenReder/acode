@@ -61,7 +61,7 @@ jobs:
           stem="acode-server-${{ inputs.version }}-linux-x64"
           tar -xzf "$archive" -C "$scratch"
           acode="$scratch/$stem/bin/acode"
-          "$acode" --version
+          test "$("$acode" --version)" = "${{ inputs.version }}"
           export ACODE_HOME="$scratch/acode-home"
           export T3CODE_NO_BROWSER=1
           "$acode" daemon start --json

@@ -2,6 +2,7 @@ import type {
   DesktopDiscoveredSshHost,
   DesktopSshEnvironmentBootstrap,
   DesktopSshEnvironmentTarget,
+  DesktopSshEnvironmentPlan,
   DesktopSshHostKeyTrust,
 } from "@t3tools/contracts";
 import * as NetService from "@t3tools/shared/Net";
@@ -70,11 +71,16 @@ export class DesktopSshEnvironment extends Context.Service<
       target: DesktopSshEnvironmentTarget,
       options?: { readonly issuePairingToken?: boolean },
     ) => Effect.Effect<DesktopSshEnvironmentBootstrap, DesktopSshEnvironmentOperationError>;
+    readonly inspectEnvironment: (
+      target: DesktopSshEnvironmentTarget,
+    ) => Effect.Effect<DesktopSshEnvironmentPlan, DesktopSshEnvironmentOperationError>;
     readonly inspectTrust: (
       target: DesktopSshEnvironmentTarget,
     ) => Effect.Effect<DesktopSshHostKeyTrust, DesktopSshEnvironmentOperationError, Scope.Scope>;
     readonly trustHost: (
       target: DesktopSshEnvironmentTarget,
+      keyType: string,
+      fingerprint: string,
     ) => Effect.Effect<void, DesktopSshEnvironmentOperationError, Scope.Scope>;
     readonly disconnectEnvironment: (
       target: DesktopSshEnvironmentTarget,
@@ -149,13 +155,21 @@ export const make = Effect.gen(function* () {
           Effect.provide(runtimeContext),
           Effect.withSpan("desktop.ssh.ensureEnvironment"),
         ),
+    inspectEnvironment: (target) =>
+      manager
+        .inspectEnvironment(target)
+        .pipe(
+          Effect.provideService(SshAuth.SshPasswordPrompt, passwordPrompt),
+          Effect.provide(runtimeContext),
+          Effect.withSpan("desktop.ssh.inspectEnvironment"),
+        ),
     inspectTrust: (target) =>
       inspectSshHostTrust(target).pipe(
         Effect.provide(runtimeContext),
         Effect.withSpan("desktop.ssh.inspectTrust"),
       ),
-    trustHost: (target) =>
-      trustSshHostKey(target).pipe(
+    trustHost: (target, keyType, fingerprint) =>
+      trustSshHostKey(target, keyType, fingerprint).pipe(
         Effect.provide(runtimeContext),
         Effect.withSpan("desktop.ssh.trustHost"),
       ),

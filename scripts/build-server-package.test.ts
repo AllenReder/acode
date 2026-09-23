@@ -13,27 +13,32 @@ describe("buildServerPackage", () => {
   it("accepts only exact server package versions", () => {
     expect(isExactServerPackageVersion("0.0.42")).toBe(true);
     expect(isExactServerPackageVersion("0.0.42-rc.1")).toBe(true);
+    expect(isExactServerPackageVersion("0.0.42+build")).toBe(false);
     expect(isExactServerPackageVersion("latest")).toBe(false);
     expect(isExactServerPackageVersion("v0.0.42")).toBe(false);
     expect(isExactServerPackageVersion("")).toBe(false);
   });
 
-  it("uses the exact release version for the archive name and checksum", async () => {
+  it("rejects a release version that differs from the packaged daemon", () => {
+    expect(() => buildServerPackage({ version: "0.0.43-rc.1", skipBuild: true })).toThrow(
+      /does not match the bundled daemon version/u,
+    );
+  });
+
+  it("uses the bundled version for the archive name and checksum", async () => {
     const outputDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "acode-server-package-"));
     try {
       const result = await buildServerPackage({
         outputDir,
         platform: "linux",
         arch: "x64",
-        version: "0.0.43-rc.1",
+        version: "0.0.42",
         skipBuild: true,
       });
 
-      expect(NodePath.basename(result.archivePath)).toBe(
-        "acode-server-0.0.43-rc.1-linux-x64.tar.gz",
-      );
+      expect(NodePath.basename(result.archivePath)).toBe("acode-server-0.0.42-linux-x64.tar.gz");
       expect(NodeFS.readFileSync(result.checksumPath, "utf8")).toMatch(
-        /^[0-9a-f]{64}  acode-server-0\.0\.43-rc\.1-linux-x64\.tar\.gz\n$/u,
+        /^[0-9a-f]{64}  acode-server-0\.0\.42-linux-x64\.tar\.gz\n$/u,
       );
     } finally {
       NodeFS.rmSync(outputDir, { recursive: true, force: true });

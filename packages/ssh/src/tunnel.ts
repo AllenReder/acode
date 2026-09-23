@@ -1,6 +1,7 @@
 import type {
   DesktopSshEnvironmentBootstrap,
   DesktopSshEnvironmentTarget,
+  DesktopSshEnvironmentPlan,
 } from "@t3tools/contracts";
 import {
   describeReadinessCause,
@@ -32,6 +33,7 @@ import * as Stream from "effect/Stream";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import * as NodeCrypto from "node:crypto";
+import * as Option from "effect/Option";
 
 import {
   buildSshChildEnvironment,
@@ -40,6 +42,7 @@ import {
   isSshAuthFailure,
 } from "./auth.ts";
 import {
+  baseScpArgs,
   baseSshArgs,
   buildSshHostSpecEffect,
   collectProcessOutput,
@@ -50,6 +53,7 @@ import {
   runSshCommand,
   targetConnectionKey,
 } from "./command.ts";
+import { reportSshProgress, sshProgress, SshEnvironmentProgress } from "./progress.ts";
 
 const scpCommandForPlatform = (platform: NodeJS.Platform): string =>
   platform === "win32" ? "scp.exe" : "scp";
@@ -105,6 +109,13 @@ export const resolveRemoteLocalArchivePaths = (staged: {
   archivePath: `ssh-launch/${staged.stateKey}/packages/${staged.version}/${staged.archiveName}`,
   checksumsPath: `ssh-launch/${staged.stateKey}/packages/${staged.version}/${SERVER_RELEASE_CHECKSUMS_FILE}`,
 });
+
+export function parseRemotePackageStageHome(stdout: string): string | null {
+  const prefix = "ACODE_STAGE_HOME=";
+  const line = stdout.split(/\r?\n/u).findLast((entry) => entry.startsWith(prefix));
+  const home = line?.slice(prefix.length);
+  return home !== undefined && home.startsWith("/") && !home.includes("\0") ? home : null;
+}
 
 export class SshLocalPackageError extends Data.TaggedError("SshLocalPackageError")<{
   readonly message: string;
@@ -241,8 +252,8 @@ const ensureLocalServerPackage = Effect.fn("ssh/tunnel.ensureLocalServerPackage"
   // A locally built package (scripts/build-server-package.ts output, or the
   // equivalent) is the last-resort source when the GitHub prerelease is gone.
   // It goes through the same SHA256SUMS verification as a downloaded one.
-  const localPackageDir = yield* Effect.sync(() =>
-    process.env.ACODE_SERVER_PACKAGE_DIR?.trim() || null,
+  const localPackageDir = yield* Effect.sync(
+    () => process.env.ACODE_SERVER_PACKAGE_DIR?.trim() || null,
   );
   if (localPackageDir !== null) {
     const builtArchivePath = path.join(localPackageDir, archiveName);
@@ -282,11 +293,31 @@ const ensureLocalServerPackage = Effect.fn("ssh/tunnel.ensureLocalServerPackage"
     fileName: string,
     destination: string,
   ) {
+    yield* reportSshProgress(sshProgress("local-download"));
     const response = yield* httpClient
-    .get(`${serverReleaseDownloadBaseUrl(version, releaseBaseUrl)}/${fileName}`)
+      .get(`${serverReleaseDownloadBaseUrl(version, releaseBaseUrl)}/${fileName}`)
       .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
-    const bytes = yield* response.arrayBuffer;
-    yield* fs.writeFile(destination, new Uint8Array(bytes));
+    const contentLength = Number(response.headers["content-length"]);
+    const encoded = response.headers["content-encoding"]?.trim().toLowerCase();
+    const totalBytes =
+      (!encoded || encoded === "identity") && Number.isFinite(contentLength) && contentLength > 0
+        ? contentLength
+        : null;
+    let transferredBytes = 0;
+    const chunks = yield* response.stream.pipe(
+      Stream.tap((chunk) => {
+        transferredBytes += chunk.byteLength;
+        return reportSshProgress(sshProgress("local-download", { transferredBytes, totalBytes }));
+      }),
+      Stream.runCollect,
+    );
+    const bytes = new Uint8Array(transferredBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    yield* fs.writeFile(destination, bytes);
   });
 
   yield* download(SERVER_RELEASE_CHECKSUMS_FILE, checksumsPath);
@@ -301,7 +332,7 @@ const ensureLocalServerPackage = Effect.fn("ssh/tunnel.ensureLocalServerPackage"
     archiveName,
     archivePath,
     checksumsPath,
-      releaseBaseUrl: serverReleaseDownloadBaseUrl(version, releaseBaseUrl),
+    releaseBaseUrl: serverReleaseDownloadBaseUrl(version, releaseBaseUrl),
   };
 });
 
@@ -318,6 +349,16 @@ const runScpUpload = Effect.fn("ssh/tunnel.runScpUpload")(function* (
   ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
 > {
   const hostSpec = yield* buildSshHostSpecEffect(target);
+  const progressService = yield* Effect.serviceOption(SshEnvironmentProgress);
+  const progressDetail = "Remote download failed; using a local upload.";
+  const fs = yield* FileSystem.FileSystem;
+  const totalBytes = yield* fs.stat(input.sourcePath).pipe(
+    Effect.map((info) => Number(info.size)),
+    Effect.orElseSucceed(() => null),
+  );
+  yield* reportSshProgress(
+    sshProgress("uploading", { detail: progressDetail, transferredBytes: 0, totalBytes }),
+  );
   const environment = yield* buildSshChildEnvironment({
     ...(input.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
     ...(input.authSecret === undefined ? {} : { authSecret: input.authSecret }),
@@ -334,7 +375,7 @@ const runScpUpload = Effect.fn("ssh/tunnel.runScpUpload")(function* (
     ),
   );
   const args = [
-    ...baseSshArgs(target, {
+    ...baseScpArgs(target, {
       batchMode: input.batchMode ?? "no",
     }),
     input.sourcePath,
@@ -342,53 +383,85 @@ const runScpUpload = Effect.fn("ssh/tunnel.runScpUpload")(function* (
   ];
   const command = yield* resolveScpCommand;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const child = yield* Effect.scopedWith((scope) =>
-    spawner
-      .spawn(
-        ChildProcess.make(command, args, {
-          env: environment,
-          extendEnv: true,
-          stdin: { stream: Stream.empty, endOnDone: true },
-        }),
-      )
-      .pipe(
-        Effect.provideService(Scope.Scope, scope),
-        Effect.mapError(
-          (cause) =>
-            new SshCommandError({
-              command: [command, ...args],
-              exitCode: null,
-              stderr: "",
-              message:
-                cause instanceof Error
-                  ? cause.message
-                  : `Failed to spawn SCP command for ${hostSpec}.`,
-              cause,
-            }),
+  const output = yield* Effect.scopedWith((scope) =>
+    Effect.gen(function* () {
+      const child = yield* spawner
+        .spawn(
+          ChildProcess.make(command, args, {
+            env: environment,
+            extendEnv: true,
+            stdin: { stream: Stream.empty, endOnDone: true },
+          }),
+        )
+        .pipe(
+          Effect.provideService(Scope.Scope, scope),
+          Effect.mapError(
+            (cause) =>
+              new SshCommandError({
+                command: [command, ...args],
+                exitCode: null,
+                stderr: "",
+                message:
+                  cause instanceof Error
+                    ? cause.message
+                    : `Failed to spawn SCP command for ${hostSpec}.`,
+                cause,
+              }),
+          ),
+        );
+      let transferredBytes = 0;
+      const sampleRemoteSize = Effect.gen(function* () {
+        while (true) {
+          const sample = yield* runSshCommand(target, {
+            remoteCommandArgs: ["sh", "-s"],
+            stdin: `if [ -f ${shellSingleQuote(input.destinationPath)} ]; then wc -c < ${shellSingleQuote(input.destinationPath)}; fi`,
+            timeoutMs: 5_000,
+            batchMode: input.authSecret === undefined ? "yes" : "no",
+            childEnvironment: environment,
+          }).pipe(
+            Effect.map((result) => Number(getLastNonEmptyOutputLine(result.stdout))),
+            Effect.catch(() => Effect.succeed(null)),
+          );
+          if (
+            sample !== null &&
+            Number.isFinite(sample) &&
+            sample > transferredBytes &&
+            (totalBytes === null || sample <= totalBytes)
+          ) {
+            transferredBytes = sample;
+            yield* reportSshProgress(
+              sshProgress("uploading", { detail: progressDetail, transferredBytes, totalBytes }),
+            );
+          }
+          yield* Effect.sleep(1_000);
+        }
+      });
+      if (Option.isSome(progressService)) yield* sampleRemoteSize.pipe(Effect.forkIn(scope));
+      return yield* Effect.all(
+        [
+          collectProcessOutput(child.stdout),
+          collectProcessOutput(child.stderr),
+          child.exitCode.pipe(Effect.map(Number)),
+        ],
+        { concurrency: "unbounded" },
+      ).pipe(
+        Effect.timeout(Duration.millis(input.timeoutMs ?? REMOTE_ARCHIVE_DOWNLOAD_SECONDS * 1000)),
+        Effect.mapError((cause) =>
+          cause instanceof SshCommandError
+            ? cause
+            : new SshCommandError({
+                command: [command, ...args],
+                exitCode: null,
+                stderr: "",
+                message:
+                  cause instanceof Error
+                    ? cause.message
+                    : `Failed to run SCP command for ${hostSpec}.`,
+                cause,
+              }),
         ),
-      ),
-  );
-  const output = yield* Effect.all(
-    [
-      collectProcessOutput(child.stdout),
-      collectProcessOutput(child.stderr),
-      child.exitCode.pipe(Effect.map(Number)),
-    ],
-    { concurrency: "unbounded" },
-  ).pipe(
-    Effect.timeout(Duration.millis(input.timeoutMs ?? REMOTE_ARCHIVE_DOWNLOAD_SECONDS * 1000)),
-    Effect.mapError((cause) =>
-      cause instanceof SshCommandError
-        ? cause
-        : new SshCommandError({
-            command: [command, ...args],
-            exitCode: null,
-            stderr: "",
-            message:
-              cause instanceof Error ? cause.message : `Failed to run SCP command for ${hostSpec}.`,
-            cause,
-      }),
-    ),
+      );
+    }),
   );
   if (output === undefined) {
     return yield* new SshCommandError({
@@ -408,51 +481,70 @@ const runScpUpload = Effect.fn("ssh/tunnel.runScpUpload")(function* (
       message: normalizeSshErrorMessage(stderr, `SCP upload failed for ${hostSpec}.`),
     });
   }
+  if (totalBytes !== null) {
+    yield* reportSshProgress(
+      sshProgress("uploading", {
+        detail: progressDetail,
+        transferredBytes: totalBytes,
+        totalBytes,
+      }),
+    );
+  }
 });
 
-const stageLocalServerPackageOnRemote = Effect.fn(
-  "ssh/tunnel.stageLocalServerPackageOnRemote",
-)(function* (
-  target: DesktopSshEnvironmentTarget,
-  authOptions: SshAuthOptions,
-  localPackage: LocalServerPackage,
-): Effect.fn.Return<
-  StagedRemoteServerPackage,
-  SshCommandError | SshInvalidTargetError,
-  ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
-> {
-  const stateKey = remoteStateKey(target);
-  const remotePaths = resolveRemoteLocalArchivePaths({
-    stateKey,
-    version: localPackage.version,
-    archiveName: localPackage.archiveName,
-  });
-  yield* runSshCommand(target, {
-    remoteCommandArgs: ["sh", "-s"],
-    stdin: `set -eu\nACODE_HOME="\${ACODE_HOME:-\${HOME}/.acode}"\nmkdir -p "$ACODE_HOME/ssh-launch/${stateKey}/packages/${localPackage.version}"\n`,
-    timeoutMs: 30_000,
-    ...spreadAuthOptions(authOptions),
-  });
-  const remoteArchivePath = remotePaths.archivePath;
-  const remoteChecksumsPath = remotePaths.checksumsPath;
-  yield* runScpUpload(target, {
-    sourcePath: localPackage.archivePath,
-    destinationPath: remoteArchivePath,
-    ...spreadAuthOptions(authOptions),
-  });
-  yield* runScpUpload(target, {
-    sourcePath: localPackage.checksumsPath,
-    destinationPath: remoteChecksumsPath,
-    timeoutMs: 30_000,
-    ...spreadAuthOptions(authOptions),
-  });
-  return {
-    ...localPackage,
-    remoteArchivePath,
-    remoteChecksumsPath,
-    stateKey,
-  };
-});
+const stageLocalServerPackageOnRemote = Effect.fn("ssh/tunnel.stageLocalServerPackageOnRemote")(
+  function* (
+    target: DesktopSshEnvironmentTarget,
+    authOptions: SshAuthOptions,
+    localPackage: LocalServerPackage,
+  ): Effect.fn.Return<
+    StagedRemoteServerPackage,
+    SshCommandError | SshInvalidTargetError,
+    ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
+  > {
+    const stateKey = remoteStateKey(target);
+    const remotePaths = resolveRemoteLocalArchivePaths({
+      stateKey,
+      version: localPackage.version,
+      archiveName: localPackage.archiveName,
+    });
+    const staging = yield* runSshCommand(target, {
+      remoteCommandArgs: ["sh", "-s"],
+      stdin: `set -eu\nACODE_HOME="\${ACODE_HOME:-\${HOME}/.acode}"\nmkdir -p "$ACODE_HOME/ssh-launch/${stateKey}/packages/${localPackage.version}"\nrm -f "$ACODE_HOME/${remotePaths.archivePath}" "$ACODE_HOME/${remotePaths.checksumsPath}"\nprintf 'ACODE_STAGE_HOME=%s\\n' "$(cd "$ACODE_HOME" && pwd -P)"\n`,
+      timeoutMs: 30_000,
+      ...spreadAuthOptions(authOptions),
+    });
+    const remoteHome = parseRemotePackageStageHome(staging.stdout);
+    if (remoteHome === null) {
+      return yield* new SshCommandError({
+        command: ["ssh"],
+        exitCode: null,
+        stderr: staging.stderr,
+        message: "SSH staging did not return the remote ACode home directory.",
+      });
+    }
+    const remoteRoot = remoteHome.replace(/\/+$/u, "");
+    const remoteArchivePath = `${remoteRoot}/${remotePaths.archivePath}`;
+    const remoteChecksumsPath = `${remoteRoot}/${remotePaths.checksumsPath}`;
+    yield* runScpUpload(target, {
+      sourcePath: localPackage.archivePath,
+      destinationPath: remoteArchivePath,
+      ...spreadAuthOptions(authOptions),
+    });
+    yield* runScpUpload(target, {
+      sourcePath: localPackage.checksumsPath,
+      destinationPath: remoteChecksumsPath,
+      timeoutMs: 30_000,
+      ...spreadAuthOptions(authOptions),
+    });
+    return {
+      ...localPackage,
+      remoteArchivePath,
+      remoteChecksumsPath,
+      stateKey,
+    };
+  },
+);
 
 // RunSshCommandOptions extends SshAuthOptions; spreading conditionally keeps
 // exactOptionalPropertyTypes happy without repeating the triplet everywhere.
@@ -478,6 +570,13 @@ interface SshAuthAttemptInput<T> extends SshAuthOperationInput<T> {
 }
 
 export interface SshEnvironmentManagerShape {
+  readonly inspectEnvironment: (
+    target: DesktopSshEnvironmentTarget,
+  ) => Effect.Effect<
+    DesktopSshEnvironmentPlan,
+    SshEnvironmentEffectError,
+    SshEnvironmentEffectContext
+  >;
   readonly ensureEnvironment: (
     target: DesktopSshEnvironmentTarget,
     options?: { readonly issuePairingToken?: boolean },
@@ -833,14 +932,49 @@ ACODE_HOME_FALLBACK="\${ACODE_HOME:-\${HOME}/.acode}"
     cp "$ACODE_HOME_FALLBACK/$ACODE_LOCAL_CHECKSUMS_PATH" "$ACODE_STAGING/SHA256SUMS"
   else
     acode_fetch() {
-      if command -v curl >/dev/null 2>&1; then curl -fsSL --connect-timeout 30 --max-time "$3" "$1" -o "$2"
-      elif command -v wget >/dev/null 2>&1; then wget -q --timeout=30 --tries=1 "$1" -O "$2"
-      else printf 'Remote host needs curl or wget to download %s.\\n' "$ACODE_ARCHIVE" >&2; exit 1
+      ACODE_PROGRESS_FLAG="$ACODE_STAGING/.progress-active"
+      if [ "$2" = "$ACODE_STAGING/$ACODE_ARCHIVE" ]; then
+        : > "$ACODE_PROGRESS_FLAG"
+        (
+          while [ -f "$ACODE_PROGRESS_FLAG" ]; do
+            if [ -f "$2" ]; then
+              ACODE_PROGRESS_TOTAL=0
+              if [ -f "$ACODE_STAGING/.download-headers" ]; then
+                ACODE_PROGRESS_TOTAL="$(awk '/^HTTP\\// { size=0 } tolower($1) == "content-length:" { gsub("\\r", "", $2); size=$2 } END { print size+0 }' "$ACODE_STAGING/.download-headers")"
+              fi
+              printf 'ACODE_PROGRESS download %s %s\\n' "$(wc -c < "$2" | tr -d ' ')" "$ACODE_PROGRESS_TOTAL" >&2
+            fi
+            sleep 1
+          done
+        ) &
+        ACODE_PROGRESS_PID=$!
       fi
+      if command -v curl >/dev/null 2>&1; then
+        curl -fsSL --connect-timeout 30 --max-time "$3" "$1" -o "$2" -D "$ACODE_STAGING/.download-headers" && ACODE_FETCH_OK=1 || ACODE_FETCH_OK=0
+      elif command -v wget >/dev/null 2>&1; then
+        wget -q --timeout=30 --tries=1 "$1" -O "$2" && ACODE_FETCH_OK=1 || ACODE_FETCH_OK=0
+      else
+        printf 'Remote host needs curl or wget to download %s.\\n' "$ACODE_ARCHIVE" >&2
+        ACODE_FETCH_OK=0
+      fi
+      if [ -n "\${ACODE_PROGRESS_PID:-}" ]; then
+        rm -f "$ACODE_PROGRESS_FLAG"
+        kill "$ACODE_PROGRESS_PID" 2>/dev/null || true
+        wait "$ACODE_PROGRESS_PID" 2>/dev/null || true
+        ACODE_PROGRESS_TOTAL=0
+        if [ -f "$ACODE_STAGING/.download-headers" ]; then
+          ACODE_PROGRESS_TOTAL="$(awk '/^HTTP\\// { size=0 } tolower($1) == "content-length:" { gsub("\\r", "", $2); size=$2 } END { print size+0 }' "$ACODE_STAGING/.download-headers")"
+        fi
+        printf 'ACODE_PROGRESS download %s %s\\n' "$(wc -c < "$2" 2>/dev/null | tr -d ' ')" "$ACODE_PROGRESS_TOTAL" >&2
+        unset ACODE_PROGRESS_PID
+      fi
+      rm -f "$ACODE_STAGING/.download-headers"
+      [ "$ACODE_FETCH_OK" -eq 1 ]
     }
     acode_fetch "$ACODE_RELEASE_BASE_URL/v$ACODE_ARCHIVE_VERSION/SHA256SUMS" "$ACODE_STAGING/SHA256SUMS" @@ACODE_ARCHIVE_CHECKSUMS_SECONDS@@
     acode_fetch "$ACODE_RELEASE_BASE_URL/v$ACODE_ARCHIVE_VERSION/$ACODE_ARCHIVE" "$ACODE_STAGING/$ACODE_ARCHIVE" @@ACODE_ARCHIVE_DOWNLOAD_SECONDS@@
   fi
+  printf 'ACODE_PROGRESS stage installing\\n' >&2
   ACODE_EXPECTED="$(grep " \\*\\{0,1\\}$ACODE_ARCHIVE$" "$ACODE_STAGING/SHA256SUMS" | cut -d' ' -f1)"
   if command -v sha256sum >/dev/null 2>&1; then
     ACODE_ACTUAL="$(sha256sum "$ACODE_STAGING/$ACODE_ARCHIVE" | cut -d' ' -f1)"
@@ -863,6 +997,7 @@ if [ -n "\${ACODE_LOCK:-}" ]; then
   rm -rf "$ACODE_LOCK"
   trap - EXIT
 fi
+printf 'ACODE_PROGRESS stage starting\\n' >&2
 exec "$ACODE_RUNTIME_DIR/bin/acode" "$@"
 `;
 
@@ -1033,6 +1168,63 @@ fi
 printf '{"remotePort":%s,"serverKind":"%s"}\\n' "$REMOTE_PORT" "\${REMOTE_MANAGED:-managed}"
 `;
 
+const REMOTE_INSPECT_SCRIPT = `set -eu
+STATE_KEY="$1"
+ACODE_HOME="$(printenv ACODE_HOME || true)"
+if [ -z "$ACODE_HOME" ]; then ACODE_HOME="$HOME/.acode"; fi
+OS="$(uname -s 2>/dev/null || true)"
+ARCH="$(uname -m 2>/dev/null || true)"
+ensure_remote_node_path || true
+NODE_VERSION="$(node -v 2>/dev/null || true)"
+if command -v git >/dev/null 2>&1; then GIT_AVAILABLE=yes; else GIT_AVAILABLE=no; fi
+DAEMON=install
+PORT="$(cat "$ACODE_HOME/ssh-launch/$STATE_KEY/port" 2>/dev/null || true)"
+if command -v node >/dev/null 2>&1; then
+  DEFAULT_PORT="$(node - "$ACODE_HOME/userdata/server-runtime.json" <<'NODE' 2>/dev/null || true
+const fs = require("node:fs");
+try {
+  const runtime = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+  const origin = new URL(runtime.origin);
+  if (origin.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(origin.hostname)) process.exit(1);
+  process.kill(Number(runtime.pid), 0);
+  process.stdout.write(String(runtime.port));
+} catch { process.exit(1); }
+NODE
+)"
+  for CANDIDATE_PORT in "$PORT" "$DEFAULT_PORT"; do
+    if [ -n "$CANDIDATE_PORT" ] && node -e 'const port = Number(process.argv[1]); if (!Number.isInteger(port) || port < 1 || port > 65535) process.exit(1); fetch("http://127.0.0.1:" + port + "/.well-known/t3/environment", { signal: AbortSignal.timeout(1500) }).then(async response => { const body = await response.json(); process.exit(response.ok && typeof body.environmentId === "string" ? 0 : 1) }).catch(() => process.exit(1))' "$CANDIDATE_PORT" >/dev/null 2>&1; then
+      DAEMON=reuse
+      break
+    fi
+  done
+fi
+printf 'ACODE_PREFLIGHT\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "$OS" "$ARCH" "$NODE_VERSION" "$GIT_AVAILABLE" "$DAEMON"
+`;
+
+export function parseSshEnvironmentInspection(
+  stdout: string,
+  runner?: RemoteT3RunnerOptions,
+): DesktopSshEnvironmentPlan | null {
+  const line = stdout.split(/\r?\n/u).findLast((entry) => entry.startsWith("ACODE_PREFLIGHT\t"));
+  const fields = line?.split("\t");
+  if (fields?.length !== 6) return null;
+  const [, os, arch, rawNodeVersion, gitAvailable, daemon] = fields;
+  if (gitAvailable !== "yes" && gitAvailable !== "no") return null;
+  if (daemon !== "reuse" && daemon !== "install") return null;
+  const nodeVersion = rawNodeVersion || null;
+  return {
+    version: runner?.archiveVersion ?? "",
+    os: os ?? "",
+    arch: arch ?? "",
+    nodeVersion,
+    nodeSupported:
+      nodeVersion !== null &&
+      satisfiesSemverRange(nodeVersion, runner?.nodeEngineRange ?? ">=22.16"),
+    gitAvailable: gitAvailable === "yes",
+    daemon,
+  };
+}
+
 const REMOTE_PAIRING_SCRIPT = `set -eu
 ACODE_HOME="\${ACODE_HOME:-\${HOME}/.acode}"
 STATE_DIR="$ACODE_HOME/ssh-launch/@@T3_STATE_KEY@@"
@@ -1090,10 +1282,10 @@ export function buildRemoteT3RunnerScript(input?: RemoteT3RunnerOptions): string
     throw new SshInvalidArchiveVersionError({ archiveVersion });
   }
   // Strip the `/v<version>` the helper appends: the script builds URLs itself.
-  const releaseBaseUrl = serverReleaseDownloadBaseUrl("", input?.releaseBaseUrl ?? undefined).replace(
-    /\/v$/u,
+  const releaseBaseUrl = serverReleaseDownloadBaseUrl(
     "",
-  );
+    input?.releaseBaseUrl ?? undefined,
+  ).replace(/\/v$/u, "");
   const localArchivePath = input?.localArchivePath?.trim() || "";
   const localChecksumsPath = input?.localChecksumsPath?.trim() || "";
   if (localArchivePath !== "" && localChecksumsPath === "") {
@@ -1169,12 +1361,36 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
       ...sshRunnerLogFields(runner),
       stateKey: remoteStateKey(target),
     });
+    yield* reportSshProgress(sshProgress("starting"));
+    const progressService = yield* Effect.serviceOption(SshEnvironmentProgress);
+    let stderrRemainder = "";
     const result = yield* runSshCommand(target, {
       remoteCommandArgs: ["sh", "-l", "-s", "--", remoteStateKey(target)],
       stdin: buildRemoteLaunchScript(runner),
       timeoutMs: isNodeScriptRunner(runner)
         ? REMOTE_LAUNCH_TIMEOUT_MS
         : REMOTE_ARCHIVE_LAUNCH_TIMEOUT_MS,
+      onStderrChunk: (chunk) => {
+        stderrRemainder += chunk;
+        const lines = stderrRemainder.split(/\r?\n/u);
+        stderrRemainder = lines.pop() ?? "";
+        for (const line of lines) {
+          const match = /^ACODE_PROGRESS download (\d+) (\d+)$/u.exec(line);
+          if (match && Option.isSome(progressService)) {
+            const totalBytes = Number(match[2]);
+            progressService.value.report(
+              sshProgress("remote-download", {
+                transferredBytes: Number(match[1]),
+                totalBytes: totalBytes > 0 ? totalBytes : null,
+              }),
+            );
+          } else if (line === "ACODE_PROGRESS stage installing" && Option.isSome(progressService)) {
+            progressService.value.report(sshProgress("installing"));
+          } else if (line === "ACODE_PROGRESS stage starting" && Option.isSome(progressService)) {
+            progressService.value.report(sshProgress("starting"));
+          }
+        }
+      },
       ...spreadAuthOptions(input ?? {}),
     });
     if (!getLastNonEmptyOutputLine(result.stdout)) {
@@ -1292,7 +1508,7 @@ export const waitForHttpReady = (input: {
 }): Effect.Effect<void, SshReadinessError, HttpClient.HttpClient> =>
   waitForHttpReadyShared({
     baseUrl: input.baseUrl,
-    ...(input.path === undefined ? {} : { path: input.path }),
+    path: input.path ?? "/.well-known/t3/environment",
     ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
     ...(input.intervalMs === undefined ? {} : { intervalMs: input.intervalMs }),
     probeTimeoutMs: input.probeTimeoutMs ?? SSH_READY_PROBE_TIMEOUT_MS,
@@ -1771,6 +1987,11 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
                 return yield* error;
               }
               if (!isNodeScriptRunner(input.runner) && input.runner?.archiveVersion) {
+                yield* reportSshProgress(
+                  sshProgress("local-download", {
+                    detail: "Remote download failed; using a local upload.",
+                  }),
+                );
                 yield* Effect.logWarning("ssh.environment.releaseDownload.fallback", {
                   ...sshTargetLogFields(input.resolvedTarget),
                   ...sshRunnerLogFields(input.runner),
@@ -1799,6 +2020,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
         ),
     });
     const remotePort = remoteLaunch.remotePort;
+    yield* reportSshProgress(sshProgress("connecting"));
     yield* Effect.logDebug("ssh.environment.remotePort.ready", {
       ...sshTargetLogFields(input.resolvedTarget),
       key: input.key,
@@ -1918,6 +2140,41 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     );
   });
 
+  const inspectEnvironment = Effect.fn("ssh/tunnel.inspectEnvironment")(function* (
+    target: DesktopSshEnvironmentTarget,
+  ): Effect.fn.Return<
+    DesktopSshEnvironmentPlan,
+    SshEnvironmentEffectError,
+    SshEnvironmentEffectContext
+  > {
+    const baseResolved = yield* resolveSshTarget(target.alias || target.hostname);
+    const resolvedTarget: DesktopSshEnvironmentTarget = {
+      ...baseResolved,
+      ...(target.username !== null ? { username: target.username } : {}),
+      ...(target.port !== null ? { port: target.port } : {}),
+    };
+    const runner =
+      options.resolveCliRunner === undefined ? undefined : yield* options.resolveCliRunner;
+    const result = yield* runWithSshAuth({
+      key: targetConnectionKey(resolvedTarget),
+      target: resolvedTarget,
+      operation: (authOptions) =>
+        runSshCommand(resolvedTarget, {
+          remoteCommandArgs: ["sh", "-l", "-s", "--", remoteStateKey(resolvedTarget)],
+          stdin: `${buildRemoteNodeEnvScript(runner)}\n${REMOTE_INSPECT_SCRIPT}`,
+          ...spreadAuthOptions(authOptions),
+        }),
+    });
+    const plan = parseSshEnvironmentInspection(result.stdout, runner);
+    if (plan === null) {
+      return yield* new SshLaunchError({
+        message: "SSH prerequisite inspection returned an invalid result.",
+        stdout: result.stdout,
+      });
+    }
+    return plan;
+  });
+
   const ensureEnvironment = Effect.fn("ssh/tunnel.ensureEnvironment")(function* (
     target: DesktopSshEnvironmentTarget,
     requestOptions?: { readonly issuePairingToken?: boolean },
@@ -1930,6 +2187,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
       ...sshTargetLogFields(target),
       issuePairingToken: requestOptions?.issuePairingToken === true,
     });
+    yield* reportSshProgress(sshProgress("connecting"));
     const baseResolved = yield* resolveSshTarget(target.alias || target.hostname);
     const resolvedTarget: DesktopSshEnvironmentTarget = {
       ...baseResolved,
@@ -1953,6 +2211,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
       Effect.gen(function* () {
         const entry = yield* ensureTunnelEntry(key, resolvedTarget, runner);
 
+        yield* reportSshProgress(sshProgress("pairing"));
         const pairingResult = requestOptions?.issuePairingToken
           ? yield* runWithSshAuth({
               key,
@@ -2020,7 +2279,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     );
   });
 
-  return SshEnvironmentManager.of({ ensureEnvironment, disconnectEnvironment });
+  return SshEnvironmentManager.of({ inspectEnvironment, ensureEnvironment, disconnectEnvironment });
 });
 
 /**
