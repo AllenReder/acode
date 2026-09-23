@@ -1,6 +1,10 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NetService from "@t3tools/shared/Net";
+import {
+  SERVER_RELEASE_CHECKSUMS_FILE,
+  serverReleaseArchiveName,
+} from "@t3tools/shared/serverRelease";
 import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -8,12 +12,14 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import { TestClock } from "effect/testing";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import * as NodeCrypto from "node:crypto";
 
 import { SshPasswordPrompt } from "./auth.ts";
 import { SshCommandError } from "./errors.ts";
@@ -104,6 +110,10 @@ function commandArgs(command: ChildProcess.Command): ReadonlyArray<string> {
   return command._tag === "StandardCommand" ? command.args : [];
 }
 
+function commandName(command: ChildProcess.Command): string {
+  return command._tag === "StandardCommand" ? command.command : "";
+}
+
 const ARCHIVE = { archiveVersion: "1.2.3-preview.20260911.4" } as const;
 const NODE_SCRIPT = {
   nodeScriptPath: "/Users/julius/Development/Work/codething-mvp/apps/server/dist/bin.mjs",
@@ -176,6 +186,8 @@ describe("ssh tunnel scripts", () => {
     assert.include(launch, "ACODE_RELEASE_BASE_URL='https://mirror.example/acode'");
     assert.include(launch, '"$RUNNER_FILE" __ssh-helper pick-port "$PORT_FILE"');
     assert.include(launch, '"$RUNNER_FILE" __ssh-helper wait-ready "$REMOTE_PORT"');
+    // Reuse only adopts a daemon that answers the public discovery API.
+    assert.include(launch, "/.well-known/t3/environment");
     assert.include(launch, '"$RUNNER_FILE" __ssh-helper runtime-port "$DEFAULT_RUNTIME_FILE"');
     assert.include(buildRemoteLaunchScript(NODE_SCRIPT), "ACODE_ARCHIVE_MODE=0");
   });
@@ -654,6 +666,145 @@ describe("ssh tunnel scripts", () => {
       );
     }),
   );
+
+  it.effect("skips the local package fallback when the launch fails on SSH authentication", () => {
+    const target = {
+      alias: "devbox",
+      hostname: "devbox.example.com",
+      username: "julius",
+      port: 2222,
+    } as const;
+    let scpUploads = 0;
+    const httpUrls: string[] = [];
+    const spawner = ChildProcessSpawner.make((command) =>
+      Effect.sync(() => {
+        const args = commandArgs(command);
+        if (commandName(command).startsWith("scp")) {
+          scpUploads += 1;
+          return makeSuccessfulProcess("");
+        }
+        if (args.includes("--")) {
+          return {
+            ...makeSuccessfulProcess(""),
+            exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(255)),
+            stderr: Stream.make(new TextEncoder().encode("Permission denied (publickey).\n")),
+          };
+        }
+        return makeSuccessfulProcess("\n");
+      }),
+    );
+    const recordingHttpClient = HttpClient.make((request) => {
+      httpUrls.push(request.url);
+      return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("", { status: 200 })));
+    });
+    const layer = Layer.mergeAll(
+      NodeServices.layer,
+      Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Layer.succeed(HttpClient.HttpClient, recordingHttpClient),
+      Layer.succeed(NetService.NetService, testNetService),
+      SshPasswordPrompt.disabledLayer,
+      SshEnvironmentManager.layer({ resolveCliRunner: Effect.succeed(ARCHIVE) }),
+    );
+
+    return Effect.gen(function* () {
+      const manager = yield* SshEnvironmentManager;
+      const result = yield* Effect.result(manager.ensureEnvironment(target));
+
+      assert.isTrue(Result.isFailure(result));
+      if (Result.isFailure(result)) {
+        assert.instanceOf(result.failure, SshCommandError);
+        assert.include(result.failure.message, "Permission denied");
+      }
+      // No 70 MB download and no SCP upload may precede the auth signal.
+      assert.equal(scpUploads, 0);
+      assert.deepEqual(httpUrls, []);
+    }).pipe(Effect.provide(layer), Effect.scoped);
+  });
+
+  it.effect("stages a locally built package from ACODE_SERVER_PACKAGE_DIR after a download failure", () => {
+    const target = {
+      alias: "devbox",
+      hostname: "devbox.example.com",
+      username: "julius",
+      port: 2222,
+    } as const;
+    const archiveName = serverReleaseArchiveName(ARCHIVE.archiveVersion);
+    let launches = 0;
+    let scpUploads = 0;
+    const httpUrls: string[] = [];
+    const spawner = ChildProcessSpawner.make((command) =>
+      Effect.sync(() => {
+        const args = commandArgs(command);
+        if (commandName(command).startsWith("scp")) {
+          scpUploads += 1;
+          return makeSuccessfulProcess("");
+        }
+        if (args.includes("--")) {
+          launches += 1;
+          if (launches === 1) {
+            return {
+              ...makeSuccessfulProcess(""),
+              exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(1)),
+              stderr: Stream.make(new TextEncoder().encode("curl: (6) Could not resolve host\n")),
+            };
+          }
+          return makeSuccessfulProcess('{"remotePort":3773}\n');
+        }
+        if (args.includes("-N")) {
+          return makeRunningProcess(() => undefined);
+        }
+        return makeSuccessfulProcess("\n");
+      }),
+    );
+    const deadHttpClient = HttpClient.make((request) => {
+      httpUrls.push(request.url);
+      // Only release downloads are forbidden; the loopback readiness probe
+      // through the tunnel still answers.
+      if (request.url.includes("github")) {
+        return Effect.die(new Error("no network in this test"));
+      }
+      return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("", { status: 200 })));
+    });
+    const layer = Layer.mergeAll(
+      NodeServices.layer,
+      Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Layer.succeed(HttpClient.HttpClient, deadHttpClient),
+      Layer.succeed(NetService.NetService, testNetService),
+      SshPasswordPrompt.disabledLayer,
+      SshEnvironmentManager.layer({ resolveCliRunner: Effect.succeed(ARCHIVE) }),
+    );
+
+    return Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const packageDir = yield* fs.makeTempDirectoryScoped({ prefix: "acode-local-package-" });
+      const archiveBytes = new TextEncoder().encode("fake acode server archive");
+      const checksum = NodeCrypto.createHash("sha256").update(archiveBytes).digest("hex");
+      yield* fs.writeFile(path.join(packageDir, archiveName), archiveBytes);
+      yield* fs.writeFileString(
+        path.join(packageDir, SERVER_RELEASE_CHECKSUMS_FILE),
+        `${checksum}  ${archiveName}\n`,
+      );
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          process.env.ACODE_SERVER_PACKAGE_DIR = packageDir;
+        }),
+        () =>
+          Effect.sync(() => {
+            delete process.env.ACODE_SERVER_PACKAGE_DIR;
+          }),
+      );
+
+      const manager = yield* SshEnvironmentManager;
+      const bootstrap = yield* manager.ensureEnvironment(target);
+
+      assert.equal(bootstrap.httpBaseUrl, "http://127.0.0.1:41773/");
+      assert.equal(launches, 2);
+      // Archive plus SHA256SUMS uploaded; nothing came from the release feed.
+      assert.equal(scpUploads, 2);
+      assert.deepEqual(httpUrls.filter((url) => url.includes("github")), []);
+    }).pipe(Effect.provide(layer), Effect.scoped);
+  });
 });
 
   // The archive runner is generated shell; string assertions cannot prove the

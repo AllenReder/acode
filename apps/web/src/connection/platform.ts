@@ -29,6 +29,7 @@ import {
   AuthStandardClientScopes,
   type DesktopBridge,
   type DesktopEnvironmentBootstrap,
+  type DesktopSshEnvironmentBootstrap,
   type DesktopSshEnvironmentTarget,
   PRIMARY_LOCAL_ENVIRONMENT_ID,
 } from "@t3tools/contracts";
@@ -44,6 +45,7 @@ import { FetchHttpClient } from "effect/unstable/http";
 
 import { APP_VERSION } from "../branding";
 import { readDesktopPrimaryBearerToken } from "../environments/primary/desktopAuth";
+import { SshPasswordPromptCancelledError } from "../desktop/sshErrors";
 import { primaryEnvironmentHttpLayer } from "../environments/primary/httpLayer";
 import {
   readPrimaryEnvironmentTarget,
@@ -131,7 +133,7 @@ function clientMetadata() {
 
 function sshPreparationError(cause: unknown) {
   const message = cause instanceof Error ? cause.message : String(cause);
-  if (message.toLowerCase().includes("cancel")) {
+  if (cause instanceof SshPasswordPromptCancelledError) {
     return new ConnectionBlockedError({
       reason: "authentication",
       detail: message,
@@ -175,37 +177,55 @@ const assertSshHostTrusted = Effect.fn("web.connectionPlatform.ssh.assertTrusted
   }
 });
 
+/** Trust gate + ensure, shared by provision and prepare. */
+const ensureTrustedSshEnvironment = Effect.fn("web.connectionPlatform.ssh.ensureTrusted")(
+  function* (bridge: DesktopBridge, target: DesktopSshEnvironmentTarget) {
+    yield* assertSshHostTrusted(bridge, target);
+    const bootstrap = yield* Effect.tryPromise({
+      try: () =>
+        bridge.ensureSshEnvironment(target, {
+          issuePairingToken: true,
+        }),
+      catch: sshPreparationError,
+    });
+    if (bootstrap.pairingToken === null) {
+      return yield* new ConnectionBlockedError({
+        reason: "authentication",
+        detail: "The SSH environment did not issue a pairing credential.",
+      });
+    }
+    return bootstrap;
+  },
+);
+
+const exchangeSshPairingCredential = Effect.fn("web.connectionPlatform.ssh.exchangePairing")(
+  function* (bridge: DesktopBridge, bootstrap: DesktopSshEnvironmentBootstrap) {
+    const access = yield* Effect.tryPromise({
+      try: () =>
+        // The null check lives in ensureTrustedSshEnvironment.
+        bridge.bootstrapSshBearerSession(bootstrap.httpBaseUrl, bootstrap.pairingToken!),
+      catch: sshPreparationError,
+    });
+    return access.access_token;
+  },
+);
+
 export const provisionDesktopSshEnvironment = Effect.fn(
   "web.connectionPlatform.ssh.provisionDesktop",
 )(function* (bridge: DesktopBridge, target: DesktopSshEnvironmentTarget) {
-  yield* assertSshHostTrusted(bridge, target);
-  const bootstrap = yield* Effect.tryPromise({
-    try: () =>
-      bridge.ensureSshEnvironment(target, {
-        issuePairingToken: true,
-      }),
-    catch: sshPreparationError,
-  });
-  const pairingToken = bootstrap.pairingToken;
-  if (pairingToken === null) {
-    return yield* new ConnectionBlockedError({
-      reason: "authentication",
-      detail: "The SSH environment did not issue a pairing credential.",
-    });
-  }
+  const bootstrap = yield* ensureTrustedSshEnvironment(bridge, target);
+  // The descriptor confirms the environment identity before the one-time
+  // pairing credential is consumed.
   const descriptor = yield* Effect.tryPromise({
     try: () => bridge.fetchSshEnvironmentDescriptor(bootstrap.httpBaseUrl),
     catch: sshPreparationError,
   });
-  const access = yield* Effect.tryPromise({
-    try: () => bridge.bootstrapSshBearerSession(bootstrap.httpBaseUrl, pairingToken),
-    catch: sshPreparationError,
-  });
+  const bearerToken = yield* exchangeSshPairingCredential(bridge, bootstrap);
   return {
     environmentId: descriptor.environmentId,
     label: descriptor.label,
     bootstrap,
-    bearerToken: access.access_token,
+    bearerToken,
   };
 });
 
@@ -280,28 +300,11 @@ const capabilitiesLayer = Layer.effectContext(
         // Reconnects skip the UI, so the trust check here is the only gate —
         // a host key that changed since the environment was saved blocks with
         // a distinct error instead of a generic SSH failure.
-        yield* assertSshHostTrusted(bridge, input.target);
-        const bootstrap = yield* Effect.tryPromise({
-          try: () =>
-            bridge.ensureSshEnvironment(input.target, {
-              issuePairingToken: true,
-            }),
-          catch: sshPreparationError,
-        });
-        if (bootstrap.pairingToken === null) {
-          return yield* new ConnectionBlockedError({
-            reason: "authentication",
-            detail: "The SSH environment did not issue a pairing credential.",
-          });
-        }
-        const access = yield* Effect.tryPromise({
-          try: () =>
-            bridge.bootstrapSshBearerSession(bootstrap.httpBaseUrl, bootstrap.pairingToken!),
-          catch: sshPreparationError,
-        });
+        const bootstrap = yield* ensureTrustedSshEnvironment(bridge, input.target);
+        const bearerToken = yield* exchangeSshPairingCredential(bridge, bootstrap);
         return {
           bootstrap,
-          bearerToken: access.access_token,
+          bearerToken,
         };
       }),
       disconnect: Effect.fn("web.connectionPlatform.ssh.disconnect")(function* (target) {

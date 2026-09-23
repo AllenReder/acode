@@ -33,6 +33,7 @@ import * as Effect from "effect/Effect";
 
 import { readBrowserClientSettings, writeBrowserClientSettings } from "../clientPersistenceStorage";
 import { showContextMenuFallback } from "../contextMenuFallback";
+import { SshPasswordPromptCancelledError } from "./sshErrors";
 import { isTauri } from "../env";
 
 interface TauriRuntimeConfig {
@@ -116,6 +117,8 @@ export function createDesktopSshApiClient(options: DesktopSshApiClientOptions) {
 function unsupported(capability: string): Promise<never> {
   return Promise.reject(new Error(`ACode Tauri shell does not support ${capability} yet.`));
 }
+
+export { SshPasswordPromptCancelledError } from "./sshErrors";
 
 function disabledWslState(): DesktopWslState {
   return {
@@ -271,7 +274,7 @@ const createTauriDesktopBridge = (): DesktopBridge => {
         body: { target, options },
       });
       if ("type" in result && result.type === DesktopSshPasswordPromptCancelledType) {
-        throw new Error(result.message);
+        throw new SshPasswordPromptCancelledError(result.message);
       }
       return result as DesktopSshEnvironmentBootstrap;
     },

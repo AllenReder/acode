@@ -9,6 +9,7 @@ import {
   DesktopSshBearerBootstrapInputSchema,
   DesktopSshBearerRequestInputSchema,
   DesktopSshEnvironmentEnsureInputSchema,
+  DesktopSshEnvironmentEnsureResultSchema,
   DesktopSshEnvironmentTargetSchema,
   DesktopSshPasswordPromptCancelledType,
   DesktopSshPasswordPromptResolutionInputSchema,
@@ -281,7 +282,9 @@ export const desktopSshEnsureRouteLayer = HttpRouter.add(
             : Effect.fail(error),
         ),
       );
-      return HttpServerResponse.jsonUnsafe(bootstrap);
+      return HttpServerResponse.jsonUnsafe(
+        yield* Schema.encodeEffect(DesktopSshEnvironmentEnsureResultSchema)(bootstrap),
+      );
     }),
   ),
 );

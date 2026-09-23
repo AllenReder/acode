@@ -97,9 +97,11 @@ interface StagedRemoteServerPackage extends LocalServerPackage {
   readonly stateKey: string;
 }
 
-export const resolveRemoteLocalArchivePaths = (
-  staged: StagedRemoteServerPackage,
-): { readonly archivePath: string; readonly checksumsPath: string } => ({
+export const resolveRemoteLocalArchivePaths = (staged: {
+  readonly stateKey: string;
+  readonly version: string;
+  readonly archiveName: string;
+}): { readonly archivePath: string; readonly checksumsPath: string } => ({
   archivePath: `ssh-launch/${staged.stateKey}/packages/${staged.version}/${staged.archiveName}`,
   checksumsPath: `ssh-launch/${staged.stateKey}/packages/${staged.version}/${SERVER_RELEASE_CHECKSUMS_FILE}`,
 });
@@ -234,6 +236,45 @@ const ensureLocalServerPackage = Effect.fn("ssh/tunnel.ensureLocalServerPackage"
       checksumsPath,
       releaseBaseUrl: serverReleaseDownloadBaseUrl(version, releaseBaseUrl),
     };
+  }
+
+  // A locally built package (scripts/build-server-package.ts output, or the
+  // equivalent) is the last-resort source when the GitHub prerelease is gone.
+  // It goes through the same SHA256SUMS verification as a downloaded one.
+  const localPackageDir = yield* Effect.sync(() =>
+    process.env.ACODE_SERVER_PACKAGE_DIR?.trim() || null,
+  );
+  if (localPackageDir !== null) {
+    const builtArchivePath = path.join(localPackageDir, archiveName);
+    const builtChecksumsPath = path.join(localPackageDir, SERVER_RELEASE_CHECKSUMS_FILE);
+    const [builtArchiveExists, builtChecksumsExist] = yield* Effect.all([
+      fs.exists(builtArchivePath).pipe(Effect.orElseSucceed(() => false)),
+      fs.exists(builtChecksumsPath).pipe(Effect.orElseSucceed(() => false)),
+    ]);
+    if (builtArchiveExists && builtChecksumsExist) {
+      yield* fs.makeDirectory(cacheDir, { recursive: true });
+      yield* Effect.all([
+        fs.copyFile(builtArchivePath, archivePath),
+        fs.copyFile(builtChecksumsPath, checksumsPath),
+      ]);
+      if (yield* verifyCachedPackage) {
+        yield* Effect.logInfo("ssh.tunnel.localPackage.fromBuildArtifact", {
+          version,
+          archiveName,
+          sourceDir: localPackageDir,
+        });
+        return {
+          version,
+          archiveName,
+          archivePath,
+          checksumsPath,
+          releaseBaseUrl: serverReleaseDownloadBaseUrl(version, releaseBaseUrl),
+        };
+      }
+      return yield* new SshLocalPackageError({
+        message: `Local ACode server package ${archiveName} in ${localPackageDir} failed SHA256 verification.`,
+      });
+    }
   }
 
   yield* fs.makeDirectory(cacheDir, { recursive: true });
@@ -382,41 +423,28 @@ const stageLocalServerPackageOnRemote = Effect.fn(
 > {
   const stateKey = remoteStateKey(target);
   const remotePaths = resolveRemoteLocalArchivePaths({
-    ...localPackage,
-    remoteArchivePath: "",
-    remoteChecksumsPath: "",
     stateKey,
+    version: localPackage.version,
+    archiveName: localPackage.archiveName,
   });
   yield* runSshCommand(target, {
     remoteCommandArgs: ["sh", "-s"],
     stdin: `set -eu\nACODE_HOME="\${ACODE_HOME:-\${HOME}/.acode}"\nmkdir -p "$ACODE_HOME/ssh-launch/${stateKey}/packages/${localPackage.version}"\n`,
     timeoutMs: 30_000,
-    ...(authOptions.authSecret === undefined ? {} : { authSecret: authOptions.authSecret }),
-    ...(authOptions.batchMode === undefined ? {} : { batchMode: authOptions.batchMode }),
-    ...(authOptions.interactiveAuth === undefined
-      ? {}
-      : { interactiveAuth: authOptions.interactiveAuth }),
+    ...spreadAuthOptions(authOptions),
   });
   const remoteArchivePath = remotePaths.archivePath;
   const remoteChecksumsPath = remotePaths.checksumsPath;
   yield* runScpUpload(target, {
     sourcePath: localPackage.archivePath,
     destinationPath: remoteArchivePath,
-    ...(authOptions.authSecret === undefined ? {} : { authSecret: authOptions.authSecret }),
-    ...(authOptions.batchMode === undefined ? {} : { batchMode: authOptions.batchMode }),
-    ...(authOptions.interactiveAuth === undefined
-      ? {}
-      : { interactiveAuth: authOptions.interactiveAuth }),
+    ...spreadAuthOptions(authOptions),
   });
   yield* runScpUpload(target, {
     sourcePath: localPackage.checksumsPath,
     destinationPath: remoteChecksumsPath,
     timeoutMs: 30_000,
-    ...(authOptions.authSecret === undefined ? {} : { authSecret: authOptions.authSecret }),
-    ...(authOptions.batchMode === undefined ? {} : { batchMode: authOptions.batchMode }),
-    ...(authOptions.interactiveAuth === undefined
-      ? {}
-      : { interactiveAuth: authOptions.interactiveAuth }),
+    ...spreadAuthOptions(authOptions),
   });
   return {
     ...localPackage,
@@ -424,6 +452,16 @@ const stageLocalServerPackageOnRemote = Effect.fn(
     remoteChecksumsPath,
     stateKey,
   };
+});
+
+// RunSshCommandOptions extends SshAuthOptions; spreading conditionally keeps
+// exactOptionalPropertyTypes happy without repeating the triplet everywhere.
+const spreadAuthOptions = (authOptions: SshAuthOptions) => ({
+  ...(authOptions.authSecret === undefined ? {} : { authSecret: authOptions.authSecret }),
+  ...(authOptions.batchMode === undefined ? {} : { batchMode: authOptions.batchMode }),
+  ...(authOptions.interactiveAuth === undefined
+    ? {}
+    : { interactiveAuth: authOptions.interactiveAuth }),
 });
 
 interface SshAuthOperationInput<T> {
@@ -583,13 +621,16 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Probe the public environment descriptor, not "/": reuse must only adopt a
+// daemon that actually speaks the ACode discovery API, not any server that
+// happens to answer on the recorded port.
 function probe() {
   return new Promise((resolve) => {
     const request = http.get(
       {
         hostname: "127.0.0.1",
         port,
-        path: "/",
+        path: "/.well-known/t3/environment",
         timeout: probeTimeoutMs,
       },
       (response) => {
@@ -1134,9 +1175,7 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
       timeoutMs: isNodeScriptRunner(runner)
         ? REMOTE_LAUNCH_TIMEOUT_MS
         : REMOTE_ARCHIVE_LAUNCH_TIMEOUT_MS,
-      ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
-      ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
-      ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
+      ...spreadAuthOptions(input ?? {}),
     });
     if (!getLastNonEmptyOutputLine(result.stdout)) {
       return yield* new SshLaunchError({
@@ -1194,9 +1233,7 @@ export const issueRemotePairingToken = Effect.fn("ssh/tunnel.issueRemotePairingT
     // Pairing may be the first command on a cold remote, so it can install
     // the archive on the way.
     ...(isNodeScriptRunner(runner) ? {} : { timeoutMs: REMOTE_ARCHIVE_LAUNCH_TIMEOUT_MS }),
-    ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
-    ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
-    ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
+    ...spreadAuthOptions(input ?? {}),
   });
   if (!getLastNonEmptyOutputLine(result.stdout)) {
     return yield* new SshPairingError({
@@ -1241,9 +1278,7 @@ const readRemoteServerLogTail = Effect.fn("ssh/tunnel.readRemoteServerLogTail")(
     remoteCommandArgs: ["sh", "-s"],
     stdin: buildRemoteLogTailScript(target),
     timeoutMs: 10_000,
-    ...(input?.authSecret === undefined ? {} : { authSecret: input.authSecret }),
-    ...(input?.batchMode === undefined ? {} : { batchMode: input.batchMode }),
-    ...(input?.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
+    ...spreadAuthOptions(input ?? {}),
   });
   return result.stdout.trim();
 });
@@ -1729,6 +1764,12 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
         launchOrReuseRemoteServer(input.resolvedTarget, authOptions, input.runner).pipe(
           Effect.catch((error) =>
             Effect.gen(function* () {
+              // Authentication failures must surface as-is so the password
+              // prompt retry sees them; downloading and uploading a ~70 MB
+              // package first would only delay and muddy that signal.
+              if (isSshAuthFailure(error)) {
+                return yield* error;
+              }
               if (!isNodeScriptRunner(input.runner) && input.runner?.archiveVersion) {
                 yield* Effect.logWarning("ssh.environment.releaseDownload.fallback", {
                   ...sshTargetLogFields(input.resolvedTarget),

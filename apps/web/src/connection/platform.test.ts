@@ -18,6 +18,7 @@ import {
   secondaryBearerExpiresAtEpochMs,
   secondaryBearerRefreshAtEpochMs,
 } from "./platform.ts";
+import { SshPasswordPromptCancelledError } from "../desktop/sshErrors.ts";
 
 const TARGET: DesktopSshEnvironmentTarget = {
   alias: "devbox",
@@ -128,6 +129,23 @@ describe("desktop SSH pairing", () => {
 
       expect(error._tag).toBe("ConnectionBlockedError");
       expect(calls).toEqual([]);
+    }),
+  );
+
+  it.effect("classifies a cancelled SSH password prompt as an authentication block", () =>
+    Effect.gen(function* () {
+      const calls: string[] = [];
+      const bridge = makeBridge(calls);
+      bridge.ensureSshEnvironment = async () => {
+        calls.push("ensure");
+        throw new SshPasswordPromptCancelledError("SSH authentication cancelled for devbox.");
+      };
+
+      const error = yield* provisionDesktopSshEnvironment(bridge, TARGET).pipe(Effect.flip);
+
+      expect(error._tag).toBe("ConnectionBlockedError");
+      expect(error._tag === "ConnectionBlockedError" && error.reason).toBe("authentication");
+      expect(calls).toEqual(["ensure"]);
     }),
   );
 });
