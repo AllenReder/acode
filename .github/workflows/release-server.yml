@@ -55,7 +55,7 @@ jobs:
           sha256sum -c SHA256SUMS
       - name: Smoke-test server archive
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           scratch="$(mktemp -d)"
           trap 'rm -rf "$scratch"' EXIT
           archive="release-server/acode-server-${{ steps.release.outputs.version }}-linux-x64.tar.gz"
