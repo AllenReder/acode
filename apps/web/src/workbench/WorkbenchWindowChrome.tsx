@@ -83,6 +83,51 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
     deltaX = dragState.pointer.x - (dragState.startRect.left + dragState.startRect.width / 2);
   }
 
+  const lastDragInfoRef = useRef<{
+    tabId: string;
+    fromIndex: number;
+    toIndex: number;
+    deltaX: number;
+    tabWidth: number;
+  } | null>(null);
+
+  const [settlingTab, setSettlingTab] = useState<{
+    tabId: string;
+    offset: number;
+  } | null>(null);
+
+  if (isAnyTabDragged && draggedTabId && draggedSourceIndex >= 0) {
+    lastDragInfoRef.current = {
+      tabId: draggedTabId,
+      fromIndex: draggedSourceIndex,
+      toIndex: targetIndex,
+      deltaX,
+      tabWidth,
+    };
+  } else if (lastDragInfoRef.current) {
+    const prev = lastDragInfoRef.current;
+    lastDragInfoRef.current = null;
+    const initialOffset = (prev.fromIndex - prev.toIndex) * prev.tabWidth + prev.deltaX;
+    if (prev.fromIndex !== prev.toIndex || Math.abs(prev.deltaX) > 2) {
+      setSettlingTab({ tabId: prev.tabId, offset: initialOffset });
+    }
+  }
+
+  useEffect(() => {
+    if (!settlingTab) return;
+    let cancelled = false;
+    requestAnimationFrame(() => {
+      if (cancelled) return;
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        setSettlingTab(null);
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [settlingTab]);
+
   useEffect(() => {
     if (typeof document === "undefined") return;
     const root = document.documentElement;
@@ -155,6 +200,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
                 isSlidOut={isSlidOut}
                 tabWidth={tabWidth}
                 tabsCount={snapshot.tabs.length}
+                settlingTab={settlingTab}
                 snapshot={snapshot}
               />
             );
@@ -223,6 +269,7 @@ interface WorkbenchTabItemProps {
   readonly isSlidOut: boolean;
   readonly tabWidth: number;
   readonly tabsCount: number;
+  readonly settlingTab: { readonly tabId: string; readonly offset: number } | null;
   readonly snapshot: WorkbenchSnapshot;
 }
 
@@ -249,6 +296,7 @@ function WorkbenchTabItem({
   isSlidOut,
   tabWidth,
   tabsCount,
+  settlingTab,
   snapshot,
 }: WorkbenchTabItemProps) {
   const drag = useWorkbenchDragSource({ kind: "tab", tabId: tab.id }, title);
@@ -281,6 +329,11 @@ function WorkbenchTabItem({
         transition: "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)",
       };
     }
+  } else if (settlingTab?.tabId === tab.id) {
+    tabStyle = {
+      transform: `translate3d(${settlingTab.offset}px, 0, 0)`,
+      transition: "none",
+    };
   } else {
     tabStyle = {
       transition: "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)",

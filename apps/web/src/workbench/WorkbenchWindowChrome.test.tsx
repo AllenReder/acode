@@ -258,3 +258,16 @@ it("activates an inactive tab immediately on pointerdown unless clicking close b
   });
   expect(activateTab).not.toHaveBeenCalled();
 });
+
+it("renders tabs with workbench-tab-item class and will-change-transform for smooth fluid reordering", () => {
+  const snapshot = createTestSnapshot();
+
+  const html = renderToStaticMarkup(
+    <SidebarProvider defaultOpen>
+      <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+    </SidebarProvider>,
+  );
+
+  expect(html).toContain("workbench-tab-item");
+  expect(html).toContain("will-change-transform");
+});

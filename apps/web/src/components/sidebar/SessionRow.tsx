@@ -112,8 +112,8 @@ export function SessionRow({
       data-workspace-key={workspaceKey}
       data-session-id={sessionId}
       className={cn(
-        "relative flex min-h-6 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
-        isBeingDragged && "opacity-40",
+        "sidebar-session-row-item relative flex min-h-6 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground will-change-transform",
+        isBeingDragged && (props.style?.opacity !== undefined ? undefined : "opacity-40"),
         isFocused
           ? "bg-sidebar-row-active font-medium text-sidebar-foreground"
           : isOpenInActiveTab
@@ -170,12 +170,12 @@ export function SessionRow({
         <span aria-hidden="true" className="absolute left-0.5 size-1 rounded-full bg-primary" />
       ) : null}
       {props.children}
-      {dropPosition === "before" ? (
+      {dropPosition === "before" && !props.style?.transform ? (
         <span
           data-sidebar-reorder-indicator="before"
           className="pointer-events-none absolute -top-px inset-x-1 h-0.5 rounded-full bg-primary z-20 shadow-[0_0_4px_var(--color-primary)]"
         />
-      ) : dropPosition === "after" ? (
+      ) : dropPosition === "after" && !props.style?.transform ? (
         <span
           data-sidebar-reorder-indicator="after"
           className="pointer-events-none absolute -bottom-px inset-x-1 h-0.5 rounded-full bg-primary z-20 shadow-[0_0_4px_var(--color-primary)]"

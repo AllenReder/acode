@@ -22,7 +22,16 @@ import {
   PlusIcon,
   TerminalIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { useComposerDraftStore } from "../composerDraftStore";
@@ -49,6 +58,7 @@ import { sessionRouteForTarget } from "../workbench/deepLinks";
 import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { runtimeTerminalIdForTarget, terminalTargetForRuntime } from "../workbench/sessionTarget";
 import type { ViewTarget } from "../workbench/viewRegistry";
+import { useWorkbenchDragState } from "../workbench/workbenchDrag";
 import { useWorkbenchStore } from "../workbench/workbenchStore";
 
 type ProjectMenuId =
@@ -643,77 +653,15 @@ export function AwenSidebar() {
                             </div>
                             {workspaceExpanded ? (
                               <div className="ms-4 flex flex-col gap-px border-s border-sidebar-border ps-1.5">
-                                {activeSessions.map((session) => {
-                                  if (session.kind === "agent") {
-                                    return (
-                                      <SessionRow
-                                        key={session.id}
-                                        data-testid="sidebar-session-row"
-                                        data-session-kind="agent"
-                                        sessionTitle={session.title}
-                                        target={{
-                                          kind: "agentSession",
-                                          environmentId: project.environmentId,
-                                          workspaceId: workspace.id,
-                                          agentSessionId: session.id,
-                                        }}
-                                        onStartRename={() =>
-                                          renameAgent(
-                                            project.environmentId,
-                                            session.threadId,
-                                            session.title,
-                                          )
-                                        }
-                                        navigateTo={(route) =>
-                                          void navigate({
-                                            ...route,
-                                            to: route.to as never,
-                                          } as never)
-                                        }
-                                      >
-                                        <span className="min-w-0 flex-1 truncate">
-                                          {session.title}
-                                        </span>
-                                      </SessionRow>
-                                    );
-                                  }
-                                  return (
-                                    <SessionRow
-                                      key={session.id}
-                                      data-testid="sidebar-session-row"
-                                      data-session-kind="terminal"
-                                      sessionTitle={session.title}
-                                      target={{
-                                        kind: "workspaceTerminal",
-                                        environmentId: project.environmentId,
-                                        workspaceId: workspace.id,
-                                        terminalSessionId: session.id,
-                                      }}
-                                      navigateTo={(route) =>
-                                        void navigate({ ...route, to: route.to as never } as never)
-                                      }
-                                      onStartRename={() =>
-                                        renameTerminal(
-                                          {
-                                            kind: "workspaceTerminal",
-                                            environmentId: project.environmentId,
-                                            workspaceId: workspace.id,
-                                            terminalSessionId: session.id,
-                                          },
-                                          session.title,
-                                        )
-                                      }
-                                    >
-                                      <TerminalIcon className="size-3 shrink-0" />
-                                      <span className="min-w-0 flex-1 truncate">
-                                        {session.title}
-                                      </span>
-                                      <span className="shrink-0 text-[10px] opacity-60">
-                                        {session.status}
-                                      </span>
-                                    </SessionRow>
-                                  );
-                                })}
+                                <WorkspaceActiveSessions
+                                  project={project}
+                                  workspace={workspace}
+                                  workspaceKey={workspaceKey}
+                                  activeSessions={activeSessions}
+                                  renameAgent={renameAgent}
+                                  renameTerminal={renameTerminal}
+                                  navigate={navigate}
+                                />
                                 {historySessions.length > 0 ? (
                                   <button
                                     type="button"
@@ -848,6 +796,220 @@ export function AwenSidebar() {
         }}
         onCreate={handleCreateWorkspace}
       />
+    </>
+  );
+}
+
+interface WorkspaceActiveSessionsProps {
+  readonly project: EnvironmentAwenProject;
+  readonly workspace: EnvironmentAwenProject["workspaces"][number];
+  readonly workspaceKey: string;
+  readonly activeSessions: ReadonlyArray<NonNullable<EnvironmentAwenProject["workspaces"][number]["sessions"]>[number]>;
+  readonly renameAgent: (environmentId: EnvironmentId, threadId: ThreadId, title: string) => void;
+  readonly renameTerminal: (
+    target: Extract<ViewTarget, { kind: "workspaceTerminal" }>,
+    title: string,
+  ) => void;
+  readonly navigate: ReturnType<typeof useNavigate>;
+}
+
+function WorkspaceActiveSessions({
+  project,
+  workspace,
+  workspaceKey,
+  activeSessions,
+  renameAgent,
+  renameTerminal,
+  navigate,
+}: WorkspaceActiveSessionsProps) {
+  const dragState = useWorkbenchDragState();
+  const [settlingSession, setSettlingSession] = useState<{
+    sessionId: string;
+    offset: number;
+  } | null>(null);
+  const lastSessionDragInfoRef = useRef<{
+    sessionId: string;
+    fromIndex: number;
+    toIndex: number;
+    deltaY: number;
+  } | null>(null);
+
+  const isSidebarDrag =
+    dragState?.phase === "dragging" &&
+    dragState.source.kind === "sidebar" &&
+    dragState.isOverSidebar;
+  const isCurrentWorkspaceDrag =
+    isSidebarDrag &&
+    dragState?.source.target.environmentId === project.environmentId &&
+    dragState?.source.target.workspaceId === workspace.id;
+
+  const draggedSessionId =
+    isCurrentWorkspaceDrag && dragState
+      ? dragState.source.target.kind === "agentSession"
+        ? dragState.source.target.agentSessionId
+        : dragState.source.target.terminalSessionId
+      : null;
+
+  const draggedSourceIndex = draggedSessionId
+    ? activeSessions.findIndex((s) => s.id === draggedSessionId)
+    : -1;
+
+  const dropTarget = isCurrentWorkspaceDrag ? dragState?.sidebarDropTarget : null;
+  let targetIndex = draggedSourceIndex;
+  if (dropTarget && dropTarget.workspaceKey === workspaceKey && draggedSourceIndex >= 0) {
+    const rawTargetIndex = activeSessions.findIndex((s) => s.id === dropTarget.sessionId);
+    if (rawTargetIndex >= 0) {
+      if (dropTarget.position === "before") {
+        targetIndex = draggedSourceIndex < rawTargetIndex ? rawTargetIndex - 1 : rawTargetIndex;
+      } else {
+        targetIndex = draggedSourceIndex > rawTargetIndex ? rawTargetIndex + 1 : rawTargetIndex;
+      }
+    }
+  }
+
+  const deltaY =
+    isCurrentWorkspaceDrag && dragState
+      ? dragState.pointer.y - (dragState.startRect.top + dragState.startRect.height / 2)
+      : 0;
+
+  const rowHeight = 25; // 24px button height + 1px gap
+
+  if (isCurrentWorkspaceDrag && draggedSessionId && draggedSourceIndex >= 0) {
+    lastSessionDragInfoRef.current = {
+      sessionId: draggedSessionId,
+      fromIndex: draggedSourceIndex,
+      toIndex: targetIndex,
+      deltaY,
+    };
+  } else if (lastSessionDragInfoRef.current) {
+    const prev = lastSessionDragInfoRef.current;
+    lastSessionDragInfoRef.current = null;
+    const initialOffset = (prev.fromIndex - prev.toIndex) * rowHeight + prev.deltaY;
+    if (prev.fromIndex !== prev.toIndex || Math.abs(prev.deltaY) > 2) {
+      setSettlingSession({ sessionId: prev.sessionId, offset: initialOffset });
+    }
+  }
+
+  useEffect(() => {
+    if (!settlingSession) return;
+    let cancelled = false;
+    requestAnimationFrame(() => {
+      if (cancelled) return;
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        setSettlingSession(null);
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [settlingSession]);
+
+  return (
+    <>
+      {activeSessions.map((session, index) => {
+        const isDragged = isCurrentWorkspaceDrag && session.id === draggedSessionId;
+        const isSettling = settlingSession?.sessionId === session.id;
+
+        let sessionStyle: CSSProperties | undefined;
+        if (isCurrentWorkspaceDrag && draggedSourceIndex >= 0) {
+          if (isDragged) {
+            sessionStyle = {
+              transform: `translate3d(0, ${deltaY}px, 0)`,
+              zIndex: 30,
+              opacity: 0.95,
+              pointerEvents: "none",
+              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.25)",
+              transition: "none",
+            };
+          } else {
+            let shift = 0;
+            if (targetIndex > draggedSourceIndex) {
+              if (index > draggedSourceIndex && index <= targetIndex) {
+                shift = -rowHeight;
+              }
+            } else if (targetIndex < draggedSourceIndex) {
+              if (index >= targetIndex && index < draggedSourceIndex) {
+                shift = rowHeight;
+              }
+            }
+            sessionStyle = {
+              transform: shift !== 0 ? `translate3d(0, ${shift}px, 0)` : undefined,
+              transition: "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)",
+            };
+          }
+        } else if (isSettling) {
+          sessionStyle = {
+            transform: `translate3d(0, ${settlingSession.offset}px, 0)`,
+            transition: "none",
+          };
+        } else {
+          sessionStyle = {
+            transition: "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)",
+          };
+        }
+
+        if (session.kind === "agent") {
+          return (
+            <SessionRow
+              key={session.id}
+              style={sessionStyle}
+              data-testid="sidebar-session-row"
+              data-session-kind="agent"
+              sessionTitle={session.title}
+              target={{
+                kind: "agentSession",
+                environmentId: project.environmentId,
+                workspaceId: workspace.id,
+                agentSessionId: session.id,
+              }}
+              onStartRename={() =>
+                renameAgent(project.environmentId, session.threadId, session.title)
+              }
+              navigateTo={(route) =>
+                void navigate({
+                  ...route,
+                  to: route.to as never,
+                } as never)
+              }
+            >
+              <span className="min-w-0 flex-1 truncate">{session.title}</span>
+            </SessionRow>
+          );
+        }
+
+        return (
+          <SessionRow
+            key={session.id}
+            style={sessionStyle}
+            data-testid="sidebar-session-row"
+            data-session-kind="terminal"
+            sessionTitle={session.title}
+            target={{
+              kind: "workspaceTerminal",
+              environmentId: project.environmentId,
+              workspaceId: workspace.id,
+              terminalSessionId: session.id,
+            }}
+            navigateTo={(route) => void navigate({ ...route, to: route.to as never } as never)}
+            onStartRename={() =>
+              renameTerminal(
+                {
+                  kind: "workspaceTerminal",
+                  environmentId: project.environmentId,
+                  workspaceId: workspace.id,
+                  terminalSessionId: session.id,
+                },
+                session.title,
+              )
+            }
+          >
+            <TerminalIcon className="size-3 shrink-0" />
+            <span className="min-w-0 flex-1 truncate">{session.title}</span>
+            <span className="shrink-0 text-[10px] opacity-60">{session.status}</span>
+          </SessionRow>
+        );
+      })}
     </>
   );
 }

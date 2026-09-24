@@ -366,3 +366,22 @@ it("marks closed sessions with data-session-closed and suppresses drag initiatio
   expect(onPointerDown).toHaveBeenCalledTimes(1);
 });
 
+it("renders with sidebar-session-row-item class and will-change-transform for fluid movement animation", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const target = {
+    kind: "agentSession",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    agentSessionId: "s1" as AgentSessionId,
+  } as const;
+
+  await act(() => {
+    renderer = create(<SessionRow target={target}>Active</SessionRow>);
+  });
+
+  const row = renderer!.root.findByType("button");
+  expect(row.props.className).toContain("sidebar-session-row-item");
+  expect(row.props.className).toContain("will-change-transform");
+});
+
+

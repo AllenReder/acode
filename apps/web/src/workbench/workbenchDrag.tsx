@@ -561,6 +561,33 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           return;
         }
 
+        if (!cancelled && source.kind === "tab") {
+          const stripEl = document.querySelector<HTMLElement>("[data-workbench-tab-strip-drop]");
+          if (stripEl) {
+            const stripRect = stripEl.getBoundingClientRect();
+            const isSlidOut = lastY > stripRect.bottom + 12;
+            if (!isSlidOut) {
+              const currentStore = useWorkbenchStore.getState();
+              const fromIndex = currentStore.tabs.findIndex((t) => t.id === source.tabId);
+              if (fromIndex >= 0) {
+                const firstTabEl = stripEl.querySelector<HTMLElement>("[data-tab-id]");
+                const tabWidth = firstTabEl?.getBoundingClientRect().width || 176;
+                const scrollLeft = stripEl.scrollLeft;
+                const currentCenter = lastX - stripRect.left + scrollLeft;
+                const toIndex = Math.max(
+                  0,
+                  Math.min(Math.floor(currentCenter / tabWidth), currentStore.tabs.length - 1),
+                );
+                if (fromIndex !== toIndex) {
+                  currentStore.moveTab(fromIndex, toIndex);
+                }
+              }
+            }
+          }
+          setState(null);
+          return;
+        }
+
         const liveTarget = cancelled || currentIsOverSidebar ? null : resolveTarget(lastX, lastY);
         const target = liveTarget;
         const result =
