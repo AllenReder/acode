@@ -1,12 +1,18 @@
 // @effect-diagnostics nodeBuiltinImport:off
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  nodeRuntimeCachePath,
   readNodeShasum,
   readStageArguments,
   resolveDesktopRuntimeTarget,
+  resolveNodeRuntimeCache,
   resolveRuntimeNodeVersion,
   runtimeNodeDownload,
+  sha256File,
 } from "./stage-desktop-runtime.ts";
 
 const WIN_EXE_SHA = "e3be0545990c90995d7bf3a7af5d64af1f2e0fc1bbd9b79c27f7abc1e9676e50";
@@ -103,5 +109,48 @@ describe("stage arguments", () => {
     expect(() => readStageArguments(["--bundle"])).toThrow(/Unknown argument/u);
     expect(() => readStageArguments(["--target"])).toThrow(/needs a Rust target triple/u);
     expect(() => readStageArguments(["--target="])).toThrow(/needs a Rust target triple/u);
+  });
+});
+
+describe("runtime download cache", () => {
+  it("uses the configured cache directory and falls back to the temp directory", () => {
+    const fallback = NodePath.join(NodeOS.tmpdir(), "awen-node-runtime");
+    expect(resolveNodeRuntimeCache({})).toBe(fallback);
+    expect(resolveNodeRuntimeCache({ AWEN_NODE_RUNTIME_CACHE: "   " })).toBe(fallback);
+    expect(resolveNodeRuntimeCache({ AWEN_NODE_RUNTIME_CACHE: "/tmp/awen-cache" })).toBe(
+      "/tmp/awen-cache",
+    );
+  });
+
+  it("keys a cached build by version and target", () => {
+    expect(
+      nodeRuntimeCachePath(
+        "/cache",
+        "24.13.1",
+        resolveDesktopRuntimeTarget("x86_64-pc-windows-msvc"),
+        "node.exe",
+      ),
+    ).toBe("/cache/v24.13.1/win32-x64/node.exe");
+    expect(
+      nodeRuntimeCachePath(
+        "/cache",
+        "24.13.1",
+        resolveDesktopRuntimeTarget("aarch64-apple-darwin"),
+        "node-v24.13.1-darwin-arm64.tar.gz",
+      ),
+    ).toBe("/cache/v24.13.1/darwin-arm64/node-v24.13.1-darwin-arm64.tar.gz");
+  });
+
+  it("digests a cached file so a reused download is verified again", () => {
+    const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "awen-runtime-hash-"));
+    try {
+      const filePath = NodePath.join(directory, "empty");
+      NodeFS.writeFileSync(filePath, "");
+      expect(sha256File(filePath)).toBe(
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      );
+    } finally {
+      NodeFS.rmSync(directory, { recursive: true, force: true });
+    }
   });
 });

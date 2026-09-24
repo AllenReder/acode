@@ -12,7 +12,8 @@ installer is `build-installers.yml`.
 
 ## What CI proves
 
-- `quality` — version consistency, typecheck, lint, and the web/server build.
+- `quality` — version consistency, formatting (`pnpm fmt:check`), typecheck,
+  lint, and the web/server build.
 - `tests` — `apps/server` and `apps/web` sharded two ways, plus every other
   workspace package through `pnpm test:packages`.
 - `desktop-shell` — the Tauri crate compiles on Linux and `cargo fmt --check`
@@ -51,3 +52,8 @@ node scripts/stage-desktop-runtime.ts --target x86_64-apple-darwin
 Rust target triple, checks it against the published `SHASUMS256.txt`, and stages
 it as the desktop runtime, which is what lets an Apple Silicon runner build the
 x86_64 DMG. Without `--target` the script copies the local Node binary.
+
+The macOS and Windows installer jobs cache that download in
+`${{ runner.temp }}/awen-node-runtime` and pass the directory through
+`AWEN_NODE_RUNTIME_CACHE`. A restored archive is verified again before use, so a
+stale cache entry only costs one download, never a wrong runtime.

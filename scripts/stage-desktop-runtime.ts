@@ -177,6 +177,35 @@ export function sha256File(filePath: string): string {
   return NodeCrypto.createHash("sha256").update(NodeFS.readFileSync(filePath)).digest("hex");
 }
 
+/**
+ * Where downloaded Node builds are kept between runs. CI points
+ * `AWEN_NODE_RUNTIME_CACHE` at a directory it restores and saves, so a warm
+ * cache replaces the download with a checksum re-verification.
+ */
+export function resolveNodeRuntimeCache(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): string {
+  const configured = environment.AWEN_NODE_RUNTIME_CACHE?.trim();
+  return configured
+    ? NodePath.resolve(configured)
+    : NodePath.join(NodeOS.tmpdir(), "awen-node-runtime");
+}
+
+/** Cache location of one published Node build, keyed by version and target. */
+export function nodeRuntimeCachePath(
+  cacheDirectory: string,
+  version: string,
+  target: DesktopRuntimeTarget,
+  fileName: string,
+): string {
+  return NodePath.join(
+    cacheDirectory,
+    `v${version}`,
+    `${target.platform}-${target.arch}`,
+    fileName,
+  );
+}
+
 async function fetchText(url: string): Promise<string> {
   const response = await fetch(url);
   if (!response.ok)
@@ -191,6 +220,27 @@ async function downloadFile(url: string, destination: string): Promise<void> {
   NodeFS.writeFileSync(destination, Buffer.from(await response.arrayBuffer()));
 }
 
+async function downloadVerifiedRuntimeNode(
+  download: RuntimeNodeDownload,
+  expected: string,
+  cachePath: string,
+): Promise<string> {
+  if (NodeFS.existsSync(cachePath) && sha256File(cachePath) === expected) {
+    console.log(`[awen] reusing cached ${NodePath.basename(cachePath)}`);
+    return cachePath;
+  }
+  NodeFS.mkdirSync(NodePath.dirname(cachePath), { recursive: true });
+  await downloadFile(download.url, cachePath);
+  const actual = sha256File(cachePath);
+  if (actual !== expected) {
+    NodeFS.rmSync(cachePath, { force: true });
+    throw new Error(
+      `Node runtime checksum mismatch for ${download.url}: expected ${expected}, received ${actual}.`,
+    );
+  }
+  return cachePath;
+}
+
 async function stageTargetNode(target: DesktopRuntimeTarget, destination: string): Promise<void> {
   const version = resolveRuntimeNodeVersion(readEngineNodeVersion());
   const download = runtimeNodeDownload(version, target);
@@ -198,23 +248,21 @@ async function stageTargetNode(target: DesktopRuntimeTarget, destination: string
     await fetchText(`${NODE_DIST_URL}/v${version}/SHASUMS256.txt`),
     download.checksumName,
   );
+  const fileName = NodePath.basename(new URL(download.url).pathname);
+  const cached = await downloadVerifiedRuntimeNode(
+    download,
+    expected,
+    nodeRuntimeCachePath(resolveNodeRuntimeCache(), version, target, fileName),
+  );
   const scratch = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "awen-node-runtime-"));
   try {
-    const downloadPath = NodePath.join(scratch, NodePath.basename(new URL(download.url).pathname));
-    await downloadFile(download.url, downloadPath);
-    const actual = sha256File(downloadPath);
-    if (actual !== expected) {
-      throw new Error(
-        `Node runtime checksum mismatch for ${download.url}: expected ${expected}, received ${actual}.`,
-      );
-    }
     if (download.archive) {
-      NodeChildProcess.execFileSync("tar", ["-xzf", downloadPath, "-C", scratch], {
+      NodeChildProcess.execFileSync("tar", ["-xzf", cached, "-C", scratch], {
         stdio: "inherit",
       });
       NodeFS.copyFileSync(NodePath.join(scratch, download.entryPath), destination);
     } else {
-      NodeFS.copyFileSync(downloadPath, destination);
+      NodeFS.copyFileSync(cached, destination);
     }
   } finally {
     NodeFS.rmSync(scratch, { recursive: true, force: true });

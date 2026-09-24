@@ -180,7 +180,18 @@ jobs:
           echo "APPLE_PASSWORD=$APPLE_PASSWORD" >> "$GITHUB_ENV"
           echo "APPLE_TEAM_ID=$APPLE_TEAM_ID" >> "$GITHUB_ENV"
           echo "mode=developer-id" >> "$GITHUB_OUTPUT"
+      # A warm cache turns the Node download into a checksum check. The primary
+      # key follows `package.json` (so an `engines.node` bump misses it) and the
+      # restore key still hands over the previous archive, which the script
+      # re-verifies before reusing.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/awen-node-runtime
+          key: node-runtime-macos-${{ matrix.arch }}-${{ hashFiles('package.json') }}
+          restore-keys: node-runtime-macos-${{ matrix.arch }}-
       - name: Stage desktop daemon and Node runtime
+        env:
+          AWEN_NODE_RUNTIME_CACHE: ${{ runner.temp }}/awen-node-runtime
         run: node scripts/stage-desktop-runtime.ts --target "${{ matrix.target }}"
       - name: Install Rust target
         run: |
@@ -252,7 +263,14 @@ jobs:
           node-version-file: package.json
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/awen-node-runtime
+          key: node-runtime-windows-x64-${{ hashFiles('package.json') }}
+          restore-keys: node-runtime-windows-x64-
       - name: Stage desktop daemon and Node runtime
+        env:
+          AWEN_NODE_RUNTIME_CACHE: ${{ runner.temp }}/awen-node-runtime
         run: node scripts/stage-desktop-runtime.ts --target x86_64-pc-windows-msvc
       - name: Install Rust target
         shell: pwsh
