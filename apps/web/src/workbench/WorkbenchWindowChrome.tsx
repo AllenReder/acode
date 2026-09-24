@@ -1,6 +1,7 @@
 import type { EnvironmentAwenProject } from "@awen/client-runtime/state/models";
 import { Columns3Icon, PanelsTopLeftIcon, PlusIcon, XIcon } from "lucide-react";
 import {
+  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -65,7 +66,11 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
           (tab) => tab.id !== tabId && !closingTabIds.has(tab.id),
         );
         const nextActive = survivingTabs[Math.min(closingIndex, survivingTabs.length - 1)];
-        if (nextActive) activateTab(nextActive.id);
+        if (nextActive) {
+          startTransition(() => {
+            activateTab(nextActive.id);
+          });
+        }
       }
 
       setClosingTabIds((prev) => new Set([...prev, tabId]));
@@ -239,6 +244,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
                 tabWidth={tabWidth}
                 tabsCount={snapshot.tabs.length}
                 remainingTabsCount={remainingTabsCount}
+                isAnyTabClosing={closingTabIds.size > 0}
                 settlingTab={settlingTab}
                 snapshot={snapshot}
               />
@@ -310,6 +316,7 @@ interface WorkbenchTabItemProps {
   readonly tabWidth: number;
   readonly tabsCount: number;
   readonly remainingTabsCount: number;
+  readonly isAnyTabClosing: boolean;
   readonly settlingTab: { readonly tabId: string; readonly offset: number } | null;
   readonly snapshot: WorkbenchSnapshot;
 }
@@ -339,6 +346,7 @@ function WorkbenchTabItem({
   tabWidth,
   tabsCount,
   remainingTabsCount,
+  isAnyTabClosing,
   settlingTab,
   snapshot,
 }: WorkbenchTabItemProps) {
@@ -420,7 +428,9 @@ function WorkbenchTabItem({
         }
         if (event.button === 0) {
           if (!active) activateTab(tab.id);
-          drag.onPointerDown(event);
+          if (!isAnyTabClosing) {
+            drag.onPointerDown(event);
+          }
         }
       }}
       onDoubleClick={() => {
@@ -483,6 +493,8 @@ function WorkbenchTabItem({
           aria-label={`Close ${title}`}
           className="opacity-0 group-hover:opacity-100 flex size-5 shrink-0 items-center justify-center rounded hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-opacity duration-150"
           onPointerDown={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
+          onDoubleClick={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
             onClose();

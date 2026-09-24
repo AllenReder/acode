@@ -1,4 +1,5 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -49,8 +50,9 @@ function resolvePaneBoxShadow(paneGap: number, paneShadow: PaneShadow): string {
   }
 }
 
-export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps) {
-  const tab = getActiveTab(snapshot);
+export const PaneTree = memo(
+  function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps) {
+    const tab = getActiveTab(snapshot);
   const dragState = useWorkbenchDragState();
   const previewTab =
     dragState?.phase === "dragging" && dragState.valid
@@ -356,7 +358,14 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
       </div>
     </div>
   );
-}
+},
+(prev, next) => {
+  if (prev.snapshot.activeTabId !== next.snapshot.activeTabId) return false;
+  if (prev.projects !== next.projects) return false;
+  const prevTab = prev.snapshot.tabs.find((t) => t.id === prev.snapshot.activeTabId);
+  const nextTab = next.snapshot.tabs.find((t) => t.id === next.snapshot.activeTabId);
+  return prevTab === nextTab;
+});
 
 interface PaneProps {
   readonly snapshot: WorkbenchSnapshot;
