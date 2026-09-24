@@ -57,7 +57,11 @@ export interface WorkbenchSnapshot {
 export type SessionViewTarget = Extract<ViewTarget, { kind: "agentSession" | "workspaceTerminal" }>;
 
 export type ViewDragSource =
-  | { readonly kind: "sidebar"; readonly target: SessionViewTarget }
+  | {
+      readonly kind: "sidebar";
+      readonly target: ViewTarget;
+      readonly onCommit?: (result: ViewDropResult) => void;
+    }
   | { readonly kind: "pane"; readonly tabId: string; readonly paneId: string }
   | { readonly kind: "tab"; readonly tabId: string };
 
@@ -364,7 +368,8 @@ function findNewAgentSessionPane(
       if (
         view.target.kind === "newAgentSession" &&
         view.target.environmentId === target.environmentId &&
-        view.target.workspaceId === target.workspaceId
+        view.target.workspaceId === target.workspaceId &&
+        view.target.draftId === target.draftId
       ) {
         return { tabId: tab.id, paneId };
       }

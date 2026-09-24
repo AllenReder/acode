@@ -66,6 +66,33 @@ describe("Awen Sidebar menus", () => {
     ]);
   });
 
+  it("attaches drag handlers (onPointerDown) to draggable workspace menu items", () => {
+    const onDragBrowseFiles = () => {};
+    const onDragReviewChanges = () => {};
+    const onDragNewAgentSession = () => {};
+    const onDragNewTerminalSession = () => {};
+
+    const items = workspaceMenuItems({
+      canDeleteDirectory: false,
+      onDragBrowseFiles,
+      onDragReviewChanges,
+      onDragNewAgentSession,
+      onDragNewTerminalSession,
+    });
+
+    const browseFiles = items.find((i) => i.id === "browse-files");
+    const reviewChanges = items.find((i) => i.id === "review-changes");
+    const newAgent = items.find((i) => i.id === "new-agent-session");
+    const newTerminal = items.find((i) => i.id === "new-terminal-session");
+    const rename = items.find((i) => i.id === "rename-workspace");
+
+    expect(browseFiles?.onPointerDown).toBe(onDragBrowseFiles);
+    expect(reviewChanges?.onPointerDown).toBe(onDragReviewChanges);
+    expect(newAgent?.onPointerDown).toBe(onDragNewAgentSession);
+    expect(newTerminal?.onPointerDown).toBe(onDragNewTerminalSession);
+    expect(rename?.onPointerDown).toBeUndefined();
+  });
+
   it("only exposes directory deletion for Workspaces Awen created", () => {
     expect(workspaceMenuItems({ canDeleteDirectory: false }).map((item) => item.id)).not.toContain(
       "delete-directory",

@@ -196,7 +196,7 @@ describe("applyOpenDeepLinkTarget", () => {
     const firstPaneId = getActiveTab(snap).focusedPaneId;
     snap = applyCreateTab(snap, ids);
 
-    snap = applyOpenDeepLinkTarget(snap, newAgentSession("draft-y" as DraftId), ids);
+    snap = applyOpenDeepLinkTarget(snap, newAgentSession(DRAFT_X), ids);
 
     expect(snap.tabs).toHaveLength(2);
     expect(snap.activeTabId).toBe(firstTabId);
@@ -343,13 +343,13 @@ describe("applyOpenTarget", () => {
     ).toBe(1);
   });
 
-  it("keeps at most one New Agent Session View for a Workspace", () => {
+  it("keeps at most one New Agent Session View for the same draft under ADR 0016", () => {
     const ids = makeIds();
     const firstDraft = newAgentSession(DRAFT_X);
     let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), firstDraft, ids);
     const firstPaneId = getActiveTab(snap).focusedPaneId;
 
-    snap = applyOpenTarget(snap, newAgentSession("draft-y" as DraftId), ids);
+    snap = applyOpenTarget(snap, firstDraft, ids);
 
     expect(getActiveTab(snap).focusedPaneId).toBe(firstPaneId);
     expect(
@@ -385,13 +385,16 @@ describe("applySplitFocused", () => {
     expect(layout.dir).toBe("down");
   });
 
-  it("focuses the existing Workspace draft instead of splitting a second New Agent Session", () => {
+  it("focuses the existing Workspace draft when splitting the same draft, but allows distinct drafts under ADR 0016", () => {
     const ids = makeIds();
     let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), newAgentSession(DRAFT_X), ids);
     const firstPaneId = getActiveTab(snap).focusedPaneId;
-    snap = applySplitFocused(snap, newAgentSession("draft-y" as DraftId), "right", ids);
+    snap = applySplitFocused(snap, newAgentSession(DRAFT_X), "right", ids);
     expect(getActiveTab(snap).panes.size).toBe(1);
     expect(getActiveTab(snap).focusedPaneId).toBe(firstPaneId);
+
+    snap = applySplitFocused(snap, newAgentSession("draft-y" as DraftId), "right", ids);
+    expect(getActiveTab(snap).panes.size).toBe(2);
   });
 });
 

@@ -120,7 +120,10 @@ const TabPaneTree = memo(
         if (Math.abs(dx) + Math.abs(dy) > 1) {
           frame.getAnimations().forEach((animation) => animation.cancel());
           frame.animate(
-            [{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "translate(0,0)" }],
+            [
+              { transform: "translate(" + dx + "px," + dy + "px)" },
+              { transform: "translate(0,0)" },
+            ],
             { duration: 220, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
           );
         }
@@ -192,7 +195,10 @@ const TabPaneTree = memo(
         if (Math.abs(dx) + Math.abs(dy) > 1) {
           frame.getAnimations().forEach((animation) => animation.cancel());
           frame.animate(
-            [{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "translate(0,0)" }],
+            [
+              { transform: "translate(" + dx + "px," + dy + "px)" },
+              { transform: "translate(0,0)" },
+            ],
             { duration: 220, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
           );
         }
@@ -334,7 +340,8 @@ const TabPaneTree = memo(
                       ),
                     );
                     if (!isInteractive && event?.currentTarget?.querySelector) {
-                      const pane = event.currentTarget.querySelector<HTMLElement>(".workbench-pane");
+                      const pane =
+                        event.currentTarget.querySelector<HTMLElement>(".workbench-pane");
                       pane?.focus({ preventScroll: true });
                     }
                   }

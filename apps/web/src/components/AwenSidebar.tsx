@@ -58,7 +58,8 @@ import { sessionRouteForTarget } from "../workbench/deepLinks";
 import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { runtimeTerminalIdForTarget, terminalTargetForRuntime } from "../workbench/sessionTarget";
 import type { ViewTarget } from "../workbench/viewRegistry";
-import { useWorkbenchDragState } from "../workbench/workbenchDrag";
+import { useWorkbenchDragController, useWorkbenchDragState } from "../workbench/workbenchDrag";
+import { NO_PROVIDER_MODEL_SELECTION } from "../providerInstances";
 import { useWorkbenchStore } from "../workbench/workbenchStore";
 
 type ProjectMenuId =
@@ -118,12 +119,36 @@ export function projectMenuItems(input: {
 
 export function workspaceMenuItems(input: {
   readonly canDeleteDirectory: boolean;
+  readonly onDragBrowseFiles?: (event: PointerEvent) => void;
+  readonly onDragReviewChanges?: (event: PointerEvent) => void;
+  readonly onDragNewAgentSession?: (event: PointerEvent) => void;
+  readonly onDragNewTerminalSession?: (event: PointerEvent) => void;
 }): ReadonlyArray<ContextMenuItem<WorkspaceMenuId>> {
   return [
-    { id: "browse-files", label: "Browse Files", icon: "folder" },
-    { id: "review-changes", label: "Review Changes", icon: "git-branch" },
-    { id: "new-agent-session", label: "New Agent Session", icon: "message-square-plus" },
-    { id: "new-terminal-session", label: "New Terminal Session", icon: "terminal" },
+    {
+      id: "browse-files",
+      label: "Browse Files",
+      icon: "folder",
+      ...(input.onDragBrowseFiles ? { onPointerDown: input.onDragBrowseFiles } : {}),
+    },
+    {
+      id: "review-changes",
+      label: "Review Changes",
+      icon: "git-branch",
+      ...(input.onDragReviewChanges ? { onPointerDown: input.onDragReviewChanges } : {}),
+    },
+    {
+      id: "new-agent-session",
+      label: "New Agent Session",
+      icon: "message-square-plus",
+      ...(input.onDragNewAgentSession ? { onPointerDown: input.onDragNewAgentSession } : {}),
+    },
+    {
+      id: "new-terminal-session",
+      label: "New Terminal Session",
+      icon: "terminal",
+      ...(input.onDragNewTerminalSession ? { onPointerDown: input.onDragNewTerminalSession } : {}),
+    },
     { id: "rename-workspace", label: "Rename", icon: "pencil", separatorBefore: true },
     {
       id: "remove-workspace",
@@ -218,6 +243,8 @@ export function AwenSidebar() {
   const openTerminal = useAtomCommand(terminalEnvironment.open);
   const renameTerminalSession = useAtomCommand(terminalEnvironment.rename);
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata);
+  const createThread = useAtomCommand(threadEnvironment.create, { reportFailure: false });
+  const dragController = useWorkbenchDragController();
 
   const openAddProject = useCallback(() => openCommandPalette({ open: "add-project" }), []);
 
@@ -247,24 +274,47 @@ export function AwenSidebar() {
     [navigate],
   );
 
+  const createEagerAgentSession = useCallback(
+    (
+      project: EnvironmentAwenProject,
+      workspace: AwenWorkspaceShell,
+      draftId: ReturnType<typeof newDraftId>,
+      threadId: ReturnType<typeof newThreadId>,
+    ) => {
+      useComposerDraftStore
+        .getState()
+        .setWorkspaceDraftThreadId(
+          workspace.id,
+          scopeProjectRef(project.environmentId, workspace.awenProjectId),
+          draftId,
+          { threadId, createdAt: new Date().toISOString() },
+        );
+      void createThread({
+        environmentId: project.environmentId,
+        input: {
+          threadId,
+          projectId: workspace.awenProjectId,
+          title: "New Agent Session",
+          modelSelection: NO_PROVIDER_MODEL_SELECTION,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: workspace.workspaceRoot,
+          createdAt: new Date().toISOString(),
+        },
+      });
+    },
+    [createThread],
+  );
+
   const newAgentSession = useCallback(
     (project: EnvironmentAwenProject, workspace: AwenWorkspaceShell) => {
-      const drafts = useComposerDraftStore.getState();
-      const existing = drafts.getDraftSessionByWorkspace(project.environmentId, workspace.id);
-      if (existing !== null) {
-        openDraft(project.environmentId, workspace.id, existing.draftId);
-        return;
-      }
       const draftId = newDraftId();
-      drafts.setWorkspaceDraftThreadId(
-        workspace.id,
-        scopeProjectRef(project.environmentId, workspace.awenProjectId),
-        draftId,
-        { threadId: newThreadId(), createdAt: new Date().toISOString() },
-      );
+      const threadId = newThreadId();
+      createEagerAgentSession(project, workspace, draftId, threadId);
       openDraft(project.environmentId, workspace.id, draftId);
     },
-    [openDraft],
+    [createEagerAgentSession, openDraft],
   );
 
   const newTerminalSession = useCallback(
@@ -403,7 +453,89 @@ export function AwenSidebar() {
       if (!api) return;
       void (async () => {
         const clicked = await api.contextMenu.show(
-          workspaceMenuItems({ canDeleteDirectory: workspace.origin === "awen-created" }),
+          workspaceMenuItems({
+            canDeleteDirectory: workspace.origin === "awen-created",
+            onDragBrowseFiles: (event) => {
+              dragController.beginDrag(
+                {
+                  kind: "sidebar",
+                  target: {
+                    kind: "workspace",
+                    definitionId: "fileView",
+                    environmentId: project.environmentId,
+                    workspaceId: workspace.id,
+                  },
+                },
+                "Browse Files",
+                event,
+              );
+            },
+            onDragReviewChanges: (event) => {
+              dragController.beginDrag(
+                {
+                  kind: "sidebar",
+                  target: {
+                    kind: "workspace",
+                    definitionId: "gitView",
+                    environmentId: project.environmentId,
+                    workspaceId: workspace.id,
+                  },
+                },
+                "Review Changes",
+                event,
+              );
+            },
+            onDragNewAgentSession: (event) => {
+              const draftId = newDraftId();
+              const threadId = newThreadId();
+              const target = {
+                kind: "newAgentSession" as const,
+                environmentId: project.environmentId,
+                workspaceId: workspace.id,
+                draftId,
+              };
+              dragController.beginDrag(
+                {
+                  kind: "sidebar",
+                  target,
+                  onCommit: () => {
+                    createEagerAgentSession(project, workspace, draftId, threadId);
+                  },
+                },
+                "New Agent Session",
+                event,
+              );
+            },
+            onDragNewTerminalSession: (event) => {
+              const terminalId = nextWorkspaceTerminalId();
+              const target = terminalTargetForRuntime({
+                environmentId: project.environmentId,
+                workspaceId: workspace.id,
+                terminalId,
+              });
+              dragController.beginDrag(
+                {
+                  kind: "sidebar",
+                  target,
+                  onCommit: () => {
+                    void openTerminal({
+                      environmentId: project.environmentId,
+                      input: { workspaceId: workspace.id, terminalId },
+                    }).then((result) => {
+                      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+                        commandFailureToast(
+                          "Unable to create terminal",
+                          squashAtomCommandFailure(result),
+                        );
+                      }
+                    });
+                  },
+                },
+                "Terminal Session",
+                event,
+              );
+            },
+          }),
           position,
         );
         if (clicked === null) return;
@@ -470,7 +602,15 @@ export function AwenSidebar() {
         }
       })();
     },
-    [newAgentSession, newTerminalSession, removeWorkspace, renameWorkspace],
+    [
+      createEagerAgentSession,
+      dragController,
+      newAgentSession,
+      newTerminalSession,
+      openTerminal,
+      removeWorkspace,
+      renameWorkspace,
+    ],
   );
 
   const renameAgent = useCallback(
@@ -804,7 +944,9 @@ interface WorkspaceActiveSessionsProps {
   readonly project: EnvironmentAwenProject;
   readonly workspace: EnvironmentAwenProject["workspaces"][number];
   readonly workspaceKey: string;
-  readonly activeSessions: ReadonlyArray<NonNullable<EnvironmentAwenProject["workspaces"][number]["sessions"]>[number]>;
+  readonly activeSessions: ReadonlyArray<
+    NonNullable<EnvironmentAwenProject["workspaces"][number]["sessions"]>[number]
+  >;
   readonly renameAgent: (environmentId: EnvironmentId, threadId: ThreadId, title: string) => void;
   readonly renameTerminal: (
     target: Extract<ViewTarget, { kind: "workspaceTerminal" }>,
@@ -835,17 +977,22 @@ function WorkspaceActiveSessions({
     deltaY: number;
   } | null>(null);
 
+  const isSessionTarget =
+    dragState?.source.kind === "sidebar" &&
+    (dragState.source.target.kind === "agentSession" ||
+      dragState.source.target.kind === "workspaceTerminal");
   const isSidebarDrag =
     dragState?.phase === "dragging" &&
     dragState.source.kind === "sidebar" &&
     dragState.isOverSidebar;
   const isCurrentWorkspaceDrag =
     isSidebarDrag &&
-    dragState?.source.target.environmentId === project.environmentId &&
-    dragState?.source.target.workspaceId === workspace.id;
+    isSessionTarget &&
+    dragState.source.target.environmentId === project.environmentId &&
+    dragState.source.target.workspaceId === workspace.id;
 
   const draggedSessionId =
-    isCurrentWorkspaceDrag && dragState
+    isCurrentWorkspaceDrag && dragState && isSessionTarget
       ? dragState.source.target.kind === "agentSession"
         ? dragState.source.target.agentSessionId
         : dragState.source.target.terminalSessionId
@@ -857,9 +1004,7 @@ function WorkspaceActiveSessions({
 
   const rowHeight = 25; // 24px button height + 1px gap
   const deltaY =
-    isCurrentWorkspaceDrag && dragState
-      ? dragState.pointer.y - dragState.startPointer.y
-      : 0;
+    isCurrentWorkspaceDrag && dragState ? dragState.pointer.y - dragState.startPointer.y : 0;
 
   let targetIndex = draggedSourceIndex;
   if (isCurrentWorkspaceDrag && draggedSourceIndex >= 0 && dragState) {

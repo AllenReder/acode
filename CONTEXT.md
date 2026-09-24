@@ -74,10 +74,10 @@ the same Session has at most one Session View in any one Tab.
 _Avoid_: Session, Runtime panel
 
 **New Agent Session View**:
-A Workbench View for composing the first turn of an Agent session before an
-Awen Session identity exists. It is bound to a Workspace and a client-local
-draft identity, not a Session; promotion replaces it with the Agent Session
-View for the Session created on first send.
+A Workbench View for staging the initial turn of an Agent session. Eager Agent
+sessions (ADR-0016) instantiate durable Awen Session identities at creation
+time, so New Agent Session Views automatically upgrade to Agent Session Views
+upon session creation.
 _Avoid_: Draft Session, Provisional Session, Thread
 
 **Workspace View**:
@@ -206,9 +206,17 @@ _Avoid_: Blank area, Dead zone, Margin
 
 **Agent session**:
 A Session representing one agent conversation: one provider, one model
-selection, one Workspace, and one transcript. Its Awen identity is distinct
-from any provider-native runtime or thread identifier.
+selection, one Workspace, and one transcript. An Agent session is created
+eagerly with durable Awen identity and appears in the Sidebar immediately.
+Its Awen identity is distinct from any provider-native runtime or thread identifier.
 _Avoid_: Agent, Task, Job, Run
+
+**Zero-turn Agent session**:
+An Agent session whose transcript contains no turns yet. It presents an initial
+composer and model selection without requiring a provider runtime process.
+Closing an untouched zero-turn Agent session permanently deletes it instead of
+archiving it to History.
+_Avoid_: Draft Session, Provisional Session
 
 **Terminal session**:
 A Session representing one Workspace-owned terminal work context, including its
@@ -320,15 +328,10 @@ _Avoid_: Chat wallpaper, Session background, View background
   Session View uniqueness rules.
 - A Workbench with no opened Session shows a Welcome View rather than an empty
   Pane.
-- A client-local Agent draft is a New Agent Session View, not a Session; no
-  Session identity exists until promotion.
-- A Workspace has at most one client-local Agent draft, and each draft has at
-  most one New Agent Session View across the Workbench. Different Workspaces
-  may have distinct drafts; the same draft cannot appear in multiple Tabs.
-  Closing its View retains the draft; discarding it is explicit.
-- An Awen Deep Link never targets a New Agent Session View. A draft route is a
-  client-local recovery input, and promotion replaces it with the canonical
-  Agent Session route.
+- An Agent session is created eagerly with durable Awen identity (AgentSessionId and ThreadId) and appears in the Sidebar under its Workspace immediately, even before its first turn is sent.
+- A Workspace may contain multiple zero-turn Agent sessions.
+- An untouched zero-turn Agent session (empty transcript and no unsent draft payload) is permanently deleted upon closing rather than archived to History.
+- Dragging a Workspace context menu action onto the Workbench creates that View instance into the targeted Pane (supporting 4-directional edge splits and center replace) or Tab drop zone without requiring prior navigation.
 - A Tab belongs to no Project or Workspace and may display Views from multiple
   Workspaces or Projects.
 - A Pane displays exactly one View instance and is never empty.

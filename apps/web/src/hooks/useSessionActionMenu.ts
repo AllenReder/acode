@@ -9,11 +9,7 @@ import {
   type SessionActionMenuId,
   type SessionActionMenuState,
 } from "../components/sidebar/sessionActionMenu.logic";
-import {
-  useSessionCommands,
-  type SessionTarget,
-  type WillCloseRevert,
-} from "./useSessionCommands";
+import { useSessionCommands, type SessionTarget, type WillCloseRevert } from "./useSessionCommands";
 
 export function useSessionActionMenu(input: {
   readonly target: SessionTarget;
@@ -96,4 +92,3 @@ export function useSessionActionMenu(input: {
 }
 
 export default useSessionActionMenu;
-

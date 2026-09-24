@@ -6,10 +6,7 @@ import { targetsEqual, type ViewTarget } from "../../workbench/viewRegistry";
 import { sessionRouteForTarget } from "../../workbench/deepLinks";
 import { useSessionActionMenu } from "../../hooks/useSessionActionMenu";
 import { useWorkbenchDragSource, useWorkbenchDragState } from "../../workbench/workbenchDrag";
-import {
-  FLUID_MOTION_DURATION_MS,
-  getPrefersReducedMotion,
-} from "../../workbench/workbenchMotion";
+import { FLUID_MOTION_DURATION_MS, getPrefersReducedMotion } from "../../workbench/workbenchMotion";
 import type { WillCloseRevert } from "../../hooks/useSessionCommands";
 
 export type SessionTarget = Extract<ViewTarget, { kind: "agentSession" | "workspaceTerminal" }>;

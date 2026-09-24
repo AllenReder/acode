@@ -459,11 +459,7 @@ it("prevents default on pointerdown and mousedown for middle-click (button 1)", 
   const onMouseDown = vi.fn();
   await act(() => {
     renderer = create(
-      <SessionRow
-        target={target}
-        onPointerDown={onPointerDown}
-        onMouseDown={onMouseDown}
-      >
+      <SessionRow target={target} onPointerDown={onPointerDown} onMouseDown={onMouseDown}>
         Session
       </SessionRow>,
     );

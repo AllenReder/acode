@@ -1,4 +1,10 @@
-import { MessageSquarePlusIcon, TerminalIcon, CopyPlusIcon } from "lucide-react";
+import {
+  MessageSquarePlusIcon,
+  TerminalIcon,
+  CopyPlusIcon,
+  FolderIcon,
+  GitBranchIcon,
+} from "lucide-react";
 import {
   createContext,
   useCallback,
@@ -18,6 +24,7 @@ import { computePaneLayoutRects } from "./layoutGeometry";
 import type { LayoutMode } from "./scrollingLayout";
 import { usePrimarySettings } from "../hooks/useSettings";
 import { useUiStateStore } from "../uiStateStore";
+import { dismissContextMenu } from "../contextMenuFallback";
 import {
   computeBaseTab,
   initialPaneDropTarget,
@@ -66,7 +73,7 @@ interface WorkbenchDragControllerValue {
   readonly beginDrag: (
     source: ViewDragSource,
     label: string,
-    event: ReactPointerEvent<HTMLElement>,
+    event: ReactPointerEvent<HTMLElement> | PointerEvent,
   ) => void;
   readonly consumeSuppressedClick: () => boolean;
 }
@@ -419,19 +426,30 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
   }, []);
 
   const beginDrag = useCallback(
-    (source: ViewDragSource, label: string, event: ReactPointerEvent<HTMLElement>) => {
+    (
+      source: ViewDragSource,
+      label: string,
+      event: ReactPointerEvent<HTMLElement> | PointerEvent,
+    ) => {
       if (event.button !== 0 || event.defaultPrevented) return;
       cleanupDragRef.current?.();
-      const handle = event.currentTarget;
+      const rawHandle =
+        "currentTarget" in event && event.currentTarget
+          ? event.currentTarget
+          : "target" in event
+            ? event.target
+            : null;
+      const handle =
+        rawHandle !== null && typeof (rawHandle as Element).getBoundingClientRect === "function"
+          ? (rawHandle as HTMLElement)
+          : null;
       const sourceElement =
         source.kind === "pane"
           ? document.querySelector<HTMLElement>(
               `[data-workbench-pane-drop][data-pane-id="${escapeCss(source.paneId)}"]`,
             )
           : source.kind === "tab"
-            ? document.querySelector<HTMLElement>(
-                `[data-tab-id="${escapeCss(source.tabId)}"]`,
-              )
+            ? document.querySelector<HTMLElement>(`[data-tab-id="${escapeCss(source.tabId)}"]`)
             : handle;
       const startRect = rectFromElement(sourceElement) ?? rectFromElement(handle);
       if (startRect === null) return;
@@ -567,48 +585,56 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         }
       };
 
-      const stepAutoScroll = () => {
-        autoScrollRaf = null;
+      // Single source of truth for the auto-scroll preconditions; also narrows the
+      // viewport element and rect that the RAF loop needs to be non-null.
+      const autoScrollSurface = (): {
+        readonly element: HTMLElement;
+        readonly rect: WorkbenchRect;
+      } | null => {
         if (
           !activeRef.current ||
-          !viewportEl ||
-          !viewportRect ||
+          viewportEl === null ||
+          viewportRect === null ||
           lastIsOverSidebar ||
           baseTab?.layoutMode !== "scrolling"
         ) {
+          return null;
+        }
+        return { element: viewportEl, rect: viewportRect };
+      };
+
+      const stepAutoScroll = () => {
+        autoScrollRaf = null;
+        const surface = autoScrollSurface();
+        if (surface === null) {
           return;
         }
-        const velocity = computeEdgeAutoScrollVelocity(lastX, viewportRect);
+        const velocity = computeEdgeAutoScrollVelocity(lastX, surface.rect);
         if (velocity === 0) return;
 
-        const maxScroll = Math.max(0, viewportEl.scrollWidth - viewportEl.clientWidth);
-        const prevScrollLeft = viewportEl.scrollLeft;
-        viewportEl.scrollLeft = Math.max(0, Math.min(maxScroll, prevScrollLeft + velocity));
+        const maxScroll = Math.max(0, surface.element.scrollWidth - surface.element.clientWidth);
+        const prevScrollLeft = surface.element.scrollLeft;
+        surface.element.scrollLeft = Math.max(0, Math.min(maxScroll, prevScrollLeft + velocity));
 
-        if (viewportEl.scrollLeft !== prevScrollLeft) {
+        if (surface.element.scrollLeft !== prevScrollLeft) {
           resolveTarget(lastX, lastY);
           if (frameRef.current === null) {
             frameRef.current = requestAnimationFrame(publishPointer);
           }
         }
 
-        if (computeEdgeAutoScrollVelocity(lastX, viewportRect) !== 0) {
+        if (computeEdgeAutoScrollVelocity(lastX, surface.rect) !== 0) {
           autoScrollRaf = requestAnimationFrame(stepAutoScroll);
         }
       };
 
       const updateAutoScroll = () => {
-        if (
-          !activeRef.current ||
-          !viewportEl ||
-          !viewportRect ||
-          lastIsOverSidebar ||
-          baseTab?.layoutMode !== "scrolling"
-        ) {
+        const surface = autoScrollSurface();
+        if (surface === null) {
           stopAutoScroll();
           return;
         }
-        const velocity = computeEdgeAutoScrollVelocity(lastX, viewportRect);
+        const velocity = computeEdgeAutoScrollVelocity(lastX, surface.rect);
         if (velocity !== 0 && autoScrollRaf === null) {
           autoScrollRaf = requestAnimationFrame(stepAutoScroll);
         } else if (velocity === 0) {
@@ -653,7 +679,8 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         if (
           !cancelled &&
           source.kind === "sidebar" &&
-          currentIsOverSidebar
+          currentIsOverSidebar &&
+          (source.target.kind === "agentSession" || source.target.kind === "workspaceTerminal")
         ) {
           const sourceSessionId =
             source.target.kind === "agentSession"
@@ -727,7 +754,8 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
                 const tabWidth = firstTabEl?.getBoundingClientRect().width || 176;
                 const deltaX = lastX - startPointer.x;
                 const scrollLeft = stripEl.scrollLeft;
-                const currentCenter = startRect.left + deltaX + tabWidth / 2 - stripRect.left + scrollLeft;
+                const currentCenter =
+                  startRect.left + deltaX + tabWidth / 2 - stripRect.left + scrollLeft;
                 const toIndex = Math.max(
                   0,
                   Math.min(Math.floor(currentCenter / tabWidth), currentStore.tabs.length - 1),
@@ -748,6 +776,9 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           target === null ? null : useWorkbenchStore.getState().previewDrop(source, target);
         if (!cancelled && target !== null && result !== null) {
           useWorkbenchStore.getState().commitDrop(result);
+          if (source.kind === "sidebar") {
+            source.onCommit?.(result);
+          }
           setState(null);
           return;
         }
@@ -775,6 +806,11 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         if (source.kind !== "sidebar") {
           return { isOverSidebar: false, sidebarDropTarget: null };
         }
+        if (source.target.kind !== "agentSession" && source.target.kind !== "workspaceTerminal") {
+          lastIsOverSidebar = false;
+          lastSidebarDropTarget = null;
+          return { isOverSidebar: false, sidebarDropTarget: null };
+        }
         const sourceWorkspaceKey = `${source.target.environmentId}:${source.target.workspaceId}`;
         const sourceSessionId =
           source.target.kind === "agentSession"
@@ -796,6 +832,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
             return;
           }
           activeRef.current = true;
+          dismissContextMenu();
           document.documentElement.dataset.workbenchDragging = "active";
           window.getSelection()?.removeAllRanges();
           const target = isOverSidebar ? null : resolveTarget(lastX, lastY);
@@ -882,7 +919,8 @@ export function useWorkbenchDragState(): WorkbenchDragState | null {
 export function useWorkbenchDragSource(source: ViewDragSource, label: string) {
   const controller = useWorkbenchDragController();
   const onPointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLElement>) => controller.beginDrag(source, label, event),
+    (event: ReactPointerEvent<HTMLElement> | PointerEvent) =>
+      controller.beginDrag(source, label, event),
     [controller, label, source],
   );
   return { onPointerDown, consumeSuppressedClick: controller.consumeSuppressedClick };
@@ -933,6 +971,24 @@ function dragGhostInfo(source: ViewDragSource): {
         typeLabel: "Terminal Session",
       };
     }
+    if (source.target.kind === "workspace") {
+      if (source.target.definitionId === "gitView") {
+        return {
+          icon: <GitBranchIcon className="size-5 text-primary" />,
+          typeLabel: "Review Changes",
+        };
+      }
+      return {
+        icon: <FolderIcon className="size-5 text-primary" />,
+        typeLabel: "Browse Files",
+      };
+    }
+    if (source.target.kind === "newAgentSession") {
+      return {
+        icon: <MessageSquarePlusIcon className="size-5 text-primary" />,
+        typeLabel: "New Agent Session",
+      };
+    }
   } else if (source.kind === "pane") {
     const tab = useWorkbenchStore.getState().tabs.find((t) => t.id === source.tabId);
     const pane = tab?.panes.get(source.paneId);
@@ -965,26 +1021,17 @@ export function WorkbenchDropOverlay() {
   const paneGap = usePrimarySettings((s) => s.paneGap);
   const paneRadius = usePrimarySettings((s) => s.paneRadius);
   const isDragging = state !== null;
-  const nodeRef = useRef<HTMLDivElement | null>(null);
+  const surfaceRef = useRef<HTMLDivElement>(null);
   const [surfaceRect, setSurfaceRect] = useState<WorkbenchRect | null>(null);
 
-  const surfaceRef = useCallback((node: HTMLDivElement | null) => {
-    nodeRef.current = node;
-    if (node !== null) {
-      setSurfaceRect(rectFromElement(node));
-    } else {
-      setSurfaceRect(null);
-    }
-  }, []);
-
+  // Refs attach before layout effects in the same commit, so keying this on
+  // isOverSidebar is enough to re-measure whenever the overlay remounts.
   useLayoutEffect(() => {
-    if (!isDragging || state?.isOverSidebar) {
+    if (!isDragging || state?.isOverSidebar || surfaceRef.current === null) {
       setSurfaceRect(null);
       return;
     }
-    if (nodeRef.current !== null) {
-      setSurfaceRect(rectFromElement(nodeRef.current));
-    }
+    setSurfaceRect(rectFromElement(surfaceRef.current));
   }, [isDragging, state?.isOverSidebar]);
 
   const preview = state === null || state.phase === "canceling" ? null : state.result;

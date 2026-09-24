@@ -60,8 +60,10 @@ manage their own vertical scrolling.
     on penetration depth).
   - Drop targets and preview indicators continuously update on each frame as
     `scrollLeft` shifts.
-  - The loop terminates immediately upon pointer release, cancel, or exiting the
-    edge zone.
+  - The loop terminates immediately upon pointer release, cancel, exiting the
+    edge zone, or while the pointer is over the Sidebar. Sidebar drags resolve their
+    own drop targets, so workbench edge auto-scrolling suspends for as long as the
+    pointer stays over the Sidebar and resumes when it returns to the Viewport.
 
 ## Consequences
 

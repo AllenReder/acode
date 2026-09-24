@@ -112,7 +112,8 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
       deltaX = dragState.pointer.x - dragState.startPointer.x;
       if (!isSlidOut) {
         const scrollLeft = stripEl.scrollLeft;
-        const currentCenter = dragState.startRect.left + deltaX + tabWidth / 2 - stripRect.left + scrollLeft;
+        const currentCenter =
+          dragState.startRect.left + deltaX + tabWidth / 2 - stripRect.left + scrollLeft;
         targetIndex = Math.max(
           0,
           Math.min(Math.floor(currentCenter / tabWidth), snapshot.tabs.length - 1),
@@ -468,9 +469,7 @@ function WorkbenchTabItem({
           event.preventDefault();
           const direction = event.key === "ArrowRight" ? 1 : -1;
           const next =
-            snapshot.tabs[
-              (currentIndex + direction + snapshot.tabs.length) % snapshot.tabs.length
-            ];
+            snapshot.tabs[(currentIndex + direction + snapshot.tabs.length) % snapshot.tabs.length];
           if (next !== undefined) activateTab(next.id);
         }
         if (event.key === "F2" && active) {

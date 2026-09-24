@@ -274,5 +274,3 @@ it("previews and commits a Tab drop to reorder tabs", () => {
   expect(store.getState().tabs.map((t) => t.id)).toEqual([tab1Id, tab2Id, tab0Id]);
   expect(writes).toHaveLength(1);
 });
-
-

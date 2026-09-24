@@ -326,6 +326,25 @@ describe("showContextMenuFallback", () => {
     await expect(selectionPromise).resolves.toBe("copy:branch");
     expect(invoker.focused).toBe(true);
   });
+
+  it("calls onPointerDown callback when pointerdown occurs with primary button", async () => {
+    const handlePointerDown = vi.fn();
+    const selectionPromise = showContextMenuFallback([
+      { id: "drag-item", label: "Drag Me", onPointerDown: handlePointerDown },
+    ]);
+
+    const button = findButton("Drag Me");
+    expect(button).toBeTruthy();
+
+    const pointerDownEvent = new MouseEvent("pointerdown", { bubbles: true });
+    Object.defineProperty(pointerDownEvent, "button", { value: 0 });
+    button?.dispatchEvent(pointerDownEvent);
+
+    expect(handlePointerDown).toHaveBeenCalledTimes(1);
+
+    dismissContextMenu();
+    await expect(selectionPromise).resolves.toBeNull();
+  });
 });
 
 describe("dismissContextMenu", () => {

@@ -1,4 +1,4 @@
-import { act, useEffect } from "react";
+import { act, useEffect, type PointerEvent as ReactPointerEvent } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import {
@@ -20,6 +20,40 @@ const dummyView = (id: string): ViewInstance => ({
 let renderer: ReactTestRenderer | undefined;
 let fakeDataset: Record<string, string | undefined>;
 
+type DragListeners = Record<string, Array<(e: unknown) => void>>;
+
+/**
+ * Stubs `window` with a listener registry the test can dispatch pointer events through.
+ */
+function stubDragWindow(): DragListeners {
+  const listeners: DragListeners = {};
+  vi.stubGlobal("window", {
+    addEventListener: vi.fn((event: string, fn: (e: unknown) => void) => {
+      listeners[event] = listeners[event] ?? [];
+      listeners[event]!.push(fn);
+    }),
+    removeEventListener: vi.fn((event: string, fn: (e: unknown) => void) => {
+      if (!listeners[event]) return;
+      listeners[event] = listeners[event]!.filter((f) => f !== fn);
+    }),
+    dispatchEvent: vi.fn(),
+    getSelection: () => ({ removeAllRanges: vi.fn() }),
+  });
+  return listeners;
+}
+
+/**
+ * The drag code calls bare `requestAnimationFrame`, never `window.requestAnimationFrame`,
+ * so the frame shims are stubbed globally.
+ */
+function stubAnimationFrames(): void {
+  vi.stubGlobal("requestAnimationFrame", (cb: (time: number) => void) => {
+    queueMicrotask(() => cb(16));
+    return 1;
+  });
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
+}
+
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   fakeDataset = {};
@@ -32,22 +66,8 @@ beforeEach(() => {
     elementFromPoint: vi.fn(() => null),
   };
   vi.stubGlobal("document", fakeDoc);
-  vi.stubGlobal("window", {
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-    getSelection: () => ({ removeAllRanges: vi.fn() }),
-    requestAnimationFrame: (cb: (time: number) => void) => {
-      queueMicrotask(() => cb(16));
-      return 1;
-    },
-    cancelAnimationFrame: vi.fn(),
-  });
-  vi.stubGlobal("requestAnimationFrame", (cb: (time: number) => void) => {
-    queueMicrotask(() => cb(16));
-    return 1;
-  });
-  vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  stubDragWindow();
+  stubAnimationFrames();
 });
 
 afterEach(async () => {
@@ -73,19 +93,7 @@ describe("WorkbenchDrag lifecycle and overlay animations", () => {
   it("transitions data-workbench-dragging from pending -> active -> settling -> deleted", async () => {
     vi.useFakeTimers();
 
-    const listeners: Record<string, Array<(e: unknown) => void>> = {};
-    const win = {
-      addEventListener: vi.fn((event: string, fn: (e: unknown) => void) => {
-        listeners[event] = listeners[event] ?? [];
-        listeners[event]!.push(fn);
-      }),
-      removeEventListener: vi.fn((event: string, fn: (e: unknown) => void) => {
-        if (!listeners[event]) return;
-        listeners[event] = listeners[event]!.filter((f) => f !== fn);
-      }),
-      getSelection: () => ({ removeAllRanges: vi.fn() }),
-    };
-    vi.stubGlobal("window", win);
+    const listeners = stubDragWindow();
 
     const twoPaneTab: WorkbenchTab = {
       id: "tab-1",
@@ -157,19 +165,7 @@ describe("WorkbenchDrag lifecycle and overlay animations", () => {
   });
 
   it("renders destination indicator with workbench-drop-destination-indicator class and secondary panes", async () => {
-    const listeners: Record<string, Array<(e: unknown) => void>> = {};
-    const win = {
-      addEventListener: vi.fn((event: string, fn: (e: unknown) => void) => {
-        listeners[event] = listeners[event] ?? [];
-        listeners[event]!.push(fn);
-      }),
-      removeEventListener: vi.fn((event: string, fn: (e: unknown) => void) => {
-        if (!listeners[event]) return;
-        listeners[event] = listeners[event]!.filter((f) => f !== fn);
-      }),
-      getSelection: () => ({ removeAllRanges: vi.fn() }),
-    };
-    vi.stubGlobal("window", win);
+    const listeners = stubDragWindow();
 
     const twoPaneTab: WorkbenchTab = {
       id: "tab-1",
@@ -282,7 +278,6 @@ describe("WorkbenchDrag lifecycle and overlay animations", () => {
       "data-workbench-preview-pane": true,
       "data-destination": "true",
     });
-    expect(destinationPane).toBeDefined();
     expect(destinationPane.props.className).toContain("workbench-drop-destination-indicator");
     expect(destinationPane.props["data-pane-id"]).toBe("pane-a");
 
@@ -294,19 +289,7 @@ describe("WorkbenchDrag lifecycle and overlay animations", () => {
   });
 
   it("renders destination indicator when dragging a session from the sidebar into the workbench", async () => {
-    const listeners: Record<string, Array<(e: unknown) => void>> = {};
-    const win = {
-      addEventListener: vi.fn((event: string, fn: (e: unknown) => void) => {
-        listeners[event] = listeners[event] ?? [];
-        listeners[event]!.push(fn);
-      }),
-      removeEventListener: vi.fn((event: string, fn: (e: unknown) => void) => {
-        if (!listeners[event]) return;
-        listeners[event] = listeners[event]!.filter((f) => f !== fn);
-      }),
-      getSelection: () => ({ removeAllRanges: vi.fn() }),
-    };
-    vi.stubGlobal("window", win);
+    const listeners = stubDragWindow();
 
     const twoPaneTab: WorkbenchTab = {
       id: "tab-1",
@@ -462,7 +445,6 @@ describe("WorkbenchDrag lifecycle and overlay animations", () => {
       "data-workbench-preview-pane": true,
       "data-destination": "true",
     });
-    expect(destinationPane).toBeDefined();
     expect(destinationPane.props.className).toContain("workbench-drop-destination-indicator");
 
     // 4. Move pointer back into sidebar (x = 50, y = 20)
@@ -493,7 +475,156 @@ describe("WorkbenchDrag lifecycle and overlay animations", () => {
       "data-workbench-preview-pane": true,
       "data-destination": "true",
     });
-    expect(destinationPane).toBeDefined();
+    // findByProps throws when the destination indicator is absent.
     expect(destinationPane.props.className).toContain("workbench-drop-destination-indicator");
+  });
+
+  it("renders destination indicator and executes onCommit when dragging workspace context menu action", async () => {
+    const listeners = stubDragWindow();
+
+    const twoPaneTab: WorkbenchTab = {
+      id: "tab-1",
+      layoutMode: "bsp",
+      layout: splitPane(leaf("pane-a"), "pane-a", "right", "pane-b"),
+      panes: new Map([
+        ["pane-a", dummyView("pane-a")],
+        ["pane-b", dummyView("pane-b")],
+      ]),
+      focusedPaneId: "pane-a",
+      titleMode: "auto",
+      titleOverride: null,
+    };
+    useWorkbenchStore.setState({
+      tabs: [twoPaneTab],
+      activeTabId: "tab-1",
+    });
+
+    const viewportEl = {
+      scrollLeft: 0,
+      scrollTop: 0,
+      clientWidth: 800,
+      clientHeight: 600,
+      getBoundingClientRect: () => ({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 600,
+        right: 800,
+        bottom: 600,
+      }),
+    } as unknown as HTMLElement;
+
+    const paneBEl = {
+      dataset: { workbenchPaneDrop: "", workbenchTabId: "tab-1", paneId: "pane-b" },
+      getBoundingClientRect: () => ({
+        left: 400,
+        top: 0,
+        width: 400,
+        height: 600,
+        right: 800,
+        bottom: 600,
+      }),
+      closest: (sel: string) => (sel === "[data-workbench-pane-drop]" ? paneBEl : null),
+    } as unknown as HTMLElement;
+
+    const fakeDoc = {
+      documentElement: { dataset: fakeDataset },
+      querySelector: vi.fn((sel: string) => {
+        if (sel === ".workbench-viewport") return viewportEl;
+        if (sel === '[data-workbench-pane-drop][data-pane-id="pane-b"]') return paneBEl;
+        return null;
+      }),
+      querySelectorAll: vi.fn(() => []),
+      elementFromPoint: vi.fn(() => paneBEl),
+    };
+    vi.stubGlobal("document", fakeDoc);
+
+    const onCommit = vi.fn();
+    let handleBeginDrag: ((e: unknown) => void) | undefined;
+    function WorkspaceActionDragHandle() {
+      const { beginDrag } = useWorkbenchDragController();
+      handleBeginDrag = (e: unknown) => {
+        beginDrag(
+          {
+            kind: "sidebar",
+            target: {
+              kind: "workspace",
+              definitionId: "fileView",
+              environmentId: "env-1" as EnvironmentId,
+              workspaceId: "ws-1" as WorkspaceId,
+            },
+            onCommit,
+          },
+          "Browse Files",
+          e as ReactPointerEvent<HTMLElement>,
+        );
+      };
+      return null;
+    }
+
+    await act(async () => {
+      renderer = create(
+        <WorkbenchDragProvider>
+          <WorkspaceActionDragHandle />
+          <WorkbenchDropOverlay />
+        </WorkbenchDragProvider>,
+        {
+          createNodeMock: (el) => {
+            if ((el.props as Record<string, unknown>)["data-workbench-drop-preview"]) {
+              return {
+                getBoundingClientRect: () => ({
+                  left: 0,
+                  top: 0,
+                  width: 800,
+                  height: 600,
+                  right: 800,
+                  bottom: 600,
+                }),
+              };
+            }
+            return null;
+          },
+        },
+      );
+    });
+
+    // 1. Pointerdown on the action handle
+    act(() => {
+      handleBeginDrag?.({
+        button: 0,
+        clientX: 50,
+        clientY: 50,
+        currentTarget: {
+          getBoundingClientRect: () => ({ left: 50, top: 50, width: 100, height: 28 }),
+        },
+      });
+    });
+
+    expect(fakeDataset.workbenchDragging).toBe("pending");
+
+    // 2. Drag into workbench pane-b right edge (x = 750, y = 300)
+    await act(async () => {
+      listeners["pointermove"]?.forEach((fn) =>
+        fn({
+          clientX: 750,
+          clientY: 300,
+        }),
+      );
+    });
+
+    expect(fakeDataset.workbenchDragging).toBe("active");
+    const destinationPane = renderer!.root.findByProps({
+      "data-workbench-preview-pane": true,
+      "data-destination": "true",
+    });
+    expect(destinationPane.props.className).toContain("workbench-drop-destination-indicator");
+
+    // 3. Pointerup: commits the drop and triggers onCommit
+    act(() => {
+      listeners["pointerup"]?.forEach((fn) => fn({}));
+    });
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(useWorkbenchStore.getState().tabs[0]?.panes.size).toBe(3);
   });
 });

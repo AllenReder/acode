@@ -127,6 +127,8 @@ export interface ContextMenuItem<T extends string = string> {
   /** Inserts a visual section divider immediately before this item. */
   separatorBefore?: boolean;
   children?: readonly ContextMenuItem<T>[];
+  /** Optional pointerdown handler, used for dragging items directly from the context menu. */
+  onPointerDown?: (event: PointerEvent) => void;
 }
 
 export type QuitShortcutHintEvent =

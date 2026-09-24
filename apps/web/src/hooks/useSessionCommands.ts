@@ -91,6 +91,20 @@ export function useSessionCommands(
       if (options?.onWillClose) {
         revert = await options.onWillClose();
       }
+      const isZeroTurn = Boolean(threadShell && !threadShell.latestTurn && !threadShell.session);
+      if (isZeroTurn) {
+        const deleteResult = await deleteThread({
+          environmentId: target.environmentId,
+          input: { threadId },
+        });
+        if (deleteResult._tag === "Failure") {
+          revert?.();
+          failureToast("Failed to close agent session", squashAtomCommandFailure(deleteResult));
+          return;
+        }
+        store.removeSessionViews(target);
+        return;
+      }
       const archiveResult = await archiveThread({
         environmentId: target.environmentId,
         input: { threadId },
