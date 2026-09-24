@@ -823,6 +823,7 @@ function WorkspaceActiveSessions({
   navigate,
 }: WorkspaceActiveSessionsProps) {
   const dragState = useWorkbenchDragState();
+  const containerRef = useRef<HTMLDivElement>(null);
   const [settlingSession, setSettlingSession] = useState<{
     sessionId: string;
     offset: number;
@@ -854,16 +855,15 @@ function WorkspaceActiveSessions({
     ? activeSessions.findIndex((s) => s.id === draggedSessionId)
     : -1;
 
-  const dropTarget = isCurrentWorkspaceDrag ? dragState?.sidebarDropTarget : null;
+  const rowHeight = 25; // 24px button height + 1px gap
   let targetIndex = draggedSourceIndex;
-  if (dropTarget && dropTarget.workspaceKey === workspaceKey && draggedSourceIndex >= 0) {
-    const rawTargetIndex = activeSessions.findIndex((s) => s.id === dropTarget.sessionId);
-    if (rawTargetIndex >= 0) {
-      if (dropTarget.position === "before") {
-        targetIndex = draggedSourceIndex < rawTargetIndex ? rawTargetIndex - 1 : rawTargetIndex;
-      } else {
-        targetIndex = draggedSourceIndex > rawTargetIndex ? rawTargetIndex + 1 : rawTargetIndex;
-      }
+  if (isCurrentWorkspaceDrag && draggedSourceIndex >= 0 && dragState) {
+    const containerEl = containerRef.current;
+    if (containerEl) {
+      const containerRect = containerEl.getBoundingClientRect();
+      const currentY = dragState.pointer.y - containerRect.top;
+      const rawSlot = Math.floor(currentY / rowHeight);
+      targetIndex = Math.max(0, Math.min(rawSlot, activeSessions.length - 1));
     }
   }
 
@@ -871,8 +871,6 @@ function WorkspaceActiveSessions({
     isCurrentWorkspaceDrag && dragState
       ? dragState.pointer.y - (dragState.startRect.top + dragState.startRect.height / 2)
       : 0;
-
-  const rowHeight = 25; // 24px button height + 1px gap
 
   if (isCurrentWorkspaceDrag && draggedSessionId && draggedSourceIndex >= 0) {
     lastSessionDragInfoRef.current = {
@@ -906,7 +904,11 @@ function WorkspaceActiveSessions({
   }, [settlingSession]);
 
   return (
-    <>
+    <div
+      ref={containerRef}
+      data-sidebar-active-sessions={workspaceKey}
+      className="flex flex-col gap-px"
+    >
       {activeSessions.map((session, index) => {
         const isDragged = isCurrentWorkspaceDrag && session.id === draggedSessionId;
         const isSettling = settlingSession?.sessionId === session.id;
@@ -938,11 +940,17 @@ function WorkspaceActiveSessions({
               transition: "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)",
             };
           }
-        } else if (isSettling) {
-          sessionStyle = {
-            transform: `translate3d(0, ${settlingSession.offset}px, 0)`,
-            transition: "none",
-          };
+        } else if (settlingSession) {
+          if (settlingSession.sessionId === session.id) {
+            sessionStyle = {
+              transform: `translate3d(0, ${settlingSession.offset}px, 0)`,
+              transition: "none",
+            };
+          } else {
+            sessionStyle = {
+              transition: "none",
+            };
+          }
         } else {
           sessionStyle = {
             transition: "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)",
@@ -1010,6 +1018,6 @@ function WorkspaceActiveSessions({
           </SessionRow>
         );
       })}
-    </>
+    </div>
   );
 }

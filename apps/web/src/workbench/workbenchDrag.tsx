@@ -532,8 +532,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         if (
           !cancelled &&
           source.kind === "sidebar" &&
-          currentIsOverSidebar &&
-          currentSidebarDropTarget
+          currentIsOverSidebar
         ) {
           const sourceSessionId =
             source.target.kind === "agentSession"
@@ -548,15 +547,46 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
             .map((el) => el.dataset.sessionId)
             .filter((id): id is string => Boolean(id));
 
-          useUiStateStore
-            .getState()
-            .reorderWorkspaceSessions(
-              workspaceKey,
-              allSessionRows,
-              sourceSessionId,
-              currentSidebarDropTarget.sessionId,
-              currentSidebarDropTarget.position,
+          if (allSessionRows.length > 1) {
+            const containerEl = document.querySelector<HTMLElement>(
+              `[data-sidebar-active-sessions="${escapeCss(workspaceKey)}"]`,
             );
+            if (containerEl) {
+              const containerRect = containerEl.getBoundingClientRect();
+              const currentY = lastY - containerRect.top;
+              const rowHeight = 25;
+              const targetIndex = Math.max(
+                0,
+                Math.min(Math.floor(currentY / rowHeight), allSessionRows.length - 1),
+              );
+              const fromIndex = allSessionRows.indexOf(sourceSessionId);
+              if (fromIndex >= 0 && fromIndex !== targetIndex) {
+                const targetSessionId = allSessionRows[targetIndex];
+                if (targetSessionId) {
+                  const position = targetIndex > fromIndex ? "after" : "before";
+                  useUiStateStore
+                    .getState()
+                    .reorderWorkspaceSessions(
+                      workspaceKey,
+                      allSessionRows,
+                      sourceSessionId,
+                      targetSessionId,
+                      position,
+                    );
+                }
+              }
+            } else if (currentSidebarDropTarget) {
+              useUiStateStore
+                .getState()
+                .reorderWorkspaceSessions(
+                  workspaceKey,
+                  allSessionRows,
+                  sourceSessionId,
+                  currentSidebarDropTarget.sessionId,
+                  currentSidebarDropTarget.position,
+                );
+            }
+          }
           setState(null);
           return;
         }

@@ -170,17 +170,6 @@ export function SessionRow({
         <span aria-hidden="true" className="absolute left-0.5 size-1 rounded-full bg-primary" />
       ) : null}
       {props.children}
-      {dropPosition === "before" && !props.style?.transform ? (
-        <span
-          data-sidebar-reorder-indicator="before"
-          className="pointer-events-none absolute -top-px inset-x-1 h-0.5 rounded-full bg-primary z-20 shadow-[0_0_4px_var(--color-primary)]"
-        />
-      ) : dropPosition === "after" && !props.style?.transform ? (
-        <span
-          data-sidebar-reorder-indicator="after"
-          className="pointer-events-none absolute -bottom-px inset-x-1 h-0.5 rounded-full bg-primary z-20 shadow-[0_0_4px_var(--color-primary)]"
-        />
-      ) : null}
     </button>
   );
 }

@@ -329,11 +329,17 @@ function WorkbenchTabItem({
         transition: "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)",
       };
     }
-  } else if (settlingTab?.tabId === tab.id) {
-    tabStyle = {
-      transform: `translate3d(${settlingTab.offset}px, 0, 0)`,
-      transition: "none",
-    };
+  } else if (settlingTab) {
+    if (settlingTab.tabId === tab.id) {
+      tabStyle = {
+        transform: `translate3d(${settlingTab.offset}px, 0, 0)`,
+        transition: "none",
+      };
+    } else {
+      tabStyle = {
+        transition: "none",
+      };
+    }
   } else {
     tabStyle = {
       transition: "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)",
