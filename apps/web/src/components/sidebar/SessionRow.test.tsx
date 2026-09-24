@@ -384,4 +384,39 @@ it("renders with sidebar-session-row-item class and will-change-transform for fl
   expect(row.props.className).toContain("will-change-transform");
 });
 
+it("renders data-session-closing and suppresses drag initiation when isClosing is true", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const target = {
+    kind: "agentSession",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    agentSessionId: "s1" as AgentSessionId,
+  } as const;
+
+  const onPointerDown = vi.fn();
+  await act(() => {
+    renderer = create(
+      <SessionRow target={target} isClosing onPointerDown={onPointerDown}>
+        Closing Session
+      </SessionRow>,
+    );
+  });
+
+  const row = renderer!.root.findByType("button");
+  expect(row.props["data-session-closing"]).toBe("true");
+
+  await act(() => {
+    row.props.onPointerDown({
+      button: 0,
+      currentTarget: {},
+      clientX: 50,
+      clientY: 50,
+      defaultPrevented: false,
+    });
+  });
+
+  expect(onPointerDown).toHaveBeenCalledTimes(1);
+});
+
+
 

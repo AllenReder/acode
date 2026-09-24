@@ -1,4 +1,4 @@
-import type { ComponentProps } from "react";
+import { useCallback, useState, type ComponentProps } from "react";
 import { cn } from "../../lib/utils";
 import { getActiveTab } from "../../workbench/workbenchState";
 import { useWorkbenchStore } from "../../workbench/workbenchStore";
@@ -12,6 +12,8 @@ export type SessionTarget = Extract<ViewTarget, { kind: "agentSession" | "worksp
 export interface SessionRowProps extends ComponentProps<"button"> {
   readonly target: SessionTarget;
   readonly isClosed?: boolean;
+  readonly isClosing?: boolean;
+  readonly onWillClose?: () => Promise<void> | void;
   readonly sessionTitle?: string;
   readonly onStartRename?: () => void;
   readonly navigateTo?: (input: {
@@ -25,6 +27,8 @@ export interface SessionRowProps extends ComponentProps<"button"> {
 export function SessionRow({
   target,
   isClosed = false,
+  isClosing = false,
+  onWillClose,
   sessionTitle,
   onStartRename,
   navigateTo,
@@ -67,12 +71,27 @@ export function SessionRow({
         ? draggedTarget.terminalSessionId === target.terminalSessionId
         : false);
 
+  const [selfClosing, setSelfClosing] = useState(false);
+  const handleWillClose = useCallback(async () => {
+    setSelfClosing(true);
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (!prefersReducedMotion) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 220));
+    }
+    await onWillClose?.();
+  }, [onWillClose]);
+
+  const closing = isClosing || selfClosing;
+
   const { openMenu } = useSessionActionMenu({
     target,
     isClosed,
     sessionTitle,
     onStartRename,
     navigateTo,
+    onWillClose: handleWillClose,
   });
   const drag = useWorkbenchDragSource(
     { kind: "sidebar", target },
@@ -100,6 +119,7 @@ export function SessionRow({
       data-workbench-drag-source="sidebar"
       data-sidebar-session-row="true"
       data-session-closed={isClosed ? "true" : undefined}
+      data-session-closing={closing ? "true" : undefined}
       data-workspace-key={workspaceKey}
       data-session-id={sessionId}
       className={cn(
@@ -151,7 +171,7 @@ export function SessionRow({
         onKeyDown?.(event);
       }}
       onPointerDown={(event) => {
-        if (!isClosed) {
+        if (!isClosed && !closing) {
           drag.onPointerDown(event);
         }
         onPointerDown?.(event);

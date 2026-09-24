@@ -16,6 +16,7 @@ export function useSessionActionMenu(input: {
   readonly isClosed?: boolean | undefined;
   readonly sessionTitle?: string | undefined;
   readonly onStartRename?: (() => void) | undefined;
+  readonly onWillClose?: (() => Promise<void> | void) | undefined;
   readonly navigateTo?:
     | ((input: {
         readonly to: string;
@@ -24,9 +25,9 @@ export function useSessionActionMenu(input: {
       }) => void)
     | undefined;
 }) {
-  const { target, isClosed = false, sessionTitle, onStartRename, navigateTo } = input;
+  const { target, isClosed = false, sessionTitle, onStartRename, onWillClose, navigateTo } = input;
   const store = useWorkbenchStore();
-  const commands = useSessionCommands(target);
+  const commands = useSessionCommands(target, onWillClose ? { onWillClose } : undefined);
 
   const openMenu = useCallback(
     (position: { x: number; y: number }) => {

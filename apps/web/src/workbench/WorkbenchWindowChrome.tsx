@@ -1,6 +1,7 @@
 import type { EnvironmentAwenProject } from "@awen/client-runtime/state/models";
 import { Columns3Icon, PanelsTopLeftIcon, PlusIcon, XIcon } from "lucide-react";
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -50,6 +51,39 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
   const stripRef = useRef<HTMLDivElement>(null);
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
+  const [closingTabIds, setClosingTabIds] = useState<ReadonlySet<string>>(() => new Set());
+  const remainingTabsCount = snapshot.tabs.length - closingTabIds.size;
+
+  const handleCloseTab = useCallback(
+    (tabId: string) => {
+      if (snapshot.tabs.length - closingTabIds.size <= 1) return;
+      if (closingTabIds.has(tabId)) return;
+
+      if (tabId === snapshot.activeTabId) {
+        const closingIndex = snapshot.tabs.findIndex((tab) => tab.id === tabId);
+        const survivingTabs = snapshot.tabs.filter(
+          (tab) => tab.id !== tabId && !closingTabIds.has(tab.id),
+        );
+        const nextActive = survivingTabs[Math.min(closingIndex, survivingTabs.length - 1)];
+        if (nextActive) activateTab(nextActive.id);
+      }
+
+      setClosingTabIds((prev) => new Set([...prev, tabId]));
+      const prefersReducedMotion =
+        typeof window !== "undefined" &&
+        window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      const delay = prefersReducedMotion ? 0 : 220;
+      setTimeout(() => {
+        closeTab(tabId);
+        setClosingTabIds((prev) => {
+          const next = new Set(prev);
+          next.delete(tabId);
+          return next;
+        });
+      }, delay);
+    },
+    [activateTab, closeTab, closingTabIds, snapshot.activeTabId, snapshot.tabs],
+  );
 
   const isAnyTabDragged = dragState?.phase === "dragging" && dragState.source.kind === "tab";
   const draggedTabId = isAnyTabDragged && dragState ? dragState.source.tabId : null;
@@ -194,7 +228,8 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
                 setEditingTabId={setEditingTabId}
                 commitRename={commitRename}
                 activateTab={activateTab}
-                closeTab={closeTab}
+                onClose={() => handleCloseTab(tab.id)}
+                isClosing={closingTabIds.has(tab.id)}
                 isAnyTabDragged={isAnyTabDragged}
                 draggedTabId={draggedTabId}
                 draggedSourceIndex={draggedSourceIndex}
@@ -203,6 +238,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
                 isSlidOut={isSlidOut}
                 tabWidth={tabWidth}
                 tabsCount={snapshot.tabs.length}
+                remainingTabsCount={remainingTabsCount}
                 settlingTab={settlingTab}
                 snapshot={snapshot}
               />
@@ -263,7 +299,8 @@ interface WorkbenchTabItemProps {
   readonly setEditingTabId: (tabId: string | null) => void;
   readonly commitRename: (tabId: string) => void;
   readonly activateTab: (tabId: string) => void;
-  readonly closeTab: (tabId: string) => void;
+  readonly onClose: () => void;
+  readonly isClosing: boolean;
   readonly isAnyTabDragged: boolean;
   readonly draggedTabId: string | null;
   readonly draggedSourceIndex: number;
@@ -272,6 +309,7 @@ interface WorkbenchTabItemProps {
   readonly isSlidOut: boolean;
   readonly tabWidth: number;
   readonly tabsCount: number;
+  readonly remainingTabsCount: number;
   readonly settlingTab: { readonly tabId: string; readonly offset: number } | null;
   readonly snapshot: WorkbenchSnapshot;
 }
@@ -290,7 +328,8 @@ function WorkbenchTabItem({
   setEditingTabId,
   commitRename,
   activateTab,
-  closeTab,
+  onClose,
+  isClosing,
   isAnyTabDragged,
   draggedTabId,
   draggedSourceIndex,
@@ -299,6 +338,7 @@ function WorkbenchTabItem({
   isSlidOut,
   tabWidth,
   tabsCount,
+  remainingTabsCount,
   settlingTab,
   snapshot,
 }: WorkbenchTabItemProps) {
@@ -306,7 +346,9 @@ function WorkbenchTabItem({
   const isDragged = isAnyTabDragged && draggedTabId === tab.id;
 
   let tabStyle: CSSProperties | undefined;
-  if (isAnyTabDragged && draggedSourceIndex >= 0) {
+  if (isClosing) {
+    tabStyle = undefined;
+  } else if (isAnyTabDragged && draggedSourceIndex >= 0) {
     if (isDragged) {
       tabStyle = {
         transform: `translate3d(${deltaX}px, 0, 0)`,
@@ -359,6 +401,7 @@ function WorkbenchTabItem({
       data-workbench-tab-drop={tab.id}
       data-workbench-drag-source="tab"
       data-active-tab={active ? "true" : "false"}
+      data-tab-closing={isClosing ? "true" : undefined}
       style={tabStyle}
       className={cn(
         "workbench-tab-item group relative flex h-full w-44 min-w-28 shrink cursor-pointer items-center gap-2 border-r border-border/60 px-3 text-left select-none [-webkit-app-region:no-drag] will-change-transform",
@@ -434,7 +477,7 @@ function WorkbenchTabItem({
           </div>
         </div>
       )}
-      {tabsCount > 1 ? (
+      {remainingTabsCount > 1 && !isClosing ? (
         <button
           type="button"
           aria-label={`Close ${title}`}
@@ -442,7 +485,7 @@ function WorkbenchTabItem({
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
-            closeTab(tab.id);
+            onClose();
           }}
         >
           <XIcon className="size-3" />

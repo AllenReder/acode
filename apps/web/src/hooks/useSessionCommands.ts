@@ -25,7 +25,10 @@ function failureToast(title: string, error: unknown) {
   );
 }
 
-export function useSessionCommands(target: SessionTarget) {
+export function useSessionCommands(
+  target: SessionTarget,
+  options?: { readonly onWillClose?: () => Promise<void> | void },
+) {
   const store = useWorkbenchStore();
   const stopThreadSession = useAtomCommand(threadEnvironment.stopSession, { reportFailure: false });
   const archiveThread = useAtomCommand(threadEnvironment.archive, { reportFailure: false });
@@ -80,6 +83,7 @@ export function useSessionCommands(target: SessionTarget) {
           return;
         }
       }
+      if (options?.onWillClose) await options.onWillClose();
       const archiveResult = await archiveThread({
         environmentId: target.environmentId,
         input: { threadId },
@@ -99,6 +103,7 @@ export function useSessionCommands(target: SessionTarget) {
         );
         return;
       }
+      if (options?.onWillClose) await options.onWillClose();
       const result = await closeTerminal({
         environmentId: target.environmentId,
         input: { workspaceId: target.workspaceId, terminalId, deleteHistory: false },
@@ -110,7 +115,15 @@ export function useSessionCommands(target: SessionTarget) {
       store.removeSessionViews(target);
       toastManager.add({ type: "success", title: "Terminal session closed" });
     }
-  }, [agentSession?.threadId, archiveThread, closeTerminal, stopThreadSession, store, target]);
+  }, [
+    agentSession?.threadId,
+    archiveThread,
+    closeTerminal,
+    options,
+    stopThreadSession,
+    store,
+    target,
+  ]);
 
   const handleDeleteSession = useCallback(
     async (sessionTitle?: string) => {
@@ -127,6 +140,7 @@ export function useSessionCommands(target: SessionTarget) {
         onFailure: (error) => failureToast("Failed to confirm session deletion", error),
       });
       if (!confirmed) return;
+      if (options?.onWillClose) await options.onWillClose();
 
       if (target.kind === "agentSession") {
         const threadId = agentSession?.threadId;
