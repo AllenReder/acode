@@ -25,8 +25,9 @@ pnpm version:check
 
 Review and commit those manifest changes with the release candidate. The CI
 workflow checks version consistency, typechecks, lints, tests, and builds the
-web/server workspace, compiles the desktop shell, and builds a Windows NSIS
-installer on pull requests and pushes to `main`.
+web/server workspace, compiles the desktop shell, builds a Windows NSIS
+installer, and builds both macOS DMGs with resource-seal verification on pull
+requests and pushes to `main`.
 
 ## Publish
 
