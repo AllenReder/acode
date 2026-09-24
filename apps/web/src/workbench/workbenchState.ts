@@ -58,7 +58,8 @@ export type SessionViewTarget = Extract<ViewTarget, { kind: "agentSession" | "wo
 
 export type ViewDragSource =
   | { readonly kind: "sidebar"; readonly target: SessionViewTarget }
-  | { readonly kind: "pane"; readonly tabId: string; readonly paneId: string };
+  | { readonly kind: "pane"; readonly tabId: string; readonly paneId: string }
+  | { readonly kind: "tab"; readonly tabId: string };
 
 export type ViewDuplicateSource = {
   readonly kind: "pane";
@@ -535,6 +536,39 @@ export function applyViewDrop(
   target: ViewDropTarget,
   generateId: () => string,
 ): ViewDropResult | null {
+  if (source.kind === "tab") {
+    const fromIndex = snapshot.tabs.findIndex((candidate) => candidate.id === source.tabId);
+    if (fromIndex < 0) return null;
+    const tab = snapshot.tabs[fromIndex]!;
+    const paneId = firstLeafId(tab.layout);
+
+    if (target.kind === "existingTab") {
+      const toIndex = snapshot.tabs.findIndex((candidate) => candidate.id === target.tabId);
+      if (toIndex < 0 || fromIndex === toIndex) {
+        return { snapshot, tabId: tab.id, paneId };
+      }
+      return {
+        snapshot: applyMoveTab(snapshot, fromIndex, toIndex),
+        tabId: tab.id,
+        paneId,
+      };
+    }
+
+    if (target.kind === "newTab") {
+      const targetIndex = Math.max(0, Math.min(target.index, snapshot.tabs.length - 1));
+      if (fromIndex === targetIndex) {
+        return { snapshot, tabId: tab.id, paneId };
+      }
+      return {
+        snapshot: applyMoveTab(snapshot, fromIndex, targetIndex),
+        tabId: tab.id,
+        paneId,
+      };
+    }
+
+    return null;
+  }
+
   if (source.kind === "pane" && target.kind === "pane") {
     const sourceTab = snapshot.tabs.find((candidate) => candidate.id === source.tabId);
     const targetTab = snapshot.tabs.find((candidate) => candidate.id === target.tabId);
@@ -801,6 +835,27 @@ export function applyCloseTab(snapshot: WorkbenchSnapshot, tabId: string): Workb
   if (snapshot.activeTabId !== tabId) return { ...snapshot, tabs };
   const nextActive = tabs[Math.min(closingIndex, tabs.length - 1)];
   return nextActive === undefined ? snapshot : { tabs, activeTabId: nextActive.id };
+}
+
+export function applyMoveTab(
+  snapshot: WorkbenchSnapshot,
+  fromIndex: number,
+  toIndex: number,
+): WorkbenchSnapshot {
+  if (
+    fromIndex < 0 ||
+    fromIndex >= snapshot.tabs.length ||
+    toIndex < 0 ||
+    toIndex >= snapshot.tabs.length ||
+    fromIndex === toIndex
+  ) {
+    return snapshot;
+  }
+  const nextTabs = [...snapshot.tabs];
+  const [moved] = nextTabs.splice(fromIndex, 1);
+  if (!moved) return snapshot;
+  nextTabs.splice(toIndex, 0, moved);
+  return { ...snapshot, tabs: nextTabs };
 }
 
 /** Compare two targets by Session identity across environments and workspaces. */

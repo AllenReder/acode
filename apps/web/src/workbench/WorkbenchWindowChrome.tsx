@@ -1,6 +1,14 @@
 import type { EnvironmentAwenProject } from "@awen/client-runtime/state/models";
 import { Columns3Icon, PanelsTopLeftIcon, PlusIcon, XIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import { cn } from "../lib/utils";
 import { MaterialSurface } from "../components/MaterialSurface";
@@ -10,6 +18,7 @@ import { TopbarInset } from "./TopbarInset";
 import { firstLeafId } from "./layout";
 import { targetKey, type ViewTarget } from "./viewRegistry";
 import { tabDisplayTitle, type WorkbenchSnapshot, type WorkbenchTab } from "./workbenchState";
+import { useWorkbenchDragSource, useWorkbenchDragState } from "./workbenchDrag";
 import { useWorkbenchStore } from "./workbenchStore";
 import { resolveTargetContext, resolveTargetTitle } from "./workbenchTitles";
 
@@ -37,10 +46,45 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
   const activateTab = useWorkbenchStore((state) => state.activateTab);
   const closeTab = useWorkbenchStore((state) => state.closeTab);
   const renameTab = useWorkbenchStore((state) => state.renameTab);
+  const dragState = useWorkbenchDragState();
+  const stripRef = useRef<HTMLDivElement>(null);
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
 
+  const isAnyTabDragged = dragState?.phase === "dragging" && dragState.source.kind === "tab";
+  const draggedTabId = isAnyTabDragged && dragState ? dragState.source.tabId : null;
+  const draggedSourceIndex = draggedTabId
+    ? snapshot.tabs.findIndex((t) => t.id === draggedTabId)
+    : -1;
+
+  let targetIndex = draggedSourceIndex;
+  let deltaX = 0;
+  let isSlidOut = false;
+  let tabWidth = 176;
+
+  if (isAnyTabDragged && dragState && draggedSourceIndex >= 0) {
+    const stripEl = stripRef.current;
+    if (stripEl) {
+      const stripRect = stripEl.getBoundingClientRect();
+      isSlidOut = dragState.pointer.y > stripRect.bottom + 12;
+      const firstTabEl = stripEl.querySelector<HTMLElement>("[data-tab-id]");
+      if (firstTabEl) {
+        tabWidth = firstTabEl.getBoundingClientRect().width || 176;
+      }
+      if (!isSlidOut) {
+        const scrollLeft = stripEl.scrollLeft;
+        const currentCenter = dragState.pointer.x - stripRect.left + scrollLeft;
+        targetIndex = Math.max(
+          0,
+          Math.min(Math.floor(currentCenter / tabWidth), snapshot.tabs.length - 1),
+        );
+      }
+    }
+    deltaX = dragState.pointer.x - (dragState.startRect.left + dragState.startRect.width / 2);
+  }
+
   useEffect(() => {
+    if (typeof document === "undefined") return;
     const root = document.documentElement;
     root.dataset.workbenchWindowChrome = "true";
     return () => {
@@ -72,13 +116,14 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
 
       <div className="flex h-full min-w-0 flex-1 items-center gap-2 pr-3" data-tauri-drag-region>
         <div
+          ref={stripRef}
           className="flex h-full min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           data-workbench-tab-strip-drop=""
           data-tauri-drag-region
           role="tablist"
           aria-label="Workbench tabs"
         >
-          {snapshot.tabs.map((tab) => {
+          {snapshot.tabs.map((tab, index) => {
             const active = tab.id === snapshot.activeTabId;
             const title = titleFor(tab);
             const target = tab.panes.get(firstLeafId(tab.layout))?.target ?? {
@@ -86,93 +131,32 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
             };
             const accent = accentForTarget(target);
             return (
-              <div
+              <WorkbenchTabItem
                 key={tab.id}
-                role="tab"
-                aria-selected={active}
-                aria-label={`Open ${title}`}
-                tabIndex={active ? 0 : -1}
-                data-tab-id={tab.id}
-                data-workbench-tab-drop={tab.id}
-                data-active-tab={active ? "true" : "false"}
-                className={cn(
-                  "group relative flex h-full w-44 min-w-28 shrink cursor-pointer items-center gap-2 border-r border-border/60 px-3 text-left transition-colors duration-150 select-none [-webkit-app-region:no-drag]",
-                  active
-                    ? "bg-foreground/5 text-foreground font-medium"
-                    : "bg-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
-                )}
-                onClick={() => {
-                  if (!active) activateTab(tab.id);
-                }}
-                onDoubleClick={() => {
-                  if (!active) return;
-                  setEditingTabId(tab.id);
-                  setDraftTitle(title);
-                }}
-                onKeyDown={(event) => {
-                  const currentIndex = snapshot.tabs.findIndex(
-                    (candidate) => candidate.id === tab.id,
-                  );
-                  if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
-                    event.preventDefault();
-                    const direction = event.key === "ArrowRight" ? 1 : -1;
-                    const next =
-                      snapshot.tabs[
-                        (currentIndex + direction + snapshot.tabs.length) % snapshot.tabs.length
-                      ];
-                    if (next !== undefined) activateTab(next.id);
-                  }
-                  if (event.key === "F2" && active) {
-                    event.preventDefault();
-                    setEditingTabId(tab.id);
-                    setDraftTitle(title);
-                  }
-                }}
-              >
-                <span className="size-2 shrink-0 rounded-full" style={{ background: accent }} />
-                {active && editingTabId === tab.id ? (
-                  <input
-                    autoFocus
-                    value={draftTitle}
-                    aria-label="Tab title"
-                    className="mx-1 min-w-0 flex-1 rounded border border-border bg-background/20 px-1.5 py-0.5 text-xs outline-none focus:ring-1 focus:ring-ring"
-                    onChange={(event) => setDraftTitle(event.target.value)}
-                    onClick={(event) => event.stopPropagation()}
-                    onBlur={() => commitRename(tab.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        commitRename(tab.id);
-                      }
-                      if (event.key === "Escape") {
-                        event.preventDefault();
-                        setEditingTabId(null);
-                        setDraftTitle("");
-                      }
-                    }}
-                  />
-                ) : (
-                  <div className="min-w-0 flex-1 block">
-                    <div className="truncate text-xs leading-none">{title}</div>
-                    <div className="truncate text-[9px] text-muted-foreground leading-none mt-0.5">
-                      {resolveTargetContext(target, projects)}
-                    </div>
-                  </div>
-                )}
-                {snapshot.tabs.length > 1 ? (
-                  <button
-                    type="button"
-                    aria-label={`Close ${title}`}
-                    className="opacity-0 group-hover:opacity-100 flex size-5 shrink-0 items-center justify-center rounded hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-opacity duration-150"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      closeTab(tab.id);
-                    }}
-                  >
-                    <XIcon className="size-3" />
-                  </button>
-                ) : null}
-              </div>
+                tab={tab}
+                index={index}
+                active={active}
+                title={title}
+                target={target}
+                accent={accent}
+                projects={projects}
+                editingTabId={editingTabId}
+                draftTitle={draftTitle}
+                setDraftTitle={setDraftTitle}
+                setEditingTabId={setEditingTabId}
+                commitRename={commitRename}
+                activateTab={activateTab}
+                closeTab={closeTab}
+                isAnyTabDragged={isAnyTabDragged}
+                draggedTabId={draggedTabId}
+                draggedSourceIndex={draggedSourceIndex}
+                targetIndex={targetIndex}
+                deltaX={deltaX}
+                isSlidOut={isSlidOut}
+                tabWidth={tabWidth}
+                tabsCount={snapshot.tabs.length}
+                snapshot={snapshot}
+              />
             );
           })}
         </div>
@@ -213,5 +197,195 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
 
       <WindowControls />
     </MaterialSurface>
+  );
+}
+
+interface WorkbenchTabItemProps {
+  readonly tab: WorkbenchTab;
+  readonly index: number;
+  readonly active: boolean;
+  readonly title: string;
+  readonly target: ViewTarget;
+  readonly accent: string;
+  readonly projects: ReadonlyArray<EnvironmentAwenProject>;
+  readonly editingTabId: string | null;
+  readonly draftTitle: string;
+  readonly setDraftTitle: (title: string) => void;
+  readonly setEditingTabId: (tabId: string | null) => void;
+  readonly commitRename: (tabId: string) => void;
+  readonly activateTab: (tabId: string) => void;
+  readonly closeTab: (tabId: string) => void;
+  readonly isAnyTabDragged: boolean;
+  readonly draggedTabId: string | null;
+  readonly draggedSourceIndex: number;
+  readonly targetIndex: number;
+  readonly deltaX: number;
+  readonly isSlidOut: boolean;
+  readonly tabWidth: number;
+  readonly tabsCount: number;
+  readonly snapshot: WorkbenchSnapshot;
+}
+
+function WorkbenchTabItem({
+  tab,
+  index,
+  active,
+  title,
+  target,
+  accent,
+  projects,
+  editingTabId,
+  draftTitle,
+  setDraftTitle,
+  setEditingTabId,
+  commitRename,
+  activateTab,
+  closeTab,
+  isAnyTabDragged,
+  draggedTabId,
+  draggedSourceIndex,
+  targetIndex,
+  deltaX,
+  isSlidOut,
+  tabWidth,
+  tabsCount,
+  snapshot,
+}: WorkbenchTabItemProps) {
+  const drag = useWorkbenchDragSource({ kind: "tab", tabId: tab.id }, title);
+  const isDragged = isAnyTabDragged && draggedTabId === tab.id;
+
+  let tabStyle: CSSProperties | undefined;
+  if (isAnyTabDragged && !isSlidOut && draggedSourceIndex >= 0) {
+    if (isDragged) {
+      tabStyle = {
+        transform: `translate3d(${deltaX}px, 0, 0)`,
+        zIndex: 40,
+        opacity: 0.95,
+        pointerEvents: "none",
+        boxShadow: "0 4px 16px rgba(0, 0, 0, 0.25)",
+        transition: "none",
+      };
+    } else {
+      let shift = 0;
+      if (targetIndex > draggedSourceIndex) {
+        if (index > draggedSourceIndex && index <= targetIndex) {
+          shift = -tabWidth;
+        }
+      } else if (targetIndex < draggedSourceIndex) {
+        if (index >= targetIndex && index < draggedSourceIndex) {
+          shift = tabWidth;
+        }
+      }
+      tabStyle = {
+        transform: shift !== 0 ? `translate3d(${shift}px, 0, 0)` : undefined,
+        transition: "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)",
+      };
+    }
+  } else {
+    tabStyle = {
+      transition: "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)",
+    };
+  }
+
+  return (
+    <div
+      role="tab"
+      aria-selected={active}
+      aria-label={`Open ${title}`}
+      tabIndex={active ? 0 : -1}
+      data-tab-id={tab.id}
+      data-workbench-tab-drop={tab.id}
+      data-workbench-drag-source="tab"
+      data-active-tab={active ? "true" : "false"}
+      style={tabStyle}
+      className={cn(
+        "workbench-tab-item group relative flex h-full w-44 min-w-28 shrink cursor-pointer items-center gap-2 border-r border-border/60 px-3 text-left select-none [-webkit-app-region:no-drag] will-change-transform",
+        active
+          ? "bg-foreground/5 text-foreground font-medium"
+          : "bg-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
+      )}
+      onClick={() => {
+        if (drag.consumeSuppressedClick()) return;
+        if (!active) activateTab(tab.id);
+      }}
+      onPointerDown={(event) => {
+        const targetElement = event.target as HTMLElement;
+        if (targetElement.closest("button, input") !== null) {
+          return;
+        }
+        if (event.button === 0) {
+          if (!active) activateTab(tab.id);
+          drag.onPointerDown(event);
+        }
+      }}
+      onDoubleClick={() => {
+        if (!active) return;
+        setEditingTabId(tab.id);
+        setDraftTitle(title);
+      }}
+      onKeyDown={(event) => {
+        const currentIndex = snapshot.tabs.findIndex((candidate) => candidate.id === tab.id);
+        if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+          event.preventDefault();
+          const direction = event.key === "ArrowRight" ? 1 : -1;
+          const next =
+            snapshot.tabs[
+              (currentIndex + direction + snapshot.tabs.length) % snapshot.tabs.length
+            ];
+          if (next !== undefined) activateTab(next.id);
+        }
+        if (event.key === "F2" && active) {
+          event.preventDefault();
+          setEditingTabId(tab.id);
+          setDraftTitle(title);
+        }
+      }}
+    >
+      <span className="size-2 shrink-0 rounded-full" style={{ background: accent }} />
+      {active && editingTabId === tab.id ? (
+        <input
+          autoFocus
+          value={draftTitle}
+          aria-label="Tab title"
+          className="mx-1 min-w-0 flex-1 rounded border border-border bg-background/20 px-1.5 py-0.5 text-xs outline-none focus:ring-1 focus:ring-ring"
+          onChange={(event) => setDraftTitle(event.target.value)}
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+          onBlur={() => commitRename(tab.id)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commitRename(tab.id);
+            }
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setEditingTabId(null);
+              setDraftTitle("");
+            }
+          }}
+        />
+      ) : (
+        <div className="min-w-0 flex-1 block">
+          <div className="truncate text-xs leading-none">{title}</div>
+          <div className="truncate text-[9px] text-muted-foreground leading-none mt-0.5">
+            {resolveTargetContext(target, projects)}
+          </div>
+        </div>
+      )}
+      {tabsCount > 1 ? (
+        <button
+          type="button"
+          aria-label={`Close ${title}`}
+          className="opacity-0 group-hover:opacity-100 flex size-5 shrink-0 items-center justify-center rounded hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-opacity duration-150"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            closeTab(tab.id);
+          }}
+        >
+          <XIcon className="size-3" />
+        </button>
+      ) : null}
+    </div>
   );
 }

@@ -151,6 +151,28 @@ it("resolves sidebar session reorder target when dragging inside sidebar within 
     sidebarDropTarget: null,
   });
 
+  // Dragging s2 over a closed (history) session: no reorder target
+  const closedRow = fakeElement({
+    dataset: {
+      sidebarSessionRow: "true",
+      workspaceKey: "local:ws1",
+      sessionId: "s_closed",
+      sessionClosed: "true",
+    },
+    rect: { left: 10, top: 90, width: 200, height: 30 },
+  });
+  closedRow.closest = ((selector: string) =>
+    selector === "[data-sidebar-session-row]" ? closedRow : null) as Element["closest"];
+  const closedResolver = {
+    isOverSidebar: (x: number, y: number) => x >= 0 && x <= 250 && y >= 0 && y <= 600,
+    elementFromPoint: () => closedRow,
+  };
+  const closedRes = resolveSidebarDropTargetAtPoint(50, 95, "local:ws1", "s2", closedResolver);
+  expect(closedRes).toEqual({
+    isOverSidebar: true,
+    sidebarDropTarget: null,
+  });
+
   // Dragging outside sidebar: isOverSidebar is false
   const outsideRes = resolveSidebarDropTargetAtPoint(300, 55, "local:ws1", "s2", resolver);
   expect(outsideRes).toEqual({

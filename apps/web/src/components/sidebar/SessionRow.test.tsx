@@ -330,3 +330,39 @@ it("distinguishes the focused Session from other opened and unopened Sessions", 
   expect(row3!.props["data-session-open-in-tab"]).toBe("false");
   expect(row3!.props["aria-current"]).toBeUndefined();
 });
+
+it("marks closed sessions with data-session-closed and suppresses drag initiation on pointerdown", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const target = {
+    kind: "agentSession",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    agentSessionId: "closed_1" as AgentSessionId,
+  } as const;
+
+  const onPointerDown = vi.fn();
+  await act(() => {
+    renderer = create(
+      <SessionRow target={target} isClosed onPointerDown={onPointerDown}>
+        Closed Session
+      </SessionRow>,
+    );
+  });
+
+  const row = renderer!.root.findByType("button");
+  expect(row.props["data-session-closed"]).toBe("true");
+
+  await act(() => {
+    row.props.onPointerDown({
+      button: 0,
+      currentTarget: {},
+      clientX: 50,
+      clientY: 50,
+      defaultPrevented: false,
+    });
+  });
+
+  // onPointerDown prop callback is still called, but drag itself is suppressed for closed sessions
+  expect(onPointerDown).toHaveBeenCalledTimes(1);
+});
+

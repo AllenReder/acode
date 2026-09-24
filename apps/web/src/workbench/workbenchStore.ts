@@ -10,6 +10,7 @@ import {
   applyColumnChange,
   applyMoveInColumn,
   applyCreateTab,
+  applyMoveTab,
   applyDuplicateToNewTab,
   applyActivateTab,
   applyCloseTab,
@@ -49,6 +50,7 @@ export interface WorkbenchStore extends WorkbenchSnapshot {
   createTab: () => void;
   activateTab: (tabId: string) => void;
   closeTab: (tabId: string) => void;
+  moveTab: (fromIndex: number, toIndex: number) => void;
   renameTab: (tabId: string, title: string | null) => void;
   closeView: (paneId: string) => void;
   removeSessionViews: (target: ViewTarget) => void;
@@ -104,6 +106,7 @@ export function createWorkbenchStore(options: WorkbenchStoreOptions = {}) {
     createTab: () => set((snapshot) => applyCreateTab(snapshot, generateId)),
     activateTab: (tabId) => set((snapshot) => applyActivateTab(snapshot, tabId)),
     closeTab: (tabId) => set((snapshot) => applyCloseTab(snapshot, tabId)),
+    moveTab: (fromIndex, toIndex) => set((snapshot) => applyMoveTab(snapshot, fromIndex, toIndex)),
     renameTab: (tabId, title) => set((snapshot) => applyRenameTab(snapshot, tabId, title)),
     registerCloseGuard: (paneId, guard) => {
       closeGuards.set(paneId, guard);

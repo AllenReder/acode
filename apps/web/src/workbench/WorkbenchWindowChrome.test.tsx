@@ -12,6 +12,7 @@ import type { EnvironmentAwenProject } from "@awen/client-runtime/state/models";
 import { SidebarProvider } from "../components/ui/sidebar";
 import { WorkbenchWindowChrome } from "./WorkbenchWindowChrome";
 import { applyCreateTab, applyOpenTarget, emptyWorkbenchSnapshot } from "./workbenchState";
+import { useWorkbenchStore } from "./workbenchStore";
 import type { ViewTarget } from "./viewRegistry";
 
 const environmentId = "env-a" as EnvironmentId;
@@ -202,4 +203,58 @@ it("renders window controls at the trailing end of the topbar when on Linux desk
   expect(html).toContain('aria-label="Close"');
 
   vi.unstubAllGlobals();
+});
+
+it("renders tabs as draggable tab sources with data-workbench-drag-source", () => {
+  const snapshot = createTestSnapshot();
+
+  const html = renderToStaticMarkup(
+    <SidebarProvider defaultOpen>
+      <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+    </SidebarProvider>,
+  );
+
+  expect(html).toContain('data-workbench-drag-source="tab"');
+});
+
+it("activates an inactive tab immediately on pointerdown unless clicking close button", async () => {
+  const snapshot = createTestSnapshot();
+  const activateTab = vi.fn();
+  const closeTab = vi.fn();
+  useWorkbenchStore.setState({ activateTab, closeTab });
+
+  const { create, act } = await import("react-test-renderer");
+  let renderer: any;
+  await act(async () => {
+    renderer = create(
+      <SidebarProvider defaultOpen>
+        <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+      </SidebarProvider>,
+    );
+  });
+
+  const tabElements = renderer.root.findAllByProps({ role: "tab" });
+  expect(tabElements).toHaveLength(2);
+
+  const inactiveTab = tabElements[0];
+  expect(inactiveTab.props["data-active-tab"]).toBe("false");
+
+  // Pointer down on inactive tab activates it
+  await act(async () => {
+    inactiveTab.props.onPointerDown({
+      button: 0,
+      target: { closest: () => null },
+    });
+  });
+  expect(activateTab).toHaveBeenCalledWith(snapshot.tabs[0]!.id);
+
+  // Pointer down on close button does not activate
+  activateTab.mockClear();
+  await act(async () => {
+    inactiveTab.props.onPointerDown({
+      button: 0,
+      target: { closest: (sel: string) => (sel.includes("button") ? {} : null) },
+    });
+  });
+  expect(activateTab).not.toHaveBeenCalled();
 });

@@ -108,6 +108,7 @@ export function SessionRow({
       aria-level={3}
       data-workbench-drag-source="sidebar"
       data-sidebar-session-row="true"
+      data-session-closed={isClosed ? "true" : undefined}
       data-workspace-key={workspaceKey}
       data-session-id={sessionId}
       className={cn(
@@ -159,7 +160,9 @@ export function SessionRow({
         onKeyDown?.(event);
       }}
       onPointerDown={(event) => {
-        drag.onPointerDown(event);
+        if (!isClosed) {
+          drag.onPointerDown(event);
+        }
         onPointerDown?.(event);
       }}
     >

@@ -231,6 +231,9 @@ export function resolveSidebarDropTargetAtPoint(
     (typeof document === "undefined" ? null : document.elementFromPoint(x, y));
   const rowElement = element?.closest<HTMLElement>("[data-sidebar-session-row]");
   if (rowElement) {
+    if (rowElement.dataset.sessionClosed === "true") {
+      return { isOverSidebar: true, sidebarDropTarget: null };
+    }
     const rowWorkspaceKey = rowElement.dataset.workspaceKey;
     const rowSessionId = rowElement.dataset.sessionId;
     if (
@@ -365,7 +368,11 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           ? document.querySelector<HTMLElement>(
               `[data-workbench-pane-drop][data-pane-id="${escapeCss(source.paneId)}"]`,
             )
-          : handle;
+          : source.kind === "tab"
+            ? document.querySelector<HTMLElement>(
+                `[data-tab-id="${escapeCss(source.tabId)}"]`,
+              )
+            : handle;
       const startRect = rectFromElement(sourceElement) ?? rectFromElement(handle);
       if (startRect === null) return;
       document.documentElement.dataset.workbenchDragging = "pending";
@@ -535,7 +542,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           const workspaceKey = `${source.target.environmentId}:${source.target.workspaceId}`;
           const allSessionRows = Array.from(
             document.querySelectorAll<HTMLElement>(
-              `[data-sidebar-session-row][data-workspace-key="${escapeCss(workspaceKey)}"]`,
+              `[data-sidebar-session-row][data-workspace-key="${escapeCss(workspaceKey)}"]:not([data-session-closed="true"])`,
             ),
           )
             .map((el) => el.dataset.sessionId)
@@ -757,6 +764,11 @@ function dragGhostInfo(source: ViewDragSource): {
         typeLabel: "Terminal Session",
       };
     }
+  } else if (source.kind === "tab") {
+    return {
+      icon: <CopyPlusIcon className="size-5 text-primary" />,
+      typeLabel: "Tab",
+    };
   }
   return {
     icon: <CopyPlusIcon className="size-5 text-primary" />,
@@ -797,7 +809,7 @@ export function WorkbenchDropOverlay() {
     return computePaneLayoutRects(previewTab, surfaceRect, paneGap);
   }, [previewTab, surfaceRect, paneGap]);
 
-  if (state === null || state.isOverSidebar) return null;
+  if (state === null || state.isOverSidebar || state.source.kind === "tab") return null;
 
   const viewport =
     typeof document !== "undefined"

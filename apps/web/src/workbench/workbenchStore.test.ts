@@ -182,3 +182,68 @@ it("splits relative to a specific pane and focuses existing targets if already p
   expect(tabAfterRefocus.panes.size).toBe(2);
   expect(tabAfterRefocus.focusedPaneId).toBe(filePaneId);
 });
+
+it("moves a tab from one index to another and persists the new order", () => {
+  const ids = makeIds();
+  let initial = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids);
+  initial = applyCreateTab(initial, ids);
+  initial = applyCreateTab(initial, ids);
+
+  const writes: WorkbenchSnapshot[] = [];
+  const store = createWorkbenchStore({
+    initialSnapshot: initial,
+    generateId: ids,
+    persist: (snapshot) => writes.push(snapshot),
+  });
+
+  const tab0Id = store.getState().tabs[0]!.id;
+  const tab1Id = store.getState().tabs[1]!.id;
+  const tab2Id = store.getState().tabs[2]!.id;
+
+  // Move tab 0 to index 2
+  store.getState().moveTab(0, 2);
+
+  expect(store.getState().tabs.map((t) => t.id)).toEqual([tab1Id, tab2Id, tab0Id]);
+  expect(writes).toHaveLength(1);
+  expect(writes[0]!.tabs.map((t) => t.id)).toEqual([tab1Id, tab2Id, tab0Id]);
+
+  // Invalid indices should no-op
+  store.getState().moveTab(0, 0);
+  store.getState().moveTab(-1, 2);
+  store.getState().moveTab(0, 99);
+  expect(writes).toHaveLength(1);
+});
+
+it("previews and commits a Tab drop to reorder tabs", () => {
+  const ids = makeIds();
+  let initial = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids);
+  initial = applyCreateTab(initial, ids);
+  initial = applyCreateTab(initial, ids);
+
+  const writes: WorkbenchSnapshot[] = [];
+  const store = createWorkbenchStore({
+    initialSnapshot: initial,
+    generateId: ids,
+    persist: (snapshot) => writes.push(snapshot),
+  });
+
+  const tab0Id = store.getState().tabs[0]!.id;
+  const tab1Id = store.getState().tabs[1]!.id;
+  const tab2Id = store.getState().tabs[2]!.id;
+
+  // Drag tab 0 to existingTab 2
+  const preview = store
+    .getState()
+    .previewDrop({ kind: "tab", tabId: tab0Id }, { kind: "existingTab", tabId: tab2Id });
+
+  expect(preview).not.toBeNull();
+  expect(preview!.snapshot.tabs.map((t) => t.id)).toEqual([tab1Id, tab2Id, tab0Id]);
+  expect(store.getState().tabs.map((t) => t.id)).toEqual([tab0Id, tab1Id, tab2Id]);
+  expect(writes).toHaveLength(0);
+
+  store.getState().commitDrop(preview!);
+  expect(store.getState().tabs.map((t) => t.id)).toEqual([tab1Id, tab2Id, tab0Id]);
+  expect(writes).toHaveLength(1);
+});
+
+
