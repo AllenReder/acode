@@ -179,3 +179,27 @@ it("renders window controls at the trailing end of the topbar when on Windows de
 
   vi.unstubAllGlobals();
 });
+
+it("renders window controls at the trailing end of the topbar when on Linux desktop", () => {
+  const snapshot = createTestSnapshot();
+
+  vi.stubGlobal("window", {
+    __TAURI_INTERNALS__: {},
+  });
+  vi.stubGlobal("navigator", {
+    platform: "Linux x86_64",
+  });
+
+  const html = renderToStaticMarkup(
+    <SidebarProvider defaultOpen>
+      <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+    </SidebarProvider>,
+  );
+
+  expect(html).toContain('data-slot="window-controls"');
+  expect(html).toContain('aria-label="Minimize"');
+  expect(html).toContain('aria-label="Maximize"');
+  expect(html).toContain('aria-label="Close"');
+
+  vi.unstubAllGlobals();
+});

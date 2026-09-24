@@ -25,7 +25,7 @@ describe("WindowControls", () => {
     expect(renderer.toJSON()).toBeNull();
   });
 
-  it("renders 3 control buttons when forced visible or in Windows desktop mode", async () => {
+  it("renders 3 control buttons when forced visible", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     await act(() => {
       renderer = create(<WindowControls forceVisible />);
@@ -149,7 +149,7 @@ describe("WindowControls", () => {
   });
 
   describe("handleTopbarDoubleClick", () => {
-    it("does not toggle maximize on non-Windows platform", () => {
+    it("does not toggle maximize on macOS", () => {
       const toggleSpy = vi
         .spyOn(defaultWindowOperations, "toggleMaximize")
         .mockResolvedValue(undefined);
@@ -163,12 +163,26 @@ describe("WindowControls", () => {
       toggleSpy.mockRestore();
     });
 
-    it("does not toggle maximize when in non-desktop browser on Windows", () => {
+    it("does not toggle maximize when in a non-desktop browser on Windows", () => {
       const toggleSpy = vi
         .spyOn(defaultWindowOperations, "toggleMaximize")
         .mockResolvedValue(undefined);
       vi.stubGlobal("window", {});
       vi.stubGlobal("navigator", { platform: "Win32" });
+
+      const target = { closest: () => null } as unknown as HTMLElement;
+      handleTopbarDoubleClick({ target } as unknown as React.MouseEvent);
+
+      expect(toggleSpy).not.toHaveBeenCalled();
+      toggleSpy.mockRestore();
+    });
+
+    it("does not toggle maximize when in a non-desktop browser on Linux", () => {
+      const toggleSpy = vi
+        .spyOn(defaultWindowOperations, "toggleMaximize")
+        .mockResolvedValue(undefined);
+      vi.stubGlobal("window", {});
+      vi.stubGlobal("navigator", { platform: "Linux x86_64" });
 
       const target = { closest: () => null } as unknown as HTMLElement;
       handleTopbarDoubleClick({ target } as unknown as React.MouseEvent);
@@ -183,6 +197,20 @@ describe("WindowControls", () => {
         .mockResolvedValue(undefined);
       vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
       vi.stubGlobal("navigator", { platform: "Win32" });
+
+      const target = { closest: () => null } as unknown as HTMLElement;
+      handleTopbarDoubleClick({ target } as unknown as React.MouseEvent);
+
+      expect(toggleSpy).toHaveBeenCalledTimes(1);
+      toggleSpy.mockRestore();
+    });
+
+    it("toggles maximize on Linux desktop for empty topbar regions", () => {
+      const toggleSpy = vi
+        .spyOn(defaultWindowOperations, "toggleMaximize")
+        .mockResolvedValue(undefined);
+      vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
+      vi.stubGlobal("navigator", { platform: "Linux x86_64" });
 
       const target = { closest: () => null } as unknown as HTMLElement;
       handleTopbarDoubleClick({ target } as unknown as React.MouseEvent);

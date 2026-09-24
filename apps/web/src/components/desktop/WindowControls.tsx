@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactElement } from "react";
 
-import { cn, isWindowsPlatform } from "../../lib/utils";
+import { cn, usesCustomWindowChrome } from "../../lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   defaultWindowOperations,
@@ -35,8 +35,9 @@ export function WindowControls({
   forceVisible = false,
   operations = defaultWindowOperations,
 }: WindowControlsProps) {
-  const isWindows = typeof navigator !== "undefined" && isWindowsPlatform(navigator.platform);
-  const shouldRender = forceVisible || (isDesktopEnvironment() && isWindows);
+  const isCustomChromePlatform =
+    typeof navigator !== "undefined" && usesCustomWindowChrome(navigator.platform);
+  const shouldRender = forceVisible || (isDesktopEnvironment() && isCustomChromePlatform);
 
   const [isMaximized, setIsMaximized] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);

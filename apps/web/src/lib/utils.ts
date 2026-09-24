@@ -20,6 +20,14 @@ export function isWindowsPlatform(platform: string): boolean {
   return /^win(dows)?/i.test(platform);
 }
 
+export function isLinuxPlatform(platform: string): boolean {
+  return /^linux/i.test(platform);
+}
+
+export function usesCustomWindowChrome(platform: string): boolean {
+  return isWindowsPlatform(platform) || isLinuxPlatform(platform);
+}
+
 export function normalizeSearchText(value: string): string {
   return value.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
 }

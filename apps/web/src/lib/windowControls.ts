@@ -4,7 +4,7 @@
  */
 
 import { isDesktop } from "../env";
-import { isWindowsPlatform } from "./utils";
+import { usesCustomWindowChrome } from "./utils";
 
 export function isDesktopEnvironment(): boolean {
   if (typeof window === "undefined") return false;
@@ -95,7 +95,7 @@ export const defaultWindowOperations: WindowBridgeOperations = {
 export function handleTopbarDoubleClick(event: React.MouseEvent): void {
   if (
     typeof navigator === "undefined" ||
-    !isWindowsPlatform(navigator.platform) ||
+    !usesCustomWindowChrome(navigator.platform) ||
     !isDesktopEnvironment()
   ) {
     return;

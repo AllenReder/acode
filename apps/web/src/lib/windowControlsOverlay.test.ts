@@ -34,6 +34,13 @@ describe("resolveWorkbenchTitlebarStyle", () => {
     expect(
       resolveWorkbenchTitlebarStyle({
         hasDesktopBridge: true,
+        platform: "Linux x86_64",
+        fullscreen: false,
+      }),
+    ).toEqual({});
+    expect(
+      resolveWorkbenchTitlebarStyle({
+        hasDesktopBridge: true,
         platform: "MacIntel",
         fullscreen: true,
       }),
