@@ -1,4 +1,4 @@
-import type { DesktopUpdateState } from "@t3tools/contracts";
+import type { DesktopUpdateState } from "@awen/contracts";
 import { isValidElement, type MouseEvent, type ReactElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -21,12 +21,12 @@ type AnchorElement = ReactElement<{
 const baseState: DesktopUpdateState = {
   enabled: true,
   status: "available",
-  channel: "nightly",
+  channel: "prerelease",
   currentVersion: "0.0.35",
   hostArch: "arm64",
   appArch: "arm64",
   runningUnderArm64Translation: false,
-  availableVersion: "0.0.36-nightly.3",
+  availableVersion: "0.1.0-alpha.3",
   downloadedVersion: null,
   releaseNotes: [],
   omittedReleaseCount: 0,
@@ -74,22 +74,22 @@ describe("SidebarUpdateReleaseNotes", () => {
     testState.addToast.mockReset();
   });
 
-  it("links each preview to its exact release and labels hidden changes", () => {
+  it("links each prerelease to its exact release and labels hidden changes", () => {
     const anchors = collectAnchors(
       renderNotes({
         ...baseState,
         releaseNotes: [
-          { version: "0.0.36-nightly.3", items: ["Change 3"], totalItems: 1 },
-          { version: "0.0.36-nightly.2", items: ["Change 2"], totalItems: 2 },
-          { version: "0.0.36-nightly.1", items: ["Change 1", "Earlier"], totalItems: 4 },
+          { version: "0.1.0-alpha.3", items: ["Change 3"], totalItems: 1 },
+          { version: "0.1.0-alpha.2", items: ["Change 2"], totalItems: 2 },
+          { version: "0.1.0-alpha.1", items: ["Change 1", "Earlier"], totalItems: 4 },
         ],
       }),
     );
 
     expect(anchors.map(({ props }) => props.href)).toEqual([
-      "https://github.com/pingdotgg/t3code/releases/tag/v0.0.36-nightly.3",
-      "https://github.com/pingdotgg/t3code/releases/tag/v0.0.36-nightly.2",
-      "https://github.com/pingdotgg/t3code/releases/tag/v0.0.36-nightly.1",
+      "https://github.com/AllenReder/awen/releases/tag/v0.1.0-alpha.3",
+      "https://github.com/AllenReder/awen/releases/tag/v0.1.0-alpha.2",
+      "https://github.com/AllenReder/awen/releases/tag/v0.1.0-alpha.1",
     ]);
     expect(anchors.map(({ props }) => textContent(props.children))).toEqual([
       "View release on GitHub",
@@ -102,12 +102,12 @@ describe("SidebarUpdateReleaseNotes", () => {
     const anchors = collectAnchors(
       renderNotes({
         ...baseState,
-        releaseNotes: [{ version: "0.0.36-nightly.3", items: ["Change 3"], totalItems: 1 }],
+        releaseNotes: [{ version: "0.1.0-alpha.3", items: ["Change 3"], totalItems: 1 }],
         omittedReleaseCount: 1,
       }),
     );
 
-    expect(anchors.at(-1)?.props.href).toBe("https://github.com/pingdotgg/t3code/releases");
+    expect(anchors.at(-1)?.props.href).toBe("https://github.com/AllenReder/awen/releases");
     expect(textContent(anchors.at(-1)?.props.children)).toBe("1 older release on GitHub");
   });
 
@@ -115,7 +115,7 @@ describe("SidebarUpdateReleaseNotes", () => {
     const anchors = collectAnchors(
       renderNotes({
         ...baseState,
-        releaseNotes: [{ version: "0.0.36-nightly.3", items: ["Change 3"], totalItems: 1 }],
+        releaseNotes: [{ version: "0.1.0-alpha.3", items: ["Change 3"], totalItems: 1 }],
         omittedReleaseCount: 3,
       }),
     );
@@ -129,7 +129,7 @@ describe("SidebarUpdateReleaseNotes", () => {
       renderNotes(
         {
           ...baseState,
-          releaseNotes: [{ version: "0.0.36-nightly.3", items: ["Change 3"], totalItems: 1 }],
+          releaseNotes: [{ version: "0.1.0-alpha.3", items: ["Change 3"], totalItems: 1 }],
         },
         openExternal,
       ),
@@ -141,7 +141,7 @@ describe("SidebarUpdateReleaseNotes", () => {
     expect(preventDefault).toHaveBeenCalledOnce();
     await vi.waitFor(() => {
       expect(openExternal).toHaveBeenCalledWith(
-        "https://github.com/pingdotgg/t3code/releases/tag/v0.0.36-nightly.3",
+        "https://github.com/AllenReder/awen/releases/tag/v0.1.0-alpha.3",
       );
       expect(testState.addToast).toHaveBeenCalledWith({
         type: "error",

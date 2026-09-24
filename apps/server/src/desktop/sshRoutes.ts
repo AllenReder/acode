@@ -1,8 +1,5 @@
 // @effect-diagnostics anyUnknownInErrorContext:off unsafeEffectTypeAssertion:off
 import {
-  AuthAccessTokenType,
-  AuthEnvironmentBootstrapTokenType,
-  AuthTokenExchangeGrantType,
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
   DesktopDiscoveredSshHostSchema,
@@ -19,7 +16,7 @@ import {
   EnvironmentAuthInvalidError,
   EnvironmentInternalError,
   EnvironmentScopeRequiredError,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import {
   SshCommandError,
   SshHostDiscoveryError,
@@ -29,17 +26,16 @@ import {
   SshPairingError,
   SshPasswordPromptError,
   SshReadinessError,
-} from "@t3tools/ssh/errors";
-import { resolveLoopbackSshHttpBaseUrl } from "@t3tools/ssh/tunnel";
-import * as NetService from "@t3tools/shared/Net";
-import { encodeOAuthScope } from "@t3tools/shared/oauthScope";
+} from "@awen/ssh/errors";
+import { resolveLoopbackSshHttpBaseUrl } from "@awen/ssh/tunnel";
+import * as NetService from "@awen/shared/Net";
 import {
   environmentEndpointUrl,
   executeEnvironmentHttpRequest,
   makeEnvironmentHttpApiGroupClient,
   RemoteEnvironmentAuthUndeclaredStatusError,
   type RemoteEnvironmentRequestError,
-} from "@t3tools/shared/remoteEnvironmentHttp";
+} from "@awen/shared/remoteEnvironmentHttp";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -59,7 +55,7 @@ import { authenticateRawRouteWithScope } from "../http.ts";
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as DesktopSshEnvironment from "./sshEnvironment.ts";
 import * as DesktopSshPasswordPrompts from "./sshPasswordPrompts.ts";
-import { SshEnvironmentProgress, sshProgress } from "@t3tools/ssh/progress";
+import { SshEnvironmentProgress, sshProgress } from "@awen/ssh/progress";
 
 const DESKTOP_SSH_ROUTE_PREFIX = "/api/desktop/ssh";
 const DEFAULT_REMOTE_REQUEST_TIMEOUT_MS = 10_000;
@@ -199,7 +195,7 @@ const fetchRemoteEnvironmentDescriptor = Effect.fn("desktop.ssh.fetchRemoteEnvir
     const client = yield* makeEnvironmentHttpApiGroupClient(httpBaseUrl, "metadata");
     return yield* executeSshRemoteRequest(
       httpBaseUrl,
-      "/.well-known/t3/environment",
+      "/.well-known/awen/environment",
       client.descriptor(),
     );
   },
@@ -210,15 +206,11 @@ const bootstrapRemoteBearerSession = Effect.fn("desktop.ssh.bootstrapRemoteBeare
     const client = yield* makeEnvironmentHttpApiGroupClient(input.httpBaseUrl, "auth");
     return yield* executeSshRemoteRequest(
       input.httpBaseUrl,
-      "/oauth/token",
-      client.token({
-        headers: {},
+      "/api/auth/bearer-session",
+      client.bearerSession({
         payload: {
-          grant_type: AuthTokenExchangeGrantType,
-          subject_token: input.credential,
-          subject_token_type: AuthEnvironmentBootstrapTokenType,
-          requested_token_type: AuthAccessTokenType,
-          scope: encodeOAuthScope([AuthOrchestrationReadScope, AuthOrchestrationOperateScope]),
+          credential: input.credential,
+          scopes: [AuthOrchestrationReadScope, AuthOrchestrationOperateScope],
         },
       }),
     );

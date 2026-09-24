@@ -11,7 +11,7 @@ use tauri::plugin::{Builder as PluginBuilder, TauriPlugin};
 use tauri::{Runtime, Url};
 
 const PRIMARY_LOCAL_ENVIRONMENT_ID: &str = "primary";
-const DEFAULT_ENVIRONMENT_LABEL: &str = "ACode local daemon";
+const DEFAULT_ENVIRONMENT_LABEL: &str = "Awen local daemon";
 const LOCAL_DAEMON_PROTOCOL_VERSION: u8 = 1;
 
 #[derive(Debug, Deserialize)]
@@ -71,22 +71,20 @@ fn push_unique(paths: &mut Vec<PathBuf>, path: PathBuf) {
 }
 
 fn runtime_state_candidates() -> Vec<PathBuf> {
-    if let Some(path) =
-        read_non_empty_env(&["ACODE_DESKTOP_RUNTIME_PATH", "T3CODE_DESKTOP_RUNTIME_PATH"])
-    {
+    if let Some(path) = read_non_empty_env(&["AWEN_DESKTOP_RUNTIME_PATH"]) {
         return vec![PathBuf::from(path)];
     }
 
     let mut bases = Vec::new();
-    if let Some(base) = read_non_empty_env(&["ACODE_HOME", "T3CODE_HOME"]) {
+    if let Some(base) = read_non_empty_env(&["AWEN_HOME"]) {
         push_unique(&mut bases, PathBuf::from(base));
     }
 
     if let Ok(mut current) = env::current_dir() {
-        // The wrapper normally provides ACODE_HOME. These ancestors keep the
+        // The wrapper normally provides AWEN_HOME. These ancestors keep the
         // shell usable when the Tauri CLI is invoked directly from this repo.
         for _ in 0..=3 {
-            push_unique(&mut bases, current.join(".acode"));
+            push_unique(&mut bases, current.join(".awen"));
             if !current.pop() {
                 break;
             }
@@ -94,7 +92,7 @@ fn runtime_state_candidates() -> Vec<PathBuf> {
     }
 
     if let Some(home) = read_non_empty_env(&["HOME", "USERPROFILE"]) {
-        push_unique(&mut bases, PathBuf::from(home).join(".acode"));
+        push_unique(&mut bases, PathBuf::from(home).join(".awen"));
     }
 
     bases
@@ -159,13 +157,13 @@ fn read_runtime_state() -> Result<Option<PersistedRuntime>, String> {
 }
 
 fn local_daemon_base_dir() -> PathBuf {
-    if let Some(base) = read_non_empty_env(&["ACODE_HOME", "T3CODE_HOME"]) {
+    if let Some(base) = read_non_empty_env(&["AWEN_HOME"]) {
         return PathBuf::from(base);
     }
 
     if let Ok(mut current) = env::current_dir() {
         for _ in 0..=3 {
-            let candidate = current.join(".acode");
+            let candidate = current.join(".awen");
             if candidate.exists() {
                 return candidate;
             }
@@ -176,8 +174,8 @@ fn local_daemon_base_dir() -> PathBuf {
     }
 
     read_non_empty_env(&["HOME", "USERPROFILE"])
-        .map(|home| PathBuf::from(home).join(".acode"))
-        .unwrap_or_else(|| PathBuf::from(".acode"))
+        .map(|home| PathBuf::from(home).join(".awen"))
+        .unwrap_or_else(|| PathBuf::from(".awen"))
 }
 
 fn daemon_entry_candidates() -> Vec<PathBuf> {
@@ -190,7 +188,7 @@ fn daemon_entry_candidates() -> Vec<PathBuf> {
 
     if let Ok(executable) = env::current_exe() {
         if let Some(parent) = executable.parent() {
-            candidates.push(parent.join("resources/t3"));
+            candidates.push(parent.join("resources/awen"));
             candidates.push(parent.join("resources/server/bin.mjs"));
         }
     }
@@ -204,7 +202,7 @@ struct DaemonInvocation {
 }
 
 fn resolve_daemon_invocation() -> Result<DaemonInvocation, String> {
-    if let Some(command) = read_non_empty_env(&["ACODE_DAEMON_COMMAND", "T3CODE_DAEMON_COMMAND"]) {
+    if let Some(command) = read_non_empty_env(&["AWEN_DAEMON_COMMAND"]) {
         return Ok(DaemonInvocation {
             command,
             entry_args: Vec::new(),
@@ -212,9 +210,9 @@ fn resolve_daemon_invocation() -> Result<DaemonInvocation, String> {
         });
     }
 
-    if let Some(entry) = read_non_empty_env(&["ACODE_DAEMON_ENTRY", "T3CODE_DAEMON_ENTRY"]) {
+    if let Some(entry) = read_non_empty_env(&["AWEN_DAEMON_ENTRY"]) {
         return Ok(DaemonInvocation {
-            command: read_non_empty_env(&["ACODE_NODE_COMMAND"]).unwrap_or_else(|| "node".into()),
+            command: read_non_empty_env(&["AWEN_NODE_COMMAND"]).unwrap_or_else(|| "node".into()),
             entry_args: vec![entry],
             current_dir: None,
         });
@@ -230,14 +228,14 @@ fn resolve_daemon_invocation() -> Result<DaemonInvocation, String> {
             == Some("mjs")
         {
             return Ok(DaemonInvocation {
-                command: read_non_empty_env(&["ACODE_NODE_COMMAND"])
+                command: read_non_empty_env(&["AWEN_NODE_COMMAND"])
                     .unwrap_or_else(|| "node".into()),
                 entry_args: vec![candidate.to_string_lossy().into_owned()],
                 current_dir: candidate.parent().map(Path::to_path_buf),
             });
         }
         return Ok(DaemonInvocation {
-            command: read_non_empty_env(&["ACODE_NODE_COMMAND"]).unwrap_or_else(|| "node".into()),
+            command: read_non_empty_env(&["AWEN_NODE_COMMAND"]).unwrap_or_else(|| "node".into()),
             entry_args: vec![candidate.to_string_lossy().into_owned()],
             current_dir: candidate
                 .parent()
@@ -248,7 +246,7 @@ fn resolve_daemon_invocation() -> Result<DaemonInvocation, String> {
         });
     }
 
-    Err("The ACode local daemon launcher is unavailable. Configure ACODE_DAEMON_COMMAND or ACODE_DAEMON_ENTRY.".into())
+    Err("The Awen local daemon launcher is unavailable. Configure AWEN_DAEMON_COMMAND or AWEN_DAEMON_ENTRY.".into())
 }
 
 fn invoke_local_daemon(action: &str, base_dir: &Path, confirm: bool) -> Result<Value, String> {
@@ -272,7 +270,7 @@ fn invoke_local_daemon(action: &str, base_dir: &Path, confirm: bool) -> Result<V
     }
     let output = command
         .output()
-        .map_err(|_| "Could not start the ACode local daemon launcher.".to_owned())?;
+        .map_err(|_| "Could not start the Awen local daemon launcher.".to_owned())?;
 
     // The launcher reports a failed operation as
     // `{"ok":false,"error":{code,message}}` on stdout *and* exits non-zero.
@@ -293,13 +291,13 @@ fn invoke_local_daemon(action: &str, base_dir: &Path, confirm: bool) -> Result<V
     if !output.status.success() {
         let detail = String::from_utf8_lossy(&output.stderr).trim().to_owned();
         return Err(if detail.is_empty() {
-            "The ACode local daemon launcher failed.".to_owned()
+            "The Awen local daemon launcher failed.".to_owned()
         } else {
-            format!("The ACode local daemon launcher failed: {detail}")
+            format!("The Awen local daemon launcher failed: {detail}")
         });
     }
 
-    Err("The ACode local daemon launcher returned an invalid response.".to_owned())
+    Err("The Awen local daemon launcher returned an invalid response.".to_owned())
 }
 
 fn describe_daemon_launcher_failure(value: &Value) -> String {
@@ -312,7 +310,7 @@ fn describe_daemon_launcher_failure(value: &Value) -> String {
         .and_then(|error| error.get("message"))
         .and_then(Value::as_str)
         .unwrap_or("The local daemon launcher rejected the request.");
-    format!("The ACode local daemon launcher failed ({code}): {message}")
+    format!("The Awen local daemon launcher failed ({code}): {message}")
 }
 
 fn normalize_local_origin(raw: &str, expected_schemes: &[&str]) -> Result<String, String> {
@@ -365,8 +363,8 @@ fn http_origin_from_websocket(ws_origin: &str) -> Result<String, String> {
 fn resolve_daemon_origins(
     runtime: Option<&PersistedRuntime>,
 ) -> Result<Option<(String, String)>, String> {
-    let explicit_http = read_non_empty_env(&["ACODE_DESKTOP_HTTP_URL", "T3CODE_DESKTOP_HTTP_URL"]);
-    let explicit_ws = read_non_empty_env(&["ACODE_DESKTOP_WS_URL", "T3CODE_DESKTOP_WS_URL"]);
+    let explicit_http = read_non_empty_env(&["AWEN_DESKTOP_HTTP_URL"]);
+    let explicit_ws = read_non_empty_env(&["AWEN_DESKTOP_WS_URL"]);
 
     let http_raw = explicit_http.or_else(|| runtime.map(|runtime| runtime.state.origin.clone()));
     let ws_raw = explicit_ws;
@@ -396,8 +394,8 @@ fn read_local_bootstrap_token(
     runtime: Option<&PersistedRuntime>,
 ) -> Result<Option<String>, String> {
     if let Some(token) = read_non_empty_env(&[
-        "ACODE_DESKTOP_BOOTSTRAP_TOKEN",
-        "T3CODE_DESKTOP_BOOTSTRAP_TOKEN",
+        "AWEN_DESKTOP_BOOTSTRAP_TOKEN",
+        "AWEN_DESKTOP_BOOTSTRAP_TOKEN",
     ]) {
         return Ok(Some(token));
     }
@@ -431,7 +429,7 @@ fn require_managed_runtime(runtime: Option<&PersistedRuntime>) -> Result<(), Str
         || state.daemon_protocol_version != Some(LOCAL_DAEMON_PROTOCOL_VERSION)
     {
         return Err(
-            "The local runtime descriptor is not an ACode-managed daemon; refusing to connect."
+            "The local runtime descriptor is not an Awen-managed daemon; refusing to connect."
                 .to_owned(),
         );
     }
@@ -452,10 +450,10 @@ fn client_platform() -> String {
 #[tauri::command]
 fn read_desktop_runtime_config() -> Result<DesktopRuntimeConfig, String> {
     let explicit_endpoint = read_non_empty_env(&[
-        "ACODE_DESKTOP_HTTP_URL",
-        "T3CODE_DESKTOP_HTTP_URL",
-        "ACODE_DESKTOP_WS_URL",
-        "T3CODE_DESKTOP_WS_URL",
+        "AWEN_DESKTOP_HTTP_URL",
+        "AWEN_DESKTOP_HTTP_URL",
+        "AWEN_DESKTOP_WS_URL",
+        "AWEN_DESKTOP_WS_URL",
     ])
     .is_some();
     let base_dir = local_daemon_base_dir();
@@ -467,8 +465,7 @@ fn read_desktop_runtime_config() -> Result<DesktopRuntimeConfig, String> {
         require_managed_runtime(runtime.as_ref())?;
     }
     let origins = resolve_daemon_origins(runtime.as_ref())?;
-    let bearer_token =
-        read_non_empty_env(&["ACODE_DESKTOP_BEARER_TOKEN", "T3CODE_DESKTOP_BEARER_TOKEN"]);
+    let bearer_token = read_non_empty_env(&["AWEN_DESKTOP_BEARER_TOKEN"]);
     let bootstrap_token = if bearer_token.is_none() {
         read_local_bootstrap_token(runtime.as_ref())?
     } else {
@@ -479,7 +476,7 @@ fn read_desktop_runtime_config() -> Result<DesktopRuntimeConfig, String> {
         .map(|(http_base_url, ws_base_url)| {
             vec![DesktopEnvironmentBootstrap {
                 id: PRIMARY_LOCAL_ENVIRONMENT_ID.to_owned(),
-                label: read_non_empty_env(&["ACODE_DESKTOP_LABEL"])
+                label: read_non_empty_env(&["AWEN_DESKTOP_LABEL"])
                     .unwrap_or_else(|| DEFAULT_ENVIRONMENT_LABEL.to_owned()),
                 http_base_url: Some(http_base_url),
                 ws_base_url: Some(ws_base_url),
@@ -516,11 +513,10 @@ fn allow_app_navigation(url: &Url) -> bool {
 }
 
 fn navigation_guard<R: Runtime>() -> TauriPlugin<R> {
-    PluginBuilder::new("acode-navigation-guard")
+    PluginBuilder::new("awen-navigation-guard")
         .on_navigation(|_, url| allow_app_navigation(url))
         .build()
 }
-
 
 #[tauri::command]
 fn set_window_glass_enabled(window: tauri::WebviewWindow, enabled: bool) {
@@ -591,7 +587,7 @@ pub fn run() {
             set_window_background_blur
         ])
         .run(tauri::generate_context!())
-        .expect("error while running ACode desktop");
+        .expect("error while running Awen desktop");
 }
 
 #[cfg(test)]
@@ -638,7 +634,7 @@ mod tests {
         let value: Value = serde_json::from_str(r#"{"ok":false}"#).expect("empty failure");
         assert_eq!(
             describe_daemon_launcher_failure(&value),
-            "The ACode local daemon launcher failed (daemon-launch-failed): The local daemon launcher rejected the request."
+            "The Awen local daemon launcher failed (daemon-launch-failed): The local daemon launcher rejected the request."
         );
     }
 

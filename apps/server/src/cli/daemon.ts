@@ -34,16 +34,11 @@ const confirmFlag = Flag.boolean("confirm").pipe(
 
 const resolveDaemonBaseDir = (baseDir: Option.Option<string>) =>
   Effect.sync(() => {
-    const configured =
-      Option.getOrUndefined(baseDir)?.trim() ||
-      process.env.ACODE_HOME?.trim() ||
-      process.env.T3CODE_HOME?.trim();
+    const configured = Option.getOrUndefined(baseDir)?.trim() || process.env.AWEN_HOME?.trim();
     if (!configured) {
-      const acodeHome = NodePath.join(NodeOS.homedir(), ".acode");
-      if (NodeFS.existsSync(acodeHome)) return acodeHome;
-      const t3Home = NodePath.join(NodeOS.homedir(), ".t3");
-      if (NodeFS.existsSync(t3Home)) return t3Home;
-      return acodeHome;
+      const awenHome = NodePath.join(NodeOS.homedir(), ".awen");
+      if (NodeFS.existsSync(awenHome)) return awenHome;
+      return awenHome;
     }
     const expanded =
       configured === "~"
@@ -146,7 +141,7 @@ const startCommand = Command.make("start", {
   baseDir: baseDirFlag,
   json: jsonFlag,
 }).pipe(
-  Command.withDescription("Start or attach to the local ACode daemon for a data root."),
+  Command.withDescription("Start or attach to the local Awen daemon for a data root."),
   Command.withHandler(runStart),
 );
 
@@ -175,7 +170,7 @@ const readToken = (baseDir: string) =>
       if (token.length === 0) {
         throw new LocalDaemonError(
           "credential-missing",
-          "No daemon credential found. Start with `acode daemon start`.",
+          "No daemon credential found. Start with `awen daemon start`.",
         );
       }
       return token;
@@ -185,7 +180,7 @@ const readToken = (baseDir: string) =>
         ? cause
         : new LocalDaemonError(
             "credential-missing",
-            "No daemon credential found. Start with `acode daemon start`.",
+            "No daemon credential found. Start with `awen daemon start`.",
           ),
   });
 
@@ -197,7 +192,7 @@ const runToken = (flags: { readonly baseDir: Option.Option<string>; readonly jso
         onSuccess: (token) =>
           flags.json
             ? Console.log(JSON.stringify({ ok: true, token }))
-            : Console.log(`ACode daemon bootstrap token: ${token}`),
+            : Console.log(`Awen daemon bootstrap token: ${token}`),
         onFailure: (cause) =>
           flags.json ? Console.log(localDaemonErrorForJson(cause)) : Effect.fail(cause),
       }),
@@ -213,6 +208,6 @@ const tokenCommand = Command.make("token", {
 );
 
 export const daemonCommand = Command.make("daemon").pipe(
-  Command.withDescription("Manage the ACode local daemon."),
+  Command.withDescription("Manage the Awen local daemon."),
   Command.withSubcommands([startCommand, statusCommand, stopCommand, tokenCommand]),
 );

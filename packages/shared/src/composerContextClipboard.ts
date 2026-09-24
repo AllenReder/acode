@@ -1,7 +1,4 @@
-import {
-  COMPOSER_CONTEXT_CLIPBOARD_MIME,
-  ComposerContextClipboardFragment,
-} from "@t3tools/contracts";
+import { COMPOSER_CONTEXT_CLIPBOARD_MIME, ComposerContextClipboardFragment } from "@awen/contracts";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
@@ -27,9 +24,9 @@ export function encodeComposerContextClipboardHtml(
   html?: string,
 ): string {
   if (html !== undefined)
-    return `<div data-t3-context-fragment="${encodeURIComponent(fragment)}">${html}</div>`;
+    return `<div data-awen-context-fragment="${encodeURIComponent(fragment)}">${html}</div>`;
   const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  return `<pre data-t3-context-fragment="${encodeURIComponent(fragment)}">${escaped}</pre>`;
+  return `<pre data-awen-context-fragment="${encodeURIComponent(fragment)}">${escaped}</pre>`;
 }
 
 export function decodeComposerContextClipboardHtml(
@@ -38,7 +35,7 @@ export function decodeComposerContextClipboardHtml(
   // `encodeURIComponent` expands one non-ASCII code unit to up to nine characters, so a
   // fragment just under the limit must still survive the round trip through the attribute.
   if (!html || html.length > MAX_FRAGMENT_CHARS * 9 + HTML_WRAPPER_SLACK_CHARS) return null;
-  const encoded = /data-t3-context-fragment=["']([^"']+)["']/.exec(html)?.[1];
+  const encoded = /data-awen-context-fragment=["']([^"']+)["']/.exec(html)?.[1];
   if (!encoded) return null;
   try {
     return decodeComposerContextFragment(decodeURIComponent(encoded));

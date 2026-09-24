@@ -8,9 +8,9 @@ use std::sync::{Mutex, OnceLock};
 use objc2::MainThreadOnly;
 use objc2_app_kit::NSUserInterfaceItemIdentification;
 use objc2_app_kit::{
-    NSAutoresizingMaskOptions, NSColor, NSTitlebarSeparatorStyle,
-    NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView,
-    NSWindow, NSWindowOrderingMode,
+    NSAutoresizingMaskOptions, NSColor, NSTitlebarSeparatorStyle, NSVisualEffectBlendingMode,
+    NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView, NSWindow,
+    NSWindowOrderingMode,
 };
 use objc2_foundation::NSString;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -20,7 +20,7 @@ pub const BLUR_MIN: u8 = 1;
 pub const BLUR_MAX: u8 = 64;
 pub const BLUR_DEFAULT: u8 = 24;
 
-const GLASS_BACKING_ID: &str = "acode.webview-glass-backing";
+const GLASS_BACKING_ID: &str = "awen.webview-glass-backing";
 const RTLD_DEFAULT: *mut c_void = -2isize as *mut c_void;
 
 static BLUR_RADIUS: AtomicU8 = AtomicU8::new(BLUR_DEFAULT);

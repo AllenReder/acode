@@ -1,5 +1,5 @@
 import {
-  AcodeProjectId,
+  AwenProjectId,
   AgentSessionId,
   ThreadId,
   type TerminalSummary,
@@ -7,7 +7,7 @@ import {
   ProjectId,
   WorkspaceId,
   type OrchestrationShellSnapshot,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import { Atom, AtomRegistry } from "effect/unstable/reactivity";
 
@@ -16,24 +16,24 @@ import { createEnvironmentWorkspaceAtoms } from "./workspaceEntities.ts";
 
 const LOCAL = EnvironmentId.make("daemon-local");
 const REMOTE = EnvironmentId.make("daemon-remote");
-const ACODE_PROJECT_ID = AcodeProjectId.make("acode-project:shared-local-id");
+const AWEN_PROJECT_ID = AwenProjectId.make("awen-project:shared-local-id");
 const WORKSPACE_ID = WorkspaceId.make("workspace:shared-local-id");
-const T3_PROJECT_ID = ProjectId.make("shared-local-id");
+const PROJECT_ID = ProjectId.make("shared-local-id");
 
 function snapshot(title: string): OrchestrationShellSnapshot {
   return {
     snapshotSequence: 1,
     projects: [],
     threads: [],
-    acodeProjects: [
+    awenProjects: [
       {
-        id: ACODE_PROJECT_ID,
+        id: AWEN_PROJECT_ID,
         title,
         workspaces: [
           {
             id: WORKSPACE_ID,
-            projectId: ACODE_PROJECT_ID,
-            t3ProjectId: T3_PROJECT_ID,
+            projectId: AWEN_PROJECT_ID,
+            awenProjectId: PROJECT_ID,
             title,
             workspaceRoot: "/same/path/on/both/daemons",
             role: "main",
@@ -49,7 +49,7 @@ function snapshot(title: string): OrchestrationShellSnapshot {
   };
 }
 
-describe("environment ACode workspace entities", () => {
+describe("environment Awen workspace entities", () => {
   it("keeps identical local ids and paths scoped to their daemon", () => {
     const snapshotAtoms = Atom.family((environmentId: EnvironmentId) =>
       Atom.make<OrchestrationShellSnapshot | null>(
@@ -69,11 +69,11 @@ describe("environment ACode workspace entities", () => {
     });
     const registry = AtomRegistry.make();
 
-    const projects = registry.get(workspaceEntities.acodeProjectsAtom);
+    const projects = registry.get(workspaceEntities.awenProjectsAtom);
     expect(projects).toHaveLength(2);
     expect(projects.map((project) => [project.environmentId, project.id])).toEqual([
-      [LOCAL, ACODE_PROJECT_ID],
-      [REMOTE, ACODE_PROJECT_ID],
+      [LOCAL, AWEN_PROJECT_ID],
+      [REMOTE, AWEN_PROJECT_ID],
     ]);
     expect(
       registry.get(
@@ -92,7 +92,7 @@ describe("environment ACode workspace entities", () => {
 
 it("projects live Terminal Sessions beside Agent Sessions and removes only the terminal on close", () => {
   const shell = snapshot("Project");
-  const workspace = shell.acodeProjects![0]!.workspaces[0]!;
+  const workspace = shell.awenProjects![0]!.workspaces[0]!;
   const agent = {
     kind: "agent" as const,
     id: AgentSessionId.make("agent-1"),
@@ -104,8 +104,8 @@ it("projects live Terminal Sessions beside Agent Sessions and removes only the t
   };
   const snapshotAtom = Atom.make<OrchestrationShellSnapshot | null>({
     ...shell,
-    acodeProjects: [
-      { ...shell.acodeProjects![0]!, workspaces: [{ ...workspace, sessions: [agent] }] },
+    awenProjects: [
+      { ...shell.awenProjects![0]!, workspaces: [{ ...workspace, sessions: [agent] }] },
     ],
   });
   const terminal: TerminalSummary = {

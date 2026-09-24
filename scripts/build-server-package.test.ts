@@ -16,6 +16,8 @@ describe("buildServerPackage", () => {
   it("accepts only exact server package versions", () => {
     expect(isExactServerPackageVersion("0.0.42")).toBe(true);
     expect(isExactServerPackageVersion("0.0.42-rc.1")).toBe(true);
+    expect(isExactServerPackageVersion("0.0.42-rc.01")).toBe(false);
+    expect(isExactServerPackageVersion("01.0.42")).toBe(false);
     expect(isExactServerPackageVersion("0.0.42+build")).toBe(false);
     expect(isExactServerPackageVersion("latest")).toBe(false);
     expect(isExactServerPackageVersion("v0.0.42")).toBe(false);
@@ -30,7 +32,7 @@ describe("buildServerPackage", () => {
   });
 
   it("uses the bundled version for the archive name and checksum", async () => {
-    const outputDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "acode-server-package-"));
+    const outputDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "awen-server-package-"));
     try {
       const result = await buildServerPackage({
         outputDir,
@@ -41,18 +43,18 @@ describe("buildServerPackage", () => {
       });
 
       expect(NodePath.basename(result.archivePath)).toBe(
-        `acode-server-${CURRENT_VERSION}-linux-x64.tar.gz`,
+        `awen-server-${CURRENT_VERSION}-linux-x64.tar.gz`,
       );
       const checksum = NodeFS.readFileSync(result.checksumPath, "utf8");
       expect(checksum).toMatch(/^[0-9a-f]{64}  /u);
-      expect(checksum).toContain(`  acode-server-${CURRENT_VERSION}-linux-x64.tar.gz\n`);
+      expect(checksum).toContain(`  awen-server-${CURRENT_VERSION}-linux-x64.tar.gz\n`);
     } finally {
       NodeFS.rmSync(outputDir, { recursive: true, force: true });
     }
   });
 
   it("writes a SHA256SUMS file for the final archive bytes", async () => {
-    const outputDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "acode-server-package-"));
+    const outputDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "awen-server-package-"));
     try {
       const result = await buildServerPackage({
         outputDir,
@@ -67,7 +69,7 @@ describe("buildServerPackage", () => {
       const checksumContents = NodeFS.readFileSync(result.checksumPath, "utf8");
 
       expect(checksumContents).toBe(
-        `${expectedHash}  acode-server-${CURRENT_VERSION}-linux-x64.tar.gz\n`,
+        `${expectedHash}  awen-server-${CURRENT_VERSION}-linux-x64.tar.gz\n`,
       );
       expect(NodePath.basename(result.checksumPath)).toBe("SHA256SUMS");
     } finally {

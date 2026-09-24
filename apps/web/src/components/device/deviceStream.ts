@@ -1,6 +1,6 @@
 /**
  * Framework-free client for expo-device-hub's per-device streams, reached
- * through the T3 proxy. One class handles both platforms because the hub
+ * through the Awen proxy. One class handles both platforms because the hub
  * vendors two servers with different wire formats:
  *
  * - iOS (serve-sim): video is an HTTP `stream.avcc` body of length-prefixed
@@ -16,9 +16,9 @@
  * The decoder only runs while frames arrive and the viewer is attached; a
  * hidden panel calls `stop()` so an idle device costs nothing on the GPU.
  */
-import type { DeviceHubAccess } from "@t3tools/client-runtime/state/deviceHubAccess";
-import { withDeviceHubQuery } from "@t3tools/client-runtime/state/deviceHubAccess";
-import type { DevicePlatform } from "@t3tools/contracts";
+import type { DeviceHubAccess } from "@awen/client-runtime/state/deviceHubAccess";
+import { withDeviceHubQuery } from "@awen/client-runtime/state/deviceHubAccess";
+import type { DevicePlatform } from "@awen/contracts";
 
 export type DeviceStreamStatus = "connecting" | "streaming" | "error";
 

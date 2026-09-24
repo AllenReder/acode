@@ -1,6 +1,6 @@
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { AgentSessionId, EnvironmentId, WorkspaceId } from "@t3tools/contracts";
+import { AgentSessionId, EnvironmentId, WorkspaceId } from "@awen/contracts";
 
 import { useWorkspaceViewActions } from "./useWorkspaceViewActions";
 import { useWorkbenchStore, resetWorkbenchStore } from "./workbenchStore";
@@ -88,5 +88,4 @@ describe("useWorkspaceViewActions", () => {
       workspaceId: wsId,
     });
   });
-
 });

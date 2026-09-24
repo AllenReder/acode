@@ -1,8 +1,8 @@
-import { ClientSettingsSchema, type ClientSettings } from "@t3tools/contracts";
+import { ClientSettingsSchema, type ClientSettings } from "@awen/contracts";
 
 import { getLocalStorageItem, setLocalStorageItem } from "./hooks/useLocalStorage";
 
-const CLIENT_SETTINGS_STORAGE_KEY = "acode:client-settings:v1";
+const CLIENT_SETTINGS_STORAGE_KEY = "awen:client-settings:v1";
 
 function hasWindow(): boolean {
   return typeof window !== "undefined";

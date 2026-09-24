@@ -3,7 +3,7 @@
 See the open-source projects in `_refs/` for reference. They are read-only,
 gitignored, and not part of the build.
 
-The current `main` branch is the clean-slate ACode v1 implementation line.
+The current `main` branch is the clean-slate Awen v1 implementation line.
 Prefer adopting and adapting mature implementations from reference projects
 over reimplementing equivalent infrastructure from scratch. Do not restore
 pre-v1 implementation patterns unless a ticket or current architecture
@@ -53,7 +53,7 @@ is never a dev selector. A raw or unregistered debug binary needs a registered
 dev `.app`; otherwise stop UI verification and report the missing identity.
 
 When a registered `.app` runner is available on macOS, its path must be
-absolute. In the prompt, mention `@Computer` or the exact `acode` app and name
+absolute. In the prompt, mention `@Computer` or the exact `awen` app and name
 the window, flow, and expected visible result. After every UI action, read a
 fresh accessibility tree before choosing the next element.
 
@@ -76,7 +76,7 @@ or cost.
 
 ### Issue tracker
 
-Issues and specs live as GitHub issues in `AllenReder/acode`, driven by the
+Issues and specs live as GitHub issues in `AllenReder/awen`, driven by the
 `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels

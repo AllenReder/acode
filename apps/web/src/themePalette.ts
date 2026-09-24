@@ -3,7 +3,7 @@ import * as Schema from "effect/Schema";
 import "culori/css";
 import { converter, parse } from "culori/fn";
 import {
-  ACODE_DEFAULT_THEME,
+  AWEN_DEFAULT_THEME,
   BUILT_IN_THEMES,
   FOREST_THEME,
   MIDNIGHT_THEME,
@@ -17,10 +17,10 @@ import {
   type ThemeColors,
   type ThemeDefinition,
   type ThemeVariants,
-} from "@t3tools/shared/themePalettes";
+} from "@awen/shared/themePalettes";
 
 export {
-  ACODE_DEFAULT_THEME,
+  AWEN_DEFAULT_THEME,
   BUILT_IN_THEMES,
   FOREST_THEME,
   MIDNIGHT_THEME,
@@ -31,7 +31,7 @@ export {
 };
 export type { ThemeAppearance, ThemeColorRole, ThemeColors, ThemeDefinition, ThemeVariants };
 
-export const ACODE_DEFAULT_THEME_ID = "acode-default" as const;
+export const AWEN_DEFAULT_THEME_ID = "awen-default" as const;
 export const ZINC_THEME_ID = "zinc" as const;
 export const SLATE_THEME_ID = "slate" as const;
 export const MIDNIGHT_THEME_ID = "midnight" as const;
@@ -39,11 +39,11 @@ export const FOREST_THEME_ID = "forest" as const;
 export const OCEAN_THEME_ID = "ocean" as const;
 
 export const THEME_FILE_VERSION = 1 as const;
-export const CUSTOM_THEMES_STORAGE_KEY = "acode:themes:v1";
-export const THEME_FOLLOW_SYSTEM_STORAGE_KEY = "acode:theme-follow-system";
-export const THEME_APPEARANCE_MODE_STORAGE_KEY = "acode:theme-appearance-mode";
-export const THEME_HALVES_STORAGE_KEY = "acode:theme-halves:v1";
-export const THEME_STORAGE_KEY = "acode:theme";
+export const CUSTOM_THEMES_STORAGE_KEY = "awen:themes:v1";
+export const THEME_FOLLOW_SYSTEM_STORAGE_KEY = "awen:theme-follow-system";
+export const THEME_APPEARANCE_MODE_STORAGE_KEY = "awen:theme-appearance-mode";
+export const THEME_HALVES_STORAGE_KEY = "awen:theme-halves:v1";
+export const THEME_STORAGE_KEY = "awen:theme";
 
 export const ThemePreference = Schema.String;
 export type ThemePreference = typeof ThemePreference.Type;
@@ -301,8 +301,8 @@ export function subscribeToCustomThemes(listener: () => void): () => void {
   };
 }
 
-// Earlier builds shipped every maintainer theme under a t3- prefix; only the
-// genuinely T3-branded palette keeps it. Stored preferences and mixes with the
+// Earlier builds shipped every maintainer theme under a awen- prefix; only the
+// genuinely Awen-branded palette keeps it. Stored preferences and mixes with the
 // old ids stay readable through this alias table.
 export function canonicalThemePreference(theme: string): string {
   return theme;
@@ -312,7 +312,7 @@ function themeIdFromPreference(theme: ThemePreference): string {
   return theme;
 }
 
-const T3_CODE_LIGHT_THEME_COLORS: ThemeColors = {
+const AWEN_LIGHT_THEME_COLORS: ThemeColors = {
   canvas: "#fcfcfc",
   chrome: "#fcfcfc",
   toolbar: "#fcfcfc",
@@ -372,7 +372,7 @@ const T3_CODE_LIGHT_THEME_COLORS: ThemeColors = {
   terminalScrollbarHover: "#bdbdbd",
 };
 
-const T3_CODE_DARK_THEME_COLORS: ThemeColors = {
+const AWEN_DARK_THEME_COLORS: ThemeColors = {
   canvas: "#0a0a0a",
   chrome: "#0a0a0a",
   toolbar: "#0a0a0a",
@@ -433,16 +433,16 @@ const T3_CODE_DARK_THEME_COLORS: ThemeColors = {
 };
 
 /**
- * The standard T3 Code look as a theme palette, for seeding a new theme when
+ * The standard Awen look as a theme palette, for seeding a new theme when
  * no theme is installed. Distinct from {@link getDefaultThemeColors}, which
- * carries the flagship T3 Chat palette used to fill roles omitted by theme
+ * carries the flagship Awen Chat palette used to fill roles omitted by theme
  * files.
  */
 export function getStandardThemeColors(appearance: ThemeAppearance): ThemeColors {
   if (appearance === "dark") {
-    return (standardDarkThemeColors ??= decodeThemeColors(T3_CODE_DARK_THEME_COLORS));
+    return (standardDarkThemeColors ??= decodeThemeColors(AWEN_DARK_THEME_COLORS));
   }
-  return (standardLightThemeColors ??= decodeThemeColors(T3_CODE_LIGHT_THEME_COLORS));
+  return (standardLightThemeColors ??= decodeThemeColors(AWEN_LIGHT_THEME_COLORS));
 }
 
 type ThemeRgbColor = {
@@ -698,7 +698,7 @@ function solveOklchLightness(
 }
 
 /**
- * The status colors T3 Code shows without a theme, read from the app's own
+ * The status colors Awen shows without a theme, read from the app's own
  * tokens (red-500 / amber-500 families). Generated palettes fall back to
  * these instead of the flagship theme's, so an imported or created theme
  * never inherits a brand tint on destructive buttons and warnings.
@@ -977,8 +977,8 @@ function standardMutedThemeText(
 /** Theme-file defaults follow the flagship palette for the requested mode. */
 export function getDefaultThemeColors(appearance: ThemeAppearance): ThemeColors {
   return appearance === "light"
-    ? (ACODE_DEFAULT_THEME.variants?.light ?? ACODE_DEFAULT_THEME.colors)
-    : (ACODE_DEFAULT_THEME.variants?.dark ?? ACODE_DEFAULT_THEME.colors);
+    ? (AWEN_DEFAULT_THEME.variants?.light ?? AWEN_DEFAULT_THEME.colors)
+    : (AWEN_DEFAULT_THEME.variants?.dark ?? AWEN_DEFAULT_THEME.colors);
 }
 
 /**
@@ -1624,7 +1624,7 @@ export function applyThemePalette(theme: ThemePreference, appearance?: ThemeAppe
   if (!root?.style) return;
 
   setThemePreviewSidebarArtwork(null);
-  const palette = getThemeDefinition(theme) ?? ACODE_DEFAULT_THEME;
+  const palette = getThemeDefinition(theme) ?? AWEN_DEFAULT_THEME;
 
   root.dataset.themeId = palette.id;
   const mode = appearance ?? palette.appearance;
@@ -1647,17 +1647,15 @@ export function resolveThemeAppearance(
     // A configured half guarantees the appearance is renderable even when the
     // base theme lacks that mode.
     if (halves?.[systemAppearance]) return systemAppearance;
-    const definition = getThemeDefinition(theme) ?? ACODE_DEFAULT_THEME;
+    const definition = getThemeDefinition(theme) ?? AWEN_DEFAULT_THEME;
     return getThemeColorsForMode(definition, systemAppearance) === null
       ? definition.appearance
       : systemAppearance;
   }
   if (mode === "light" || mode === "dark") {
     if (halves?.[mode]) return mode;
-    const definition = getThemeDefinition(theme) ?? ACODE_DEFAULT_THEME;
-    return getThemeColorsForMode(definition, mode) === null
-      ? definition.appearance
-      : mode;
+    const definition = getThemeDefinition(theme) ?? AWEN_DEFAULT_THEME;
+    return getThemeColorsForMode(definition, mode) === null ? definition.appearance : mode;
   }
   return getThemePreferenceMode(theme) ?? (systemDark ? "dark" : "light");
 }
@@ -1733,5 +1731,5 @@ export function resolveThemeHalf(
   const half = halves?.[appearance];
   if (half && getThemeDefinition(half) !== null) return half;
   if (getThemeDefinition(theme) !== null) return theme;
-  return ACODE_DEFAULT_THEME_ID;
+  return AWEN_DEFAULT_THEME_ID;
 }

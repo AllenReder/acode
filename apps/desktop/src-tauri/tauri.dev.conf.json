@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ACode Dev",
-  "identifier": "com.allenreder.acode.dev",
+  "productName": "Awen Dev",
+  "identifier": "com.allenreder.awen.dev",
   "app": {
     "windows": [
       {
         "label": "main",
-        "title": "ACode Dev",
+        "title": "Awen Dev",
         "width": 1280,
         "height": 800,
         "minWidth": 800,

@@ -1,4 +1,4 @@
-import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
+import type { EnvironmentAwenProject } from "@awen/client-runtime/state/models";
 import { ChevronDownIcon, FolderOpenIcon, GitBranchIcon } from "lucide-react";
 import {
   useCallback,
@@ -28,7 +28,7 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 
 export interface AddWorkspaceDialogProps {
-  readonly project: EnvironmentAcodeProject | null;
+  readonly project: EnvironmentAwenProject | null;
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly onAssociate: (path: string) => Promise<void>;
@@ -261,7 +261,7 @@ export function AddWorkspaceDialog({
 }
 
 export interface NewWorkspaceDialogProps {
-  readonly project: EnvironmentAcodeProject | null;
+  readonly project: EnvironmentAwenProject | null;
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly onCreate: (input: {
@@ -361,7 +361,9 @@ export function NewWorkspaceDialog({
       setHighlightedIndex((prev) => (prev + 1) % Math.max(1, filteredRefs.length));
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      setHighlightedIndex((prev) => (prev - 1 + filteredRefs.length) % Math.max(1, filteredRefs.length));
+      setHighlightedIndex(
+        (prev) => (prev - 1 + filteredRefs.length) % Math.max(1, filteredRefs.length),
+      );
     } else if (event.key === "Enter") {
       if (filteredRefs.length > 0 && isBaseRefDropdownOpen) {
         event.preventDefault();
@@ -475,44 +477,45 @@ export function NewWorkspaceDialog({
                     className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
                     data-testid="new-workspace-base-ref-dropdown"
                   >
-                  {filteredRefs.map((refItem, index) => {
-                    const isHighlighted = index === highlightedIndex;
-                    const isSelected = baseRef.trim() === refItem;
-                    return (
-                      <button
-                        key={refItem}
-                        type="button"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          setBaseRef(refItem);
-                          setIsBaseRefDropdownOpen(false);
-                        }}
-                        onMouseEnter={() => setHighlightedIndex(index)}
-                        className={cn(
-                          "w-full flex items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-xs outline-none cursor-pointer transition-colors",
-                          isHighlighted || isSelected
-                            ? "bg-accent text-accent-foreground font-medium"
-                            : "text-foreground hover:bg-accent/50",
-                        )}
-                        data-testid={`base-ref-option-${refItem}`}
-                      >
-                        <span className="flex items-center gap-1.5 min-w-0 flex-1 truncate">
-                          <GitBranchIcon className="size-3 shrink-0 text-muted-foreground" />
-                          <span className="truncate">{refItem}</span>
-                        </span>
-                        {refItem === "HEAD" ? (
-                          <span className="text-[10px] text-muted-foreground/70 uppercase">
-                            Default
+                    {filteredRefs.map((refItem, index) => {
+                      const isHighlighted = index === highlightedIndex;
+                      const isSelected = baseRef.trim() === refItem;
+                      return (
+                        <button
+                          key={refItem}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setBaseRef(refItem);
+                            setIsBaseRefDropdownOpen(false);
+                          }}
+                          onMouseEnter={() => setHighlightedIndex(index)}
+                          className={cn(
+                            "w-full flex items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-xs outline-none cursor-pointer transition-colors",
+                            isHighlighted || isSelected
+                              ? "bg-accent text-accent-foreground font-medium"
+                              : "text-foreground hover:bg-accent/50",
+                          )}
+                          data-testid={`base-ref-option-${refItem}`}
+                        >
+                          <span className="flex items-center gap-1.5 min-w-0 flex-1 truncate">
+                            <GitBranchIcon className="size-3 shrink-0 text-muted-foreground" />
+                            <span className="truncate">{refItem}</span>
                           </span>
-                        ) : null}
-                      </button>
-                    );
-                  })}
+                          {refItem === "HEAD" ? (
+                            <span className="text-[10px] text-muted-foreground/70 uppercase">
+                              Default
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
                   </div>
                 ) : null}
               </div>
               <p className="text-xs text-muted-foreground">
-                Branch, tag, or commit the new worktree starts from (defaults to HEAD). Click to select from repository refs.
+                Branch, tag, or commit the new worktree starts from (defaults to HEAD). Click to
+                select from repository refs.
               </p>
             </div>
 
@@ -559,11 +562,7 @@ export function NewWorkspaceDialog({
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={pending}
-              data-testid="new-workspace-submit-btn"
-            >
+            <Button type="submit" disabled={pending} data-testid="new-workspace-submit-btn">
               {pending ? "Creating…" : "Create Workspace"}
             </Button>
           </DialogFooter>

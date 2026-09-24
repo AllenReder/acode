@@ -2,12 +2,6 @@ import {
   AuthAccessReadScope,
   AuthAccessWriteScope,
   AuthStandardClientScopes,
-  AuthOrchestrationOperateScope,
-  AuthOrchestrationReadScope,
-  AuthRelayReadScope,
-  AuthRelayWriteScope,
-  AuthReviewWriteScope,
-  AuthTerminalOperateScope,
   EnvironmentAuthInvalidError,
   type EnvironmentAuthInvalidReason,
   EnvironmentHttpApi,
@@ -21,13 +15,11 @@ import {
   EnvironmentScopeRequiredError,
   EnvironmentAuthenticatedAuth,
   EnvironmentAuthenticatedPrincipal,
-} from "@t3tools/contracts";
-import type { AuthEnvironmentScope, DpopFailureReason } from "@t3tools/contracts";
-import { parseAllowedOAuthScope } from "@t3tools/shared/oauthScope";
-import { causeErrorTag } from "@t3tools/shared/observability";
+} from "@awen/contracts";
+import type { AuthEnvironmentScope } from "@awen/contracts";
+import { causeErrorTag } from "@awen/shared/observability";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import { identity } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Cookies from "effect/unstable/http/Cookies";
 import * as HttpEffect from "effect/unstable/http/HttpEffect";
@@ -36,9 +28,7 @@ import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 
 import * as EnvironmentAuth from "./EnvironmentAuth.ts";
 import * as SessionStore from "./SessionStore.ts";
-import { traceAuthenticatedRelayRequest, traceRelayRequest } from "../cloud/traceRelayRequest.ts";
 import { deriveAuthClientMetadata } from "./utils.ts";
-import { verifyRequestDpopProof } from "./dpop.ts";
 
 const CREDENTIAL_RESPONSE_HEADERS = {
   "cache-control": "no-store",
@@ -48,22 +38,6 @@ const CREDENTIAL_RESPONSE_HEADERS = {
 const appendCredentialResponseHeaders = HttpEffect.appendPreResponseHandler((_request, response) =>
   Effect.succeed(HttpServerResponse.setHeaders(response, CREDENTIAL_RESPONSE_HEADERS)),
 );
-
-const appendDpopChallengeHeader = HttpEffect.appendPreResponseHandler((_request, response) =>
-  Effect.succeed(HttpServerResponse.setHeader(response, "www-authenticate", "DPoP")),
-);
-
-const appendDpopChallengeOnUnauthorized = (error: EnvironmentAuthInvalidError) =>
-  Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const usesDpop =
-      (request.originalUrl.startsWith("/oauth/token") && request.headers.dpop !== undefined) ||
-      request.headers.authorization?.startsWith("DPoP ") === true;
-    if (usesDpop) {
-      yield* appendDpopChallengeHeader;
-    }
-    return yield* error;
-  });
 
 const currentEnvironmentTraceId = Effect.currentParentSpan.pipe(
   Effect.map((span) => span.traceId),
@@ -95,17 +69,13 @@ export function annotateEnvironmentRequest(endpoint: string) {
   });
 }
 
-export function failEnvironmentAuthInvalid(
-  reason: EnvironmentAuthInvalidReason,
-  dpopFailureReason?: DpopFailureReason,
-) {
+export function failEnvironmentAuthInvalid(reason: EnvironmentAuthInvalidReason) {
   return currentEnvironmentTraceId.pipe(
     Effect.flatMap((traceId) =>
       Effect.fail(
         new EnvironmentAuthInvalidError({
           code: "auth_invalid",
           reason,
-          ...(dpopFailureReason === undefined ? {} : { dpopFailureReason }),
           traceId,
         }),
       ),
@@ -207,10 +177,7 @@ export const environmentAuthenticatedAuthLayer = Layer.effect(
         const request = yield* HttpServerRequest.HttpServerRequest;
         const session = yield* serverAuth.authenticateHttpRequest(request).pipe(
           Effect.catchIf(EnvironmentAuth.isServerAuthCredentialError, (error) =>
-            failEnvironmentAuthInvalid(
-              EnvironmentAuth.serverAuthCredentialReason(error),
-              EnvironmentAuth.serverAuthDpopFailureReason(error),
-            ),
+            failEnvironmentAuthInvalid(EnvironmentAuth.serverAuthCredentialReason(error)),
           ),
           Effect.catchIf(EnvironmentAuth.isServerAuthInternalError, (error) =>
             failEnvironmentInternal("internal_error", error),
@@ -221,9 +188,8 @@ export const environmentAuthenticatedAuthLayer = Layer.effect(
             ...session,
             scopes: new Set(session.scopes),
           }),
-          session.subject === "cloud-connect" ? traceAuthenticatedRelayRequest : identity,
         );
-      }).pipe(Effect.catchTag("EnvironmentAuthInvalidError", appendDpopChallengeOnUnauthorized));
+      });
   }),
 );
 
@@ -299,10 +265,7 @@ export const authHttpApiLayer = HttpApiBuilder.group(
             return result.response;
           },
           Effect.catchIf(EnvironmentAuth.isServerAuthCredentialError, (error) =>
-            failEnvironmentAuthInvalid(
-              EnvironmentAuth.serverAuthCredentialReason(error),
-              EnvironmentAuth.serverAuthDpopFailureReason(error),
-            ),
+            failEnvironmentAuthInvalid(EnvironmentAuth.serverAuthCredentialReason(error)),
           ),
           Effect.catchIf(EnvironmentAuth.isServerAuthInternalError, (error) =>
             failEnvironmentInternal("browser_session_issuance_failed", error),
@@ -310,76 +273,37 @@ export const authHttpApiLayer = HttpApiBuilder.group(
         ),
       )
       .handle(
-        "token",
-        Effect.fn("environment.auth.token")(
+        "bearerSession",
+        Effect.fn("environment.auth.bearerSession")(
           function* (args) {
             yield* annotateEnvironmentRequest(args.endpoint.name);
             const request = yield* HttpServerRequest.HttpServerRequest;
-            const requestedScopes =
-              args.payload.scope === undefined
-                ? undefined
-                : parseAllowedOAuthScope({
-                    value: args.payload.scope,
-                    allowedScopes: new Set<AuthEnvironmentScope>([
-                      AuthOrchestrationReadScope,
-                      AuthOrchestrationOperateScope,
-                      AuthTerminalOperateScope,
-                      AuthReviewWriteScope,
-                      AuthAccessReadScope,
-                      AuthAccessWriteScope,
-                      AuthRelayReadScope,
-                      AuthRelayWriteScope,
-                    ]),
-                  });
-            if (requestedScopes === null) {
+            const requestedScopes = args.payload.scopes;
+            if (
+              requestedScopes?.length === 0 ||
+              (requestedScopes !== undefined &&
+                new Set<AuthEnvironmentScope>(requestedScopes).size !== requestedScopes.length)
+            ) {
               return yield* failEnvironmentInvalidRequest("invalid_scope");
             }
-            const proofKeyThumbprint = args.headers.dpop
-              ? yield* verifyRequestDpopProof({ request }).pipe(
-                  Effect.catchIf(EnvironmentAuth.isServerAuthCredentialError, (error) =>
-                    appendDpopChallengeHeader.pipe(
-                      Effect.andThen(
-                        failEnvironmentAuthInvalid(
-                          "invalid_credential",
-                          EnvironmentAuth.serverAuthDpopFailureReason(error),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Effect.catchIf(EnvironmentAuth.isServerAuthInternalError, (error) =>
-                    failEnvironmentInternal("access_token_issuance_failed", error),
-                  ),
-                )
-              : undefined;
             yield* appendCredentialResponseHeaders;
-            return yield* serverAuth.exchangeBootstrapCredentialForAccessToken(
-              args.payload.subject_token,
+            return yield* serverAuth.createBearerSession(
+              args.payload.credential,
               requestedScopes,
               deriveAuthClientMetadata({
                 request,
-                presented: {
-                  ...(args.payload.client_label ? { label: args.payload.client_label } : {}),
-                  ...(args.payload.client_device_type
-                    ? { deviceType: args.payload.client_device_type }
-                    : {}),
-                  ...(args.payload.client_os ? { os: args.payload.client_os } : {}),
-                },
+                ...(args.payload.client === undefined ? {} : { presented: args.payload.client }),
               }),
-              proofKeyThumbprint ? { proofKeyThumbprint } : undefined,
             );
           },
-          traceRelayRequest,
           Effect.catchIf(EnvironmentAuth.isServerAuthCredentialError, (error) =>
-            failEnvironmentAuthInvalid(
-              EnvironmentAuth.serverAuthCredentialReason(error),
-              EnvironmentAuth.serverAuthDpopFailureReason(error),
-            ),
+            failEnvironmentAuthInvalid(EnvironmentAuth.serverAuthCredentialReason(error)),
           ),
           Effect.catchIf(EnvironmentAuth.isServerAuthInvalidRequestError, (error) =>
             failEnvironmentInvalidRequest(EnvironmentAuth.serverAuthInvalidRequestReason(error)),
           ),
           Effect.catchIf(EnvironmentAuth.isServerAuthInternalError, (error) =>
-            failEnvironmentInternal("access_token_issuance_failed", error),
+            failEnvironmentInternal("bearer_session_issuance_failed", error),
           ),
         ),
       )

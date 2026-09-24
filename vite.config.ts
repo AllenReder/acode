@@ -67,7 +67,7 @@ export default defineConfig({
       "**/routeTree.gen.ts",
     ],
     plugins: ["eslint", "oxc", "react", "unicorn", "typescript"],
-    jsPlugins: ["./oxlint-plugin-t3code/index.ts"],
+    jsPlugins: ["./oxlint-plugin-awen/index.ts"],
     categories: {
       correctness: "warn",
       suspicious: "warn",
@@ -104,9 +104,9 @@ export default defineConfig({
         {
           paths: [
             {
-              name: "@t3tools/client-runtime",
+              name: "@awen/client-runtime",
               message:
-                "Import from an explicit @t3tools/client-runtime/* subpath. The package has no root export.",
+                "Import from an explicit @awen/client-runtime/* subpath. The package has no root export.",
             },
             {
               name: "@pierre/diffs/react",
@@ -117,17 +117,17 @@ export default defineConfig({
           ],
         },
       ],
-      "t3code/no-global-process-runtime": "error",
-      "t3code/no-inline-schema-compile": "warn",
-      "t3code/no-manual-effect-runtime-in-tests": "error",
-      "t3code/no-native-title-tooltip": "error",
-      "t3code/namespace-node-imports": "error",
+      "awen/no-global-process-runtime": "error",
+      "awen/no-inline-schema-compile": "warn",
+      "awen/no-manual-effect-runtime-in-tests": "error",
+      "awen/no-native-title-tooltip": "error",
+      "awen/namespace-node-imports": "error",
     },
     overrides: [
       {
         // The one place that reads the host platform to seed the injected references.
         files: ["packages/shared/src/hostProcess.ts"],
-        rules: { "t3code/no-global-process-runtime": "off" },
+        rules: { "awen/no-global-process-runtime": "off" },
       },
       {
         // Shared client code must not call APIs missing from Hermes. Our ESNext
@@ -139,7 +139,7 @@ export default defineConfig({
           "packages/shared/src/**",
         ],
         excludeFiles: ["**/*.test.ts", "**/*.test.tsx"],
-        rules: { "t3code/no-hermes-unsupported-apis": "error" },
+        rules: { "awen/no-hermes-unsupported-apis": "error" },
       },
       // Legacy manual Effect runners tracked as debt: no net-new occurrences.
       // Lower a ceiling when you migrate a file, and delete its entry at zero.
@@ -161,7 +161,7 @@ export default defineConfig({
         "apps/server/src/provider/acp/CursorAcpSupport.test.ts": 1,
       }).map(([file, maxOccurrences]) => {
         const rule: ["error", { maxOccurrences: number }] = ["error", { maxOccurrences }];
-        return { files: [file], rules: { "t3code/no-manual-effect-runtime-in-tests": rule } };
+        return { files: [file], rules: { "awen/no-manual-effect-runtime-in-tests": rule } };
       }),
     ],
     options: {

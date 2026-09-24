@@ -2,15 +2,15 @@ import {
   PROVIDER_SEND_TURN_SUPPORTED_IMAGE_MIME_TYPES,
   type ChatAttachment,
   type EnvironmentId,
-} from "@t3tools/contracts";
-import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
-import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
+} from "@awen/contracts";
+import { parseScopedThreadKey } from "@awen/client-runtime/environment";
+import { resolveAssetUrl } from "@awen/client-runtime/state/assets";
 import {
   deletePendingAttachmentUpload,
   runAttachmentUploadCycle,
   verifyPersistedAttachmentUpload,
   type PersistedAttachmentVerification,
-} from "@t3tools/client-runtime/state/attachments";
+} from "@awen/client-runtime/state/attachments";
 import { create } from "zustand";
 
 import {

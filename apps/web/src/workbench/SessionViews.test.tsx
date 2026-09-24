@@ -7,8 +7,8 @@ import {
   type EnvironmentId,
   type ProjectId,
   type WorkspaceId,
-} from "@t3tools/contracts";
-import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+} from "@awen/contracts";
+import { scopeProjectRef } from "@awen/client-runtime/environment";
 import { AgentView } from "./AgentView";
 import { NewAgentSessionView } from "./NewAgentSessionView";
 import { TerminalView } from "./TerminalView";
@@ -20,12 +20,12 @@ import { DraftId, useComposerDraftStore } from "../composerDraftStore";
 // The trusted runtime adapters are the agreed integration boundary. Present
 // their inputs as text, without starting a provider, PTY, or GPU in Node.
 vi.mock("../state/entities", () => ({
-  useAcodeProjects: () => [],
-  useAcodeAgentSessionShell: (_environment: unknown, _workspace: unknown, session: string) => ({
+  useAwenProjects: () => [],
+  useAwenAgentSessionShell: (_environment: unknown, _workspace: unknown, session: string) => ({
     threadId: `thread-${session}`,
     status: session === "closed-session" ? "closed" : "open",
   }),
-  useAcodeWorkspace: () => ({ workspaceRoot: "/checkout" }),
+  useAwenWorkspace: () => ({ workspaceRoot: "/checkout" }),
   useThread: () => null,
   useThreadShell: () => null,
 }));
@@ -53,12 +53,14 @@ it("renders a New Agent Session View from its Workspace draft before Session pro
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const draftId = DraftId.make("draft-one");
   const threadId = ThreadId.make("thread-reserved");
-  useComposerDraftStore.getState().setWorkspaceDraftThreadId(
-    workspaceId,
-    scopeProjectRef(environmentId, "project" as ProjectId),
-    draftId,
-    { threadId },
-  );
+  useComposerDraftStore
+    .getState()
+    .setWorkspaceDraftThreadId(
+      workspaceId,
+      scopeProjectRef(environmentId, "project" as ProjectId),
+      draftId,
+      { threadId },
+    );
 
   await act(() => {
     renderer = create(
@@ -226,12 +228,7 @@ it("binds workspace actions (browse files, new terminal) from AgentView to ChatV
 
   await act(() => {
     renderer = create(
-      <AgentView
-        target={target}
-        paneId={sourcePaneId}
-        focused
-        availableSize={availableSize}
-      />,
+      <AgentView target={target} paneId={sourcePaneId} focused availableSize={availableSize} />,
     );
   });
 

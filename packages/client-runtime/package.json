@@ -1,5 +1,5 @@
 {
-  "name": "@t3tools/client-runtime",
+  "name": "@awen/client-runtime",
   "private": true,
   "type": "module",
   "exports": {
@@ -87,10 +87,6 @@
       "types": "./src/voice-input/index.ts",
       "default": "./src/voice-input/index.ts"
     },
-    "./relay": {
-      "types": "./src/relay/index.ts",
-      "default": "./src/relay/index.ts"
-    },
     "./state/auth": {
       "types": "./src/state/auth.ts",
       "default": "./src/state/auth.ts"
@@ -170,10 +166,6 @@
     "./state/project-grouping": {
       "types": "./src/state/projectGrouping.ts",
       "default": "./src/state/projectGrouping.ts"
-    },
-    "./state/relay": {
-      "types": "./src/state/relayDiscovery.ts",
-      "default": "./src/state/relayDiscovery.ts"
     },
     "./state/review": {
       "types": "./src/state/review.ts",
@@ -269,8 +261,8 @@
     "test": "vp test run"
   },
   "dependencies": {
-    "@t3tools/contracts": "workspace:*",
-    "@t3tools/shared": "workspace:*",
+    "@awen/contracts": "workspace:*",
+    "@awen/shared": "workspace:*",
     "effect": "catalog:",
     "mdast-util-directive": "^3.1.0",
     "micromark-extension-directive": "^4.0.0",

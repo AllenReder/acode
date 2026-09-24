@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { ProviderDriverKind, type ModelCapabilities } from "@t3tools/contracts";
+import { ProviderDriverKind, type ModelCapabilities } from "@awen/contracts";
 
 import {
   DESCRIPTOR_PRESETS_BY_KIND,
@@ -185,7 +185,7 @@ describe("customModelEditor.logic", () => {
           type: "select",
           options: [
             { id: "high", label: "High", isDefault: true },
-            { id: "ultracode", label: "Ultracode", description: "Uses additional reasoning." },
+            { id: "ultrawen", label: "Ultrawen", description: "Uses additional reasoning." },
           ],
         },
       ],

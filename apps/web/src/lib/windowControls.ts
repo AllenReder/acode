@@ -37,7 +37,9 @@ async function getTauriWindow() {
   }
 }
 
-async function withWindow(run: (win: NonNullable<Awaited<ReturnType<typeof getTauriWindow>>>) => Promise<void>) {
+async function withWindow(
+  run: (win: NonNullable<Awaited<ReturnType<typeof getTauriWindow>>>) => Promise<void>,
+) {
   try {
     const win = await getTauriWindow();
     if (win) {
@@ -91,11 +93,19 @@ export const defaultWindowOperations: WindowBridgeOperations = {
 };
 
 export function handleTopbarDoubleClick(event: React.MouseEvent): void {
-  if (typeof navigator === "undefined" || !isWindowsPlatform(navigator.platform) || !isDesktopEnvironment()) {
+  if (
+    typeof navigator === "undefined" ||
+    !isWindowsPlatform(navigator.platform) ||
+    !isDesktopEnvironment()
+  ) {
     return;
   }
   const target = event.target as HTMLElement | null;
-  if (target?.closest?.("button, a, input, select, textarea, [data-no-drag], [role='tab'], [data-tab-id]")) {
+  if (
+    target?.closest?.(
+      "button, a, input, select, textarea, [data-no-drag], [role='tab'], [data-tab-id]",
+    )
+  ) {
     return;
   }
   void defaultWindowOperations.toggleMaximize();

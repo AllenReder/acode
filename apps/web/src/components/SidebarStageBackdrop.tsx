@@ -5,8 +5,8 @@ import { APP_STAGE_LABEL } from "../branding";
 import { resolveServerBackedAppStageLabel } from "../branding.logic";
 import { primaryServerConfigAtom } from "../state/server";
 
-export type SidebarStageBackdropVariant = "nightly" | "dev";
-export type EnvironmentIdentificationPillLabel = "Dev" | "Nightly";
+export type SidebarStageBackdropVariant = "alpha" | "dev";
+export type EnvironmentIdentificationPillLabel = "Dev" | "Alpha";
 
 // A wide viewBox keeps the 96-unit art height at a fixed scale while sidebar resizing reveals
 // more horizontal canvas instead of zooming the scene.
@@ -18,7 +18,7 @@ export function resolveSidebarStageBackdropVariant(
 ): SidebarStageBackdropVariant | null {
   if (!enabled) return null;
   const normalized = stageLabel.trim().toLowerCase();
-  if (normalized === "nightly") return "nightly";
+  if (normalized === "alpha") return "alpha";
   if (normalized === "dev") return "dev";
   return null;
 }
@@ -26,7 +26,7 @@ export function resolveSidebarStageBackdropVariant(
 export function resolveSidebarStageFocusRingOffsetClass(
   variant: SidebarStageBackdropVariant,
 ): string {
-  return variant === "nightly"
+  return variant === "alpha"
     ? "focus-visible:ring-offset-(--stage-night-bottom)"
     : "focus-visible:ring-offset-(--stage-art-bottom)";
 }
@@ -36,7 +36,7 @@ export function resolveEnvironmentIdentificationPillLabel(
 ): EnvironmentIdentificationPillLabel | null {
   const normalized = stageLabel.trim().toLowerCase();
   if (normalized === "dev") return "Dev";
-  if (normalized === "nightly") return "Nightly";
+  if (normalized === "alpha") return "Alpha";
   return null;
 }
 
@@ -54,7 +54,7 @@ export function useSidebarStageBackdropVariant(enabled = true): SidebarStageBack
   return resolveSidebarStageBackdropVariant(useEnvironmentStageLabel(), enabled);
 }
 
-/** Stage-channel header art; palettes mirror the per-channel app icons in `assets/`. */
+/** Build-stage header art; palettes mirror the app icons in `assets/`. */
 export function SidebarStageBackdrop({ variant }: { variant: SidebarStageBackdropVariant }) {
   return (
     <div
@@ -67,14 +67,14 @@ export function SidebarStageBackdrop({ variant }: { variant: SidebarStageBackdro
 }
 
 export function StageBackdropArt({ variant }: { variant: SidebarStageBackdropVariant }) {
-  return variant === "nightly" ? <NightlySkyArt /> : <DevBlueprintArt />;
+  return variant === "alpha" ? <AlphaSkyArt /> : <DevBlueprintArt />;
 }
 
 export function StageBackdropButtonArt({ variant }: { variant: SidebarStageBackdropVariant }) {
-  return variant === "nightly" ? <NightlySkyArt compact /> : <DevBlueprintArt compact />;
+  return variant === "alpha" ? <AlphaSkyArt compact /> : <DevBlueprintArt compact />;
 }
 
-const NIGHTLY_STARS: ReadonlyArray<{
+const STARS: ReadonlyArray<{
   cx: number;
   cy: number;
   r: number;
@@ -99,24 +99,24 @@ const NIGHTLY_STARS: ReadonlyArray<{
   { cx: 268, cy: 34, r: 0.4, opacity: 0.45 },
 ];
 
-const NIGHTLY_SPARKLES: ReadonlyArray<{ x: number; y: number }> = [
+const SPARKLES: ReadonlyArray<{ x: number; y: number }> = [
   { x: 70, y: 28 },
   { x: 160, y: 36 },
   { x: 246, y: 26 },
 ];
 
-function NightlySkyArt({ compact = false }: { compact?: boolean }) {
+function AlphaSkyArt({ compact = false }: { compact?: boolean }) {
   const idPrefix = useId().replaceAll(":", "");
-  const skyId = `${idPrefix}-stage-night-sky`;
-  const glowId = `${idPrefix}-stage-night-glow`;
-  const cloudId = `${idPrefix}-stage-night-cloud`;
-  const softId = `${idPrefix}-stage-night-soft`;
-  const starsId = `${idPrefix}-stage-night-stars`;
-  const glowsId = `${idPrefix}-stage-night-glows`;
+  const skyId = `${idPrefix}-stage-alpha-sky`;
+  const glowId = `${idPrefix}-stage-alpha-glow`;
+  const cloudId = `${idPrefix}-stage-alpha-cloud`;
+  const softId = `${idPrefix}-stage-alpha-soft`;
+  const starsId = `${idPrefix}-stage-alpha-stars`;
+  const glowsId = `${idPrefix}-stage-alpha-glows`;
 
   return (
     <svg
-      className="stage-art stage-nightly h-full w-full"
+      className="stage-art stage-alpha h-full w-full"
       fill="none"
       preserveAspectRatio="xMinYMin slice"
       viewBox={compact ? "96 0 8192 96" : STAGE_BACKDROP_VIEW_BOX}
@@ -166,7 +166,7 @@ function NightlySkyArt({ compact = false }: { compact?: boolean }) {
         </filter>
         <pattern id={starsId} width="288" height="96" patternUnits="userSpaceOnUse">
           <g style={{ fill: "var(--stage-night-line)" }}>
-            {NIGHTLY_STARS.map((star) => (
+            {STARS.map((star) => (
               <circle
                 key={`${star.cx}-${star.cy}`}
                 cx={star.cx}
@@ -182,7 +182,7 @@ function NightlySkyArt({ compact = false }: { compact?: boolean }) {
             strokeOpacity="0.7"
             strokeWidth="0.6"
           >
-            {NIGHTLY_SPARKLES.map((sparkle) => (
+            {SPARKLES.map((sparkle) => (
               <g key={`${sparkle.x}-${sparkle.y}`}>
                 <path d={`M${sparkle.x - 1.5} ${sparkle.y}H${sparkle.x + 1.5}`} />
                 <path d={`M${sparkle.x} ${sparkle.y - 1.5}V${sparkle.y + 1.5}`} />

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useParams } from "@tanstack/react-router";
 
-import { useAcodeProjects, useEnvironmentShellSnapshotPresent } from "../state/entities";
+import { useAwenProjects, useEnvironmentShellSnapshotPresent } from "../state/entities";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useEnvironmentCatalogSnapshot } from "../state/environmentCatalogSnapshot";
 import { useEnvironments } from "../state/environments";
@@ -37,7 +37,7 @@ export function Workbench({ navigate: navigateTo }: WorkbenchProps = {}) {
   const reconcileDraftWorkspaceBindings = useComposerDraftStore(
     (state) => state.reconcileDraftWorkspaceBindings,
   );
-  const projects = useAcodeProjects();
+  const projects = useAwenProjects();
   const { environments } = useEnvironments();
   const connectedEnvironmentIds = useMemo(
     () =>

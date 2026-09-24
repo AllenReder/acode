@@ -1,12 +1,12 @@
 /**
- * One authority for where the ACode daemon lives in development.
+ * One authority for where the Awen daemon lives in development.
  *
  * The bind side and the address side run as separate processes:
  * `apps/server/src/localDaemon.ts` binds the port, while the desktop dev wrapper
  * `apps/desktop/scripts/run-tauri.mjs` tells the web dev server which port to
  * proxy to and which URL the Tauri window loads. When each carried its own copy
  * of these rules the two disagreed — the wrapper resolved only two of the four
- * keys, so a developer's `T3CODE_DAEMON_PORT` was shadowed by the wrapper's
+ * keys, so a developer's `AWEN_DAEMON_PORT` was shadowed by the wrapper's
  * default, the daemon bound elsewhere, and every proxied request failed against
  * a port nothing served. See issue #87.
  */
@@ -29,10 +29,8 @@ export interface DaemonPortKey {
 
 /** Precedence order: the first key holding a non-blank value wins. */
 export const DAEMON_PORT_KEYS: ReadonlyArray<DaemonPortKey> = [
-  { key: "ACODE_DAEMON_PORT", required: true },
-  { key: "ACODE_PORT", required: false },
-  { key: "T3CODE_DAEMON_PORT", required: true },
-  { key: "T3CODE_PORT", required: false },
+  { key: "AWEN_DAEMON_PORT", required: true },
+  { key: "AWEN_PORT", required: false },
 ];
 
 export type DaemonPortRequest =
@@ -68,12 +66,12 @@ export function resolveDaemonPortRequest(env: Environment): DaemonPortRequest {
 }
 
 /**
- * `T3CODE_PORT_OFFSET` shifts both base ports so concurrent sessions stop
+ * `AWEN_PORT_OFFSET` shifts both base ports so concurrent sessions stop
  * colliding. The runner's own `--port-offset`/config surface validates the same
  * rule for its flag; this is the env surface the desktop wrapper reads.
  */
 export function resolvePortOffset(env: Environment): PortOffsetRequest {
-  const raw = env.T3CODE_PORT_OFFSET?.trim();
+  const raw = env.AWEN_PORT_OFFSET?.trim();
   if (raw === undefined || raw.length === 0) return { _tag: "unset" };
   const offset = Number(raw);
   if (!Number.isInteger(offset) || offset < 0) return { _tag: "invalid", raw };
@@ -88,7 +86,7 @@ export function describeInvalidDaemonPort(request: {
 }
 
 export function describeInvalidPortOffset(raw: string): string {
-  return `T3CODE_PORT_OFFSET must be a non-negative integer; received "${raw}".`;
+  return `AWEN_PORT_OFFSET must be a non-negative integer; received "${raw}".`;
 }
 
 export function daemonPortForOffset(offset: number): number {

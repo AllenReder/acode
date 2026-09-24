@@ -1,4 +1,4 @@
-import { normalizeThreadPullRequestKey } from "@t3tools/shared/threadPullRequests";
+import { normalizeThreadPullRequestKey } from "@awen/shared/threadPullRequests";
 import {
   IsoDateTime,
   PositiveInt,
@@ -8,7 +8,7 @@ import {
   ThreadPullRequestSnapshot,
   ThreadPullRequestStack,
   TrimmedNonEmptyString,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import * as Schema from "effect/Schema";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -92,7 +92,9 @@ export class ProjectionThreadPullRequestRepository extends Context.Service<
       input: DeleteProjectionThreadPullRequestsBySourceInput,
     ) => Effect.Effect<void, ProjectionRepositoryError>;
   }
->()("t3/persistence/ProjectionThreadPullRequests/ProjectionThreadPullRequestRepository") {}
+>()(
+  "@awen/server/persistence/ProjectionThreadPullRequests/ProjectionThreadPullRequestRepository",
+) {}
 
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {

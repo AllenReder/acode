@@ -11,84 +11,58 @@ import {
   parseChecksums,
 } from "./cliRelease.ts";
 
-describe("cliRelease", () => {
-  it("names archives by version and platform, zip only on Windows", () => {
-    expect(cliArchiveFileName("1.2.3-preview.20260911.4", "linux-x64")).toBe(
-      "t3-1.2.3-preview.20260911.4-linux-x64.tar.gz",
+describe("daemonRelease", () => {
+  it("uses the Linux x64 daemon artifact name for stable and prerelease versions", () => {
+    expect(cliArchiveFileName("0.1.0-alpha.1", "linux-x64")).toBe(
+      "awen-server-0.1.0-alpha.1-linux-x64.tar.gz",
     );
-    expect(cliArchiveFileName("1.2.3", "win32-x64")).toBe("t3-1.2.3-win32-x64.zip");
+    expect(cliArchiveFileName("0.1.0", "linux-x64")).toBe("awen-server-0.1.0-linux-x64.tar.gz");
   });
 
-  it("only maps platforms and architectures that have a release archive", () => {
-    expect(cliArchivePlatformKey("darwin", "arm64")).toBe("darwin-arm64");
+  it("offers automatic daemon packages for Linux x64 only", () => {
     expect(cliArchivePlatformKey("linux", "x64")).toBe("linux-x64");
-    expect(cliArchivePlatformKey("win32", "x64")).toBe("win32-x64");
-    // Node single-executables are unsupported on x64 macOS.
-    expect(cliArchivePlatformKey("darwin", "x64")).toBeUndefined();
-    expect(cliArchivePlatformKey("linux", "arm64")).toBe("linux-arm64");
-    expect(cliArchivePlatformKey("win32", "arm64")).toBe("win32-arm64");
-    expect(cliArchivePlatformKey("freebsd", "x64")).toBeUndefined();
-    expect(cliArchivePlatformKey("linux", "ia32")).toBeUndefined();
+    expect(cliArchivePlatformKey("darwin", "arm64")).toBeUndefined();
+    expect(cliArchivePlatformKey("win32", "x64")).toBeUndefined();
+    expect(cliArchiveTarCommand("linux", {})).toBe("tar");
   });
 
-  it("resolves download URLs under the tagged release, honoring a mirror", () => {
-    expect(cliReleaseDownloadBaseUrl("1.2.3")).toBe(
-      "https://github.com/pingdotgg/t3code/releases/download/v1.2.3",
+  it("resolves release asset URLs under the tagged release", () => {
+    expect(cliReleaseDownloadBaseUrl("0.1.0-alpha.1")).toBe(
+      "https://github.com/AllenReder/awen/releases/download/v0.1.0-alpha.1",
     );
-    expect(cliReleaseDownloadBaseUrl("1.2.3", "https://mirror.example/t3/")).toBe(
-      "https://mirror.example/t3/v1.2.3",
+    expect(cliReleaseDownloadBaseUrl("0.1.0", "https://mirror.example/awen/")).toBe(
+      "https://mirror.example/awen/v0.1.0",
     );
   });
 
   it("parses sha256sum output including binary-mode markers", () => {
     const checksums = parseChecksums(
       [
-        `${"a".repeat(64)}  t3-1.2.3-linux-x64.tar.gz`,
-        `${"B".repeat(64)} *t3-1.2.3-win32-x64.zip`,
+        `${"a".repeat(64)}  awen-server-0.1.0-linux-x64.tar.gz`,
+        `${"B".repeat(64)} *Awen-0.1.0-windows-x64.exe`,
         "not a checksum line",
         "",
       ].join("\n"),
     );
-    expect(checksums.get("t3-1.2.3-linux-x64.tar.gz")).toBe("a".repeat(64));
-    expect(checksums.get("t3-1.2.3-win32-x64.zip")).toBe("b".repeat(64));
+    expect(checksums.get("awen-server-0.1.0-linux-x64.tar.gz")).toBe("a".repeat(64));
+    expect(checksums.get("Awen-0.1.0-windows-x64.exe")).toBe("b".repeat(64));
     expect(checksums.size).toBe(2);
   });
 
-  it("extracts with the System32 bsdtar on Windows and plain tar elsewhere", () => {
-    expect(cliArchiveTarCommand("linux", {})).toBe("tar");
-    expect(cliArchiveTarCommand("win32", { SystemRoot: "D:\\Win" })).toBe(
-      "D:\\Win\\System32\\tar.exe",
-    );
-    expect(cliArchiveTarCommand("win32", {})).toBe("C:\\Windows\\System32\\tar.exe");
-  });
-
-  it("derives the release channel from the version alone", () => {
-    expect(cliReleaseChannelOf("1.2.3")).toBe("stable");
-    expect(cliReleaseChannelOf("1.2.3-nightly.20260911.4")).toBe("nightly");
-    expect(cliReleaseChannelOf("1.2.3-preview.20260911.4")).toBe("preview");
-    // A prerelease that is not one of our trains is not silently a nightly.
-    expect(cliReleaseChannelOf("1.2.3-rc.1")).toBe("stable");
-  });
-
-  it("picks the newest non-draft release on the requested channel", () => {
+  it("separates stable tags from prerelease tags", () => {
+    expect(cliReleaseChannelOf("0.1.0")).toBe("stable");
+    expect(cliReleaseChannelOf("0.1.0-alpha.1")).toBe("prerelease");
     const releases = [
-      { tag_name: "v1.2.4-preview.20260912.9", draft: true },
-      { tag_name: "v1.2.4-preview.20260912.8" },
-      { tag_name: "v1.2.4-nightly.20260912.7" },
+      { tag_name: "v0.2.0-alpha.2", draft: true },
+      { tag_name: "v0.2.0-alpha.1", prerelease: true },
+      { tag_name: "v0.2.0-alpha.01", prerelease: true },
+      { tag_name: "v0.1.0" },
       { tag_name: "desktop-preview" },
-      { tag_name: "v1.2.3" },
-      { tag_name: "v1.2.3-nightly.20260911.2" },
     ];
-    expect(newestCliReleaseVersion(releases, "preview")).toBe("1.2.4-preview.20260912.8");
-    expect(newestCliReleaseVersion(releases, "nightly")).toBe("1.2.4-nightly.20260912.7");
-    expect(newestCliReleaseVersion(releases, "stable")).toBe("1.2.3");
-    expect(newestCliReleaseVersion([{ tag_name: "v1.2.3" }], "preview")).toBeUndefined();
-  });
-
-  it("pages through the release index at the largest page GitHub allows", () => {
+    expect(newestCliReleaseVersion(releases, "prerelease")).toBe("0.2.0-alpha.1");
+    expect(newestCliReleaseVersion(releases, "stable")).toBe("0.1.0");
     expect(cliReleaseIndexPageUrl(1)).toBe(
-      "https://api.github.com/repos/pingdotgg/t3code/releases?per_page=100&page=1",
+      "https://api.github.com/repos/AllenReder/awen/releases?per_page=100&page=1",
     );
-    expect(cliReleaseIndexPageUrl(3)).toContain("page=3");
   });
 });

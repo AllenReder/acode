@@ -1,4 +1,4 @@
-import type { EnvironmentId, ProjectId } from "@t3tools/contracts";
+import type { EnvironmentId, ProjectId } from "@awen/contracts";
 import { CircleIcon } from "lucide-react";
 import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
@@ -119,8 +119,8 @@ describe("pull request filters menu", () => {
         {
           id: projectId,
           environmentId,
-          title: "T3 Code",
-          workspaceRoot: "/work/t3code",
+          title: "Awen",
+          workspaceRoot: "/work/awen",
         },
       ],
       projectId,
@@ -145,14 +145,14 @@ describe("pull request filters menu", () => {
         {
           id: projectId,
           environmentId: "env-1" as EnvironmentId,
-          title: "T3 Code · one",
-          workspaceRoot: "/work/t3code-1",
+          title: "Awen · one",
+          workspaceRoot: "/work/awen-1",
         },
         {
           id: projectId,
           environmentId: "env-2" as EnvironmentId,
-          title: "T3 Code · two",
-          workspaceRoot: "/work/t3code-2",
+          title: "Awen · two",
+          workspaceRoot: "/work/awen-2",
         },
       ],
       onProject,

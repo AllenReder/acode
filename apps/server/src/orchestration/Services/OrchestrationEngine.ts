@@ -15,7 +15,7 @@ import type {
   OrchestrationCommand,
   OrchestrationEvent,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
@@ -114,4 +114,4 @@ export interface OrchestrationEngineShape {
 export class OrchestrationEngineService extends Context.Service<
   OrchestrationEngineService,
   OrchestrationEngineShape
->()("t3/orchestration/Services/OrchestrationEngine/OrchestrationEngineService") {}
+>()("@awen/server/orchestration/Services/OrchestrationEngine/OrchestrationEngineService") {}

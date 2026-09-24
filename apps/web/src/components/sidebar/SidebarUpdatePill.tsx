@@ -1,4 +1,4 @@
-import type { DesktopUpdateState } from "@t3tools/contracts";
+import type { DesktopUpdateState } from "@awen/contracts";
 import { TriangleAlertIcon } from "lucide-react";
 import { type ComponentProps, useCallback, useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
@@ -40,7 +40,7 @@ export function shouldUseSidebarUpdateReleaseNotesPopover(
   showUpdateDetails: boolean,
   state: DesktopUpdateState | null,
 ): boolean {
-  return showUpdateDetails && state?.channel === "nightly" && state.releaseNotes.length > 0;
+  return showUpdateDetails && state?.channel === "prerelease" && state.releaseNotes.length > 0;
 }
 
 export function handleSidebarUpdateReleaseNotesPopoverOpenChange(
@@ -392,7 +392,7 @@ function SidebarUpdateControl() {
         {showReleaseNotesPopover && state ? (
           <PopoverPopup
             align="center"
-            aria-label="Nightly update release notes"
+            aria-label="Prerelease update release notes"
             className="max-w-none text-balance shadow-xl shadow-black/25"
             initialFocus={false}
             onKeyDownCapture={(event) => {

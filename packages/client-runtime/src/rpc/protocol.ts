@@ -1,4 +1,4 @@
-import { WsRpcGroupAll } from "@t3tools/contracts";
+import { WsRpcGroupAll } from "@awen/contracts";
 import * as Effect from "effect/Effect";
 import { RpcClient } from "effect/unstable/rpc";
 

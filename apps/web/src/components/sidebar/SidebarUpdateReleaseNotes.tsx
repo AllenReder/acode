@@ -1,4 +1,4 @@
-import type { DesktopBridge, DesktopUpdateState } from "@t3tools/contracts";
+import type { DesktopBridge, DesktopUpdateState } from "@awen/contracts";
 import { ExternalLinkIcon } from "lucide-react";
 
 import {
@@ -52,7 +52,7 @@ export function SidebarUpdateReleaseNotes({
   readonly state: DesktopUpdateState;
   readonly tooltip: string;
 }) {
-  if (state.channel !== "nightly" || state.releaseNotes.length === 0) {
+  if (state.channel !== "prerelease" || state.releaseNotes.length === 0) {
     return <>{tooltip}</>;
   }
 

@@ -239,7 +239,7 @@ describe("ssh command", () => {
     const observed: string[] = [];
     const spawner = ChildProcessSpawner.make(() =>
       Effect.succeed(
-        makeFailedProcess({ stdout: "", stderr: "ACODE_PROGRESS download 1024\nfailed\n" }),
+        makeFailedProcess({ stdout: "", stderr: "AWEN_PROGRESS download 1024\nfailed\n" }),
       ),
     );
     const processLayer = Layer.mergeAll(
@@ -254,7 +254,7 @@ describe("ssh command", () => {
           { onStderrChunk: (chunk) => observed.push(chunk) },
         ),
       );
-      assert.deepEqual(observed, ["ACODE_PROGRESS download 1024\nfailed\n"]);
+      assert.deepEqual(observed, ["AWEN_PROGRESS download 1024\nfailed\n"]);
       assert.isTrue(Result.isFailure(result));
       if (Result.isFailure(result) && result.failure instanceof SshCommandError) {
         assert.include(result.failure.stderr, "failed");

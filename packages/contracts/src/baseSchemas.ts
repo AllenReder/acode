@@ -18,20 +18,6 @@ export const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
 export const PositiveInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 export const PortSchema = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
 
-/**
- * Safe categories for a failed DPoP proof. These describe the class of failure
- * without exposing proof contents or server-side authentication details.
- */
-export const DpopFailureReason = Schema.Literals([
-  "time_window",
-  "key_mismatch",
-  "request_mismatch",
-  "token_mismatch",
-  "replay",
-  "invalid_proof",
-]);
-export type DpopFailureReason = typeof DpopFailureReason.Type;
-
 export const IsoDateTime = Schema.String;
 export type IsoDateTime = typeof IsoDateTime.Type;
 
@@ -107,18 +93,18 @@ const makeEntityId = <Brand extends string>(brand: Brand) => {
 
 export const ThreadId = makeEntityId("ThreadId");
 export type ThreadId = typeof ThreadId.Type;
-/** Stable ACode identity for an agent conversation, distinct from its T3 thread. */
+/** Stable Awen identity for an agent conversation, distinct from its Awen thread. */
 export const AgentSessionId = makeEntityId("AgentSessionId");
 export type AgentSessionId = typeof AgentSessionId.Type;
-/** Stable ACode identity for a Workspace-owned terminal, distinct from its runtime PTY id. */
+/** Stable Awen identity for a Workspace-owned terminal, distinct from its runtime PTY id. */
 export const TerminalSessionId = makeEntityId("TerminalSessionId");
 export type TerminalSessionId = typeof TerminalSessionId.Type;
 export const ProjectId = makeEntityId("ProjectId");
 export type ProjectId = typeof ProjectId.Type;
-/** Identity of an ACode navigation Project, distinct from a T3 orchestration project. */
-export const AcodeProjectId = makeEntityId("AcodeProjectId");
-export type AcodeProjectId = typeof AcodeProjectId.Type;
-/** Identity of an ACode Workspace, independent of branch, commit, or HEAD state. */
+/** Identity of an Awen navigation Project, distinct from a Awen orchestration project. */
+export const AwenProjectId = makeEntityId("AwenProjectId");
+export type AwenProjectId = typeof AwenProjectId.Type;
+/** Identity of an Awen Workspace, independent of branch, commit, or HEAD state. */
 export const WorkspaceId = makeEntityId("WorkspaceId");
 export type WorkspaceId = typeof WorkspaceId.Type;
 export const EnvironmentId = makeEntityId("EnvironmentId");
@@ -163,7 +149,7 @@ export type ClientDeviceType = typeof ClientDeviceType.Type;
 export const ClientWebDeployment = Schema.Literals(["hosted", "server"]);
 export type ClientWebDeployment = typeof ClientWebDeployment.Type;
 
-export const ClientConnectionMethod = Schema.Literals(["direct", "ssh", "relay", "unknown"]);
+export const ClientConnectionMethod = Schema.Literals(["direct", "ssh", "unknown"]);
 export type ClientConnectionMethod = typeof ClientConnectionMethod.Type;
 
 export const ProviderItemId = makeEntityId("ProviderItemId");

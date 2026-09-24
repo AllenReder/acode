@@ -1,7 +1,7 @@
-import * as NetService from "@t3tools/shared/Net";
-import { OtlpHeadersFromString, OtlpProtocol } from "@t3tools/shared/observability";
-import { parsePersistedServerObservabilitySettings } from "@t3tools/shared/serverSettings";
-import { DesktopBackendBootstrap, PortSchema } from "@t3tools/contracts";
+import * as NetService from "@awen/shared/Net";
+import { OtlpHeadersFromString, OtlpProtocol } from "@awen/shared/observability";
+import { parsePersistedServerObservabilitySettings } from "@awen/shared/serverSettings";
+import { DesktopBackendBootstrap, PortSchema } from "@awen/contracts";
 import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -34,7 +34,7 @@ const hostFlag = Flag.string("host").pipe(
 );
 export const baseDirFlag = Flag.string("base-dir").pipe(
   Flag.withDescription(
-    "Explicit T3 Code data directory; runtime state is stored under userdata (equivalent to T3CODE_HOME).",
+    "Explicit Awen data directory; runtime state is stored under userdata (equivalent to AWEN_HOME).",
   ),
   Flag.optional,
 );
@@ -60,7 +60,7 @@ const autoBootstrapProjectFromCwdFlag = Flag.boolean("auto-bootstrap-project-fro
 );
 const logWebSocketEventsFlag = Flag.boolean("log-websocket-events").pipe(
   Flag.withDescription(
-    "Emit server-side logs for outbound WebSocket push traffic (equivalent to T3CODE_LOG_WS_EVENTS).",
+    "Emit server-side logs for outbound WebSocket push traffic (equivalent to AWEN_LOG_WS_EVENTS).",
   ),
   Flag.withAlias("log-ws-events"),
   Flag.optional,
@@ -78,68 +78,62 @@ const tailscaleServePortFlag = Flag.integer("tailscale-serve-port").pipe(
 );
 
 const EnvServerConfig = Config.all({
-  logLevel: Config.logLevel("T3CODE_LOG_LEVEL").pipe(Config.withDefault("Info")),
-  traceMinLevel: Config.logLevel("T3CODE_TRACE_MIN_LEVEL").pipe(Config.withDefault("Info")),
-  traceTimingEnabled: Config.boolean("T3CODE_TRACE_TIMING_ENABLED").pipe(Config.withDefault(true)),
-  traceFile: Config.string("T3CODE_TRACE_FILE").pipe(
+  logLevel: Config.logLevel("AWEN_LOG_LEVEL").pipe(Config.withDefault("Info")),
+  traceMinLevel: Config.logLevel("AWEN_TRACE_MIN_LEVEL").pipe(Config.withDefault("Info")),
+  traceTimingEnabled: Config.boolean("AWEN_TRACE_TIMING_ENABLED").pipe(Config.withDefault(true)),
+  traceFile: Config.string("AWEN_TRACE_FILE").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  traceMaxBytes: Config.int("T3CODE_TRACE_MAX_BYTES").pipe(Config.withDefault(10 * 1024 * 1024)),
-  traceMaxFiles: Config.int("T3CODE_TRACE_MAX_FILES").pipe(Config.withDefault(10)),
-  traceBatchWindowMs: Config.int("T3CODE_TRACE_BATCH_WINDOW_MS").pipe(Config.withDefault(1_000)),
-  otlpTracesUrl: Config.string("T3CODE_OTLP_TRACES_URL").pipe(
+  traceMaxBytes: Config.int("AWEN_TRACE_MAX_BYTES").pipe(Config.withDefault(10 * 1024 * 1024)),
+  traceMaxFiles: Config.int("AWEN_TRACE_MAX_FILES").pipe(Config.withDefault(10)),
+  traceBatchWindowMs: Config.int("AWEN_TRACE_BATCH_WINDOW_MS").pipe(Config.withDefault(1_000)),
+  otlpTracesUrl: Config.string("AWEN_OTLP_TRACES_URL").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  otlpMetricsUrl: Config.string("T3CODE_OTLP_METRICS_URL").pipe(
+  otlpMetricsUrl: Config.string("AWEN_OTLP_METRICS_URL").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  otlpExportIntervalMs: Config.int("T3CODE_OTLP_EXPORT_INTERVAL_MS").pipe(
-    Config.withDefault(10_000),
-  ),
-  otlpServiceName: Config.string("T3CODE_OTLP_SERVICE_NAME").pipe(Config.withDefault("t3-server")),
-  otlpHeaders: Config.schema(OtlpHeadersFromString, "T3CODE_OTLP_HEADERS").pipe(
+  otlpExportIntervalMs: Config.int("AWEN_OTLP_EXPORT_INTERVAL_MS").pipe(Config.withDefault(10_000)),
+  otlpServiceName: Config.string("AWEN_OTLP_SERVICE_NAME").pipe(Config.withDefault("awen-server")),
+  otlpHeaders: Config.schema(OtlpHeadersFromString, "AWEN_OTLP_HEADERS").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  otlpProtocol: Config.schema(OtlpProtocol, "T3CODE_OTLP_PROTOCOL").pipe(
+  otlpProtocol: Config.schema(OtlpProtocol, "AWEN_OTLP_PROTOCOL").pipe(
     Config.withDefault("http/json"),
   ),
-  mode: Config.schema(ServerConfig.RuntimeMode, "T3CODE_MODE").pipe(
+  mode: Config.schema(ServerConfig.RuntimeMode, "AWEN_MODE").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  port: Config.port("ACODE_DAEMON_PORT").pipe(
-    Config.orElse(() => Config.port("ACODE_PORT")),
-    Config.orElse(() => Config.port("T3CODE_DAEMON_PORT")),
-    Config.orElse(() => Config.port("T3CODE_PORT")),
+  port: Config.port("AWEN_DAEMON_PORT").pipe(
+    Config.orElse(() => Config.port("AWEN_PORT")),
+    Config.orElse(() => Config.port("AWEN_DAEMON_PORT")),
+    Config.orElse(() => Config.port("AWEN_PORT")),
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  host: Config.string("T3CODE_HOST").pipe(Config.option, Config.map(Option.getOrUndefined)),
-  daemonId: Config.string("T3CODE_DAEMON_ID").pipe(
+  host: Config.string("AWEN_HOST").pipe(Config.option, Config.map(Option.getOrUndefined)),
+  daemonId: Config.string("AWEN_DAEMON_ID").pipe(Config.option, Config.map(Option.getOrUndefined)),
+  daemonOwner: Config.string("AWEN_DAEMON_OWNER").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  daemonOwner: Config.string("T3CODE_DAEMON_OWNER").pipe(
+  daemonWorkingDirectory: Config.string("AWEN_DAEMON_WORKING_DIR").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  daemonWorkingDirectory: Config.string("T3CODE_DAEMON_WORKING_DIR").pipe(
+  daemonManaged: Config.boolean("AWEN_DAEMON_MANAGED").pipe(Config.withDefault(false)),
+  desktopBootstrapToken: Config.string("AWEN_DESKTOP_BOOTSTRAP_TOKEN").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  daemonManaged: Config.boolean("T3CODE_DAEMON_MANAGED").pipe(Config.withDefault(false)),
-  desktopBootstrapToken: Config.string("T3CODE_DESKTOP_BOOTSTRAP_TOKEN").pipe(
-    Config.option,
-    Config.map(Option.getOrUndefined),
-  ),
-  acodeHome: Config.string("ACODE_HOME").pipe(Config.option, Config.map(Option.getOrUndefined)),
-  t3Home: Config.string("T3CODE_HOME").pipe(Config.option, Config.map(Option.getOrUndefined)),
+  awenHome: Config.string("AWEN_HOME").pipe(Config.option, Config.map(Option.getOrUndefined)),
   devUrl: Config.url("VITE_DEV_SERVER_URL").pipe(Config.option, Config.map(Option.getOrUndefined)),
-  devAllowedOrigins: Config.string("T3CODE_DEV_ALLOWED_ORIGINS").pipe(
+  devAllowedOrigins: Config.string("AWEN_DEV_ALLOWED_ORIGINS").pipe(
     Config.withDefault(""),
     Config.map((value) =>
       value
@@ -148,33 +142,33 @@ const EnvServerConfig = Config.all({
         .filter((entry) => entry.length > 0),
     ),
   ),
-  noBrowser: Config.boolean("T3CODE_NO_BROWSER").pipe(
+  noBrowser: Config.boolean("AWEN_NO_BROWSER").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  bootstrapFd: Config.int("T3CODE_BOOTSTRAP_FD").pipe(
+  bootstrapFd: Config.int("AWEN_BOOTSTRAP_FD").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  autoBootstrapProjectFromCwd: Config.boolean("T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD").pipe(
+  autoBootstrapProjectFromCwd: Config.boolean("AWEN_AUTO_BOOTSTRAP_PROJECT_FROM_CWD").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  logWebSocketEvents: Config.boolean("T3CODE_LOG_WS_EVENTS").pipe(
+  logWebSocketEvents: Config.boolean("AWEN_LOG_WS_EVENTS").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  tailscaleServeEnabled: Config.boolean("T3CODE_TAILSCALE_SERVE").pipe(
+  tailscaleServeEnabled: Config.boolean("AWEN_TAILSCALE_SERVE").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  tailscaleServePort: Config.port("T3CODE_TAILSCALE_SERVE_PORT").pipe(
+  tailscaleServePort: Config.port("AWEN_TAILSCALE_SERVE_PORT").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
 });
 
-const DevAuthTokenConfig = Config.redacted("T3CODE_DEV_AUTH_TOKEN").pipe(
+const DevAuthTokenConfig = Config.redacted("AWEN_DEV_AUTH_TOKEN").pipe(
   Config.map((token) => Redacted.make(Redacted.value(token).trim())),
   Config.mapOrFail((token) =>
     Redacted.value(token).length === 0 || Redacted.value(token).length >= 32
@@ -183,7 +177,7 @@ const DevAuthTokenConfig = Config.redacted("T3CODE_DEV_AUTH_TOKEN").pipe(
           new Config.ConfigError(
             new Schema.SchemaError(
               new SchemaIssue.InvalidValue({
-                message: "T3CODE_DEV_AUTH_TOKEN must contain at least 32 characters.",
+                message: "AWEN_DEV_AUTH_TOKEN must contain at least 32 characters.",
               }),
             ),
           ),
@@ -325,12 +319,11 @@ export const resolveServerConfig = (
       mode === "web" && devUrl !== undefined ? yield* DevAuthTokenConfig : undefined;
     const explicitBaseDir = resolveOptionPrecedence(
       normalizedFlags.baseDir,
-      Option.fromUndefinedOr(env.acodeHome),
-      Option.fromUndefinedOr(env.t3Home),
+      Option.fromUndefinedOr(env.awenHome),
     ).pipe(Option.filter((value) => value.trim().length > 0));
     const baseDir = yield* resolveBaseDir(
       Option.getOrUndefined(
-        resolveOptionPrecedence(explicitBaseDir, Option.fromUndefinedOr(bootstrap?.t3Home)),
+        resolveOptionPrecedence(explicitBaseDir, Option.fromUndefinedOr(bootstrap?.awenHome)),
       ),
     );
     const rawCwd = Option.getOrElse(normalizedFlags.cwd, () => process.cwd());

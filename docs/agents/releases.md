@@ -1,9 +1,56 @@
-# Product versions and server prereleases
+# Versions and releases
 
-ACode currently uses one product version for the Web client, desktop app, contracts, and daemon. The root `package.json` is the version source; package manifests and the desktop Cargo manifest/lockfile are synchronized copies. Tauri reads the root package version directly. A code commit or merge does not change the version or publish a release.
+Awen uses one SemVer version for the web app, Windows/macOS desktop installers,
+and Linux x64 daemon. The root `package.json` is authoritative; the version
+script synchronizes package manifests and the desktop Cargo/Tauri versions.
+Changing the version also increments the numeric macOS bundle build number.
+Ordinary commits and merges never publish artifacts.
 
-For a new build, choose a version that has not been used for a different daemon build. From the repository root, run `pnpm version:set <version>`, review the resulting manifest changes, and commit them with the feature or release-preparation PR. `pnpm version:check` verifies that every copy agrees; the pull-request workflow enforces it. Do not reuse a version after changing daemon code: an SSH connection reuses a healthy remote daemon with the same version.
+## Choose the next version
 
-Before publishing, commit the relevant `CHANGELOG.md` entries under the version being released. After that commit is merged and its checks pass, manually run **Release server package** with its exact SHA. The workflow derives the version from the checked-out root manifest, verifies the copies, builds and smoke-tests the Linux x64 package, and publishes `v<version>` as a GitHub prerelease. It does not publish a desktop installer or an npm package. The optional tag input must equal `v<version>`.
+During the pre-1.0 alpha, use `0.1.0-alpha.N` for planned feature releases.
+Increment `N` for another build in the same prerelease series. Use a new
+`0.1.x-alpha.1` series for a separately versioned patch line only after
+`0.1.0` has shipped; while `0.1.0` is still in alpha, bug-fix builds are
+`0.1.0-alpha.2`, `alpha.3`, and so on. After `0.1.0`, a backward-compatible
+bug fix increments the patch (`0.1.1`), a compatible feature release
+increments the minor (`0.2.0`), and a breaking release increments the major.
 
-The release asset is `acode-server-<version>-linux-x64.tar.gz` with `SHA256SUMS`. SSH onboarding prefers downloading this exact asset on the remote host; if unavailable, it can upload a matching local cache or `ACODE_SERVER_PACKAGE_DIR` build. A previously installed, healthy remote daemon is reused rather than silently replaced. Record user-facing changes in release notes before publishing a stable release.
+Set and verify the product version from the repository root:
+
+```bash
+pnpm version:set 0.1.0-alpha.1
+pnpm version:check
+```
+
+Review and commit those manifest changes with the release candidate. The CI
+workflow checks version consistency, typechecks, lints, tests, and builds the
+web/server workspace and compiles the desktop shell on pull requests and pushes
+to `main`.
+
+## Publish
+
+After the version commit is on `main` and CI passes, push the matching tag:
+
+```bash
+git tag v0.1.0-alpha.1
+git push origin v0.1.0-alpha.1
+```
+
+The tag starts the release workflow. It verifies that the tag exactly matches
+all product versions, builds the unsigned desktop installers on Windows and
+both macOS architectures, builds and smoke-tests the Linux x64 daemon package,
+and publishes all assets with GitHub-generated release notes. A SemVer version
+containing a prerelease suffix becomes a GitHub prerelease; a version without a
+suffix becomes a stable release. The workflow never moves a shared channel or
+publishes an npm package.
+
+Assets use `Awen-<version>-windows-x64.*`,
+`Awen-<version>-macos-{arm64,x64}.dmg`, and
+`awen-server-<version>-linux-x64.tar.gz`. The daemon archive includes its own
+`SHA256SUMS`; the release also includes checksums covering every installer and
+archive.
+
+The installers are unsigned. Signing can be added after developer accounts
+and signing credentials are available, without changing the version or tag
+flow.

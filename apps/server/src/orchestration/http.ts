@@ -2,7 +2,7 @@ import {
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
   EnvironmentHttpApi,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
@@ -122,7 +122,7 @@ export const orchestrationHttpApiLayer = HttpApiBuilder.group(
           return yield* enrichOrchestrationDispatchResult({
             command: normalizedCommand,
             result,
-            readAcodeAgentSessionByThreadId: projectionSnapshotQuery.getAcodeAgentSessionByThreadId,
+            readAwenAgentSessionByThreadId: projectionSnapshotQuery.getAwenAgentSessionByThreadId,
           });
         }),
       );

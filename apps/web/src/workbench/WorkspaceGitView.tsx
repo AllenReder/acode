@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { useAcodeWorkspace } from "../state/entities";
+import { useAwenWorkspace } from "../state/entities";
 import type { ViewTarget } from "./viewRegistry";
 import { Spinner } from "~/components/ui/spinner";
 
@@ -20,7 +20,7 @@ export function WorkspaceGitView({
   focusRequestId: _focusRequestId = 0,
   availableSize: _availableSize,
 }: WorkspaceGitViewProps) {
-  const workspace = useAcodeWorkspace(target.environmentId, target.workspaceId);
+  const workspace = useAwenWorkspace(target.environmentId, target.workspaceId);
 
   if (workspace === null) {
     return (

@@ -5,9 +5,9 @@ import { useParams } from "@tanstack/react-router";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
-import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
-import type { ScopedThreadRef, TurnId } from "@t3tools/contracts";
+} from "@awen/client-runtime/state/runtime";
+import { safeErrorLogAttributes } from "@awen/client-runtime/errors";
+import type { ScopedThreadRef, TurnId } from "@awen/contracts";
 import {
   ArrowRightIcon,
   CheckIcon,
@@ -30,7 +30,11 @@ import { type DraftId } from "../composerDraftStore";
 import { openDiffFilePrimaryAction } from "../diffFileActions";
 import { useCheckpointDiff } from "~/lib/checkpointDiffState";
 import { cn } from "~/lib/utils";
-import { type DiffPanelSelection, selectThreadDiffPanelSelection, useDiffPanelStore } from "../diffPanelStore";
+import {
+  type DiffPanelSelection,
+  selectThreadDiffPanelSelection,
+  useDiffPanelStore,
+} from "../diffPanelStore";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { useTheme } from "../hooks/useTheme";
 import {
@@ -45,7 +49,7 @@ import {
 import { PREFERRED_HIGHLIGHTER } from "../lib/syntaxHighlighting";
 import { areAllDiffFilesCollapsed, toggleAllDiffFiles } from "../lib/diffCollapse";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
-import type { EnvironmentId, WorkspaceId } from "@t3tools/contracts";
+import type { EnvironmentId, WorkspaceId } from "@awen/contracts";
 import { useWorkspaceMutationRefresh } from "../hooks/useWorkspaceMutationRefresh";
 import { useProject, useThread } from "../state/entities";
 import { resolveThreadRouteRef } from "../threadRoutes";
@@ -89,7 +93,7 @@ import { createGitDiffFileContentsLoader } from "../lib/diffFileContents";
 
 type DiffThemeType = "light" | "dark";
 const AUTOMATIC_BASE_REF = "__automatic_base_ref__";
-const DIFF_FILE_TREE_STORAGE_KEY = "t3code.diffFileTreeOpen";
+const DIFF_FILE_TREE_STORAGE_KEY = "awen.diffFileTreeOpen";
 
 interface CollapsedDiffFilesState {
   readonly scopeKey: string | null;
@@ -154,16 +158,16 @@ export default function DiffPanel({
         }
       : null,
   );
-  const activeCwd = workspaceScope?.cwd ?? (activeThread?.worktreePath ?? activeProject?.workspaceRoot);
+  const activeCwd =
+    workspaceScope?.cwd ?? activeThread?.worktreePath ?? activeProject?.workspaceRoot;
   const activeRepositoryRoot = workspaceScope
     ? undefined
     : activeThread?.worktreePath
       ? undefined
       : activeProject?.repositoryIdentity?.rootPath;
-  const effectiveEnvironmentId = workspaceScope?.environmentId ?? activeThread?.environmentId ?? null;
-  const serverConfig = useAtomValue(
-    serverEnvironment.configValueAtom(effectiveEnvironmentId),
-  );
+  const effectiveEnvironmentId =
+    workspaceScope?.environmentId ?? activeThread?.environmentId ?? null;
+  const serverConfig = useAtomValue(serverEnvironment.configValueAtom(effectiveEnvironmentId));
   const openInPreferredEditor = useOpenInPreferredEditor(
     effectiveEnvironmentId,
     serverConfig?.availableEditors ?? [],
@@ -177,10 +181,12 @@ export default function DiffPanel({
         })
       : null,
   );
-  const [workspaceScopeSelection, setWorkspaceScopeSelection] = useState<DiffPanelSelection>(() => ({
-    kind: initialGitScope === "unstaged" ? "unstaged" : "branch",
-    baseRef: null,
-  }));
+  const [workspaceScopeSelection, setWorkspaceScopeSelection] = useState<DiffPanelSelection>(
+    () => ({
+      kind: initialGitScope === "unstaged" ? "unstaged" : "branch",
+      baseRef: null,
+    }),
+  );
   const threadDiffSelection = useDiffPanelStore((state) =>
     selectThreadDiffPanelSelection(
       state.byThreadKey,
@@ -524,7 +530,14 @@ export default function DiffPanel({
         },
       });
     },
-    [activeCwd, activeRepositoryRoot, effectiveEnvironmentId, openInPreferredEditor, routeThreadRef, workspaceScope],
+    [
+      activeCwd,
+      activeRepositoryRoot,
+      effectiveEnvironmentId,
+      openInPreferredEditor,
+      routeThreadRef,
+      workspaceScope,
+    ],
   );
   const toggleDiffFileCollapsed = useCallback(
     (fileKey: string) => {
@@ -639,7 +652,9 @@ export default function DiffPanel({
                         <DropdownMenuItem
                           key={summary.turnId}
                           className={
-                            summary.turnId === selectedTurn?.turnId ? "bg-foreground/[0.08]" : undefined
+                            summary.turnId === selectedTurn?.turnId
+                              ? "bg-foreground/[0.08]"
+                              : undefined
                           }
                           onClick={() => selectTurn(summary.turnId)}
                         >

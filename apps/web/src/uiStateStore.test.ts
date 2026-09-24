@@ -1,4 +1,4 @@
-import { ProjectId, ThreadId } from "@t3tools/contracts";
+import { ProjectId, ThreadId } from "@awen/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
@@ -89,12 +89,12 @@ describe("uiStateStore pure functions", () => {
   it("reorders from the current atom-derived project order", () => {
     const project1 = ProjectId.make("project-1");
     const project2 = ProjectId.make("project-2");
-    const project3 = ProjectId.make("project-3");
-    const currentOrder = [project1, project2, project3];
+    const projecawen = ProjectId.make("project-3");
+    const currentOrder = [project1, project2, projecawen];
 
-    const next = reorderProjects(makeUiState(), currentOrder, [project1], [project3]);
+    const next = reorderProjects(makeUiState(), currentOrder, [project1], [projecawen]);
 
-    expect(next.projectOrder).toEqual([project2, project3, project1]);
+    expect(next.projectOrder).toEqual([project2, projecawen, project1]);
   });
 
   it("moves grouped project members together", () => {
@@ -165,10 +165,10 @@ describe("uiStateStore pure functions", () => {
   });
 
   it("stores the sidebar project scope and resets it to all projects", () => {
-    const scoped = setSidebarProjectScopeKey(makeUiState(), "github.com/pingdotgg/t3code");
+    const scoped = setSidebarProjectScopeKey(makeUiState(), "github.com/AllenReder/awen");
 
-    expect(scoped.sidebarProjectScopeKey).toBe("github.com/pingdotgg/t3code");
-    expect(setSidebarProjectScopeKey(scoped, "github.com/pingdotgg/t3code")).toBe(scoped);
+    expect(scoped.sidebarProjectScopeKey).toBe("github.com/AllenReder/awen");
+    expect(setSidebarProjectScopeKey(scoped, "github.com/AllenReder/awen")).toBe(scoped);
     expect(setSidebarProjectScopeKey(scoped, null).sidebarProjectScopeKey).toBeNull();
     expect(setSidebarProjectScopeKey(scoped, "").sidebarProjectScopeKey).toBeNull();
   });
@@ -357,14 +357,14 @@ describe("uiStateStore persistence", () => {
   });
 
   it("restores the sidebar project scope across reloads", () => {
-    persistState(makeUiState({ sidebarProjectScopeKey: "github.com/pingdotgg/t3code" }));
+    persistState(makeUiState({ sidebarProjectScopeKey: "github.com/AllenReder/awen" }));
 
     const persisted = JSON.parse(
       localStorageStub.getItem(PERSISTED_STATE_KEY) ?? "{}",
     ) as PersistedUiState;
 
     expect(parsePersistedState(persisted).sidebarProjectScopeKey).toBe(
-      "github.com/pingdotgg/t3code",
+      "github.com/AllenReder/awen",
     );
   });
 

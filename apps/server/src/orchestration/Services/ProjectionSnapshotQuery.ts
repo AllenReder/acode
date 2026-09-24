@@ -7,7 +7,7 @@
  * @module ProjectionSnapshotQuery
  */
 import type {
-  AcodeProjectId,
+  AwenProjectId,
   AgentSessionImportSource,
   ApprovalRequestId,
   CheckpointRef,
@@ -28,7 +28,7 @@ import type {
   ProjectId,
   ThreadId,
   WorkspaceId,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import * as Context from "effect/Context";
 import type * as Option from "effect/Option";
 import type * as Effect from "effect/Effect";
@@ -181,52 +181,52 @@ export interface ProjectionSnapshotQueryShape {
     projectIds?: ReadonlyArray<ProjectId>,
   ) => Effect.Effect<ReadonlyArray<OrchestrationProjectShell>, ProjectionRepositoryError>;
 
-  /** Read the ACode navigation Project containing one T3 project mapping. */
-  readonly listAcodeProjects?: () => Effect.Effect<
-    ReadonlyArray<import("@t3tools/contracts").AcodeProjectShell>,
+  /** Read the Awen navigation Project containing one Awen project mapping. */
+  readonly listAwenProjects?: () => Effect.Effect<
+    ReadonlyArray<import("@awen/contracts").AwenProjectShell>,
     ProjectionRepositoryError
   >;
-  readonly getAcodeProjectByT3ProjectId?: (
+  readonly getAwenProjectByAwenProjectId?: (
     projectId: ProjectId,
   ) => Effect.Effect<
-    Option.Option<import("@t3tools/contracts").AcodeProjectShell>,
+    Option.Option<import("@awen/contracts").AwenProjectShell>,
     ProjectionRepositoryError
   >;
-  /** Read one ACode Project with its Workspaces by its stable ACode identity. */
-  readonly getAcodeProjectById?: (
-    acodeProjectId: AcodeProjectId,
+  /** Read one Awen Project with its Workspaces by its stable Awen identity. */
+  readonly getAwenProjectById?: (
+    awenProjectId: AwenProjectId,
   ) => Effect.Effect<
-    Option.Option<import("@t3tools/contracts").AcodeProjectShell>,
+    Option.Option<import("@awen/contracts").AwenProjectShell>,
     ProjectionRepositoryError
   >;
-  /** Read the ACode Workspace used to resolve Workspace-owned terminal cwd. */
-  readonly getAcodeWorkspaceById?: (
+  /** Read the Awen Workspace used to resolve Workspace-owned terminal cwd. */
+  readonly getAwenWorkspaceById?: (
     workspaceId: WorkspaceId,
   ) => Effect.Effect<
-    Option.Option<import("@t3tools/contracts").AcodeWorkspaceShell>,
+    Option.Option<import("@awen/contracts").AwenWorkspaceShell>,
     ProjectionRepositoryError
   >;
-  readonly updateAcodeWorkspaceTitle?: (input: {
+  readonly updateAwenWorkspaceTitle?: (input: {
     readonly workspaceId: WorkspaceId;
     readonly title: string;
     readonly updatedAt: string;
   }) => Effect.Effect<void, ProjectionRepositoryError>;
-  readonly updateAcodeProjectTitle?: (input: {
-    readonly acodeProjectId: AcodeProjectId;
+  readonly updateAwenProjectTitle?: (input: {
+    readonly awenProjectId: AwenProjectId;
     readonly title: string;
     readonly updatedAt: string;
   }) => Effect.Effect<void, ProjectionRepositoryError>;
-  /** Read the owning ACode tree for a session that just left the active shell. */
-  readonly getAcodeProjectByThreadId?: (
+  /** Read the owning Awen tree for a session that just left the active shell. */
+  readonly getAwenProjectByThreadId?: (
     threadId: ThreadId,
   ) => Effect.Effect<
-    Option.Option<import("@t3tools/contracts").AcodeProjectShell>,
+    Option.Option<import("@awen/contracts").AwenProjectShell>,
     ProjectionRepositoryError
   >;
-  readonly getAcodeAgentSessionByThreadId?: (
+  readonly getAwenAgentSessionByThreadId?: (
     threadId: ThreadId,
   ) => Effect.Effect<
-    Option.Option<import("@t3tools/contracts").AcodeAgentSessionShell>,
+    Option.Option<import("@awen/contracts").AwenAgentSessionShell>,
     ProjectionRepositoryError
   >;
 
@@ -330,4 +330,4 @@ export interface ProjectionSnapshotQueryShape {
 export class ProjectionSnapshotQuery extends Context.Service<
   ProjectionSnapshotQuery,
   ProjectionSnapshotQueryShape
->()("t3/orchestration/Services/ProjectionSnapshotQuery") {}
+>()("@awen/server/orchestration/Services/ProjectionSnapshotQuery") {}

@@ -51,7 +51,7 @@ const pickPort = Command.make("pick-port", {
 );
 
 // Probe the public environment descriptor, not "/": the SSH launch script
-// reuses whatever answers, so readiness must mean an ACode-compatible daemon
+// reuses whatever answers, so readiness must mean an Awen-compatible daemon
 // serving the discovery API, not any server on the port.
 const probe = (port: number, probeTimeoutMs: number) =>
   new Promise<boolean>((resolve) => {
@@ -59,7 +59,7 @@ const probe = (port: number, probeTimeoutMs: number) =>
       {
         hostname: "127.0.0.1",
         port,
-        path: "/.well-known/t3/environment",
+        path: "/.well-known/awen/environment",
         timeout: probeTimeoutMs,
       },
       (response) => {

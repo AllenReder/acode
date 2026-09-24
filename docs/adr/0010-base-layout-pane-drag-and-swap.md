@@ -2,7 +2,7 @@
 
 **Status: accepted**
 
-ACode's Workbench organizes Views into Panes inside Tabs using either BSP or
+Awen's Workbench organizes Views into Panes inside Tabs using either BSP or
 Scrolling layout. Dragging an existing Pane within a Tab resolves drop targets
 against a virtual geometry grid derived from the layout without the dragged Pane.
 Intra-workbench pane drag has no central "replace" zone: it resolves purely to

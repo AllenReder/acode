@@ -16,73 +16,66 @@ import {
 describe("daemon port request", () => {
   it("reads the documented keys in precedence order", () => {
     expect(resolveDaemonPortRequest({})).toEqual({ _tag: "unset" });
-    expect(resolveDaemonPortRequest({ ACODE_DAEMON_PORT: "14001" })).toEqual({
+    expect(resolveDaemonPortRequest({ AWEN_DAEMON_PORT: "14001" })).toEqual({
       _tag: "set",
-      key: "ACODE_DAEMON_PORT",
+      key: "AWEN_DAEMON_PORT",
       port: 14_001,
       required: true,
     });
-    expect(resolveDaemonPortRequest({ ACODE_PORT: "14002" })).toEqual({
+    expect(resolveDaemonPortRequest({ AWEN_PORT: "14002" })).toEqual({
       _tag: "set",
-      key: "ACODE_PORT",
+      key: "AWEN_PORT",
       port: 14_002,
       required: false,
     });
-    expect(resolveDaemonPortRequest({ T3CODE_DAEMON_PORT: "14003" })).toEqual({
+    expect(resolveDaemonPortRequest({ AWEN_DAEMON_PORT: "14003" })).toEqual({
       _tag: "set",
-      key: "T3CODE_DAEMON_PORT",
+      key: "AWEN_DAEMON_PORT",
       port: 14_003,
       required: true,
     });
-    expect(resolveDaemonPortRequest({ T3CODE_PORT: "14004" })).toEqual({
+    expect(resolveDaemonPortRequest({ AWEN_PORT: "14004" })).toEqual({
       _tag: "set",
-      key: "T3CODE_PORT",
+      key: "AWEN_PORT",
       port: 14_004,
       required: false,
     });
   });
 
-  // The desktop dev wrapper resolved only ACODE_DAEMON_PORT and T3CODE_PORT, so
-  // a developer's T3CODE_DAEMON_PORT was shadowed by the wrapper's default while
-  // the launcher happily bound the port they asked for. Both sides now read this
-  // one list.
+  // The desktop dev wrapper and daemon read the same ordered environment keys.
   it("keeps every key a developer can set, in the launcher's order", () => {
-    expect(DAEMON_PORT_KEYS.map((entry) => entry.key)).toEqual([
-      "ACODE_DAEMON_PORT",
-      "ACODE_PORT",
-      "T3CODE_DAEMON_PORT",
-      "T3CODE_PORT",
-    ]);
+    expect(DAEMON_PORT_KEYS.map((entry) => entry.key)).toEqual(["AWEN_DAEMON_PORT", "AWEN_PORT"]);
     expect(
       resolveDaemonPortRequest({
-        ACODE_DAEMON_PORT: "14001",
-        ACODE_PORT: "14002",
-        T3CODE_DAEMON_PORT: "14003",
-        T3CODE_PORT: "14004",
+        AWEN_DAEMON_PORT: "14001",
+        AWEN_PORT: "14002",
       }),
-    ).toMatchObject({ _tag: "set", key: "ACODE_DAEMON_PORT" });
-    expect(
-      resolveDaemonPortRequest({ ACODE_DAEMON_PORT: "  ", T3CODE_DAEMON_PORT: "14003" }),
-    ).toMatchObject({ _tag: "set", key: "T3CODE_DAEMON_PORT" });
+    ).toEqual({ _tag: "set", key: "AWEN_DAEMON_PORT", port: 14_001, required: true });
+    expect(resolveDaemonPortRequest({ AWEN_DAEMON_PORT: "  ", AWEN_PORT: "14003" })).toEqual({
+      _tag: "set",
+      key: "AWEN_PORT",
+      port: 14_003,
+      required: false,
+    });
   });
 
   it("reports an unusable value instead of ignoring it", () => {
-    expect(resolveDaemonPortRequest({ T3CODE_PORT: "not-a-port" })).toEqual({
+    expect(resolveDaemonPortRequest({ AWEN_PORT: "not-a-port" })).toEqual({
       _tag: "invalid",
-      key: "T3CODE_PORT",
+      key: "AWEN_PORT",
       raw: "not-a-port",
     });
-    expect(resolveDaemonPortRequest({ ACODE_DAEMON_PORT: "0" })._tag).toBe("invalid");
-    expect(resolveDaemonPortRequest({ ACODE_DAEMON_PORT: "65536" })._tag).toBe("invalid");
-    expect(resolveDaemonPortRequest({ ACODE_DAEMON_PORT: "-1" })._tag).toBe("invalid");
+    expect(resolveDaemonPortRequest({ AWEN_DAEMON_PORT: "0" })._tag).toBe("invalid");
+    expect(resolveDaemonPortRequest({ AWEN_DAEMON_PORT: "65536" })._tag).toBe("invalid");
+    expect(resolveDaemonPortRequest({ AWEN_DAEMON_PORT: "-1" })._tag).toBe("invalid");
   });
 
   it("describes both failures in one wording", () => {
-    expect(describeInvalidDaemonPort({ key: "ACODE_PORT", raw: "abc" })).toBe(
-      'ACODE_PORT must be a port number between 1 and 65535; received "abc".',
+    expect(describeInvalidDaemonPort({ key: "AWEN_PORT", raw: "abc" })).toBe(
+      'AWEN_PORT must be a port number between 1 and 65535; received "abc".',
     );
     expect(describeInvalidPortOffset("abc")).toBe(
-      'T3CODE_PORT_OFFSET must be a non-negative integer; received "abc".',
+      'AWEN_PORT_OFFSET must be a non-negative integer; received "abc".',
     );
   });
 });
@@ -90,12 +83,12 @@ describe("daemon port request", () => {
 describe("port offset", () => {
   it("defaults to zero and rejects anything but a non-negative integer", () => {
     expect(resolvePortOffset({})).toEqual({ _tag: "unset" });
-    expect(resolvePortOffset({ T3CODE_PORT_OFFSET: "2" })).toEqual({ _tag: "set", offset: 2 });
-    expect(resolvePortOffset({ T3CODE_PORT_OFFSET: "2.5" })).toEqual({
+    expect(resolvePortOffset({ AWEN_PORT_OFFSET: "2" })).toEqual({ _tag: "set", offset: 2 });
+    expect(resolvePortOffset({ AWEN_PORT_OFFSET: "2.5" })).toEqual({
       _tag: "invalid",
       raw: "2.5",
     });
-    expect(resolvePortOffset({ T3CODE_PORT_OFFSET: "-1" })._tag).toBe("invalid");
+    expect(resolvePortOffset({ AWEN_PORT_OFFSET: "-1" })._tag).toBe("invalid");
   });
 
   it("shifts both base ports by the same amount", () => {
@@ -113,7 +106,7 @@ describe("desktop dev ports", () => {
       _tag: "set",
       ports: { offset: 0, daemonPort: 13_773, webPort: 5_733 },
     });
-    expect(resolveDesktopDevPorts({ T3CODE_PORT_OFFSET: "2" })).toEqual({
+    expect(resolveDesktopDevPorts({ AWEN_PORT_OFFSET: "2" })).toEqual({
       _tag: "set",
       ports: { offset: 2, daemonPort: 13_775, webPort: 5_735 },
     });
@@ -122,17 +115,17 @@ describe("desktop dev ports", () => {
   // An explicit daemon port is absolute: it is not shifted again, or the window
   // and the proxy would address a port the daemon never bound.
   it("honours an explicit daemon port and leaves the offset to the web port", () => {
-    expect(resolveDesktopDevPorts({ T3CODE_PORT_OFFSET: "2", ACODE_PORT: "15000" })).toEqual({
+    expect(resolveDesktopDevPorts({ AWEN_PORT_OFFSET: "2", AWEN_PORT: "15000" })).toEqual({
       _tag: "set",
       ports: { offset: 2, daemonPort: 15_000, webPort: 5_735 },
     });
   });
 
   it("surfaces an invalid port or offset instead of falling back", () => {
-    expect(resolveDesktopDevPorts({ T3CODE_DAEMON_PORT: "nope" })).toEqual({
+    expect(resolveDesktopDevPorts({ AWEN_DAEMON_PORT: "nope" })).toEqual({
       _tag: "invalid",
-      message: 'T3CODE_DAEMON_PORT must be a port number between 1 and 65535; received "nope".',
+      message: 'AWEN_DAEMON_PORT must be a port number between 1 and 65535; received "nope".',
     });
-    expect(resolveDesktopDevPorts({ T3CODE_PORT_OFFSET: "-3" })._tag).toBe("invalid");
+    expect(resolveDesktopDevPorts({ AWEN_PORT_OFFSET: "-3" })._tag).toBe("invalid");
   });
 });

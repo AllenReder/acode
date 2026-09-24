@@ -20,19 +20,19 @@ import {
   type TurnId,
   WORKTREE_SETUP_ACTIVITY_KIND,
   WorktreeSetupSnapshot,
-} from "@t3tools/contracts";
-import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
-import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
+} from "@awen/contracts";
+import { parseScopedThreadKey } from "@awen/client-runtime/environment";
+import { resolveAssetUrl } from "@awen/client-runtime/state/assets";
 import {
   squashAtomCommandFailure,
   type AtomCommandResult,
-} from "@t3tools/client-runtime/state/runtime";
-import { videoMimeType } from "@t3tools/shared/video";
+} from "@awen/client-runtime/state/runtime";
+import { videoMimeType } from "@awen/shared/video";
 import {
   appendCodexArtifactTemplateUsePrompt,
   codexArtifactTemplateUsePrompt,
   type CodexArtifactTemplate,
-} from "@t3tools/client-runtime/codex-artifact-templates";
+} from "@awen/client-runtime/codex-artifact-templates";
 import {
   type ChatMessage,
   isImageAttachment,
@@ -61,7 +61,7 @@ import {
   type ProviderInstanceEntry,
 } from "../providerInstances";
 
-export const LAST_INVOKED_SCRIPT_BY_PROJECT_KEY = "t3code:last-invoked-script-by-project";
+export const LAST_INVOKED_SCRIPT_BY_PROJECT_KEY = "awen:last-invoked-script-by-project";
 export const MAX_HIDDEN_MOUNTED_TERMINAL_THREADS = 10;
 export const MAX_HIDDEN_MOUNTED_PREVIEW_THREADS = 3;
 export const ENVIRONMENT_RECONNECT_WARNING_GRACE_MS = 2_000;

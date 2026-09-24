@@ -1,5 +1,5 @@
 export const BUILT_IN_THEME_IDS = [
-  "acode-default",
+  "awen-default",
   "zinc",
   "slate",
   "midnight",
@@ -7,10 +7,10 @@ export const BUILT_IN_THEME_IDS = [
   "ocean",
 ] as const;
 
-export const DEFAULT_BUILT_IN_THEME_ID = "acode-default";
+export const DEFAULT_BUILT_IN_THEME_ID = "awen-default";
 
 /** The mobile app default theme ID */
-export const MOBILE_DEFAULT_THEME_ID = "acode-default";
+export const MOBILE_DEFAULT_THEME_ID = "awen-default";
 
 export const MOBILE_THEME_IDS = [MOBILE_DEFAULT_THEME_ID, ...BUILT_IN_THEME_IDS] as const;
 
@@ -269,8 +269,8 @@ function createPalette(base: {
   return { dark, light };
 }
 
-// 1. ACode Default: Monocode-inspired deep neutral dark + crisp light
-const acodeDefaultPalettes = createPalette({
+// 1. Awen Default: Monocode-inspired deep neutral dark + crisp light
+const awenDefaultPalettes = createPalette({
   dark: {
     canvas: "oklch(0.2 0.005 260)",
     chrome: "oklch(0.2 0.005 260)",
@@ -313,14 +313,14 @@ const acodeDefaultPalettes = createPalette({
   },
 });
 
-export const ACODE_DEFAULT_THEME: ThemeDefinition = {
-  id: "acode-default",
-  label: "ACode Default",
+export const AWEN_DEFAULT_THEME: ThemeDefinition = {
+  id: "awen-default",
+  label: "Awen Default",
   appearance: "dark",
-  colors: acodeDefaultPalettes.dark,
+  colors: awenDefaultPalettes.dark,
   variants: {
-    light: acodeDefaultPalettes.light,
-    dark: acodeDefaultPalettes.dark,
+    light: awenDefaultPalettes.light,
+    dark: awenDefaultPalettes.dark,
   },
   sidebarArtwork: true,
 };
@@ -606,7 +606,7 @@ export const OCEAN_THEME: ThemeDefinition = {
 };
 
 export const BUILT_IN_THEMES: ReadonlyArray<ThemeDefinition> = [
-  ACODE_DEFAULT_THEME,
+  AWEN_DEFAULT_THEME,
   ZINC_THEME,
   SLATE_THEME,
   MIDNIGHT_THEME,

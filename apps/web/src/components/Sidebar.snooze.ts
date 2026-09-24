@@ -1,9 +1,9 @@
-import type { TimestampFormat } from "@t3tools/contracts/settings";
+import type { TimestampFormat } from "@awen/contracts/settings";
 import {
   resolveSnoozePresets as resolveSharedSnoozePresets,
   snoozeWakeLabel,
   type SnoozePreset,
-} from "@t3tools/client-runtime/state/thread-settled";
+} from "@awen/client-runtime/state/thread-settled";
 
 import { formatShortTimestamp, parseTimestampDate } from "../timestampFormat";
 

@@ -24,7 +24,7 @@ describe("serverRuntimeState", () => {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const root = yield* fileSystem.makeTempDirectoryScoped({
-        prefix: "t3-server-runtime-state-test-",
+        prefix: "awen-server-runtime-state-test-",
       });
       const statePath = path.join(root, "runtime", "server.json");
       const state: ServerRuntimeState.PersistedServerRuntimeState = {
@@ -88,7 +88,7 @@ describe("serverRuntimeState", () => {
           host: "127.0.0.1",
           devUrl: undefined,
           daemonId: "daemon-test",
-          daemonOwner: "acode-local-daemon",
+          daemonOwner: "awen-local-daemon",
           daemonWorkingDirectory: "/worktree with spaces",
           daemonManaged: true,
         },
@@ -100,7 +100,7 @@ describe("serverRuntimeState", () => {
       });
 
       assert.equal(managed.daemonId, "daemon-test");
-      assert.equal(managed.daemonOwner, "acode-local-daemon");
+      assert.equal(managed.daemonOwner, "awen-local-daemon");
       assert.equal(managed.daemonWorkingDirectory, "/worktree with spaces");
       assert.equal(managed.daemonProtocolVersion, 1);
       assert.isTrue(managed.daemonManaged);
@@ -114,7 +114,7 @@ describe("serverRuntimeState", () => {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const root = yield* fileSystem.makeTempDirectoryScoped({
-        prefix: "t3-server-runtime-state-test-",
+        prefix: "awen-server-runtime-state-test-",
       });
 
       const restored = yield* ServerRuntimeState.readPersistedServerRuntimeState(
@@ -138,7 +138,7 @@ describe("serverRuntimeState", () => {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const root = yield* fileSystem.makeTempDirectoryScoped({
-        prefix: "t3-server-runtime-state-test-",
+        prefix: "awen-server-runtime-state-test-",
       });
       const statePath = path.join(root, "server.json");
       yield* fileSystem.writeFileString(statePath, "{not json");
@@ -175,7 +175,7 @@ describe("serverRuntimeState", () => {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const root = yield* fileSystem.makeTempDirectoryScoped({
-        prefix: "t3-server-runtime-state-test-",
+        prefix: "awen-server-runtime-state-test-",
       });
       const statePath = path.join(root, "server.json");
       yield* fileSystem.makeDirectory(statePath);
@@ -204,7 +204,7 @@ describe("serverRuntimeState", () => {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const root = yield* fileSystem.makeTempDirectoryScoped({
-        prefix: "t3-server-runtime-state-test-",
+        prefix: "awen-server-runtime-state-test-",
       });
       const blockedDirectory = path.join(root, "not-a-directory");
       const statePath = path.join(blockedDirectory, "server.json");

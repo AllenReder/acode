@@ -11,7 +11,7 @@ import {
 import { resetWorkbenchStore, useWorkbenchStore } from "./workbenchStore";
 import { getActiveTab } from "./workbenchState";
 import { createWelcomeViewDefinition } from "./welcomeViewDefinition";
-import type { EnvironmentId, WorkspaceId } from "@t3tools/contracts";
+import type { EnvironmentId, WorkspaceId } from "@awen/contracts";
 
 let renderer: ReactTestRenderer | undefined;
 afterEach(async () => {
@@ -94,11 +94,11 @@ it("renders Welcome without Workspace navigation or a Workspace View", async () 
   await act(() => {
     renderer = create(<Harness />);
   });
-  expect(renderer!.root.findByType("h1").children).toEqual(["Welcome to ACode"]);
+  expect(renderer!.root.findByType("h1").children).toEqual(["Welcome to Awen"]);
   expect(
     renderer!.root
       .findAllByType("button")
-      .some((node) => node.children.join("").includes("ACode / Main")),
+      .some((node) => node.children.join("").includes("Awen / Main")),
   ).toBe(false);
 });
 
@@ -161,7 +161,9 @@ it("does not render extra column or stack headers in scrolling mode", async () =
     workspaceId: "s1" as WorkspaceId,
   } as const;
   useWorkbenchStore.getState().openTarget(target);
-  useWorkbenchStore.getState().splitFocused({ ...target, workspaceId: "s2" as WorkspaceId }, "down");
+  useWorkbenchStore
+    .getState()
+    .splitFocused({ ...target, workspaceId: "s2" as WorkspaceId }, "down");
   useWorkbenchStore.getState().setLayoutMode("scrolling");
 
   await act(() => {
@@ -254,7 +256,9 @@ it("focuses the pane via onMouseDownCapture on the pane frame", async () => {
     workspaceId: "w1" as WorkspaceId,
   } as const;
   useWorkbenchStore.getState().openTarget(first);
-  useWorkbenchStore.getState().splitFocused({ ...first, workspaceId: "w2" as WorkspaceId }, "right");
+  useWorkbenchStore
+    .getState()
+    .splitFocused({ ...first, workspaceId: "w2" as WorkspaceId }, "right");
 
   await act(() => {
     renderer = create(<Harness />);
@@ -269,7 +273,9 @@ it("focuses the pane via onMouseDownCapture on the pane frame", async () => {
   expect(frames.length).toBe(2);
 
   // Trigger onMouseDownCapture on the unfocused frame
-  const unfocusedFrame = frames.find((f) => f.props.children.props.children.props.paneId === unfocusedPaneId)!;
+  const unfocusedFrame = frames.find(
+    (f) => f.props.children.props.children.props.paneId === unfocusedPaneId,
+  )!;
   await act(() => unfocusedFrame.props.onMouseDownCapture());
 
   expect(getActiveTab(useWorkbenchStore.getState()).focusedPaneId).toBe(unfocusedPaneId);
@@ -297,7 +303,9 @@ it("clears viewFocused on the blurred pane immediately during scrolling animatio
   } as const;
   useWorkbenchStore.getState().openTarget(first);
   const firstId = getActiveTab(useWorkbenchStore.getState()).focusedPaneId;
-  useWorkbenchStore.getState().splitFocused({ ...first, workspaceId: "w2" as WorkspaceId }, "right");
+  useWorkbenchStore
+    .getState()
+    .splitFocused({ ...first, workspaceId: "w2" as WorkspaceId }, "right");
   const secondId = getActiveTab(useWorkbenchStore.getState()).focusedPaneId;
   useWorkbenchStore.getState().setLayoutMode("scrolling");
 
@@ -337,7 +345,9 @@ it("blurs activeElement of another pane on activation and prevents focus bounce"
   } as const;
   useWorkbenchStore.getState().openTarget(first);
   const firstId = getActiveTab(useWorkbenchStore.getState()).focusedPaneId;
-  useWorkbenchStore.getState().splitFocused({ ...first, workspaceId: "w2" as WorkspaceId }, "right");
+  useWorkbenchStore
+    .getState()
+    .splitFocused({ ...first, workspaceId: "w2" as WorkspaceId }, "right");
   const secondId = getActiveTab(useWorkbenchStore.getState()).focusedPaneId;
 
   await act(() => {
@@ -387,7 +397,9 @@ it("supports bidirectional focus switching between panes without focus bounce", 
   } as const;
   useWorkbenchStore.getState().openTarget(first);
   const firstId = getActiveTab(useWorkbenchStore.getState()).focusedPaneId;
-  useWorkbenchStore.getState().splitFocused({ ...first, workspaceId: "w2" as WorkspaceId }, "right");
+  useWorkbenchStore
+    .getState()
+    .splitFocused({ ...first, workspaceId: "w2" as WorkspaceId }, "right");
   const secondId = getActiveTab(useWorkbenchStore.getState()).focusedPaneId;
 
   await act(() => {
@@ -396,7 +408,9 @@ it("supports bidirectional focus switching between panes without focus bounce", 
 
   const frames = renderer!.root.findAllByProps({ className: "workbench-pane-frame" });
   const firstFrame = frames.find((f) => f.props.children.props.children.props.paneId === firstId)!;
-  const secondFrame = frames.find((f) => f.props.children.props.children.props.paneId === secondId)!;
+  const secondFrame = frames.find(
+    (f) => f.props.children.props.children.props.paneId === secondId,
+  )!;
 
   // Switch right -> left
   await act(() => firstFrame.props.onMouseDownCapture({ target: null, currentTarget: null }));

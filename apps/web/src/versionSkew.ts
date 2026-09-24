@@ -1,6 +1,6 @@
-import type { EnvironmentId, ServerConfig, ServerSelfUpdateCapability } from "@t3tools/contracts";
-import type { ServerUpdateState } from "@t3tools/client-runtime/state/server";
-import { compareSemverVersions, parseSemver } from "@t3tools/shared/semver";
+import type { EnvironmentId, ServerConfig, ServerSelfUpdateCapability } from "@awen/contracts";
+import type { ServerUpdateState } from "@awen/client-runtime/state/server";
+import { compareSemverVersions, parseSemver } from "@awen/shared/semver";
 import * as Schema from "effect/Schema";
 
 import { APP_VERSION } from "./branding";
@@ -12,7 +12,7 @@ export interface VersionMismatch {
   readonly hint: string;
 }
 
-const VERSION_MISMATCH_DISMISSALS_STORAGE_KEY = "t3code:version-mismatch-dismissals:v1";
+const VERSION_MISMATCH_DISMISSALS_STORAGE_KEY = "awen:version-mismatch-dismissals:v1";
 
 // Runtime failures retain their identity until the next attempt. Dismiss only
 // that attempt, across chat remounts, without clearing the error in Settings.
@@ -43,12 +43,11 @@ function versionCore(version: string): string {
 }
 
 /**
- * The skew a user can act on: the connected server runs an older T3 Code than
+ * The skew a user can act on: the connected server runs an older Awen than
  * this client, so the server is the side that needs updating.
  *
- * Two nightly builds compare their full versions, including the date and run.
- * Other combinations compare their core `major.minor.patch` only, so a stable
- * build and a nightly build with the same core do not cause an update warning.
+ * Two prerelease builds compare their full versions. A stable build and a
+ * prerelease build with the same core do not cause an update warning.
  * A server ahead of the client does not need an update. Versions that do not
  * parse as semver fall back to plain string inequality.
  */
@@ -63,14 +62,15 @@ export function resolveVersionMismatch(
 
   const clientCore = versionCore(normalizedClientVersion);
   const serverCore = versionCore(normalizedServerVersion);
-  const compareNightlyBuilds =
-    parseSemver(normalizedClientVersion)?.prerelease[0] === "nightly" &&
-    parseSemver(normalizedServerVersion)?.prerelease[0] === "nightly";
+  const clientSemver = parseSemver(normalizedClientVersion);
+  const serverSemver = parseSemver(normalizedServerVersion);
+  const comparePrereleaseBuilds =
+    (clientSemver?.prerelease.length ?? 0) > 0 && (serverSemver?.prerelease.length ?? 0) > 0;
   const serverIsBehind =
-    parseSemver(clientCore) && parseSemver(serverCore)
+    clientSemver && serverSemver
       ? compareSemverVersions(
-          compareNightlyBuilds ? normalizedServerVersion : serverCore,
-          compareNightlyBuilds ? normalizedClientVersion : clientCore,
+          comparePrereleaseBuilds ? normalizedServerVersion : serverCore,
+          comparePrereleaseBuilds ? normalizedClientVersion : clientCore,
         ) < 0
       : normalizedServerVersion !== normalizedClientVersion;
   if (!serverIsBehind) {
@@ -80,7 +80,7 @@ export function resolveVersionMismatch(
   return {
     clientVersion: normalizedClientVersion,
     serverVersion: normalizedServerVersion,
-    hint: "Version mismatch. Try syncing the client and server to the same T3 Code version.",
+    hint: "Version mismatch. Try syncing the client and server to the same Awen version.",
   };
 }
 
@@ -116,7 +116,7 @@ export function supportsServerUpdateThreadContinuation(
 
 /** The command to hand users whose server cannot update itself. */
 export function manualServerUpdateCommand(targetVersion: string): string {
-  return `npx t3@${targetVersion}`;
+  return `npx awen@${targetVersion}`;
 }
 
 export function serverUpdateGuidance(capability: ServerSelfUpdateCapability): string {

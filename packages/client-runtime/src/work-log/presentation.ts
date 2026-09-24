@@ -5,11 +5,11 @@ import {
   type ThreadId,
   type ToolActivitySource,
   type ToolLifecycleItemType,
-} from "@t3tools/contracts";
-import { classifyMarkdownImageSource } from "@t3tools/client-runtime/markdown-images";
-import { resolveMediaSource } from "@t3tools/client-runtime/media-source";
-import { parseChangeRequestUrl } from "@t3tools/shared/changeRequestUrl";
-import { isWorkspaceImagePreviewPath } from "@t3tools/shared/filePreview";
+} from "@awen/contracts";
+import { classifyMarkdownImageSource } from "@awen/client-runtime/markdown-images";
+import { resolveMediaSource } from "@awen/client-runtime/media-source";
+import { parseChangeRequestUrl } from "@awen/shared/changeRequestUrl";
+import { isWorkspaceImagePreviewPath } from "@awen/shared/filePreview";
 
 /**
  * Activities the worktree setup card already represents. The settled record
@@ -71,7 +71,7 @@ export function normalizeCompactToolLabel(value: string): string {
   return value.replace(/\s+(?:complete|completed)\s*$/i, "").trim();
 }
 
-const T3_MCP_TOOL_LABELS: Record<
+const AWEN_MCP_TOOL_LABELS: Record<
   string,
   readonly [action: string, running: string, completed: string, detail: string]
 > = {
@@ -86,15 +86,15 @@ const T3_MCP_TOOL_LABELS: Record<
   list_scheduled_tasks: ["List", "Listing", "Listed", "scheduled tasks"],
   update_scheduled_task: ["Update", "Updating", "Updated", "a scheduled task"],
   delete_scheduled_task: ["Delete", "Deleting", "Deleted", "a scheduled task"],
-  create_threads: ["Create", "Creating", "Created", "T3 threads"],
-  t3_thread_start: ["Start", "Starting", "Started", "a T3 thread"],
-  t3_thread_list: ["List", "Listing", "Listed", "T3 threads"],
-  t3_thread_read: ["Read", "Reading", "Read", "a T3 thread"],
-  t3_thread_send: ["Send", "Sending", "Sent", "to a T3 thread"],
-  t3_thread_wait: ["Wait", "Waiting", "Waited", "for a T3 thread"],
-  t3_thread_interrupt: ["Interrupt", "Interrupting", "Interrupted", "a T3 thread"],
-  t3_worktree_handoff: ["Hand off", "Handing off", "Handed off", "thread to a git worktree"],
-  t3_worktree_status: ["Get", "Getting", "Got", "thread worktree status"],
+  create_threads: ["Create", "Creating", "Created", "Awen threads"],
+  awen_thread_start: ["Start", "Starting", "Started", "a Awen thread"],
+  awen_thread_list: ["List", "Listing", "Listed", "Awen threads"],
+  awen_thread_read: ["Read", "Reading", "Read", "a Awen thread"],
+  awen_thread_send: ["Send", "Sending", "Sent", "to a Awen thread"],
+  awen_thread_wait: ["Wait", "Waiting", "Waited", "for a Awen thread"],
+  awen_thread_interrupt: ["Interrupt", "Interrupting", "Interrupted", "a Awen thread"],
+  awen_worktree_handoff: ["Hand off", "Handing off", "Handed off", "thread to a git worktree"],
+  awen_worktree_status: ["Get", "Getting", "Got", "thread worktree status"],
   preview_status: ["Get", "Getting", "Got", "preview browser status"],
   preview_open: ["Open", "Opening", "Opened", "a page in the preview browser"],
   preview_navigate: ["Navigate", "Navigating", "Navigated", "the preview browser"],
@@ -131,19 +131,19 @@ const PR_TOOL_ACTIONS: Readonly<Record<string, ToolGroupAction>> = {
   list_thread_pull_requests: "list-prs",
 };
 
-function resolveT3McpToolPresentation(
+function resolveAwenMcpToolPresentation(
   value: string | undefined,
   status: string | undefined,
   data?: unknown,
 ) {
   if (!value) return null;
   const name = normalizeCompactToolLabel(value).replace(
-    /^(?:mcp__(?:t3-code|t3_code|t3code)__|(?:t3-code|t3_code|t3code)(?:[.:/]|\s*·\s*))/i,
+    /^(?:mcp__awen__|awen(?:[.:/]|\s*·\s*))/i,
     "",
   );
-  if (!Object.hasOwn(T3_MCP_TOOL_LABELS, name)) return null;
+  if (!Object.hasOwn(AWEN_MCP_TOOL_LABELS, name)) return null;
 
-  const [action, running, completed, detail] = T3_MCP_TOOL_LABELS[name]!;
+  const [action, running, completed, detail] = AWEN_MCP_TOOL_LABELS[name]!;
   const verb =
     status === "inProgress"
       ? running
@@ -180,7 +180,7 @@ function resolveT3McpToolPresentation(
           ? ("browser" as const)
           : name.startsWith("device_")
             ? ("device" as const)
-            : ("t3-code" as const),
+            : ("awen" as const),
     ...(actionKind === undefined ? {} : { action: actionKind }),
   };
 }
@@ -206,16 +206,16 @@ export function resolveWorkEntryToolPresentation(
       "tool" in data &&
       typeof data.tool === "string"
     ) {
-      return resolveT3McpToolPresentation(`${data.server}.${data.tool}`, status, data);
+      return resolveAwenMcpToolPresentation(`${data.server}.${data.tool}`, status, data);
     }
     if ("toolName" in data && typeof data.toolName === "string") {
-      return resolveT3McpToolPresentation(data.toolName, status, data);
+      return resolveAwenMcpToolPresentation(data.toolName, status, data);
     }
   }
 
   return (
-    resolveT3McpToolPresentation(entry.toolTitle, status, data) ??
-    resolveT3McpToolPresentation(entry.label, status, data)
+    resolveAwenMcpToolPresentation(entry.toolTitle, status, data) ??
+    resolveAwenMcpToolPresentation(entry.label, status, data)
   );
 }
 

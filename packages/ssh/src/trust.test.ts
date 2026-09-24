@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import type { DesktopSshEnvironmentTarget } from "@t3tools/contracts";
+import type { DesktopSshEnvironmentTarget } from "@awen/contracts";
 
 import {
   classifySshHostKeyTrust,
@@ -35,10 +35,7 @@ const knownHostsOutput = (key = KEY_A) =>
 describe("classifySshHostKeyTrust", () => {
   it("looks up known hosts by resolved hostname and non-default port, without username", () => {
     assert.equal(knownHostsLookupHost(TARGET), "devbox.example.test");
-    assert.equal(
-      knownHostsLookupHost({ ...TARGET, port: 6000 }),
-      "[devbox.example.test]:6000",
-    );
+    assert.equal(knownHostsLookupHost({ ...TARGET, port: 6000 }), "[devbox.example.test]:6000");
   });
 
   it("formats OpenSSH SHA256 fingerprints from presented key bytes", () => {

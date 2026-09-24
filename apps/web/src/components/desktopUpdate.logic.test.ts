@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { DesktopUpdateActionResult, DesktopUpdateState } from "@t3tools/contracts";
+import type { DesktopUpdateActionResult, DesktopUpdateState } from "@awen/contracts";
 
 import {
   canCheckForUpdate,
@@ -18,7 +18,7 @@ import {
 const baseState: DesktopUpdateState = {
   enabled: true,
   status: "idle",
-  channel: "latest",
+  channel: "stable",
   currentVersion: "1.0.0",
   hostArch: "x64",
   appArch: "x64",
@@ -182,13 +182,13 @@ describe("getDesktopUpdateActionError", () => {
 describe("desktop update UI helpers", () => {
   it("builds the stable release URL for a downloaded version", () => {
     expect(getDesktopUpdateReleaseUrl("0.0.30")).toBe(
-      "https://github.com/pingdotgg/t3code/releases/tag/v0.0.30",
+      "https://github.com/AllenReder/awen/releases/tag/v0.0.30",
     );
   });
 
-  it("builds the nightly release URL without dropping its version suffix", () => {
-    expect(getDesktopUpdateReleaseUrl("0.0.30-nightly.20260728.931")).toBe(
-      "https://github.com/pingdotgg/t3code/releases/tag/v0.0.30-nightly.20260728.931",
+  it("builds a prerelease URL without dropping its version suffix", () => {
+    expect(getDesktopUpdateReleaseUrl("0.1.0-alpha.1")).toBe(
+      "https://github.com/AllenReder/awen/releases/tag/v0.1.0-alpha.1",
     );
   });
 
@@ -198,9 +198,7 @@ describe("desktop update UI helpers", () => {
   });
 
   it("builds the release history URL", () => {
-    expect(getDesktopUpdateReleaseHistoryUrl()).toBe(
-      "https://github.com/pingdotgg/t3code/releases",
-    );
+    expect(getDesktopUpdateReleaseHistoryUrl()).toBe("https://github.com/AllenReder/awen/releases");
   });
 
   it("toasts only for actionable updater errors", () => {
@@ -259,7 +257,7 @@ describe("desktop update UI helpers", () => {
         availableVersion: "1.1.0",
         downloadedVersion: "1.1.1",
       }),
-    ).toContain("Install update 1.1.1 and restart T3 Code?");
+    ).toContain("Install update 1.1.1 and restart Awen?");
   });
 
   it("falls back to generic install confirmation copy when no version is available", () => {
@@ -268,7 +266,7 @@ describe("desktop update UI helpers", () => {
         availableVersion: null,
         downloadedVersion: null,
       }),
-    ).toContain("Install update and restart T3 Code?");
+    ).toContain("Install update and restart Awen?");
   });
 
   it("keeps the same install confirmation copy across desktop platforms", () => {
@@ -278,7 +276,7 @@ describe("desktop update UI helpers", () => {
         downloadedVersion: "1.1.0",
       }),
     ).toBe(
-      "Install update 1.1.0 and restart T3 Code?\n\nAny running tasks will be interrupted. Make sure you're ready before continuing.",
+      "Install update 1.1.0 and restart Awen?\n\nAny running tasks will be interrupted. Make sure you're ready before continuing.",
     );
   });
 });

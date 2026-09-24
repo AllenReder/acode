@@ -1,4 +1,4 @@
-# acode
+# Awen
 
 A desktop console for running and driving coding agents. Projects hold
 Workspaces; Sessions belong to Workspaces; Views present Workspace or Session
@@ -7,7 +7,7 @@ state and are displayed as Panes in Tabs.
 ## Language
 
 **Environment**:
-A connected execution-environment scope backed by one ACode daemon/server. It
+A connected execution-environment scope backed by one Awen daemon/server. It
 scopes Project, Workspace, and Session identities and capabilities; it is not
 itself a Project or Sidebar grouping.
 _Avoid_: Host, Machine, Daemon
@@ -20,21 +20,21 @@ Sessions. Dynamic port remapping or reconnecting through a different tunnel
 preserves the target Environment's identity.
 _Avoid_: Machine config, Server profile, Remote host
 
-**ACode Deep Link**:
-A canonical navigation address that identifies one ACode target by its
+**Awen Deep Link**:
+A canonical navigation address that identifies one Awen target by its
 Environment- and target-level identities. It opens or focuses a View but is
 not the authority for Tab, Pane, focus, or layout state.
 _Avoid_: Workbench URL, layout URL, Thread URL
 
 **Project**:
-A registered logical project root in acode. It is the canonical top-level
+A registered logical project root in Awen. It is the canonical top-level
 domain identity in the Sidebar; external project records are integration
-references and do not replace the ACode Project identity.
+references and do not replace the Awen Project identity.
 _Avoid_: Repo, Repository, Folder (as UI labels)
 
 **Workspace**:
 One stable checkout of a Project. It may be the Project's main checkout or a
-Git worktree. A Workspace has its own ACode identity independent of its current
+Git worktree. A Workspace has its own Awen identity independent of its current
 branch, commit, or detached-HEAD state. Its display title is Workspace metadata,
 not Project identity; renaming a Workspace does not rename its Project, and
 renaming a Project does not rename its Workspaces. Sibling Workspaces of one
@@ -44,7 +44,7 @@ happens to carry a branch.
 
 **Session**:
 A persistent unit of work belonging to exactly one Workspace. Agent sessions
-and terminal sessions are the current Session kinds; each has an ACode identity
+and terminal sessions are the current Session kinds; each has an Awen identity
 independent of the runtime process or provider-native session currently backing
 it. A Session may be active, stopped, resumable, or closed according to its
 kind and provider capabilities, and Sessions are listed at the third level of
@@ -75,7 +75,7 @@ _Avoid_: Session, Runtime panel
 
 **New Agent Session View**:
 A Workbench View for composing the first turn of an Agent session before an
-ACode Session identity exists. It is bound to a Workspace and a client-local
+Awen Session identity exists. It is bound to a Workspace and a client-local
 draft identity, not a Session; promotion replaces it with the Agent Session
 View for the Session created on first send.
 _Avoid_: Draft Session, Provisional Session, Thread
@@ -107,7 +107,7 @@ _Avoid_: Global View, Workspace View, Session View
 
 **View definition**:
 The registered kind of a View, with its identity and renderer. A definition
-describes what can be opened and may be supplied by acode or a plugin; it is
+describes what can be opened and may be supplied by Awen or a plugin; it is
 not one opened occurrence.
 _Avoid_: Panel registration, View instance
 
@@ -177,14 +177,14 @@ _Avoid_: Workspace name, Window title
 **History**:
 The complete, Workspace-grouped index of `closed` Agent and Terminal Sessions
 that remain resumable when supported after their active runtime process is
-released. History is an ACode concept; provider or T3 archival states are only
+released. History is an Awen concept; provider or Awen archival states are only
 integration details.
 _Avoid_: Archive, Deleted sessions
 
 **BSP layout**:
 A Tab layout that recursively divides its available rectangle along stored
 horizontal or vertical axes; each leaf is one Pane. It is inspired by
-Hyprland's Dwindle interaction, but is acode's own stable split model.
+Hyprland's Dwindle interaction, but is Awen's own stable split model.
 _Avoid_: Dwindle (unless referring to Hyprland)
 
 **Scrolling layout**:
@@ -200,13 +200,13 @@ _Avoid_: Split (when referring to a Scrolling layout Column)
 
 **Agent session**:
 A Session representing one agent conversation: one provider, one model
-selection, one Workspace, and one transcript. Its ACode identity is distinct
+selection, one Workspace, and one transcript. Its Awen identity is distinct
 from any provider-native runtime or thread identifier.
 _Avoid_: Agent, Task, Job, Run
 
 **Terminal session**:
 A Session representing one Workspace-owned terminal work context, including its
-terminal history and resumable state when supported. Its ACode identity is
+terminal history and resumable state when supported. Its Awen identity is
 independent of the current PTY process and terminal emulator instance.
 _Avoid_: Terminal, Terminal pane, PTY
 
@@ -225,7 +225,7 @@ _Avoid_: HarnessId union, Provider menu, Model list
 A local runtime process used by the desktop application to host provider
 runtimes, active Session execution, PTYs, and persistence behind typed
 contracts. Its transport, supervision mechanism, and provider-native runtime
-identities are implementation details and do not define ACode domain identity.
+identities are implementation details and do not define Awen domain identity.
 _Avoid_: Tauri command, Renderer process, Pane runtime
 
 **Agent timeline**:
@@ -320,7 +320,7 @@ _Avoid_: Chat wallpaper, Session background, View background
   most one New Agent Session View across the Workbench. Different Workspaces
   may have distinct drafts; the same draft cannot appear in multiple Tabs.
   Closing its View retains the draft; discarding it is explicit.
-- An ACode Deep Link never targets a New Agent Session View. A draft route is a
+- An Awen Deep Link never targets a New Agent Session View. A draft route is a
   client-local recovery input, and promotion replaces it with the canonical
   Agent Session route.
 - A Tab belongs to no Project or Workspace and may display Views from multiple
@@ -337,7 +337,7 @@ _Avoid_: Chat wallpaper, Session background, View background
 - Opening an unopened Session or draft from the Sidebar opens it as the sole View in a new Tab (or replaces an active Welcome Tab), rather than adding a Pane to the current Tab.
 - Activating a Session that already has an opened Session View focuses that existing View and activates its Tab.
 - Splitting within an active Tab is explicit through keyboard modifiers or drag-and-drop.
-- Runtime and provider implementation details must not define ACode domain
+- Runtime and provider implementation details must not define Awen domain
   identity.
-- Provider-native lifecycle commands may implement ACode Session operations,
+- Provider-native lifecycle commands may implement Awen Session operations,
   but they do not add user-visible Session actions or lifecycle states.

@@ -36,15 +36,12 @@ export function appleEaseOut(t: number): number {
   let u = t;
   for (let i = 0; i < 5; i++) {
     const oneMinusU = 1 - u;
-    const currentX =
-      3 * oneMinusU * oneMinusU * u * x1 + 3 * oneMinusU * u * u * x2 + u * u * u;
+    const currentX = 3 * oneMinusU * oneMinusU * u * x1 + 3 * oneMinusU * u * u * x2 + u * u * u;
     const diff = currentX - t;
     if (Math.abs(diff) < 1e-5) break;
 
     const slope =
-      3 * oneMinusU * oneMinusU * x1 +
-      6 * oneMinusU * u * (x2 - x1) +
-      3 * u * u * (1 - x2);
+      3 * oneMinusU * oneMinusU * x1 + 6 * oneMinusU * u * (x2 - x1) + 3 * u * u * (1 - x2);
     if (Math.abs(slope) < 1e-5) break;
     u -= diff / slope;
     u = Math.max(0, Math.min(1, u));
@@ -144,8 +141,7 @@ export function computeScrollingRevealTarget(input: ScrollRevealInput): ScrollRe
   }
 
   const needsScroll =
-    Math.abs(targetLeft - currentScrollLeft) >= 1 ||
-    Math.abs(targetTop - currentScrollTop) >= 1;
+    Math.abs(targetLeft - currentScrollLeft) >= 1 || Math.abs(targetTop - currentScrollTop) >= 1;
 
   return {
     targetLeft,

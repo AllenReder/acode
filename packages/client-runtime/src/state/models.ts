@@ -1,13 +1,13 @@
 import type {
-  AcodeProjectShell,
+  AwenProjectShell,
   EnvironmentId,
   OrchestrationMessage,
   OrchestrationProjectShell,
   OrchestrationThread,
   OrchestrationThreadShell,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 
-export interface EnvironmentAcodeProject extends AcodeProjectShell {
+export interface EnvironmentAwenProject extends AwenProjectShell {
   readonly environmentId: EnvironmentId;
 }
 

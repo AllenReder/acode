@@ -7,7 +7,7 @@ import { OrchestrationMessageContext } from "./composerContext.ts";
 import { ProviderOptionSelections } from "./model.ts";
 import { RepositoryIdentity, ThreadEnvMode } from "./environment.ts";
 import {
-  AcodeProjectId,
+  AwenProjectId,
   ApprovalRequestId,
   CheckpointRef,
   ClientSurface,
@@ -32,7 +32,7 @@ import {
   PullRequestReviewDecision,
   PullRequestState,
 } from "./pullRequest.ts";
-import { AcodeAgentSessionShell, AcodeProjectShell, WorkspaceOrigin } from "./workspace.ts";
+import { AwenAgentSessionShell, AwenProjectShell, WorkspaceOrigin } from "./workspace.ts";
 
 export const ORCHESTRATION_WS_METHODS = {
   dispatchCommand: "orchestration.dispatchCommand",
@@ -526,7 +526,7 @@ export const OrchestrationProject = Schema.Struct({
   repositoryIdentity: Schema.optional(Schema.NullOr(RepositoryIdentity)),
   defaultModelSelection: Schema.NullOr(ModelSelection),
   // Per-project override for where new threads start. Null/absent means
-  // "no override": clients fall back to t3.json, then the global setting.
+  // "no override": clients fall back to awen.json, then the global setting.
   defaultThreadEnvMode: Schema.optional(Schema.NullOr(ThreadEnvMode)),
   // Opt-in because background sync performs network I/O and may move the checkout.
   // Optional on the wire so cached snapshots from older servers still decode.
@@ -678,7 +678,7 @@ export type ThreadTitleRegeneration = typeof ThreadTitleRegeneration.Type;
 
 /**
  * Legacy single-PR link. Still emitted as the thread's derived current pull
- * request (see `@t3tools/shared/threadPullRequests`) so clients from before
+ * request (see `@awen/shared/threadPullRequests`) so clients from before
  * `pullRequests` keep working independently of their release schedule.
  */
 export const ThreadLinkedPullRequest = Schema.Struct({
@@ -915,8 +915,8 @@ export const OrchestrationShellSnapshot = Schema.Struct({
   snapshotSequence: NonNegativeInt,
   projects: Schema.Array(OrchestrationProjectShell),
   threads: Schema.Array(OrchestrationThreadShell),
-  /** ACode navigation tree; optional for compatibility with pre-C06 servers. */
-  acodeProjects: Schema.optional(Schema.Array(AcodeProjectShell)),
+  /** Awen navigation tree; optional for compatibility with pre-C06 servers. */
+  awenProjects: Schema.optional(Schema.Array(AwenProjectShell)),
   updatedAt: IsoDateTime,
 });
 export type OrchestrationShellSnapshot = typeof OrchestrationShellSnapshot.Type;
@@ -926,30 +926,30 @@ export const OrchestrationShellStreamEvent = Schema.Union([
     kind: Schema.Literal("project-upserted"),
     sequence: NonNegativeInt,
     project: OrchestrationProjectShell,
-    /** The ACode tree row affected by this T3 project event. */
-    acodeProject: Schema.optional(AcodeProjectShell),
+    /** The Awen tree row affected by this Awen project event. */
+    awenProject: Schema.optional(AwenProjectShell),
   }),
   Schema.Struct({
     kind: Schema.Literal("project-removed"),
     sequence: NonNegativeInt,
     projectId: ProjectId,
-    acodeProjectId: Schema.optional(AcodeProjectId),
-    /** The owning ACode tree when a sibling Workspace was removed. */
-    acodeProject: Schema.optional(AcodeProjectShell),
+    awenProjectId: Schema.optional(AwenProjectId),
+    /** The owning Awen tree when a sibling Workspace was removed. */
+    awenProject: Schema.optional(AwenProjectShell),
   }),
   Schema.Struct({
     kind: Schema.Literal("thread-upserted"),
     sequence: NonNegativeInt,
     thread: OrchestrationThreadShell,
-    /** The ACode Workspace.sessions row affected by this thread event. */
-    acodeProject: Schema.optional(AcodeProjectShell),
+    /** The Awen Workspace.sessions row affected by this thread event. */
+    awenProject: Schema.optional(AwenProjectShell),
   }),
   Schema.Struct({
     kind: Schema.Literal("thread-removed"),
     sequence: NonNegativeInt,
     threadId: ThreadId,
-    /** The owning ACode tree after the session leaves the active thread list. */
-    acodeProject: Schema.optional(AcodeProjectShell),
+    /** The owning Awen tree after the session leaves the active thread list. */
+    awenProject: Schema.optional(AwenProjectShell),
   }),
 ]);
 export type OrchestrationShellStreamEvent = typeof OrchestrationShellStreamEvent.Type;
@@ -1059,17 +1059,17 @@ export const OrchestrationThreadDetailSnapshot = Schema.Struct({
 export type OrchestrationThreadDetailSnapshot = typeof OrchestrationThreadDetailSnapshot.Type;
 
 /**
- * Attach the Workspace created by `project.create` under an existing ACode
- * Project as a sibling checkout instead of deriving a fresh ACode Project and
+ * Attach the Workspace created by `project.create` under an existing Awen
+ * Project as a sibling checkout instead of deriving a fresh Awen Project and
  * "main" Workspace. Server-side workspace management flows set this after
  * validating the checkout on the target daemon; legacy callers omit it.
  */
-export const ProjectCreateAcodeWorkspace = Schema.Struct({
-  acodeProjectId: AcodeProjectId,
+export const ProjectCreateAwenWorkspace = Schema.Struct({
+  awenProjectId: AwenProjectId,
   role: Schema.Literal("worktree"),
   origin: WorkspaceOrigin,
 });
-export type ProjectCreateAcodeWorkspace = typeof ProjectCreateAcodeWorkspace.Type;
+export type ProjectCreateAwenWorkspace = typeof ProjectCreateAwenWorkspace.Type;
 
 export const ProjectCreateCommand = Schema.Struct({
   type: Schema.Literal("project.create"),
@@ -1078,7 +1078,7 @@ export const ProjectCreateCommand = Schema.Struct({
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
   createWorkspaceRootIfMissing: Schema.optional(Schema.Boolean),
-  acodeWorkspace: Schema.optional(ProjectCreateAcodeWorkspace),
+  awenWorkspace: Schema.optional(ProjectCreateAwenWorkspace),
   // Retained for older clients that sent an automatic create-time seed. The
   // server ignores it; explicit project defaults use project.meta.update.
   defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
@@ -1691,9 +1691,9 @@ export const ProjectCreatedPayload = Schema.Struct({
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
   // Optional so persisted events from older servers still decode. When set,
-  // the projection attaches the Workspace to this existing ACode Project as a
-  // sibling checkout instead of deriving a new ACode Project.
-  acodeWorkspace: Schema.optional(ProjectCreateAcodeWorkspace),
+  // the projection attaches the Workspace to this existing Awen Project as a
+  // sibling checkout instead of deriving a new Awen Project.
+  awenWorkspace: Schema.optional(ProjectCreateAwenWorkspace),
   repositoryIdentity: Schema.optional(Schema.NullOr(RepositoryIdentity)),
   defaultModelSelection: Schema.NullOr(ModelSelection),
   // Optional so persisted events from older servers still decode.
@@ -2235,9 +2235,9 @@ export type ProjectionPendingApprovalDecision = typeof ProjectionPendingApproval
 
 export const DispatchResult = Schema.Struct({
   sequence: NonNegativeInt,
-  /** Present when a thread.create command also materialized an ACode Session. */
-  agentSession: Schema.optional(AcodeAgentSessionShell),
-  /** Explicit binding failure when the T3 project has no ACode Workspace mapping. */
+  /** Present when a thread.create command also materialized an Awen Session. */
+  agentSession: Schema.optional(AwenAgentSessionShell),
+  /** Explicit binding failure when the Awen project has no Awen Workspace mapping. */
   agentSessionError: Schema.optional(Schema.Literal("workspace-unbound")),
 });
 export type DispatchResult = typeof DispatchResult.Type;

@@ -1,10 +1,10 @@
 import { withAgentDeviceEnvironment } from "../../mcp/McpProviderSession.ts";
-import { AntigravitySettings, ProviderDriverKind, ProviderSetupError } from "@t3tools/contracts";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { AntigravitySettings, ProviderDriverKind, ProviderSetupError } from "@awen/contracts";
+import { HostProcessPlatform } from "@awen/shared/hostProcess";
 import {
   NodeRuntimeUnavailableError,
   nodeRuntimeUnavailableMessage,
-} from "@t3tools/shared/nodeRuntime";
+} from "@awen/shared/nodeRuntime";
 import * as Crypto from "effect/Crypto";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -238,7 +238,7 @@ export const AntigravityDriver: ProviderDriver<AntigravitySettings, AntigravityD
         input: Pick<AntigravityAcpRuntimeInput, "onAuthorizationUrl">,
       ) {
         const cwd = yield* fileSystem
-          .makeTempDirectoryScoped({ prefix: "t3-antigravity-setup-" })
+          .makeTempDirectoryScoped({ prefix: "awen-antigravity-setup-" })
           .pipe(
             Effect.mapError(
               () =>
@@ -262,7 +262,7 @@ export const AntigravityDriver: ProviderDriver<AntigravitySettings, AntigravityD
         );
         const runtime = yield* makeRuntime({
           cwd,
-          clientInfo: { name: "t3-code-provider-setup", version: "0.0.0" },
+          clientInfo: { name: "awen-provider-setup", version: "0.0.0" },
           mcpServers: [],
           ...(input.onAuthorizationUrl ? { onAuthorizationUrl: input.onAuthorizationUrl } : {}),
         });
@@ -394,7 +394,7 @@ export const AntigravityDriver: ProviderDriver<AntigravitySettings, AntigravityD
         makeRuntime: (cwd) =>
           makeRuntime({
             cwd,
-            clientInfo: { name: "t3-code-text", version: "0.0.0" },
+            clientInfo: { name: "awen-text", version: "0.0.0" },
             mcpServers: [],
           }),
       });

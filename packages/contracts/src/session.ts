@@ -1,18 +1,18 @@
 import * as Schema from "effect/Schema";
 
 import { AgentSessionId, TerminalSessionId, WorkspaceId } from "./baseSchemas.ts";
-import type { AcodeSessionShell } from "./workspace.ts";
+import type { AwenSessionShell } from "./workspace.ts";
 
-/** The stable ACode work units shown below a Workspace in the Sidebar. */
+/** The stable Awen work units shown below a Workspace in the Sidebar. */
 export const SessionKind = Schema.Literals(["agent", "terminal"]);
 export type SessionKind = typeof SessionKind.Type;
 
 /**
- * A durable ACode Agent Session identity scoped to its owning Workspace.
+ * A durable Awen Agent Session identity scoped to its owning Workspace.
  *
- * This is the product-level identity for an agent conversation. The T3 thread
+ * This is the product-level identity for an agent conversation. The Awen thread
  * that currently backs the conversation is deliberately absent: it is an
- * adapter binding (see `AcodeAgentSessionShell`), not an ACode target.
+ * adapter binding (see `AwenAgentSessionShell`), not an Awen target.
  */
 export const AgentSessionRef = Schema.Struct({
   kind: Schema.Literal("agent"),
@@ -21,7 +21,7 @@ export const AgentSessionRef = Schema.Struct({
 });
 export type AgentSessionRef = typeof AgentSessionRef.Type;
 
-/** A durable ACode Terminal Session identity scoped to its owning Workspace. */
+/** A durable Awen Terminal Session identity scoped to its owning Workspace. */
 export const TerminalSessionRef = Schema.Struct({
   kind: Schema.Literal("terminal"),
   workspaceId: WorkspaceId,
@@ -30,25 +30,25 @@ export const TerminalSessionRef = Schema.Struct({
 export type TerminalSessionRef = typeof TerminalSessionRef.Type;
 
 /**
- * The shared Session contract. Every ACode Session kind carries exactly one
+ * The shared Session contract. Every Awen Session kind carries exactly one
  * owning Workspace and its own typed identity, so Agent and Terminal Sessions
  * can be opened, focused, closed, and historied through one model.
  *
- * The runtime process behind a Session — a T3 thread, a provider runtime, or a
+ * The runtime process behind a Session — a Awen thread, a provider runtime, or a
  * PTY — is never part of this reference.
  */
 export const SessionRef = Schema.Union([AgentSessionRef, TerminalSessionRef]);
 export type SessionRef = typeof SessionRef.Type;
 
 /**
- * ACode identity for the terminal currently known to the runtime as
+ * Awen identity for the terminal currently known to the runtime as
  * `(workspaceId, terminalId)`.
  *
- * The runtime terminal id is only unique inside its Workspace, so the ACode
+ * The runtime terminal id is only unique inside its Workspace, so the Awen
  * identity embeds the Workspace id and keeps the runtime id as an opaque
  * suffix. The Workspace id is length-prefixed so the two halves stay
  * unambiguous even when either id itself contains ":" — without it,
- * `("a:b", "c")` and `("a", "b:c")` would collide on one ACode identity.
+ * `("a:b", "c")` and `("a", "b:c")` would collide on one Awen identity.
  *
  * New Workspace terminals allocate a UUID once per creation request. The
  * runtime persists that id across process generations; old term-N identities
@@ -60,7 +60,7 @@ function runtimeTerminalIdPrefix(workspaceId: WorkspaceId): string {
   return `${TERMINAL_SESSION_ID_PREFIX}${workspaceId.length}:${workspaceId}:`;
 }
 
-/** Stable ACode Terminal Session identity for a runtime `(workspaceId, terminalId)` pair. */
+/** Stable Awen Terminal Session identity for a runtime `(workspaceId, terminalId)` pair. */
 export function terminalSessionIdForRuntime(
   workspaceId: WorkspaceId,
   terminalId: string,
@@ -69,7 +69,7 @@ export function terminalSessionIdForRuntime(
 }
 
 /**
- * Adapter from the existing terminal runtime identity to the canonical ACode
+ * Adapter from the existing terminal runtime identity to the canonical Awen
  * Terminal Session reference. Existing terminal flows keep sending
  * `(workspaceId, terminalId)`; only the adapter boundary sees that pair.
  */
@@ -94,7 +94,7 @@ export function terminalSessionRefForShell(shell: {
 
 /**
  * Adapter from a durable Agent Session shell to its canonical reference,
- * dropping the T3 thread binding so it cannot leak as a product identity.
+ * dropping the Awen thread binding so it cannot leak as a product identity.
  */
 export function agentSessionRefForShell(shell: {
   readonly id: AgentSessionId;
@@ -109,14 +109,14 @@ export function agentSessionRefForShell(shell: {
  * It narrows on the shell's `kind`, so the shared contract stays the single
  * source of Session identity and no caller has to re-derive it.
  */
-export function sessionRefForShell(shell: AcodeSessionShell): SessionRef {
+export function sessionRefForShell(shell: AwenSessionShell): SessionRef {
   return shell.kind === "agent"
     ? agentSessionRefForShell(shell)
     : terminalSessionRefForShell(shell);
 }
 
 /**
- * Resolve the runtime terminal id behind an ACode Terminal Session reference.
+ * Resolve the runtime terminal id behind an Awen Terminal Session reference.
  *
  * Returns null for an identity this adapter did not produce, so callers must
  * treat a null as "no runtime binding" instead of guessing at the wire id.

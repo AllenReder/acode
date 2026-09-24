@@ -7,8 +7,8 @@ import {
   type OrchestrationEvent,
   type OrchestrationSessionStatus,
   ThreadId,
-} from "@t3tools/contracts";
-import { compareDateTimeStrings } from "@t3tools/shared/dateTime";
+} from "@awen/contracts";
+import { compareDateTimeStrings } from "@awen/shared/dateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -20,7 +20,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import {
   legacyThreadPullRequestKey,
   threadPullRequestKeysEqual,
-} from "@t3tools/shared/threadPullRequests";
+} from "@awen/shared/threadPullRequests";
 import * as Cause from "effect/Cause";
 
 import {
@@ -30,7 +30,7 @@ import {
 } from "../../persistence/Errors.ts";
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
 import { ProjectionPendingApprovalRepository } from "../../persistence/Services/ProjectionPendingApprovals.ts";
-import { ProjectionAcodeProjectRepository } from "../../persistence/Services/ProjectionAcodeProjects.ts";
+import { ProjectionAwenProjectRepository } from "../../persistence/Services/ProjectionAwenProjects.ts";
 import { ProjectionProjectRepository } from "../../persistence/Services/ProjectionProjects.ts";
 import { ProjectionStateRepository } from "../../persistence/Services/ProjectionState.ts";
 import { ProjectionThreadActivityRepository } from "../../persistence/Services/ProjectionThreadActivities.ts";
@@ -51,7 +51,7 @@ import {
 } from "../../persistence/Services/ProjectionTurns.ts";
 import { ProjectionThreadRepository } from "../../persistence/Services/ProjectionThreads.ts";
 import { ProjectionPendingApprovalRepositoryLive } from "../../persistence/Layers/ProjectionPendingApprovals.ts";
-import { ProjectionAcodeProjectRepositoryLive } from "../../persistence/Layers/ProjectionAcodeProjects.ts";
+import { ProjectionAwenProjectRepositoryLive } from "../../persistence/Layers/ProjectionAwenProjects.ts";
 import { ProjectionProjectRepositoryLive } from "../../persistence/Layers/ProjectionProjects.ts";
 import { ProjectionStateRepositoryLive } from "../../persistence/Layers/ProjectionState.ts";
 import { ProjectionThreadActivityRepositoryLive } from "../../persistence/Layers/ProjectionThreadActivities.ts";
@@ -489,7 +489,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     const sql = yield* SqlClient.SqlClient;
     const eventStore = yield* OrchestrationEventStore;
     const projectionStateRepository = yield* ProjectionStateRepository;
-    const projectionAcodeProjectRepository = yield* ProjectionAcodeProjectRepository;
+    const projectionAwenProjectRepository = yield* ProjectionAwenProjectRepository;
     const projectionProjectRepository = yield* ProjectionProjectRepository;
     const projectionThreadRepository = yield* ProjectionThreadRepository;
     const projectionThreadMessageRepository = yield* ProjectionThreadMessageRepository;
@@ -524,16 +524,16 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             updatedAt: event.payload.updatedAt,
             deletedAt: null,
           });
-          yield* projectionAcodeProjectRepository
-            .upsertForT3Project({
-              t3ProjectId: event.payload.projectId,
+          yield* projectionAwenProjectRepository
+            .upsertForAwenProject({
+              projectId: event.payload.projectId,
               title: event.payload.title,
               workspaceRoot: event.payload.workspaceRoot,
-              ...(event.payload.acodeWorkspace !== undefined
+              ...(event.payload.awenWorkspace !== undefined
                 ? {
-                    acodeProjectId: event.payload.acodeWorkspace.acodeProjectId,
-                    role: event.payload.acodeWorkspace.role,
-                    origin: event.payload.acodeWorkspace.origin,
+                    awenProjectId: event.payload.awenWorkspace.awenProjectId,
+                    role: event.payload.awenWorkspace.role,
+                    origin: event.payload.awenWorkspace.origin,
                   }
                 : {}),
               createdAt: event.payload.createdAt,
@@ -544,15 +544,15 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
                 const error = Cause.squash(cause);
                 if (
                   Schema.is(PersistenceSqlError)(error) &&
-                  error.operation === "ProjectionAcodeProjectRepository.upsert" &&
-                  error.detail?.startsWith("No ACode Project")
+                  error.operation === "ProjectionAwenProjectRepository.upsert" &&
+                  error.detail?.startsWith("No Awen Project")
                 ) {
                   // The attach target vanished between command validation and
-                  // projection. Drop only the ACode mapping: the T3 project row
+                  // projection. Drop only the Awen mapping: the Awen project row
                   // stays, and one bad event must not stall the pipeline.
-                  return Effect.logWarning("ACode workspace attachment skipped: Project is gone", {
-                    t3ProjectId: event.payload.projectId,
-                    acodeProjectId: event.payload.acodeWorkspace?.acodeProjectId,
+                  return Effect.logWarning("Awen workspace attachment skipped: Project is gone", {
+                    projectId: event.payload.projectId,
+                    awenProjectId: event.payload.awenWorkspace?.awenProjectId,
                   }).pipe(Effect.asVoid);
                 }
                 return Effect.failCause(cause);
@@ -589,8 +589,8 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...(event.payload.scripts !== undefined ? { scripts: event.payload.scripts } : {}),
             updatedAt: event.payload.updatedAt,
           });
-          yield* projectionAcodeProjectRepository.upsertForT3Project({
-            t3ProjectId: event.payload.projectId,
+          yield* projectionAwenProjectRepository.upsertForAwenProject({
+            projectId: event.payload.projectId,
             title: event.payload.title ?? existingRow.value.title,
             workspaceRoot: event.payload.workspaceRoot ?? existingRow.value.workspaceRoot,
             createdAt: existingRow.value.createdAt,
@@ -611,15 +611,15 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             deletedAt: event.payload.deletedAt,
             updatedAt: event.payload.deletedAt,
           });
-          yield* projectionAcodeProjectRepository.removeForT3Project(event.payload.projectId);
+          yield* projectionAwenProjectRepository.removeForProject(event.payload.projectId);
           return;
         }
 
         case "thread.created":
-          yield* projectionAcodeProjectRepository
+          yield* projectionAwenProjectRepository
             .upsertAgentSession({
               agentSessionId: agentSessionIdForThreadCreatedEvent(event.eventId),
-              t3ProjectId: event.payload.projectId,
+              projectId: event.payload.projectId,
               threadId: event.payload.threadId,
               title: event.payload.title,
               createdAt: event.payload.createdAt,
@@ -630,14 +630,14 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
                 const error = Cause.squash(cause);
                 if (
                   Schema.is(PersistenceSqlError)(error) &&
-                  error.operation === "ProjectionAcodeProjectRepository.upsertAgentSession" &&
-                  error.detail?.startsWith("No ACode Workspace is bound")
+                  error.operation === "ProjectionAwenProjectRepository.upsertAgentSession" &&
+                  error.detail?.startsWith("No Awen Workspace is bound")
                 ) {
                   return Effect.logWarning(
-                    "ACode session projection is awaiting Workspace binding",
+                    "Awen session projection is awaiting Workspace binding",
                     {
                       threadId: event.payload.threadId,
-                      t3ProjectId: event.payload.projectId,
+                      projectId: event.payload.projectId,
                     },
                   ).pipe(Effect.asVoid);
                 }
@@ -647,7 +647,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           return;
 
         case "thread.meta-updated":
-          yield* projectionAcodeProjectRepository.updateAgentSession({
+          yield* projectionAwenProjectRepository.updateAgentSession({
             threadId: event.payload.threadId,
             ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
             updatedAt: event.payload.updatedAt,
@@ -655,7 +655,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           return;
 
         case "thread.archived":
-          yield* projectionAcodeProjectRepository.archiveAgentSession({
+          yield* projectionAwenProjectRepository.archiveAgentSession({
             threadId: event.payload.threadId,
             archivedAt: event.payload.archivedAt,
             updatedAt: event.payload.updatedAt,
@@ -663,14 +663,14 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           return;
 
         case "thread.unarchived":
-          yield* projectionAcodeProjectRepository.unarchiveAgentSession({
+          yield* projectionAwenProjectRepository.unarchiveAgentSession({
             threadId: event.payload.threadId,
             updatedAt: event.payload.updatedAt,
           });
           return;
 
         case "thread.deleted":
-          yield* projectionAcodeProjectRepository.deleteAgentSession({
+          yield* projectionAwenProjectRepository.deleteAgentSession({
             threadId: event.payload.threadId,
             deletedAt: event.payload.deletedAt,
           });
@@ -2294,7 +2294,7 @@ export const OrchestrationProjectionPipelineLive = Layer.effect(
   OrchestrationProjectionPipeline,
   makeOrchestrationProjectionPipeline(),
 ).pipe(
-  Layer.provideMerge(ProjectionAcodeProjectRepositoryLive),
+  Layer.provideMerge(ProjectionAwenProjectRepositoryLive),
   Layer.provideMerge(ProjectionProjectRepositoryLive),
   Layer.provideMerge(ProjectionThreadRepositoryLive),
   Layer.provideMerge(ProjectionThreadMessageRepositoryLive),

@@ -22,7 +22,7 @@ import {
   type ThemeAppearance,
   type ThemeDefinition,
   type ThemeHalves,
-  ACODE_DEFAULT_THEME,
+  AWEN_DEFAULT_THEME,
   ZINC_THEME,
   SLATE_THEME,
   MIDNIGHT_THEME,
@@ -56,7 +56,7 @@ import {
 import { ThemeWireframe } from "./ThemeWireframe";
 
 const MAINTAINER_THEMES: ReadonlyArray<ThemeDefinition> = [
-  ACODE_DEFAULT_THEME,
+  AWEN_DEFAULT_THEME,
   ZINC_THEME,
   SLATE_THEME,
   MIDNIGHT_THEME,
@@ -628,7 +628,7 @@ export function ThemeLibrary({
   // ----- Automatic-mode mixing -------------------------------------------
   // The pair model: one theme owns light, one owns dark, and the global
   // appearance mode (light / dark / auto) decides which is showing.
-  const baseCardId = getThemeDefinition(theme)?.id ?? ACODE_DEFAULT_THEME.id;
+  const baseCardId = getThemeDefinition(theme)?.id ?? AWEN_DEFAULT_THEME.id;
   const lightOwner = themeHalves?.light ?? baseCardId;
   const darkOwner = themeHalves?.dark ?? baseCardId;
 
@@ -673,7 +673,7 @@ export function ThemeLibrary({
     getThemeDefinition((initialAppearance === "light" ? lightOwner : darkOwner) ?? "") ?? null;
 
   const cardDefById = (id: string | null): ThemeCardDefinition => {
-    const definition = (id ? getThemeDefinition(id) : null) ?? ACODE_DEFAULT_THEME;
+    const definition = (id ? getThemeDefinition(id) : null) ?? AWEN_DEFAULT_THEME;
     return getThemeCardDefinition(definition);
   };
 
@@ -694,7 +694,7 @@ export function ThemeLibrary({
 
   // Rings always show the effective owner of each appearance: an unpicked
   // half belongs to the default card (a null owner), so a fresh install
-  // shows T3 Code selected instead of nothing.
+  // shows Awen selected instead of nothing.
   const pickedModesFor = (cardId: string | null): ThemeMode[] => {
     const rings: ThemeMode[] = [];
     if (lightOwner === cardId) rings.push("light");

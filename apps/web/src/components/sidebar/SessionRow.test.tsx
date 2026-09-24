@@ -19,7 +19,7 @@ vi.mock("../../localApi", () => ({
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import type { AgentSessionId, EnvironmentId, WorkspaceId } from "@t3tools/contracts";
+import type { AgentSessionId, EnvironmentId, WorkspaceId } from "@awen/contracts";
 import { SessionRow } from "./SessionRow";
 import { resetWorkbenchStore, useWorkbenchStore } from "../../workbench/workbenchStore";
 import { getActiveTab } from "../../workbench/workbenchState";
@@ -30,7 +30,7 @@ afterEach(async () => {
   resetWorkbenchStore();
   vi.unstubAllGlobals();
 });
-it("opens, splits and focuses Agent Sessions by ACode identity, including reopening a closed View", async () => {
+it("opens, splits and focuses Agent Sessions by Awen identity, including reopening a closed View", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const target = {
     kind: "agentSession",
@@ -293,7 +293,7 @@ it("distinguishes the focused Session from other opened and unopened Sessions", 
     workspaceId: "workspace" as WorkspaceId,
     agentSessionId: "s2" as AgentSessionId,
   } as const;
-  const target3 = {
+  const targeawen = {
     kind: "agentSession",
     environmentId: "local" as EnvironmentId,
     workspaceId: "workspace" as WorkspaceId,
@@ -305,7 +305,7 @@ it("distinguishes the focused Session from other opened and unopened Sessions", 
       <>
         <SessionRow target={target1}>Session 1</SessionRow>
         <SessionRow target={target2}>Session 2</SessionRow>
-        <SessionRow target={target3}>Session 3</SessionRow>
+        <SessionRow target={targeawen}>Session 3</SessionRow>
       </>,
     );
   });
@@ -318,7 +318,7 @@ it("distinguishes the focused Session from other opened and unopened Sessions", 
   // Split target2 into the active tab (now target2 is focused)
   await act(() => row2!.props.onClick({ altKey: true, shiftKey: false }));
 
-  // Target2 is now focused in tab, target1 is open in tab but not focused, target3 is not in tab
+  // Target2 is now focused in tab, target1 is open in tab but not focused, targeawen is not in tab
   expect(row2!.props["data-session-focused"]).toBe("true");
   expect(row2!.props["aria-current"]).toBe("page");
 

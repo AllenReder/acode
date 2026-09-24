@@ -11,12 +11,15 @@ vi.mock("../../localApi", () => ({
 }));
 
 vi.mock("../ui/dialog", () => ({
-  Dialog: ({ open, children }: { open: boolean; children: ReactNode }) => (open ? <>{children}</> : null),
+  Dialog: ({ open, children }: { open: boolean; children: ReactNode }) =>
+    open ? <>{children}</> : null,
   DialogDescription: ({ children }: { children: ReactNode }) => <p>{children}</p>,
   DialogFooter: ({ children }: { children: ReactNode }) => <footer>{children}</footer>,
   DialogHeader: ({ children }: { children: ReactNode }) => <header>{children}</header>,
   DialogPanel: ({ children }: { children: ReactNode }) => <section>{children}</section>,
-  DialogPopup: ({ children, ...props }: { children: ReactNode }) => <div {...props}>{children}</div>,
+  DialogPopup: ({ children, ...props }: { children: ReactNode }) => (
+    <div {...props}>{children}</div>
+  ),
   DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
 }));
 
@@ -37,7 +40,7 @@ vi.mock("../../state/query", () => ({
 }));
 
 import { AddWorkspaceDialog, NewWorkspaceDialog } from "./WorkspaceDialogs";
-import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
+import type { EnvironmentAwenProject } from "@awen/client-runtime/state/models";
 
 const mockProject = {
   id: "project-1",
@@ -47,7 +50,7 @@ const mockProject = {
     {
       id: "w-main",
       projectId: "project-1",
-      t3ProjectId: "t3-main",
+      awenProjectId: "awen-main",
       title: "main",
       workspaceRoot: "/repo/main",
       role: "main",
@@ -55,7 +58,7 @@ const mockProject = {
       updatedAt: "2026-01-01T00:00:00.000Z",
     },
   ],
-} as unknown as EnvironmentAcodeProject;
+} as unknown as EnvironmentAwenProject;
 
 describe("WorkspaceDialogs", () => {
   let renderer: ReactTestRenderer;
@@ -195,10 +198,14 @@ describe("WorkspaceDialogs", () => {
       const dialog = renderer.root.findByProps({ "data-testid": "new-workspace-dialog" });
       expect(dialog).toBeDefined();
 
-      const branchInput = renderer.root.findByProps({ "data-testid": "new-workspace-branch-input" });
+      const branchInput = renderer.root.findByProps({
+        "data-testid": "new-workspace-branch-input",
+      });
       expect(branchInput.props.value).toBe("");
 
-      const baseRefInput = renderer.root.findByProps({ "data-testid": "new-workspace-base-ref-input" });
+      const baseRefInput = renderer.root.findByProps({
+        "data-testid": "new-workspace-base-ref-input",
+      });
       expect(baseRefInput.props.value).toBe("");
       expect(baseRefInput.props.placeholder).toBe("HEAD");
     });
@@ -219,13 +226,17 @@ describe("WorkspaceDialogs", () => {
         );
       });
 
-      const baseRefInput = renderer.root.findByProps({ "data-testid": "new-workspace-base-ref-input" });
+      const baseRefInput = renderer.root.findByProps({
+        "data-testid": "new-workspace-base-ref-input",
+      });
 
       await act(() => {
         baseRefInput.props.onClick();
       });
 
-      const dropdown = renderer.root.findByProps({ "data-testid": "new-workspace-base-ref-dropdown" });
+      const dropdown = renderer.root.findByProps({
+        "data-testid": "new-workspace-base-ref-dropdown",
+      });
       expect(dropdown).toBeDefined();
 
       // Type "release"
@@ -233,7 +244,9 @@ describe("WorkspaceDialogs", () => {
         baseRefInput.props.onChange({ target: { value: "release" } });
       });
 
-      const releaseOption = renderer.root.findByProps({ "data-testid": "base-ref-option-release-branch" });
+      const releaseOption = renderer.root.findByProps({
+        "data-testid": "base-ref-option-release-branch",
+      });
       expect(releaseOption).toBeDefined();
 
       // Click option to select it
@@ -260,7 +273,9 @@ describe("WorkspaceDialogs", () => {
         );
       });
 
-      const branchInput = renderer.root.findByProps({ "data-testid": "new-workspace-branch-input" });
+      const branchInput = renderer.root.findByProps({
+        "data-testid": "new-workspace-branch-input",
+      });
       await act(() => {
         branchInput.props.onChange({ target: { value: "feat-test" } });
       });

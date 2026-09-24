@@ -1,6 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { HostProcessPlatform } from "@awen/shared/hostProcess";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -11,7 +11,7 @@ import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import * as NodeNet from "node:net";
 
-import { buildRemoteT3RunnerScript } from "./tunnel.ts";
+import { buildRemoteAwenRunnerScript } from "./tunnel.ts";
 
 const Started = Schema.Struct({
   pid: Schema.Number,
@@ -28,7 +28,7 @@ describe.skipIf(HostProcessPlatform.defaultValue() === "win32")(
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-        const fixture = yield* fs.makeTempDirectoryScoped({ prefix: "t3-runner-" });
+        const fixture = yield* fs.makeTempDirectoryScoped({ prefix: "awen-runner-" });
         const bin = path.join(fixture, "bin");
         const cliPath = path.join(fixture, "installed cli.mjs");
         yield* fs.makeDirectory(bin);
@@ -44,7 +44,7 @@ const server = net.createServer((socket) => {
 process.on("SIGTERM", () => server.close(() => {
   process.stdout.write("graceful shutdown\\n");
 }));
-server.listen(Number(process.env.T3_TEST_PORT ?? 0), "127.0.0.1", () => {
+server.listen(Number(process.env.AWEN_TEST_PORT ?? 0), "127.0.0.1", () => {
   process.stdout.write(JSON.stringify({
     pid: process.pid,
     port: server.address().port,
@@ -62,11 +62,13 @@ server.listen(Number(process.env.T3_TEST_PORT ?? 0), "127.0.0.1", () => {
                 cwd: fixture,
                 env: {
                   PATH: bin,
-                  T3_TEST_PORT: String(port),
+                  AWEN_TEST_PORT: String(port),
                 },
                 detached: false,
                 stdin: Stream.make(
-                  new TextEncoder().encode(buildRemoteT3RunnerScript({ nodeScriptPath: cliPath })),
+                  new TextEncoder().encode(
+                    buildRemoteAwenRunnerScript({ nodeScriptPath: cliPath }),
+                  ),
                 ),
               }),
             );

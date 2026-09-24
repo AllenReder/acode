@@ -10,7 +10,7 @@ import {
   type ProviderSendTurnInput,
   ThreadId,
   TurnId,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import { assert, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
@@ -23,7 +23,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { HttpServer } from "effect/unstable/http";
 
 import * as EnvironmentAuth from "../src/auth/EnvironmentAuth.ts";
-import * as ServiceLauncherClient from "../src/cloud/serviceLauncherClient.ts";
+import * as ServiceLauncherClient from "../src/service/serviceLauncherClient.ts";
 import * as ServerConfig from "../src/config.ts";
 import * as ServerEnvironment from "../src/environment/ServerEnvironment.ts";
 import * as Keybindings from "../src/keybindings.ts";
@@ -359,7 +359,7 @@ it.effect(
     }).pipe(
       Effect.provide(
         ServerConfig.layerTest(process.cwd(), {
-          prefix: "t3-orphaned-provider-session-startup-",
+          prefix: "awen-orphaned-provider-session-startup-",
         }).pipe(Layer.provideMerge(NodeServices.layer)),
       ),
     ),
@@ -478,7 +478,7 @@ it.effect.each(["opt-in desktop restart", "marked remote update"] as const)(
       );
     }).pipe(
       Effect.provide(
-        ServerConfig.layerTest(process.cwd(), { prefix: "t3-restart-newer-turn-" }).pipe(
+        ServerConfig.layerTest(process.cwd(), { prefix: "awen-restart-newer-turn-" }).pipe(
           Layer.provideMerge(NodeServices.layer),
         ),
       ),

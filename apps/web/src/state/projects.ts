@@ -1,12 +1,12 @@
 import { Atom, AsyncResult } from "effect/unstable/reactivity";
 import * as Option from "effect/Option";
 import { terminalEnvironment } from "./terminal";
-import { createEnvironmentProjectAtoms } from "@t3tools/client-runtime/state/projects";
-import { createProjectEnvironmentAtoms } from "@t3tools/client-runtime/state/projects";
-import { createEnvironmentWorkspaceAtoms } from "@t3tools/client-runtime/state/workspaceEntities";
-import { createEnvironmentWorkspaceCommandAtoms } from "@t3tools/client-runtime/state/workspaceCommands";
-import { createEnvironmentRpcQueryAtomFamily } from "@t3tools/client-runtime/state/runtime";
-import { WS_METHODS } from "@t3tools/contracts";
+import { createEnvironmentProjectAtoms } from "@awen/client-runtime/state/projects";
+import { createProjectEnvironmentAtoms } from "@awen/client-runtime/state/projects";
+import { createEnvironmentWorkspaceAtoms } from "@awen/client-runtime/state/workspaceEntities";
+import { createEnvironmentWorkspaceCommandAtoms } from "@awen/client-runtime/state/workspaceCommands";
+import { createEnvironmentRpcQueryAtomFamily } from "@awen/client-runtime/state/runtime";
+import { WS_METHODS } from "@awen/contracts";
 
 import { environmentCatalog } from "../connection/catalog";
 import { connectionAtomRuntime } from "../connection/runtime";

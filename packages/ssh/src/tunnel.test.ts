@@ -1,11 +1,11 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as NetService from "@t3tools/shared/Net";
+import * as NetService from "@awen/shared/Net";
+import { HostProcessArchitecture, HostProcessPlatform } from "@awen/shared/hostProcess";
 import {
   SERVER_RELEASE_CHECKSUMS_FILE,
   serverReleaseArchiveName,
-} from "@t3tools/shared/serverRelease";
-import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+} from "@awen/shared/serverRelease";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -27,7 +27,7 @@ import { SshEnvironmentProgress } from "./progress.ts";
 import {
   buildRemoteLaunchScript,
   buildRemotePairingScript,
-  buildRemoteT3RunnerScript,
+  buildRemoteAwenRunnerScript,
   SshInvalidArchiveVersionError,
   SshMissingRunnerError,
   describeReadinessCause,
@@ -43,12 +43,12 @@ import {
 const TEST_NODE_ENGINE_RANGE = "^22.16 || ^23.11 || >=24.10";
 
 describe("remote package upload", () => {
-  it("reads the absolute ACode home used by the remote staging command", () => {
+  it("reads the absolute Awen home used by the remote staging command", () => {
     assert.equal(
-      parseRemotePackageStageHome("login banner\nACODE_STAGE_HOME=/home/allen/.acode\n"),
-      "/home/allen/.acode",
+      parseRemotePackageStageHome("login banner\nAWEN_STAGE_HOME=/home/allen/.awen\n"),
+      "/home/allen/.awen",
     );
-    assert.equal(parseRemotePackageStageHome("ACODE_STAGE_HOME=relative/.acode\n"), null);
+    assert.equal(parseRemotePackageStageHome("AWEN_STAGE_HOME=relative/.awen\n"), null);
   });
 });
 
@@ -58,7 +58,7 @@ describe("SSH environment inspection", () => {
   it("parses actual prerequisites and reuse state", () => {
     assert.deepEqual(
       parseSshEnvironmentInspection(
-        "login banner\nACODE_PREFLIGHT\tLinux\tx86_64\tv22.16.0\tyes\treuse\n",
+        "login banner\nAWEN_PREFLIGHT\tLinux\tx86_64\tv22.16.0\tyes\treuse\n",
         runner,
       ),
       {
@@ -76,14 +76,14 @@ describe("SSH environment inspection", () => {
   it("reports unsupported Node and rejects malformed output", () => {
     assert.equal(
       parseSshEnvironmentInspection(
-        "ACODE_PREFLIGHT\tLinux\tx86_64\tv22.15.0\tno\tinstall\n",
+        "AWEN_PREFLIGHT\tLinux\tx86_64\tv22.15.0\tno\tinstall\n",
         runner,
       )?.nodeSupported,
       false,
     );
     assert.equal(
       parseSshEnvironmentInspection(
-        "ACODE_PREFLIGHT\tLinux\tx86_64\tv22.16.0\tyes\tunknown\n",
+        "AWEN_PREFLIGHT\tLinux\tx86_64\tv22.16.0\tyes\tunknown\n",
         runner,
       ),
       null,
@@ -172,79 +172,76 @@ const NODE_SCRIPT = {
 } as const;
 
 describe("ssh tunnel scripts", () => {
-  it("installs and runs the ACode server release archive after Node and Git checks", () => {
-    const script = buildRemoteT3RunnerScript(ARCHIVE);
+  it("installs and runs the Awen server release archive after Node and Git checks", () => {
+    const script = buildRemoteAwenRunnerScript(ARCHIVE);
 
-    assert.include(script, "ACODE_ARCHIVE_VERSION='1.2.3-preview.20260911.4'");
-    assert.include(script, "ACODE_NODE_SCRIPT_PATH=''");
+    assert.include(script, "AWEN_ARCHIVE_VERSION='1.2.3-preview.20260911.4'");
+    assert.include(script, "AWEN_NODE_SCRIPT_PATH=''");
     assert.include(
       script,
-      "ACODE_RELEASE_BASE_URL='https://github.com/AllenReder/acode/releases/download'",
+      "AWEN_RELEASE_BASE_URL='https://github.com/AllenReder/awen/releases/download'",
     );
-    assert.include(
-      script,
-      'ACODE_RUNTIME_DIR="$ACODE_HOME/runtime/versions/$ACODE_ARCHIVE_VERSION"',
-    );
-    assert.include(script, 'ACODE_ARCHIVE="acode-server-$ACODE_ARCHIVE_VERSION-linux-x64.tar.gz"');
+    assert.include(script, 'AWEN_RUNTIME_DIR="$AWEN_HOME/runtime/versions/$AWEN_ARCHIVE_VERSION"');
+    assert.include(script, 'AWEN_ARCHIVE="awen-server-$AWEN_ARCHIVE_VERSION-linux-x64.tar.gz"');
     assert.include(script, "SHA256SUMS");
-    assert.include(script, 'exec "$ACODE_RUNTIME_DIR/bin/acode" "$@"');
+    assert.include(script, 'exec "$AWEN_RUNTIME_DIR/bin/awen" "$@"');
     assert.include(script, 'if [ "$(uname -s)" != "Linux" ]; then');
     assert.include(script, "x86_64 | amd64");
     assert.include(script, "if ! command -v git >/dev/null 2>&1; then");
     assert.include(script, "if ! ensure_remote_node_path; then");
     assert.notInclude(script, "npx");
     assert.notInclude(script, "npm exec");
-    assert.notInclude(script, "acode@latest");
-    assert.notInclude(script, 'exec acode "$@"');
+    assert.notInclude(script, "awen@latest");
+    assert.notInclude(script, 'exec awen "$@"');
     // Concurrent launches serialize on a per-version mkdir lock and recheck
     // the completion marker after acquiring it.
     assert.include(
       script,
-      'ACODE_LOCK="$ACODE_HOME/runtime/versions/.$ACODE_ARCHIVE_VERSION.install.lock"',
+      'AWEN_LOCK="$AWEN_HOME/runtime/versions/.$AWEN_ARCHIVE_VERSION.install.lock"',
     );
     // mkdir is the exclusive create; the pid follows atomically. A dead owner
     // is reclaimed at once, a never-published owner after a short grace.
-    assert.include(script, 'while ! mkdir "$ACODE_LOCK" 2>/dev/null; do');
-    assert.include(script, 'mv "$ACODE_LOCK/pid.tmp" "$ACODE_LOCK/pid"');
-    assert.include(script, 'if ! kill -0 "$ACODE_LOCK_OWNER" 2>/dev/null; then');
-    assert.include(script, 'if [ "$ACODE_LOCK_UNOWNED" -ge 5 ]; then');
-    assert.include(script, 'if [ "$ACODE_LOCK_WAITED" -ge 360 ]; then');
-    assert.include(script, '"$ACODE_STAGING/SHA256SUMS" 30');
-    assert.include(script, '"$ACODE_STAGING/$ACODE_ARCHIVE" 240');
-    assert.include(script, "ACODE_PROGRESS download %s");
-    assert.include(script, "ACODE_PROGRESS stage installing");
-    assert.include(script, "ACODE_PROGRESS stage starting");
-    assert.notInclude(script, "ACODE_LOCK_CANDIDATE");
+    assert.include(script, 'while ! mkdir "$AWEN_LOCK" 2>/dev/null; do');
+    assert.include(script, 'mv "$AWEN_LOCK/pid.tmp" "$AWEN_LOCK/pid"');
+    assert.include(script, 'if ! kill -0 "$AWEN_LOCK_OWNER" 2>/dev/null; then');
+    assert.include(script, 'if [ "$AWEN_LOCK_UNOWNED" -ge 5 ]; then');
+    assert.include(script, 'if [ "$AWEN_LOCK_WAITED" -ge 360 ]; then');
+    assert.include(script, '"$AWEN_STAGING/SHA256SUMS" 30');
+    assert.include(script, '"$AWEN_STAGING/$AWEN_ARCHIVE" 240');
+    assert.include(script, "AWEN_PROGRESS download %s");
+    assert.include(script, "AWEN_PROGRESS stage installing");
+    assert.include(script, "AWEN_PROGRESS stage starting");
+    assert.notInclude(script, "AWEN_LOCK_CANDIDATE");
     assert.notInclude(script, "-mmin");
-    assert.equal(script.split("if ! acode_runtime_ready; then").length - 1, 2);
+    assert.equal(script.split("if ! awen_runtime_ready; then").length - 1, 2);
     assert.isBelow(
-      script.indexOf('"$ACODE_STAGING/bin/acode" --version'),
-      script.indexOf('> "$ACODE_STAGING/.install-complete"'),
+      script.indexOf('"$AWEN_STAGING/bin/awen" --version'),
+      script.indexOf('> "$AWEN_STAGING/.install-complete"'),
     );
     // Node discovery is defined for the dev path but only ever invoked inside
     // the node-script branch, which the archive path skips entirely.
     assert.equal(script.split("ensure_remote_node_path || true").length - 1, 1);
     assert.isBelow(
       script.indexOf("ensure_remote_node_path || true"),
-      script.indexOf('exec node "$ACODE_NODE_SCRIPT_PATH" "$@"'),
+      script.indexOf('exec node "$AWEN_NODE_SCRIPT_PATH" "$@"'),
     );
     assert.isBelow(
-      script.indexOf('exec node "$ACODE_NODE_SCRIPT_PATH" "$@"'),
-      script.indexOf("ACODE_ARCHIVE_VERSION="),
+      script.indexOf('exec node "$AWEN_NODE_SCRIPT_PATH" "$@"'),
+      script.indexOf("AWEN_ARCHIVE_VERSION="),
     );
 
     const launch = buildRemoteLaunchScript({
       ...ARCHIVE,
-      releaseBaseUrl: "https://mirror.example/acode/",
+      releaseBaseUrl: "https://mirror.example/awen/",
     });
-    assert.include(launch, "ACODE_ARCHIVE_MODE=1");
-    assert.include(launch, "ACODE_RELEASE_BASE_URL='https://mirror.example/acode'");
+    assert.include(launch, "AWEN_ARCHIVE_MODE=1");
+    assert.include(launch, "AWEN_RELEASE_BASE_URL='https://mirror.example/awen'");
     assert.include(launch, '"$RUNNER_FILE" __ssh-helper pick-port "$PORT_FILE"');
     assert.include(launch, '"$RUNNER_FILE" __ssh-helper wait-ready "$REMOTE_PORT"');
     // Reuse only adopts a daemon that answers the public discovery API.
-    assert.include(launch, "/.well-known/t3/environment");
+    assert.include(launch, "/.well-known/awen/environment");
     assert.include(launch, '"$RUNNER_FILE" __ssh-helper runtime-port "$DEFAULT_RUNTIME_FILE"');
-    assert.include(buildRemoteLaunchScript(NODE_SCRIPT), "ACODE_ARCHIVE_MODE=0");
+    assert.include(buildRemoteLaunchScript(NODE_SCRIPT), "AWEN_ARCHIVE_MODE=0");
   });
 
   it("rejects archive versions that are not a single exact version segment", () => {
@@ -257,46 +254,46 @@ describe("ssh tunnel scripts", () => {
       "v1.2.3",
     ]) {
       assert.throws(
-        () => buildRemoteT3RunnerScript({ archiveVersion }),
+        () => buildRemoteAwenRunnerScript({ archiveVersion }),
         SshInvalidArchiveVersionError,
         undefined,
         archiveVersion,
       );
     }
     assert.include(
-      buildRemoteT3RunnerScript(ARCHIVE),
-      "ACODE_ARCHIVE_VERSION='1.2.3-preview.20260911.4'",
+      buildRemoteAwenRunnerScript(ARCHIVE),
+      "AWEN_ARCHIVE_VERSION='1.2.3-preview.20260911.4'",
     );
   });
 
   it("refuses to build a runner with neither an archive version nor a node script", () => {
     for (const input of [undefined, {}, { archiveVersion: "  " }, { nodeScriptPath: null }]) {
-      assert.throws(() => buildRemoteT3RunnerScript(input), SshMissingRunnerError);
+      assert.throws(() => buildRemoteAwenRunnerScript(input), SshMissingRunnerError);
     }
     assert.throws(() => buildRemoteLaunchScript(), SshMissingRunnerError);
   });
 
   it("does not hard-code a remote node engine range", () => {
-    const script = buildRemoteT3RunnerScript(NODE_SCRIPT);
+    const script = buildRemoteAwenRunnerScript(NODE_SCRIPT);
 
-    assert.include(script, "ACODE_NODE_ENGINE_RANGE=''");
+    assert.include(script, "AWEN_NODE_ENGINE_RANGE=''");
     assert.notInclude(script, TEST_NODE_ENGINE_RANGE);
   });
 
-  it("builds the remote ACode runner with a node script override", () => {
-    const script = buildRemoteT3RunnerScript({
+  it("builds the remote Awen runner with a node script override", () => {
+    const script = buildRemoteAwenRunnerScript({
       ...NODE_SCRIPT,
       nodeEngineRange: TEST_NODE_ENGINE_RANGE,
     });
 
     assert.include(
       script,
-      "ACODE_NODE_SCRIPT_PATH='/Users/julius/Development/Work/codething-mvp/apps/server/dist/bin.mjs'",
+      "AWEN_NODE_SCRIPT_PATH='/Users/julius/Development/Work/codething-mvp/apps/server/dist/bin.mjs'",
     );
-    assert.include(script, 'exec node "$ACODE_NODE_SCRIPT_PATH" "$@"');
-    assert.include(script, "ACODE_ARCHIVE_VERSION=''");
+    assert.include(script, 'exec node "$AWEN_NODE_SCRIPT_PATH" "$@"');
+    assert.include(script, "AWEN_ARCHIVE_VERSION=''");
     assert.include(script, 'prepend_path_if_dir "$HOME/.local/bin"');
-    assert.include(script, `ACODE_NODE_ENGINE_RANGE='${TEST_NODE_ENGINE_RANGE}'`);
+    assert.include(script, `AWEN_NODE_ENGINE_RANGE='${TEST_NODE_ENGINE_RANGE}'`);
     assert.include(script, "remote_node_satisfies_engine()");
     assert.include(script, "function satisfiesSemverRange");
     assert.include(script, "satisfiesSemverRange(rawVersion, range)");
@@ -309,12 +306,12 @@ describe("ssh tunnel scripts", () => {
     assert.include(script, 'prepend_path_if_dir "$HOME/.nodenv/shims"');
     assert.include(script, 'NVM_DIR="$HOME/.nvm"');
     assert.include(script, "nvm use --silent default");
-    assert.include(script, 'for ACODE_NODE_BIN in "$NVM_DIR"/versions/node/*/bin');
+    assert.include(script, 'for AWEN_NODE_BIN in "$NVM_DIR"/versions/node/*/bin');
     assert.notInclude(script, "ensure $NVM_DIR/nvm.sh is available");
     assert.notInclude(script, "npx");
   });
 
-  it("uses the remote ACode runner for launch and pairing scripts", () => {
+  it("uses the remote Awen runner for launch and pairing scripts", () => {
     const target = {
       alias: "devbox",
       hostname: "devbox.example.com",
@@ -337,7 +334,7 @@ describe("ssh tunnel scripts", () => {
     assert.notInclude(launch, "RUNNER_CHANGED");
     assert.include(launch, "ensure_remote_node_path()");
     assert.include(launch, "if ! ensure_remote_node_path; then");
-    assert.include(devLaunch, `ACODE_NODE_ENGINE_RANGE='${TEST_NODE_ENGINE_RANGE}'`);
+    assert.include(devLaunch, `AWEN_NODE_ENGINE_RANGE='${TEST_NODE_ENGINE_RANGE}'`);
     assert.include(devLaunch, "does not satisfy required range ");
     // Only an unhealthy daemon is killed for recovery.
     assert.include(launch, 'kill "$REMOTE_PID" 2>/dev/null || true');
@@ -345,11 +342,11 @@ describe("ssh tunnel scripts", () => {
     assert.include(launch, '"$RUNNER_FILE" serve --host 127.0.0.1');
     assert.include(launch, '--base-dir "$DEFAULT_SERVER_HOME"');
     assert.notInclude(launch, "server-home");
-    assert.include(launch, "Remote ACode daemon did not become ready");
+    assert.include(launch, "Remote Awen daemon did not become ready");
     assert.include(launch, 'wait_ready "60000"');
     assert.include(launch, 'if [ -s "$LOG_FILE" ]; then');
     assert.include(launch, "It wrote nothing to %s");
-    assert.include(launch, "ACODE_ARCHIVE_VERSION='1.2.3-preview.20260911.4'");
+    assert.include(launch, "AWEN_ARCHIVE_VERSION='1.2.3-preview.20260911.4'");
     assert.include(
       buildRemotePairingScript(target, ARCHIVE),
       '"$RUNNER_FILE" auth pairing create --base-dir "$PAIRING_BASE_DIR" --json',
@@ -361,7 +358,7 @@ describe("ssh tunnel scripts", () => {
     assert.notInclude(buildRemotePairingScript(target, ARCHIVE), "server-home");
     assert.include(
       buildRemotePairingScript(target, ARCHIVE),
-      "ACODE_ARCHIVE_VERSION='1.2.3-preview.20260911.4'",
+      "AWEN_ARCHIVE_VERSION='1.2.3-preview.20260911.4'",
     );
     assert.include(
       launch,
@@ -473,7 +470,7 @@ describe("ssh tunnel scripts", () => {
     });
     return Effect.gen(function* () {
       yield* waitForHttpReady({ baseUrl: "http://127.0.0.1:41773/" });
-      assert.deepEqual(urls, ["http://127.0.0.1:41773/.well-known/t3/environment"]);
+      assert.deepEqual(urls, ["http://127.0.0.1:41773/.well-known/awen/environment"]);
     }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient));
   });
 
@@ -789,7 +786,7 @@ describe("ssh tunnel scripts", () => {
   });
 
   it.effect(
-    "stages a locally built package from ACODE_SERVER_PACKAGE_DIR after a download failure",
+    "stages a locally built package from AWEN_SERVER_PACKAGE_DIR after a download failure",
     () => {
       const target = {
         alias: "devbox",
@@ -800,7 +797,7 @@ describe("ssh tunnel scripts", () => {
       const archiveName = serverReleaseArchiveName(ARCHIVE.archiveVersion);
       let launches = 0;
       let scpUploads = 0;
-      const firstUploadProgress = Effect.runSync(Deferred.make<void>());
+      const firstUploadProgress = Deferred.makeUnsafe<void>();
       const uploadProgress: Array<{ transferredBytes: number | null; totalBytes: number | null }> =
         [];
       const httpUrls: string[] = [];
@@ -810,7 +807,7 @@ describe("ssh tunnel scripts", () => {
           if (commandName(command).startsWith("scp")) {
             assert.include(args, "-P");
             assert.notInclude(args, "-p");
-            assert.include(args.at(-1) ?? "", "julius@devbox:/home/julius/.acode/ssh-launch/");
+            assert.include(args.at(-1) ?? "", "julius@devbox:/home/julius/.awen/ssh-launch/");
             scpUploads += 1;
             let released = false;
             return yield* Effect.acquireRelease(
@@ -847,7 +844,7 @@ describe("ssh tunnel scripts", () => {
           }
           if (args.includes("sh")) {
             return makeSuccessfulProcess(
-              scpUploads > 0 ? "10\n" : "ACODE_STAGE_HOME=/home/julius/.acode\n",
+              scpUploads > 0 ? "10\n" : "AWEN_STAGE_HOME=/home/julius/.awen\n",
             );
           }
           return makeSuccessfulProcess("\n");
@@ -877,7 +874,7 @@ describe("ssh tunnel scripts", () => {
               if (progress.stage === "uploading") {
                 uploadProgress.push(progress);
                 if (progress.transferredBytes === 10) {
-                  Effect.runSync(Deferred.succeed(firstUploadProgress, undefined));
+                  Deferred.doneUnsafe(firstUploadProgress, Effect.void);
                 }
               }
             },
@@ -889,8 +886,8 @@ describe("ssh tunnel scripts", () => {
       return Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const packageDir = yield* fs.makeTempDirectoryScoped({ prefix: "acode-local-package-" });
-        const archiveBytes = new TextEncoder().encode("fake acode server archive");
+        const packageDir = yield* fs.makeTempDirectoryScoped({ prefix: "awen-local-package-" });
+        const archiveBytes = new TextEncoder().encode("fake awen server archive");
         const checksum = NodeCrypto.createHash("sha256").update(archiveBytes).digest("hex");
         yield* fs.writeFile(path.join(packageDir, archiveName), archiveBytes);
         yield* fs.writeFileString(
@@ -899,11 +896,11 @@ describe("ssh tunnel scripts", () => {
         );
         yield* Effect.acquireRelease(
           Effect.sync(() => {
-            process.env.ACODE_SERVER_PACKAGE_DIR = packageDir;
+            process.env.AWEN_SERVER_PACKAGE_DIR = packageDir;
           }),
           () =>
             Effect.sync(() => {
-              delete process.env.ACODE_SERVER_PACKAGE_DIR;
+              delete process.env.AWEN_SERVER_PACKAGE_DIR;
             }),
         );
 
@@ -933,10 +930,7 @@ describe("ssh tunnel scripts", () => {
 // lock excludes concurrent installers. Run the real script against a tiny
 // fake archive served from a file:// mirror.
 describe("archive runner script", () => {
-  const hostPlatform = Effect.runSync(HostProcessPlatform);
   const archiveVersion = "1.2.3-preview.20260911.4";
-  const linuxX64Host =
-    hostPlatform === "linux" && Effect.runSync(HostProcessArchitecture) === "x64";
 
   const runRunner = (home: string, runner: string) =>
     Effect.gen(function* () {
@@ -975,14 +969,14 @@ describe("archive runner script", () => {
   // stem, checksummed in SHA256SUMS.
   const makeMirror = Effect.fn("makeMirror")(function* (root: string) {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const stem = `acode-server-${archiveVersion}-linux-x64`;
+    const stem = `awen-server-${archiveVersion}-linux-x64`;
     const stage = `${root}/stage/${stem}`;
     const release = `${root}/mirror/v${archiveVersion}`;
     const script = [
       "set -eu",
       `mkdir -p '${stage}/bin' '${release}'`,
-      `printf '#!/bin/sh\\necho acode v${archiveVersion}\\n' > '${stage}/bin/acode'`,
-      `chmod +x '${stage}/bin/acode'`,
+      `printf '#!/bin/sh\\necho awen v${archiveVersion}\\n' > '${stage}/bin/awen'`,
+      `chmod +x '${stage}/bin/awen'`,
       `tar -czf '${release}/${stem}.tar.gz' -C '${root}/stage' '${stem}'`,
       `cd '${release}' && (sha256sum '${stem}.tar.gz' 2>/dev/null || shasum -a 256 '${stem}.tar.gz') > SHA256SUMS`,
     ].join("\n");
@@ -991,17 +985,23 @@ describe("archive runner script", () => {
     return `file://${root}/mirror`;
   });
 
-  it.effect.skipIf(!linuxX64Host)(
+  it.effect(
     "installs once when several launches race, and reclaims stale locks",
     () =>
       Effect.gen(function* () {
+        if (
+          (yield* HostProcessPlatform) !== "linux" ||
+          (yield* HostProcessArchitecture) !== "x64"
+        ) {
+          return;
+        }
         const fs = yield* FileSystem.FileSystem;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "acode-archive-runner-" });
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "awen-archive-runner-" });
         const releaseBaseUrl = yield* makeMirror(root);
-        const runner = `${root}/run-acode.sh`;
+        const runner = `${root}/run-awen.sh`;
         yield* fs.writeFileString(
           runner,
-          buildRemoteT3RunnerScript({ archiveVersion, releaseBaseUrl }),
+          buildRemoteAwenRunnerScript({ archiveVersion, releaseBaseUrl }),
         );
         const home = `${root}/home`;
         yield* fs.makeDirectory(home, { recursive: true });
@@ -1012,9 +1012,9 @@ describe("archive runner script", () => {
         );
         for (const result of results) {
           assert.equal(result.exitCode, 0, result.stderr);
-          assert.include(result.stdout, `acode v${archiveVersion}`);
+          assert.include(result.stdout, `awen v${archiveVersion}`);
         }
-        const versionsDir = `${home}/.acode/runtime/versions`;
+        const versionsDir = `${home}/.awen/runtime/versions`;
         assert.deepEqual(yield* fs.readDirectory(versionsDir), [archiveVersion]);
         assert.equal(
           (yield* fs.readFileString(`${versionsDir}/${archiveVersion}/.install-complete`)).trim(),

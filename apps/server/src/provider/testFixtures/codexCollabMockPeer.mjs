@@ -2,7 +2,7 @@
 // Speaks just enough of the protocol for CodexSessionRuntime to start a
 // session, using REAL captured responses (codexMultiAgentWire.json), then
 // replays a scripted multi-agent notification sequence read from the
-// T3_CODEX_COLLAB_SCRIPT env var (a JSON file path) when the first turn
+// AWEN_CODEX_COLLAB_SCRIPT env var (a JSON file path) when the first turn
 // starts. Runs as a plain Node process — stdlib only.
 import * as NodeFS from "node:fs";
 import * as NodeReadline from "node:readline";
@@ -14,7 +14,7 @@ const here = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));
 const fixture = JSON.parse(
   NodeFS.readFileSync(NodePath.join(here, "codexMultiAgentWire.json"), "utf8"),
 );
-const script = JSON.parse(NodeFS.readFileSync(process.env.T3_CODEX_COLLAB_SCRIPT, "utf8"));
+const script = JSON.parse(NodeFS.readFileSync(process.env.AWEN_CODEX_COLLAB_SCRIPT, "utf8"));
 
 const write = (message) => process.stdout.write(`${JSON.stringify(message)}\n`);
 let turnStartCount = 0;
@@ -36,7 +36,7 @@ rl.on("line", (line) => {
   const { id, method } = message;
   if (method === undefined && script.serverRequests?.some((request) => request.id === id)) {
     NodeFS.appendFileSync(
-      `${process.env.T3_CODEX_COLLAB_SCRIPT}.responses`,
+      `${process.env.AWEN_CODEX_COLLAB_SCRIPT}.responses`,
       `${JSON.stringify({ id, result: message.result, error: message.error })}\n`,
     );
     if (script.completeTurnOnServerResponse && activeTurn) {
@@ -55,7 +55,7 @@ rl.on("line", (line) => {
     write({
       id,
       result: {
-        userAgent: "t3-collab-mock/0.0.0",
+        userAgent: "awen-collab-mock/0.0.0",
         codexHome: "/tmp",
         platformFamily: "unix",
         platformOs: "linux",
@@ -78,7 +78,7 @@ rl.on("line", (line) => {
   if (method === "thread/resume") {
     if (script.recordRequests) {
       NodeFS.appendFileSync(
-        `${process.env.T3_CODEX_COLLAB_SCRIPT}.requests`,
+        `${process.env.AWEN_CODEX_COLLAB_SCRIPT}.requests`,
         `${JSON.stringify({ method, params: message.params })}\n`,
       );
     }
@@ -148,7 +148,7 @@ rl.on("line", (line) => {
       activeCommand = NodeChildProcess.spawn(
         executable,
         args,
-        // oxlint-disable-next-line t3code/no-global-process-runtime -- standalone mock peer has no Effect runtime.
+        // oxlint-disable-next-line awen/no-global-process-runtime -- standalone mock peer has no Effect runtime.
         { detached: process.platform !== "win32", stdio: "ignore" },
       );
       activeCommand.once("spawn", () => {
@@ -173,7 +173,7 @@ rl.on("line", (line) => {
       });
       activeCommand.once("exit", (exitCode, signal) => {
         NodeFS.appendFileSync(
-          `${process.env.T3_CODEX_COLLAB_SCRIPT}.command-exits`,
+          `${process.env.AWEN_CODEX_COLLAB_SCRIPT}.command-exits`,
           `${JSON.stringify({ processId, exitCode, signal })}\n`,
         );
         activeCommand = undefined;
@@ -203,7 +203,7 @@ rl.on("line", (line) => {
     // failInterruptFor simulates a dead child whose interrupt errors.
     const target = message.params?.threadId;
     NodeFS.appendFileSync(
-      `${process.env.T3_CODEX_COLLAB_SCRIPT}.interrupts`,
+      `${process.env.AWEN_CODEX_COLLAB_SCRIPT}.interrupts`,
       `${JSON.stringify({ threadId: target, turnId: message.params?.turnId })}\n`,
     );
     if (
@@ -234,7 +234,7 @@ rl.on("line", (line) => {
   }
   if (method === "command/exec/terminate") {
     NodeFS.appendFileSync(
-      `${process.env.T3_CODEX_COLLAB_SCRIPT}.terminations`,
+      `${process.env.AWEN_CODEX_COLLAB_SCRIPT}.terminations`,
       `${JSON.stringify({ processId: message.params?.processId })}\n`,
     );
     if (

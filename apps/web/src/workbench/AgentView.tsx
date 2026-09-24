@@ -1,5 +1,5 @@
 import ChatView from "../components/ChatView";
-import { useAcodeAgentSessionShell } from "../state/entities";
+import { useAwenAgentSessionShell } from "../state/entities";
 import { useWorkspaceViewActions } from "./useWorkspaceViewActions";
 import type { ViewTarget } from "./viewRegistry";
 
@@ -12,10 +12,10 @@ interface AgentViewProps {
 }
 
 /**
- * View definition rendering one ACode Agent Session inside a Pane.
+ * View definition rendering one Awen Agent Session inside a Pane.
  *
  * Adapter from the workbench's `View instance` to the existing `<ChatView>`
- * component (which already hosts the T3 timeline, composer, tool activity,
+ * component (which already hosts the Awen timeline, composer, tool activity,
  * approvals and error surface). The View passes the Agent Session's owning
  * Workspace and Session ids explicitly — there is no assumption of a single
  * global selected thread (per the C10 issue body).
@@ -25,8 +25,14 @@ interface AgentViewProps {
  * the daemon, so re-opening the same Session from the Sidebar reattaches to
  * the live Agent Session rather than creating a fresh one.
  */
-export function AgentView({ target, paneId, focused, focusRequestId = 0, availableSize }: AgentViewProps) {
-  const session = useAcodeAgentSessionShell(
+export function AgentView({
+  target,
+  paneId,
+  focused,
+  focusRequestId = 0,
+  availableSize,
+}: AgentViewProps) {
+  const session = useAwenAgentSessionShell(
     target.environmentId,
     target.workspaceId,
     target.agentSessionId,

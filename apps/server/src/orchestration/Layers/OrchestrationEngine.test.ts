@@ -17,7 +17,7 @@ import {
   type OrchestrationCommand,
   type OrchestrationEvent,
   ProviderInstanceId,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it as effectIt } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -69,7 +69,7 @@ function makeOrchestrationLayer(
     ? makeSqlitePersistenceLive(databasePath)
     : SqlitePersistenceMemory;
   const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
-    prefix: "t3-orchestration-engine-test-",
+    prefix: "awen-orchestration-engine-test-",
   });
   return Layer.mergeAll(
     OrchestrationEngineLive.pipe(
@@ -132,16 +132,16 @@ const hasMetricSnapshot = (
   );
 
 describe("OrchestrationEngine", () => {
-  it("persists one ACode session per T3 thread under its owning workspace", async () => {
-    const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-acode-sessions-"));
+  it("persists one Awen session per Awen thread under its owning workspace", async () => {
+    const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "awen-awen-sessions-"));
     const databasePath = NodePath.join(directory, "state.sqlite");
     const first = await createOrchestrationSystem(databasePath);
     const modelSelection = { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" };
 
     try {
       for (const [projectId, workspaceRoot, threadId] of [
-        ["session-project-a", "/tmp/acode-session-a", "session-thread-a"],
-        ["session-project-b", "/tmp/acode-session-b", "session-thread-b"],
+        ["session-project-a", "/tmp/awen-session-a", "session-thread-a"],
+        ["session-project-b", "/tmp/awen-session-b", "session-thread-b"],
       ] as const) {
         await first.run(
           first.engine.dispatch({
@@ -171,7 +171,7 @@ describe("OrchestrationEngine", () => {
       }
 
       // Replaying the exact creation command returns its durable receipt and
-      // does not create a second ACode session row.
+      // does not create a second Awen session row.
       await first.run(
         first.engine.dispatch({
           type: "thread.create",
@@ -189,7 +189,7 @@ describe("OrchestrationEngine", () => {
       );
 
       const firstShell = await first.shell();
-      const firstSessions = (firstShell.acodeProjects ?? []).flatMap((project) =>
+      const firstSessions = (firstShell.awenProjects ?? []).flatMap((project) =>
         project.workspaces.flatMap((workspace) => agentSessionsIn(workspace)),
       );
       const sessionA = firstSessions.find((session) => session.threadId === "session-thread-a");
@@ -220,13 +220,13 @@ describe("OrchestrationEngine", () => {
       );
       const archivedShell = await first.shell();
       expect(
-        archivedShell.acodeProjects?.find(
-          (project) => project.id === "acode-project:session-project-a",
+        archivedShell.awenProjects?.find(
+          (project) => project.id === "awen-project:session-project-a",
         )?.workspaces[0]?.sessions,
       ).toEqual([]);
       expect(
-        archivedShell.acodeProjects?.find(
-          (project) => project.id === "acode-project:session-project-a",
+        archivedShell.awenProjects?.find(
+          (project) => project.id === "awen-project:session-project-a",
         )?.workspaces[0]?.historySessions,
       ).toMatchObject([{ id: sessionA?.id, threadId: "session-thread-a", status: "closed" }]);
 
@@ -239,8 +239,8 @@ describe("OrchestrationEngine", () => {
       );
       const unarchivedShell = await first.shell();
       expect(
-        unarchivedShell.acodeProjects?.find(
-          (project) => project.id === "acode-project:session-project-a",
+        unarchivedShell.awenProjects?.find(
+          (project) => project.id === "awen-project:session-project-a",
         )?.workspaces[0]?.sessions?.[0]?.id,
       ).toBe(sessionA?.id);
       first.dispose();
@@ -250,7 +250,7 @@ describe("OrchestrationEngine", () => {
         const reopenedSessions = reopened
           .shell()
           .then((shell) =>
-            (shell.acodeProjects ?? []).flatMap((project) =>
+            (shell.awenProjects ?? []).flatMap((project) =>
               project.workspaces.flatMap((workspace) => agentSessionsIn(workspace)),
             ),
           );
@@ -268,11 +268,11 @@ describe("OrchestrationEngine", () => {
     }
   });
 
-  it("registers a directory into a stable ACode tree across daemon restart", async () => {
-    const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-acode-project-"));
+  it("registers a directory into a stable Awen tree across daemon restart", async () => {
+    const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "awen-awen-project-"));
     const databasePath = NodePath.join(directory, "state.sqlite");
     const projectId = ProjectId.make("registration-project");
-    const workspaceRoot = "/tmp/acode-registration-workspace";
+    const workspaceRoot = "/tmp/awen-registration-workspace";
     const command = {
       type: "project.create" as const,
       commandId: CommandId.make("registration-project-create"),
@@ -286,13 +286,13 @@ describe("OrchestrationEngine", () => {
     const firstResult = await first.run(first.engine.dispatch(command));
     expect(firstResult.sequence).toBeGreaterThan(0);
     const firstShell = await first.shell();
-    expect(firstShell.acodeProjects).toMatchObject([
+    expect(firstShell.awenProjects).toMatchObject([
       {
-        id: "acode-project:registration-project",
+        id: "awen-project:registration-project",
         workspaces: [
           {
             id: "workspace:registration-project",
-            t3ProjectId: "registration-project",
+            awenProjectId: "registration-project",
             workspaceRoot,
             role: "main",
           },
@@ -303,7 +303,7 @@ describe("OrchestrationEngine", () => {
 
     const reopened = await createOrchestrationSystem(databasePath);
     const reopenedShell = await reopened.shell();
-    expect(reopenedShell.acodeProjects).toEqual(firstShell.acodeProjects);
+    expect(reopenedShell.awenProjects).toEqual(firstShell.awenProjects);
 
     const duplicate = await reopened.run(
       reopened.engine
@@ -319,7 +319,7 @@ describe("OrchestrationEngine", () => {
   });
 
   it("keeps identical local project ids and paths in separate daemon stores", async () => {
-    const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-acode-daemons-"));
+    const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "awen-awen-daemons-"));
     const command = {
       type: "project.create" as const,
       commandId: CommandId.make("same-local-registration"),
@@ -335,8 +335,8 @@ describe("OrchestrationEngine", () => {
       await second.run(second.engine.dispatch(command));
 
       const [firstShell, secondShell] = await Promise.all([first.shell(), second.shell()]);
-      expect(firstShell.acodeProjects).toEqual(secondShell.acodeProjects);
-      expect(firstShell.acodeProjects).not.toBe(secondShell.acodeProjects);
+      expect(firstShell.awenProjects).toEqual(secondShell.awenProjects);
+      expect(firstShell.awenProjects).not.toBe(secondShell.awenProjects);
     } finally {
       first.dispose();
       second.dispose();
@@ -347,7 +347,7 @@ describe("OrchestrationEngine", () => {
     "sends async answers with a %s session and rejects old duplicate replies",
     async (status) => {
       const directory = await NodeFSP.mkdtemp(
-        NodePath.join(NodeOS.tmpdir(), "t3-async-questions-"),
+        NodePath.join(NodeOS.tmpdir(), "awen-async-questions-"),
       );
       const databasePath = NodePath.join(directory, "state.sqlite");
       let system = await createOrchestrationSystem(databasePath);
@@ -1216,7 +1216,7 @@ describe("OrchestrationEngine", () => {
         },
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
         runtimeMode: "approval-required",
-        branch: "t3code/generated-branch-name",
+        branch: "awen/generated-branch-name",
         worktreePath: "/tmp/project-branch-race-worktree",
         createdAt,
       }),
@@ -1227,13 +1227,13 @@ describe("OrchestrationEngine", () => {
         type: "thread.meta.update",
         commandId: CommandId.make("cmd-stale-temporary-branch-sync"),
         threadId: ThreadId.make("thread-branch-race"),
-        branch: "t3code/1234abcd",
-        expectedBranch: "t3code/1234abcd",
+        branch: "awen/1234abcd",
+        expectedBranch: "awen/1234abcd",
       }),
     );
 
     const snapshot = await system.readModel();
-    expect(snapshot.threads[0]?.branch).toBe("t3code/generated-branch-name");
+    expect(snapshot.threads[0]?.branch).toBe("awen/generated-branch-name");
     await system.dispose();
   });
 
@@ -1509,13 +1509,13 @@ describe("OrchestrationEngine", () => {
         type: "thread.meta.update",
         commandId: CommandId.make("cmd-authoritative-worktree-bootstrap"),
         threadId: ThreadId.make("thread-worktree-bootstrap"),
-        branch: "t3code/1234abcd",
+        branch: "awen/1234abcd",
         worktreePath: "/tmp/project-worktree-bootstrap-worktree",
       }),
     );
 
     const snapshot = await system.readModel();
-    expect(snapshot.threads[0]?.branch).toBe("t3code/1234abcd");
+    expect(snapshot.threads[0]?.branch).toBe("awen/1234abcd");
     expect(snapshot.threads[0]?.worktreePath).toBe("/tmp/project-worktree-bootstrap-worktree");
     await system.dispose();
   });
@@ -1561,7 +1561,7 @@ describe("OrchestrationEngine", () => {
 
     const snapshots = await system.run(Metric.snapshot);
     expect(
-      hasMetricSnapshot(snapshots, "t3_orchestration_command_ack_duration", {
+      hasMetricSnapshot(snapshots, "awen_orchestration_command_ack_duration", {
         commandType: "thread.create",
         aggregateKind: "thread",
         ackEventType: "thread.created",
@@ -1599,7 +1599,7 @@ describe("OrchestrationEngine", () => {
 
     const snapshots = await system.run(Metric.snapshot);
     expect(
-      hasMetricSnapshot(snapshots, "t3_orchestration_commands_total", {
+      hasMetricSnapshot(snapshots, "awen_orchestration_commands_total", {
         commandType: "thread.create",
         aggregateKind: "thread",
         outcome: "failure",
@@ -1653,7 +1653,7 @@ describe("OrchestrationEngine", () => {
         threadId: ThreadId.make("thread-turn-diff"),
         turnId: asTurnId("turn-1"),
         completedAt: createdAt,
-        checkpointRef: asCheckpointRef("refs/t3/checkpoints/thread-turn-diff/turn/1"),
+        checkpointRef: asCheckpointRef("refs/awen/checkpoints/thread-turn-diff/turn/1"),
         status: "ready",
         files: [],
         checkpointTurnCount: 1,
@@ -1668,7 +1668,7 @@ describe("OrchestrationEngine", () => {
       {
         turnId: asTurnId("turn-1"),
         checkpointTurnCount: 1,
-        checkpointRef: asCheckpointRef("refs/t3/checkpoints/thread-turn-diff/turn/1"),
+        checkpointRef: asCheckpointRef("refs/awen/checkpoints/thread-turn-diff/turn/1"),
         status: "ready",
         files: [],
         assistantMessageId: null,
@@ -1718,7 +1718,7 @@ describe("OrchestrationEngine", () => {
     };
 
     const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
-      prefix: "t3-orchestration-engine-test-",
+      prefix: "awen-orchestration-engine-test-",
     });
 
     const runtime = ManagedRuntime.make(

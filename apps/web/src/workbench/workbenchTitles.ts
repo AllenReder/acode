@@ -1,4 +1,4 @@
-import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
+import type { EnvironmentAwenProject } from "@awen/client-runtime/state/models";
 
 import type { ViewTarget } from "./viewRegistry";
 
@@ -9,14 +9,14 @@ type WorkspaceScopedTarget = Extract<
 
 function workspaceFor(
   target: WorkspaceScopedTarget,
-  projects: ReadonlyArray<EnvironmentAcodeProject>,
+  projects: ReadonlyArray<EnvironmentAwenProject>,
 ) {
   return locationFor(target, projects)?.workspace ?? null;
 }
 
 function locationFor(
   target: WorkspaceScopedTarget,
-  projects: ReadonlyArray<EnvironmentAcodeProject>,
+  projects: ReadonlyArray<EnvironmentAwenProject>,
 ) {
   for (const project of projects) {
     if (project.environmentId !== target.environmentId) continue;
@@ -29,7 +29,7 @@ function locationFor(
 /** Resolve the Project, Workspace, and View title breadcrumb for a Pane target. */
 export function resolveTargetBreadcrumbs(
   target: ViewTarget,
-  projects: ReadonlyArray<EnvironmentAcodeProject>,
+  projects: ReadonlyArray<EnvironmentAwenProject>,
 ): ReadonlyArray<string> {
   if (target.kind === "welcome") return ["Welcome"];
   if (target.kind === "project") {
@@ -53,7 +53,7 @@ export function resolveTargetBreadcrumbs(
 
 export function resolveTargetContext(
   target: ViewTarget,
-  projects: ReadonlyArray<EnvironmentAcodeProject>,
+  projects: ReadonlyArray<EnvironmentAwenProject>,
 ): string {
   if (target.kind === "welcome") return "Workbench";
   if (target.kind === "project") return "Project";
@@ -82,7 +82,7 @@ export function fallbackTargetTitle(target: ViewTarget): string {
 /** Resolve a human title from the latest public projection, never from runtime identity. */
 export function resolveTargetTitle(
   target: ViewTarget,
-  projects: ReadonlyArray<EnvironmentAcodeProject>,
+  projects: ReadonlyArray<EnvironmentAwenProject>,
 ): string {
   if (target.kind === "welcome") return "Welcome";
   if (target.kind === "project") {

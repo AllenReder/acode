@@ -181,12 +181,26 @@ describe("WorkbenchDrag lifecycle and overlay animations", () => {
       scrollTop: 0,
       clientWidth: 800,
       clientHeight: 600,
-      getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 }),
+      getBoundingClientRect: () => ({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 600,
+        right: 800,
+        bottom: 600,
+      }),
     } as unknown as HTMLElement;
 
     const paneBEl = {
       dataset: { workbenchPaneDrop: "", workbenchTabId: "tab-1", paneId: "pane-b" },
-      getBoundingClientRect: () => ({ left: 400, top: 0, width: 400, height: 600, right: 800, bottom: 600 }),
+      getBoundingClientRect: () => ({
+        left: 400,
+        top: 0,
+        width: 400,
+        height: 600,
+        right: 800,
+        bottom: 600,
+      }),
       closest: (sel: string) => (sel === "[data-workbench-pane-drop]" ? paneBEl : null),
     } as unknown as HTMLElement;
 
@@ -212,7 +226,14 @@ describe("WorkbenchDrag lifecycle and overlay animations", () => {
           createNodeMock: (el) => {
             if ((el.props as Record<string, unknown>)["data-workbench-drop-preview"]) {
               return {
-                getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 }),
+                getBoundingClientRect: () => ({
+                  left: 0,
+                  top: 0,
+                  width: 800,
+                  height: 600,
+                  right: 800,
+                  bottom: 600,
+                }),
               };
             }
             return null;

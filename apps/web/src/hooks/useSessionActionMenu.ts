@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { settlePromise } from "@t3tools/client-runtime/state/runtime";
+import { settlePromise } from "@awen/client-runtime/state/runtime";
 import { readLocalApi } from "../localApi";
 import { getActiveTab, findPaneBySessionTarget } from "../workbench/workbenchState";
 import { useWorkbenchStore } from "../workbench/workbenchStore";

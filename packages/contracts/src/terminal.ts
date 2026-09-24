@@ -57,7 +57,7 @@ const TerminalOwnerInput = Schema.Struct({
 /**
  * Terminal ids are ALWAYS chosen by the client and sent explicitly — no
  * server-side allocation. New callers send `workspaceId`; `threadId` is an
- * old-client compatibility owner and is not used by the ACode path.
+ * old-client compatibility owner and is not used by the Awen path.
  */
 const TerminalSessionInput = Schema.Struct({
   ...TerminalOwnerInput.fields,

@@ -9,7 +9,7 @@ import {
   type OrchestrationEvent,
   type OrchestrationThread,
   type ProviderApprovalDecision,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
@@ -87,7 +87,6 @@ import * as VcsDriverRegistry from "../src/vcs/VcsDriverRegistry.ts";
 import { VcsStatusBroadcaster } from "../src/vcs/VcsStatusBroadcaster.ts";
 import { GitWorkflowService } from "../src/git/GitWorkflowService.ts";
 import * as VcsProcess from "../src/vcs/VcsProcess.ts";
-import * as AgentAwarenessRelay from "../src/relay/AgentAwarenessRelay.ts";
 import * as PullRequestService from "../src/pullRequest/PullRequestService.ts";
 
 const decodeCodexSettings = Schema.decodeEffect(CodexSettings);
@@ -258,7 +257,7 @@ export const makeOrchestrationIntegrationHarness = (
         )
       : null;
     const rootDir = yield* fileSystem.makeTempDirectoryScoped({
-      prefix: "t3-orchestration-integration-",
+      prefix: "awen-orchestration-integration-",
     });
     const workspaceDir = path.join(rootDir, "workspace");
     const { stateDir, dbPath } = yield* deriveServerPaths(rootDir, undefined).pipe(
@@ -410,12 +409,6 @@ export const makeOrchestrationIntegrationHarness = (
           start: () => Effect.void,
           drain: Effect.void,
           requestSync: () => Effect.void,
-        }),
-      ),
-      Layer.provideMerge(
-        Layer.succeed(AgentAwarenessRelay.AgentAwarenessRelay, {
-          publishThread: () => Effect.void,
-          start: () => Effect.void,
         }),
       ),
     );

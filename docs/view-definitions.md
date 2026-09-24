@@ -4,7 +4,7 @@ The Workbench's in-process extension seam lives in
 `apps/web/src/workbench/viewRegistry.ts`. Built-ins register in
 `viewDefinitions.ts`; there is no plugin discovery or dynamic loading.
 
-A `ViewTarget` contains an ACode Project, Workspace, Agent Session, or Terminal
+A `ViewTarget` contains an Awen Project, Workspace, Agent Session, or Terminal
 Session identity, scoped to an environment. Welcome has no work target.
 `definitionId` optionally selects a registered renderer; otherwise the target
 kind selects the built-in definition. Project and Workspace definitions can
@@ -35,7 +35,7 @@ trusted application code. A future plugin permission system is separate work.
 
 `createWorkspaceViewDefinitions` demonstrates this contract with Welcome and
 Workspace overview. The production adapter projects the existing runtime
-Workspace read model to titles and ACode targets, excluding Thread bindings,
+Workspace read model to titles and Awen targets, excluding Thread bindings,
 execution paths, PTYs, and service handles. Welcome can open an available
 Workspace. Its overview can open a Session only from that Workspace's current
 snapshot; unavailable targets return `false` and cause no navigation. Neither

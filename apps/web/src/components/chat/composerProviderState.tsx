@@ -5,14 +5,14 @@ import {
   type ProviderOptionSelection,
   type ScopedThreadRef,
   type ServerProviderModel,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import {
   buildExplicitProviderOptionSelectionsFromDescriptors,
   getProviderOptionCurrentValue,
   getProviderOptionDescriptors,
   isClaudeUltrathinkPrompt,
   normalizeModelSlug,
-} from "@t3tools/shared/model";
+} from "@awen/shared/model";
 import type { VariantProps } from "class-variance-authority";
 import type { ReactNode } from "react";
 
@@ -65,7 +65,7 @@ export function getComposerPromptInjectionState(prompt: string): ComposerPromptI
 }
 
 /**
- * Cursor ACP can report `fastMode: true` as the provider default. T3 only
+ * Cursor ACP can report `fastMode: true` as the provider default. Awen only
  * treats Fast as selected when the user chose it (draft/sticky/settings).
  * Otherwise inject an explicit `false` so new chats stay Normal and the
  * send path can overwrite a prior Fast session — descriptor defaults are

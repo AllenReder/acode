@@ -21,8 +21,8 @@ import {
   type RuntimeMode,
   ThreadId,
   ProviderInstanceId,
-} from "@t3tools/contracts";
-import { createModelSelection } from "@t3tools/shared/model";
+} from "@awen/contracts";
+import { createModelSelection } from "@awen/shared/model";
 import { assert, describe, it } from "@effect/vitest";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -55,7 +55,7 @@ const encodeUnknownJsonString = Schema.encodeSync(Schema.fromJsonString(Schema.U
 
 // Test-local service tag so the rest of the file can keep using `yield* ClaudeAdapter`.
 class ClaudeAdapter extends Context.Service<ClaudeAdapter, ClaudeAdapterShape>()(
-  "t3/provider/Layers/ClaudeAdapter.test/ClaudeAdapter",
+  "@awen/server/provider/Layers/ClaudeAdapter.test/ClaudeAdapter",
 ) {}
 
 class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
@@ -4196,8 +4196,8 @@ describe("ClaudeAdapterLive", () => {
           type: "system",
           subtype: "code_change_published",
           provider: "github",
-          url: "https://github.com/pingdotgg/t3code/pull/1",
-          repo: "pingdotgg/t3code",
+          url: "https://github.com/AllenReder/awen/pull/1",
+          repo: "AllenReder/awen",
           identifier: "1",
           session_id: "session",
           uuid: "ccp",

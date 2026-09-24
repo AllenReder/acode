@@ -11,8 +11,8 @@ import { leafIds, type LayoutNode } from "./layout";
 import { targetKey, type ViewTarget } from "./viewRegistry";
 import type { ViewInstance, WorkbenchSnapshot, WorkbenchTab } from "./workbenchState";
 
-export const WORKBENCH_PERSISTENCE_KEY = "acode:workbench:v1";
-export const WORKBENCH_PERSISTENCE_BACKUP_KEY = "acode:workbench:v1.backup";
+export const WORKBENCH_PERSISTENCE_KEY = "awen:workbench:v1";
+export const WORKBENCH_PERSISTENCE_BACKUP_KEY = "awen:workbench:v1.backup";
 const WORKBENCH_PERSISTENCE_VERSION = 1;
 
 export interface WorkbenchStorage {

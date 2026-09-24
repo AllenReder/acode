@@ -4,9 +4,9 @@
  * The hub binds loopback and is never reachable directly: serve-sim exposes a
  * shell-exec route and serve-emu's action routes are unauthenticated, so the
  * only way to a device stream is through this route, which requires an
- * environment session with read scope (operate scope for input and tuning). Reusing the T3
- * origin is also what makes remote connections work unchanged — Tailscale and
- * T3 Connect already carry `/api/*` and WebSocket upgrades for the app itself.
+ * environment session with read scope (operate scope for input and tuning).
+ * Reusing the Awen origin is also what makes remote connections work unchanged:
+ * Tailscale forwards `/api/*` and WebSocket upgrades for the app itself.
  *
  * Only the routes the Device panel needs are forwarded. Anything under the
  * hub's dashboard, exec, or WebRTC surface is rejected here.
@@ -15,7 +15,7 @@ import {
   AuthOrchestrationReadScope,
   AuthOrchestrationOperateScope,
   type AuthEnvironmentScope,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import {
@@ -70,7 +70,6 @@ const DROPPED_REQUEST_HEADERS = new Set([
   "sec-websocket-protocol",
   "cookie",
   "authorization",
-  "dpop",
   "content-length",
   "accept-encoding",
 ]);
@@ -82,7 +81,7 @@ const isWebSocketUpgrade = (request: HttpServerRequest.HttpServerRequest) =>
  * `<img>` and WebSocket cannot set headers, so every proxied request
  * authenticates the way the `/ws` upgrade does: a cookie for browser
  * sessions, or a short-lived `wsTicket` minted over authenticated HTTP for
- * bearer and DPoP clients. The upgrade authenticator already implements that
+ * bearer clients. The upgrade authenticator already implements that
  * fallback order, so it is used for plain requests as well.
  */
 const authenticate = (requiredScope: AuthEnvironmentScope) =>
@@ -95,7 +94,6 @@ const authenticate = (requiredScope: AuthEnvironmentScope) =>
           if (EnvironmentAuth.isServerAuthCredentialError(error)) {
             return yield* failEnvironmentAuthInvalid(
               EnvironmentAuth.serverAuthCredentialReason(error),
-              EnvironmentAuth.serverAuthDpopFailureReason(error),
             );
           }
           return yield* failEnvironmentInternal("internal_error", error);
@@ -202,7 +200,7 @@ const handler = Effect.gen(function* () {
   }
   // The hub runs in standalone mode at its origin root; the panel builds every
   // stream and socket URL itself, so nothing depends on the hub knowing the
-  // T3 prefix.
+  // Awen prefix.
   // The ticket authenticates here and must not travel on to the hub.
   const upstreamSearch = new URLSearchParams(url.value.search);
   upstreamSearch.delete("wsTicket");

@@ -1,7 +1,7 @@
 import {
-  type AcodeProjectShell,
+  type AwenProjectShell,
   type AgentSessionImportSource,
-  AcodeProjectId,
+  AwenProjectId,
   ChatAttachment,
   ComposerContextId,
   CheckpointRef,
@@ -15,7 +15,7 @@ import {
   ProviderInstanceId,
   OrchestrationMessageContext,
   WorkspaceId,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import { assert, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
@@ -119,9 +119,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       const sql = yield* SqlClient.SqlClient;
       const branchPullRequest = {
         projectId: asProjectId("project-1"),
-        repository: "pingdotgg/t3code",
+        repository: "AllenReder/awen",
         number: 43,
-        url: "https://github.com/pingdotgg/t3code/pull/43",
+        url: "https://github.com/AllenReder/awen/pull/43",
       };
 
       yield* sql`DELETE FROM projection_projects`;
@@ -171,9 +171,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           (
             'thread-1',
             'github.com',
-            'pingdotgg/t3code',
+            'AllenReder/awen',
             41,
-            'https://github.com/pingdotgg/t3code/pull/41',
+            'https://github.com/AllenReder/awen/pull/41',
             'created',
             '2026-02-24T00:00:02.500Z',
             '{"state":"merged","title":"Groundwork","headBranch":"feat/groundwork","baseBranch":"main","isDraft":false,"updatedAt":"2026-02-24T00:00:02.600Z","syncedAt":"2026-02-24T00:00:02.700Z"}',
@@ -182,9 +182,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           (
             'thread-1',
             'github.com',
-            'pingdotgg/t3code',
+            'AllenReder/awen',
             42,
-            'https://github.com/pingdotgg/t3code/pull/42',
+            'https://github.com/AllenReder/awen/pull/42',
             'manual',
             '2026-02-24T00:00:03.000Z',
             NULL,
@@ -225,7 +225,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           'default',
           NULL,
           NULL,
-          '{"projectId":"project-1","repository":"pingdotgg/t3code","number":41,"url":"https://github.com/pingdotgg/t3code/pull/41"}',
+          '{"projectId":"project-1","repository":"AllenReder/awen","number":41,"url":"https://github.com/AllenReder/awen/pull/41"}',
           ${encodeThreadLinkedPullRequest(branchPullRequest)},
           'turn-1',
           '2026-02-24T00:00:04.000Z',
@@ -390,9 +390,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       const expectedPullRequests: ReadonlyArray<ThreadPullRequestLink> = [
         {
           host: "github.com",
-          repository: "pingdotgg/t3code",
+          repository: "AllenReder/awen",
           number: 41,
-          url: "https://github.com/pingdotgg/t3code/pull/41",
+          url: "https://github.com/AllenReder/awen/pull/41",
           source: "created",
           linkedAt: "2026-02-24T00:00:02.500Z",
           snapshot: {
@@ -408,9 +408,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         },
         {
           host: "github.com",
-          repository: "pingdotgg/t3code",
+          repository: "AllenReder/awen",
           number: 42,
-          url: "https://github.com/pingdotgg/t3code/pull/42",
+          url: "https://github.com/AllenReder/awen/pull/42",
           source: "manual",
           linkedAt: "2026-02-24T00:00:03.000Z",
           snapshot: null,
@@ -930,9 +930,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       const sql = yield* SqlClient.SqlClient;
       const branchPullRequest = {
         projectId: asProjectId("project-archive-test"),
-        repository: "pingdotgg/t3code",
+        repository: "AllenReder/awen",
         number: 43,
-        url: "https://github.com/pingdotgg/t3code/pull/43",
+        url: "https://github.com/AllenReder/awen/pull/43",
       };
 
       yield* sql`DELETE FROM projection_projects`;
@@ -3518,7 +3518,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery activities by kind", (it) => {
   );
 });
 
-projectionSnapshotLayer("ProjectionSnapshotQuery ACode workspace tree", (it) => {
+projectionSnapshotLayer("ProjectionSnapshotQuery Awen workspace tree", (it) => {
   it.effect("exposes a registered project with its stable main workspace", () =>
     Effect.gen(function* () {
       const query = yield* ProjectionSnapshotQuery;
@@ -3527,42 +3527,42 @@ projectionSnapshotLayer("ProjectionSnapshotQuery ACode workspace tree", (it) => 
         INSERT INTO projection_projects (
           project_id, title, workspace_root, scripts_json, created_at, updated_at
         ) VALUES (
-          'project-register', 'Registered repo', '/tmp/acode-register', '[]',
+          'project-register', 'Registered repo', '/tmp/awen-register', '[]',
           '2026-09-18T00:00:00Z', '2026-09-18T00:00:00Z'
         )
       `;
       yield* sql`
-        INSERT INTO projection_acode_projects (
-          acode_project_id, title, created_at, updated_at
+        INSERT INTO projection_awen_projects (
+          awen_project_id, title, created_at, updated_at
         ) VALUES (
-          'acode-project:project-register', 'Registered repo',
+          'awen-project:project-register', 'Registered repo',
           '2026-09-18T00:00:00Z', '2026-09-18T00:00:00Z'
         )
       `;
       yield* sql`
-        INSERT INTO projection_acode_workspaces (
-          workspace_id, acode_project_id, t3_project_id, title, workspace_root,
+        INSERT INTO projection_awen_workspaces (
+          workspace_id, awen_project_id, project_id, title, workspace_root,
           role, created_at, updated_at
         ) VALUES (
-          'workspace:project-register', 'acode-project:project-register',
-          'project-register', 'Registered repo', '/tmp/acode-register', 'main',
+          'workspace:project-register', 'awen-project:project-register',
+          'project-register', 'Registered repo', '/tmp/awen-register', 'main',
           '2026-09-18T00:00:00Z', '2026-09-18T00:00:00Z'
         )
       `;
 
       const snapshot = yield* query.getShellSnapshot();
 
-      assert.deepEqual(snapshot.acodeProjects, [
+      assert.deepEqual(snapshot.awenProjects, [
         {
-          id: AcodeProjectId.make("acode-project:project-register"),
+          id: AwenProjectId.make("awen-project:project-register"),
           title: "Registered repo",
           workspaces: [
             {
               id: WorkspaceId.make("workspace:project-register"),
-              projectId: AcodeProjectId.make("acode-project:project-register"),
-              t3ProjectId: ProjectId.make("project-register"),
+              projectId: AwenProjectId.make("awen-project:project-register"),
+              awenProjectId: ProjectId.make("project-register"),
               title: "Registered repo",
-              workspaceRoot: "/tmp/acode-register",
+              workspaceRoot: "/tmp/awen-register",
               role: "main",
               sessions: [],
               historySessions: [],
@@ -3577,26 +3577,26 @@ projectionSnapshotLayer("ProjectionSnapshotQuery ACode workspace tree", (it) => 
     }),
   );
 
-  it.effect("returns the complete ACode Project when a sibling Workspace changes", () =>
+  it.effect("returns the complete Awen Project when a sibling Workspace changes", () =>
     Effect.gen(function* () {
       const query = yield* ProjectionSnapshotQuery;
       const sql = yield* SqlClient.SqlClient;
       yield* sql`
-        INSERT INTO projection_acode_projects (
-          acode_project_id, title, created_at, updated_at
+        INSERT INTO projection_awen_projects (
+          awen_project_id, title, created_at, updated_at
         ) VALUES (
-          'acode-project:siblings', 'Repository',
+          'awen-project:siblings', 'Repository',
           '2026-09-18T00:00:00Z', '2026-09-18T00:00:00Z'
         )
       `;
       yield* sql`
-        INSERT INTO projection_acode_workspaces (
-          workspace_id, acode_project_id, t3_project_id, title, workspace_root,
+        INSERT INTO projection_awen_workspaces (
+          workspace_id, awen_project_id, project_id, title, workspace_root,
           role, created_at, updated_at
         ) VALUES
-          ('workspace:siblings-main', 'acode-project:siblings', 'siblings-main',
+          ('workspace:siblings-main', 'awen-project:siblings', 'siblings-main',
             'Main', '/tmp/siblings-main', 'main', '2026-09-18T00:00:00Z', '2026-09-18T00:00:00Z'),
-          ('workspace:siblings-feature', 'acode-project:siblings', 'siblings-feature',
+          ('workspace:siblings-feature', 'awen-project:siblings', 'siblings-feature',
             'Feature', '/tmp/siblings-feature', 'worktree', '2026-09-18T00:00:01Z', '2026-09-18T00:00:01Z')
       `;
 
@@ -3604,8 +3604,8 @@ projectionSnapshotLayer("ProjectionSnapshotQuery ACode workspace tree", (it) => 
       // `?.()` alone would make `yield*` see `Effect | undefined` and widen the
       // whole test effect to `unknown`. Fall back like the production callers.
       const project = yield* (
-        query.getAcodeProjectByT3ProjectId?.(ProjectId.make("siblings-feature")) ??
-          Effect.succeed(Option.none<AcodeProjectShell>())
+        query.getAwenProjectByAwenProjectId?.(ProjectId.make("siblings-feature")) ??
+          Effect.succeed(Option.none<AwenProjectShell>())
       );
       assert.isTrue(Option.isSome(project));
       if (Option.isSome(project)) {

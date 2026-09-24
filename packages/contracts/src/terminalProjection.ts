@@ -1,7 +1,7 @@
 import { WorkspaceId } from "./baseSchemas.ts";
 import { terminalSessionIdForRuntime } from "./session.ts";
 import type { TerminalSummary } from "./terminal.ts";
-import type { AcodeProjectShell, AcodeTerminalSessionShell } from "./workspace.ts";
+import type { AwenProjectShell, AwenTerminalSessionShell } from "./workspace.ts";
 
 /**
  * Join the terminal metadata projection to the durable Workspace tree. The
@@ -9,11 +9,11 @@ import type { AcodeProjectShell, AcodeTerminalSessionShell } from "./workspace.t
  * Legacy thread terminals cannot be assigned a Workspace by guessing a cwd.
  */
 export function projectTerminalSessions(
-  projects: ReadonlyArray<AcodeProjectShell>,
+  projects: ReadonlyArray<AwenProjectShell>,
   terminals: ReadonlyArray<TerminalSummary>,
-): ReadonlyArray<AcodeProjectShell> {
-  const activeSessions = new Map<WorkspaceId, Map<string, AcodeTerminalSessionShell>>();
-  const historySessions = new Map<WorkspaceId, Map<string, AcodeTerminalSessionShell>>();
+): ReadonlyArray<AwenProjectShell> {
+  const activeSessions = new Map<WorkspaceId, Map<string, AwenTerminalSessionShell>>();
+  const historySessions = new Map<WorkspaceId, Map<string, AwenTerminalSessionShell>>();
 
   for (const terminal of terminals) {
     if (terminal.workspaceId === undefined) continue;

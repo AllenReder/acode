@@ -1,12 +1,14 @@
 import {
+  AuthBearerSessionRequest,
   AuthStandardClientScopes,
   EnvironmentId,
   ORCHESTRATION_PROTOCOL_VERSION,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 
 import { remoteHttpClientLayer } from "../rpc/http.ts";
 import { ClientPresentation, SshEnvironmentGateway } from "../platform/capabilities.ts";
@@ -22,7 +24,7 @@ const CLIENT_PRESENTATION_LAYER = Layer.succeed(
   ClientPresentation,
   ClientPresentation.of({
     metadata: {
-      label: "T3 Code Test",
+      label: "Awen Test",
       deviceType: "desktop",
       os: "Test OS",
     },
@@ -38,7 +40,7 @@ function pairingHttpLayer(
     const url = String(input);
     calls.push({ url, init });
 
-    if (url.endsWith("/.well-known/t3/environment")) {
+    if (url.endsWith("/.well-known/awen/environment")) {
       if (options?.failDescriptor === true) {
         return Promise.resolve(
           Response.json({ message: "descriptor unavailable" }, { status: 503 }),
@@ -61,14 +63,12 @@ function pairingHttpLayer(
       );
     }
 
-    if (url.endsWith("/oauth/token")) {
+    if (url.endsWith("/api/auth/bearer-session")) {
       return Promise.resolve(
         Response.json({
-          access_token: "bearer-token",
-          issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
-          token_type: "Bearer",
-          expires_in: 3600,
-          scope: AuthStandardClientScopes.join(" "),
+          token: "bearer-token",
+          scopes: AuthStandardClientScopes,
+          expiresInSeconds: 3600,
         }),
       );
     }
@@ -107,19 +107,22 @@ describe("connection onboarding", () => {
         },
       });
       expect(calls.map((call) => call.url)).toEqual([
-        "https://remote.example.test/.well-known/t3/environment",
-        "https://remote.example.test/oauth/token",
+        "https://remote.example.test/.well-known/awen/environment",
+        "https://remote.example.test/api/auth/bearer-session",
       ]);
 
-      const tokenRequest = calls.find((call) => call.url.endsWith("/oauth/token"));
-      const tokenBody =
-        tokenRequest?.init.body instanceof Uint8Array
-          ? new TextDecoder().decode(tokenRequest.init.body)
-          : String(tokenRequest?.init.body);
-      const tokenParams = new URLSearchParams(tokenBody);
-      expect(tokenParams.get("subject_token")).toBe("pairing-token");
-      expect(tokenParams.get("scope")).toBe(AuthStandardClientScopes.join(" "));
-      expect(tokenParams.get("client_label")).toBe("T3 Code Test");
+      const sessionRequest = calls.find((call) => call.url.endsWith("/api/auth/bearer-session"));
+      const body = sessionRequest?.init.body;
+      const sessionBody =
+        body instanceof Uint8Array ? new TextDecoder().decode(body) : String(body ?? "");
+      const sessionPayload = yield* Schema.decodeUnknownEffect(
+        Schema.fromJsonString(AuthBearerSessionRequest),
+      )(sessionBody);
+      expect(sessionPayload).toEqual({
+        credential: "pairing-token",
+        scopes: AuthStandardClientScopes,
+        client: { label: "Awen Test", deviceType: "desktop", os: "Test OS" },
+      });
     }),
   );
 
@@ -140,7 +143,7 @@ describe("connection onboarding", () => {
       );
       expect(error).toMatchObject({ reason: "unsupported" });
       expect(calls.map((call) => call.url)).toEqual([
-        "https://remote.example.test/.well-known/t3/environment",
+        "https://remote.example.test/.well-known/awen/environment",
       ]);
     }),
   );
@@ -163,7 +166,7 @@ describe("connection onboarding", () => {
       );
 
       expect(calls.map((call) => call.url)).toEqual([
-        "https://remote.example.test/.well-known/t3/environment",
+        "https://remote.example.test/.well-known/awen/environment",
       ]);
     }),
   );

@@ -1,4 +1,4 @@
-import type { DesktopSshEnvironmentProgress } from "@t3tools/contracts";
+import type { DesktopSshEnvironmentProgress } from "@awen/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -6,7 +6,7 @@ import * as Option from "effect/Option";
 export class SshEnvironmentProgress extends Context.Service<
   SshEnvironmentProgress,
   { readonly report: (progress: DesktopSshEnvironmentProgress) => void }
->()("@t3tools/ssh/progress/SshEnvironmentProgress") {}
+>()("@awen/ssh/progress/SshEnvironmentProgress") {}
 
 export const reportSshProgress = (progress: DesktopSshEnvironmentProgress) =>
   Effect.gen(function* () {

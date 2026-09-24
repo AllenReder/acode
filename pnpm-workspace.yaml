@@ -2,9 +2,14 @@ packages:
   - apps/desktop
   - apps/server
   - apps/web
-  - oxlint-plugin-t3code
+  - oxlint-plugin-awen
   - packages/*
   - scripts
+
+# Desktop bundle builds run their frontend hook under production mode. Keep
+# pnpm from replacing the installed dev toolchain with a production-only tree
+# before that hook; CI performs an explicit frozen install before its commands.
+verifyDepsBeforeRun: warn
 
 # Successor to onlyBuiltDependencies/ignoredBuiltDependencies (pnpm 11).
 # true = allowed to run build scripts; false mirrors the pnpm 10 behavior
@@ -24,13 +29,6 @@ allowBuilds:
   workerd: false
 
 catalog:
-  "@clerk/backend": 3.18.1
-  "@clerk/clerk-js": 6.32.1
-  "@clerk/electron": 0.0.44
-  "@clerk/electron-passkeys": 0.0.3
-  "@clerk/expo": 4.6.8
-  "@clerk/react": 6.16.1
-  "@clerk/shared": 4.33.0
   "@effect/atom-react": 4.0.0-rc.112
   "@effect/openapi-generator": 4.0.0-rc.112
   "@effect/platform-node": 4.0.0-rc.112
@@ -56,12 +54,6 @@ catalog:
   yaml: ^2.9.0
 
 minimumReleaseAgeExclude:
-  - "@clerk/backend@3.18.1"
-  - "@clerk/clerk-js@6.32.1"
-  - "@clerk/electron@0.0.44"
-  - "@clerk/expo@4.6.8"
-  - "@clerk/react@6.16.1"
-  - "@clerk/shared@4.33.0"
   - "@distilled.cloud/aws@0.30.2"
   - "@distilled.cloud/axiom@0.30.2"
   - "@distilled.cloud/cloudflare@0.30.2"
@@ -104,19 +96,6 @@ overrides:
   "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-linux-x64-musl": "-"
   "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-win32-arm64": "-"
   "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-win32-x64": "-"
-  "@clerk/backend": "catalog:"
-  "@clerk/clerk-js": "catalog:"
-  "@clerk/clerk-js>@base-org/account": "-"
-  "@clerk/clerk-js>@coinbase/wallet-sdk": "-"
-  "@clerk/clerk-js>@solana/wallet-adapter-base": "-"
-  "@clerk/clerk-js>@solana/wallet-adapter-react": "-"
-  "@clerk/clerk-js>@solana/wallet-standard": "-"
-  "@clerk/clerk-js>@wallet-standard/core": "-"
-  "@clerk/electron": "catalog:"
-  "@clerk/electron-passkeys": "catalog:"
-  "@clerk/expo": "catalog:"
-  "@clerk/react": "catalog:"
-  "@clerk/shared": "catalog:"
   "@effect/atom-react": "catalog:"
   "@effect/platform-node": "catalog:"
   "@effect/platform-node-shared": "catalog:"
@@ -144,9 +123,6 @@ overrides:
   yaml: "catalog:"
 
 packageExtensions:
-  "@clerk/expo@*":
-    dependencies:
-      "@expo/config-plugins": 57.0.9
   "@effect/vitest@*":
     dependencies:
       vite-plus: "catalog:"

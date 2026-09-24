@@ -1,6 +1,6 @@
 import type { SelectedLineRange } from "@pierre/diffs";
 import type { FileOptions } from "@pierre/diffs/react";
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import type { ScopedThreadRef } from "@awen/contracts";
 import type { DraftId } from "~/composerDraftStore";
 import { resolveDiffThemeName } from "~/lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "~/lib/syntaxHighlighting";

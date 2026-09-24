@@ -3,7 +3,7 @@ import * as Schema from "effect/Schema";
 
 import {
   AgentSessionId,
-  AcodeProjectId,
+  AwenProjectId,
   EventId,
   ForwardCompatibleArray,
   IsoDateTime,
@@ -16,7 +16,7 @@ import {
 
 /**
  * Where the checkout sits in the Project's repository. "main" is the
- * registered root checkout; "worktree" is an associated or ACode-created
+ * registered root checkout; "worktree" is an associated or Awen-created
  * linked worktree. Display state (branch, commit, detached HEAD) never feeds
  * this value.
  */
@@ -24,25 +24,25 @@ export const WorkspaceRole = Schema.Literals(["main", "worktree"]);
 export type WorkspaceRole = typeof WorkspaceRole.Type;
 
 /**
- * How a "worktree" Workspace came to exist. ACode only deletes directories it
- * created, so the delete-directory action is gated on "acode-created".
+ * How a "worktree" Workspace came to exist. Awen only deletes directories it
+ * created, so the delete-directory action is gated on "awen-created".
  * Absent on "main" Workspaces and on shells from servers predating the field.
  */
-export const WorkspaceOrigin = Schema.Literals(["associated", "acode-created"]);
+export const WorkspaceOrigin = Schema.Literals(["associated", "awen-created"]);
 export type WorkspaceOrigin = typeof WorkspaceOrigin.Type;
 
 /**
- * A durable ACode Session shell: the fields every Session kind exposes in the
+ * A durable Awen Session shell: the fields every Session kind exposes in the
  * Workspace projection. The kind discriminates the identity, and the runtime
  * binding for that kind stays on its own shell variant.
  */
-export const AcodeSessionLifecycleStatus = Schema.Literals(["open", "closed"]);
-export type AcodeSessionLifecycleStatus = typeof AcodeSessionLifecycleStatus.Type;
+export const AwenSessionLifecycleStatus = Schema.Literals(["open", "closed"]);
+export type AwenSessionLifecycleStatus = typeof AwenSessionLifecycleStatus.Type;
 
-const AcodeSessionShellFields = {
+const AwenSessionShellFields = {
   workspaceId: WorkspaceId,
   title: TrimmedNonEmptyString,
-  status: Schema.optional(AcodeSessionLifecycleStatus).pipe(
+  status: Schema.optional(AwenSessionLifecycleStatus).pipe(
     Schema.withDecodingDefault(Effect.succeed("open" as const)),
   ),
   closedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
@@ -50,8 +50,8 @@ const AcodeSessionShellFields = {
   updatedAt: IsoDateTime,
 };
 
-/** The durable ACode identity and T3 conversation binding shown in a Workspace. */
-export const AcodeAgentSessionShell = Schema.Struct({
+/** The durable Awen identity and Awen conversation binding shown in a Workspace. */
+export const AwenAgentSessionShell = Schema.Struct({
   /**
    * Agent was the only Session kind before the shared contract, so shells from
    * a server that predates this discriminant decode as Agent instead of
@@ -59,65 +59,65 @@ export const AcodeAgentSessionShell = Schema.Struct({
    */
   kind: Schema.Literal("agent").pipe(Schema.withDecodingDefault(Effect.succeed("agent"))),
   id: AgentSessionId,
-  ...AcodeSessionShellFields,
+  ...AwenSessionShellFields,
   threadId: ThreadId,
 });
-export type AcodeAgentSessionShell = typeof AcodeAgentSessionShell.Type;
+export type AwenAgentSessionShell = typeof AwenAgentSessionShell.Type;
 
 /**
- * A durable ACode Terminal Session shell. Its identity is independent of the
+ * A durable Awen Terminal Session shell. Its identity is independent of the
  * PTY process currently backing it; the runtime terminal id stays behind the
  * Terminal Session adapter.
  */
-export const AcodeTerminalSessionShell = Schema.Struct({
+export const AwenTerminalSessionShell = Schema.Struct({
   kind: Schema.Literal("terminal"),
   id: TerminalSessionId,
-  ...AcodeSessionShellFields,
+  ...AwenSessionShellFields,
 });
-export type AcodeTerminalSessionShell = typeof AcodeTerminalSessionShell.Type;
+export type AwenTerminalSessionShell = typeof AwenTerminalSessionShell.Type;
 
 /** The shared durable Session contract projected under a Workspace. */
-export const AcodeSessionShell = Schema.Union([AcodeAgentSessionShell, AcodeTerminalSessionShell]);
-export type AcodeSessionShell = typeof AcodeSessionShell.Type;
+export const AwenSessionShell = Schema.Union([AwenAgentSessionShell, AwenTerminalSessionShell]);
+export type AwenSessionShell = typeof AwenSessionShell.Type;
 
 /** Narrow a projected Session shell to the Agent kind. */
-const isAcodeAgentSessionShell = Schema.is(AcodeAgentSessionShell);
+const isAwenAgentSessionShell = Schema.is(AwenAgentSessionShell);
 
 /**
  * The Agent Session shells of one Workspace projection.
  *
  * Operates on *decoded* shells. `Schema.is` does not honour the Agent shell's
  * `kind` decoding default, so a raw pre-discriminant payload that never went
- * through `AcodeProjectShell` decoding is not recognized and yields no Agent
+ * through `AwenProjectShell` decoding is not recognized and yields no Agent
  * Sessions. Every caller reads its Workspace from a decoded snapshot.
  */
 export function agentSessionsIn(workspace: {
-  readonly sessions?: ReadonlyArray<AcodeSessionShell> | undefined;
-  readonly historySessions?: ReadonlyArray<AcodeSessionShell> | undefined;
-}): ReadonlyArray<AcodeAgentSessionShell> {
+  readonly sessions?: ReadonlyArray<AwenSessionShell> | undefined;
+  readonly historySessions?: ReadonlyArray<AwenSessionShell> | undefined;
+}): ReadonlyArray<AwenAgentSessionShell> {
   return [...(workspace.sessions ?? []), ...(workspace.historySessions ?? [])].filter(
-    isAcodeAgentSessionShell,
+    isAwenAgentSessionShell,
   );
 }
 
 export function activeAgentSessionsIn(workspace: {
-  readonly sessions?: ReadonlyArray<AcodeSessionShell> | undefined;
-}): ReadonlyArray<AcodeAgentSessionShell> {
-  return (workspace.sessions ?? []).filter(isAcodeAgentSessionShell);
+  readonly sessions?: ReadonlyArray<AwenSessionShell> | undefined;
+}): ReadonlyArray<AwenAgentSessionShell> {
+  return (workspace.sessions ?? []).filter(isAwenAgentSessionShell);
 }
 
 export function historyAgentSessionsIn(workspace: {
-  readonly historySessions?: ReadonlyArray<AcodeSessionShell> | undefined;
-}): ReadonlyArray<AcodeAgentSessionShell> {
-  return (workspace.historySessions ?? []).filter(isAcodeAgentSessionShell);
+  readonly historySessions?: ReadonlyArray<AwenSessionShell> | undefined;
+}): ReadonlyArray<AwenAgentSessionShell> {
+  return (workspace.historySessions ?? []).filter(isAwenAgentSessionShell);
 }
 
-/** A stable checkout owned by one ACode Project. */
-export const AcodeWorkspaceShell = Schema.Struct({
+/** A stable checkout owned by one Awen Project. */
+export const AwenWorkspaceShell = Schema.Struct({
   id: WorkspaceId,
-  projectId: AcodeProjectId,
-  /** The T3 orchestration project that owns the execution directory. */
-  t3ProjectId: ProjectId,
+  projectId: AwenProjectId,
+  /** The Awen orchestration project that owns the execution directory. */
+  awenProjectId: ProjectId,
   title: TrimmedNonEmptyString,
   workspaceRoot: TrimmedNonEmptyString,
   role: WorkspaceRole,
@@ -127,63 +127,63 @@ export const AcodeWorkspaceShell = Schema.Struct({
    * Sessions of every kind. Decoded with `ForwardCompatibleArray` so a server
    * that adds a Session kind this build does not know drops that one element
    * instead of failing the whole Workspace snapshot. The transcript and
-   * execution state remain on the T3 thread shell.
+   * execution state remain on the Awen thread shell.
    */
-  sessions: Schema.optional(ForwardCompatibleArray(AcodeSessionShell)),
-  historySessions: Schema.optional(ForwardCompatibleArray(AcodeSessionShell)),
+  sessions: Schema.optional(ForwardCompatibleArray(AwenSessionShell)),
+  historySessions: Schema.optional(ForwardCompatibleArray(AwenSessionShell)),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
-export type AcodeWorkspaceShell = typeof AcodeWorkspaceShell.Type;
+export type AwenWorkspaceShell = typeof AwenWorkspaceShell.Type;
 
-/** A navigation Project grouping one or more ACode Workspaces. */
-export const AcodeProjectShell = Schema.Struct({
-  id: AcodeProjectId,
+/** A navigation Project grouping one or more Awen Workspaces. */
+export const AwenProjectShell = Schema.Struct({
+  id: AwenProjectId,
   title: TrimmedNonEmptyString,
-  workspaces: Schema.Array(AcodeWorkspaceShell),
+  workspaces: Schema.Array(AwenWorkspaceShell),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
-export type AcodeProjectShell = typeof AcodeProjectShell.Type;
+export type AwenProjectShell = typeof AwenProjectShell.Type;
 
 /**
  * Stable fallback identities for legacy project.create callers. The mapping
- * is deterministic but still keeps the ACode and T3 identifiers distinct.
+ * is deterministic but still keeps the Awen and Awen identifiers distinct.
  */
-export function acodeProjectIdForT3Project(projectId: ProjectId): AcodeProjectId {
-  return AcodeProjectId.make(`acode-project:${projectId}`);
+export function awenProjectIdForAwenProject(projectId: ProjectId): AwenProjectId {
+  return AwenProjectId.make(`awen-project:${projectId}`);
 }
 
-export function workspaceIdForT3Project(projectId: ProjectId): WorkspaceId {
+export function workspaceIdForAwenProject(projectId: ProjectId): WorkspaceId {
   return WorkspaceId.make(`workspace:${projectId}`);
 }
 
-/** Stable ACode identity derived from the creation event, not the thread id. */
+/** Stable Awen identity derived from the creation event, not the thread id. */
 export function agentSessionIdForThreadCreatedEvent(eventId: EventId): AgentSessionId {
   return AgentSessionId.make(`agent-session:${eventId}`);
 }
 
-// --- Workspace management RPC (acodeWorkspace.*) ---
+// --- Workspace management RPC (awenWorkspace.*) ---
 
 /** Attach an existing on-disk checkout as a sibling Workspace of the Project. */
-export const AcodeWorkspaceAssociateInput = Schema.Struct({
-  projectId: AcodeProjectId,
+export const AwenWorkspaceAssociateInput = Schema.Struct({
+  projectId: AwenProjectId,
   /** Directory of the checkout to associate. Subdirectories resolve to the checkout root. */
   path: TrimmedNonEmptyString,
   title: Schema.optional(TrimmedNonEmptyString),
 });
-export type AcodeWorkspaceAssociateInput = typeof AcodeWorkspaceAssociateInput.Type;
+export type AwenWorkspaceAssociateInput = typeof AwenWorkspaceAssociateInput.Type;
 
-export const AcodeWorkspaceAssociateResult = Schema.Struct({
-  workspace: AcodeWorkspaceShell,
+export const AwenWorkspaceAssociateResult = Schema.Struct({
+  workspace: AwenWorkspaceShell,
   /** True when the checkout was already registered under this Project and nothing changed. */
   reused: Schema.Boolean,
 });
-export type AcodeWorkspaceAssociateResult = typeof AcodeWorkspaceAssociateResult.Type;
+export type AwenWorkspaceAssociateResult = typeof AwenWorkspaceAssociateResult.Type;
 
 /** Create a Git worktree from the Project's repository and register it as a Workspace. */
-export const AcodeWorkspaceCreateWorktreeInput = Schema.Struct({
-  projectId: AcodeProjectId,
+export const AwenWorkspaceCreateWorktreeInput = Schema.Struct({
+  projectId: AwenProjectId,
   /** Create and check out this new branch. Omit to detach at `baseRef`. */
   newBranch: Schema.optional(TrimmedNonEmptyString),
   /** Branch, tag, or commit the worktree starts from. Defaults to HEAD. */
@@ -192,10 +192,10 @@ export const AcodeWorkspaceCreateWorktreeInput = Schema.Struct({
   path: Schema.optional(TrimmedNonEmptyString),
   title: Schema.optional(TrimmedNonEmptyString),
 });
-export type AcodeWorkspaceCreateWorktreeInput = typeof AcodeWorkspaceCreateWorktreeInput.Type;
+export type AwenWorkspaceCreateWorktreeInput = typeof AwenWorkspaceCreateWorktreeInput.Type;
 
-export const AcodeWorkspaceCreateWorktreeResult = Schema.Struct({
-  workspace: AcodeWorkspaceShell,
+export const AwenWorkspaceCreateWorktreeResult = Schema.Struct({
+  workspace: AwenWorkspaceShell,
   worktreePath: TrimmedNonEmptyString,
   /**
    * False when the directory already held a completed worktree of the same
@@ -203,52 +203,52 @@ export const AcodeWorkspaceCreateWorktreeResult = Schema.Struct({
    */
   worktreeCreated: Schema.Boolean,
 });
-export type AcodeWorkspaceCreateWorktreeResult = typeof AcodeWorkspaceCreateWorktreeResult.Type;
+export type AwenWorkspaceCreateWorktreeResult = typeof AwenWorkspaceCreateWorktreeResult.Type;
 
-export const AcodeWorkspaceRemoveInput = Schema.Struct({
+export const AwenWorkspaceRemoveInput = Schema.Struct({
   workspaceId: WorkspaceId,
   /**
    * Also delete the directory from disk. Only honored for "worktree"
-   * Workspaces with origin "acode-created"; the main checkout is never
+   * Workspaces with origin "awen-created"; the main checkout is never
    * deleted through this action.
    */
   deleteDirectory: Schema.optional(Schema.Boolean),
 });
-export type AcodeWorkspaceRemoveInput = typeof AcodeWorkspaceRemoveInput.Type;
+export type AwenWorkspaceRemoveInput = typeof AwenWorkspaceRemoveInput.Type;
 
-export const AcodeWorkspaceRemoveResult = Schema.Struct({
+export const AwenWorkspaceRemoveResult = Schema.Struct({
   /** False when the Workspace was already unregistered; removal is idempotent. */
   removed: Schema.Boolean,
   deletedDirectory: Schema.Boolean,
   /** Present when registration was removed but the requested directory cleanup was not. */
   warning: Schema.optional(TrimmedNonEmptyString),
 });
-export type AcodeWorkspaceRemoveResult = typeof AcodeWorkspaceRemoveResult.Type;
+export type AwenWorkspaceRemoveResult = typeof AwenWorkspaceRemoveResult.Type;
 
-export const AcodeWorkspaceRenameInput = Schema.Struct({
+export const AwenWorkspaceRenameInput = Schema.Struct({
   workspaceId: WorkspaceId,
   title: TrimmedNonEmptyString,
 });
-export type AcodeWorkspaceRenameInput = typeof AcodeWorkspaceRenameInput.Type;
+export type AwenWorkspaceRenameInput = typeof AwenWorkspaceRenameInput.Type;
 
-export const AcodeWorkspaceRenameResult = Schema.Struct({
-  workspace: AcodeWorkspaceShell,
+export const AwenWorkspaceRenameResult = Schema.Struct({
+  workspace: AwenWorkspaceShell,
 });
-export type AcodeWorkspaceRenameResult = typeof AcodeWorkspaceRenameResult.Type;
+export type AwenWorkspaceRenameResult = typeof AwenWorkspaceRenameResult.Type;
 
-export const AcodeProjectRenameInput = Schema.Struct({
-  projectId: AcodeProjectId,
+export const AwenProjectRenameInput = Schema.Struct({
+  projectId: AwenProjectId,
   title: TrimmedNonEmptyString,
 });
-export type AcodeProjectRenameInput = typeof AcodeProjectRenameInput.Type;
+export type AwenProjectRenameInput = typeof AwenProjectRenameInput.Type;
 
-export const AcodeProjectRenameResult = Schema.Struct({
-  project: AcodeProjectShell,
+export const AwenProjectRenameResult = Schema.Struct({
+  project: AwenProjectShell,
 });
-export type AcodeProjectRenameResult = typeof AcodeProjectRenameResult.Type;
+export type AwenProjectRenameResult = typeof AwenProjectRenameResult.Type;
 
-export const AcodeWorkspaceErrorReason = Schema.Literals([
-  /** The target ACode Project does not exist (or has no checkout to anchor on). */
+export const AwenWorkspaceErrorReason = Schema.Literals([
+  /** The target Awen Project does not exist (or has no checkout to anchor on). */
   "project-not-found",
   /** The associate path does not exist or is not a directory. */
   "path-not-found",
@@ -266,27 +266,27 @@ export const AcodeWorkspaceErrorReason = Schema.Literals([
   "invalid-ref",
   /** Directory deletion was requested for the main checkout. */
   "main-checkout-protected",
-  /** Directory deletion was requested for a checkout ACode did not create. */
-  "not-acode-created",
+  /** Directory deletion was requested for a checkout Awen did not create. */
+  "not-awen-created",
   /** Directory deletion was refused because the worktree has uncommitted or untracked files. */
   "dirty-worktree",
   /** Registration removal was refused because the Workspace still owns Sessions. */
   "workspace-not-empty",
   /** The requested Workspace identity does not exist on this server. */
   "workspace-not-found",
-  /** The requested ACode Project identity does not exist on this server. */
-  "acode-project-not-found",
+  /** The requested Awen Project identity does not exist on this server. */
+  "awen-project-not-found",
   /** The underlying Git operation failed; the directory state is unchanged. */
   "git-failed",
   /** The worktree was created on disk but Workspace registration failed. The directory was kept. */
   "registration-failed",
 ]);
-export type AcodeWorkspaceErrorReason = typeof AcodeWorkspaceErrorReason.Type;
+export type AwenWorkspaceErrorReason = typeof AwenWorkspaceErrorReason.Type;
 
-export class AcodeWorkspaceError extends Schema.TaggedError<AcodeWorkspaceError>()(
-  "AcodeWorkspaceError",
+export class AwenWorkspaceError extends Schema.TaggedError<AwenWorkspaceError>()(
+  "AwenWorkspaceError",
   {
-    reason: AcodeWorkspaceErrorReason,
+    reason: AwenWorkspaceErrorReason,
     detail: Schema.String,
     /** The on-disk path involved, when one exists (e.g. the kept worktree after a registration failure). */
     path: Schema.optional(Schema.String),

@@ -7,7 +7,7 @@ import * as NodePath from "node:path";
 import * as NodeProcess from "node:process";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { DEFAULT_TERMINAL_ID, type TerminalAttachStreamEvent } from "@t3tools/contracts";
+import { DEFAULT_TERMINAL_ID, type TerminalAttachStreamEvent } from "@awen/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -72,7 +72,7 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 async function main(): Promise<void> {
-  const baseDir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "acode-c04-terminal-"));
+  const baseDir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "awen-c04-terminal-"));
   const logsDir = NodePath.join(baseDir, "userdata", "logs", "terminals");
   const shell = currentShell();
   const runtime = ManagedRuntime.make(runtimeLayer);
@@ -122,8 +122,8 @@ async function main(): Promise<void> {
           const firstPid = firstSnapshot.pid;
 
           const visualPayload =
-            "\u001b[31mACODE_RED\u001b[0m\n中文\n" +
-            "\u001b[?1049h\u001b[2J\u001b[HACODE_ALT\u001b[?1049l\n";
+            "\u001b[31mAWEN_RED\u001b[0m\n中文\n" +
+            "\u001b[?1049h\u001b[2J\u001b[HAWEN_ALT\u001b[?1049l\n";
           yield* manager.write({
             threadId: THREAD_ID,
             terminalId: TERMINAL_ID,
@@ -137,9 +137,9 @@ async function main(): Promise<void> {
             waitFor("ANSI, alternate-screen, and Unicode output", () => {
               const output = outputText(events);
               return (
-                output.includes("ACODE_RED") &&
+                output.includes("AWEN_RED") &&
                 output.includes("中文") &&
-                output.includes("ACODE_ALT") &&
+                output.includes("AWEN_ALT") &&
                 output.includes("\u001b[31m") &&
                 output.includes("\u001b[?1049h") &&
                 output.includes("\u001b[2J") &&
@@ -152,8 +152,8 @@ async function main(): Promise<void> {
           const fullScreenProgram = [
             "process.stdin.setRawMode?.(true)",
             "process.stdin.resume()",
-            "process.stdout.write('\\u001b[?1049h\\u001b[2J\\u001b[HACODE_FULL_SCREEN\\n')",
-            "process.stdin.once('data',()=>{process.stdout.write('\\u001b[?1049l\\u001b[2J\\u001b[HACODE_FULL_SCREEN_RESTORED\\n');process.exit(0)})",
+            "process.stdout.write('\\u001b[?1049h\\u001b[2J\\u001b[HAWEN_FULL_SCREEN\\n')",
+            "process.stdin.once('data',()=>{process.stdout.write('\\u001b[?1049l\\u001b[2J\\u001b[HAWEN_FULL_SCREEN_RESTORED\\n');process.exit(0)})",
           ].join(";");
           yield* manager.write({
             threadId: THREAD_ID,
@@ -163,7 +163,7 @@ async function main(): Promise<void> {
           yield* Effect.promise(() =>
             waitFor("interactive full-screen program startup", () => {
               const output = outputText(events);
-              return output.includes("ACODE_FULL_SCREEN") && output.includes("\u001b[?1049h");
+              return output.includes("AWEN_FULL_SCREEN") && output.includes("\u001b[?1049h");
             }),
           );
           yield* manager.write({
@@ -175,18 +175,18 @@ async function main(): Promise<void> {
             waitFor("interactive full-screen program exit and screen restore", () => {
               const output = outputText(events);
               return (
-                output.includes("ACODE_FULL_SCREEN_RESTORED") && output.includes("\u001b[?1049l")
+                output.includes("AWEN_FULL_SCREEN_RESTORED") && output.includes("\u001b[?1049l")
               );
             }),
           );
           yield* manager.write({
             threadId: THREAD_ID,
             terminalId: TERMINAL_ID,
-            data: nodeCommand("process.stdout.write('ACODE_AFTER_FULLSCREEN\\n')"),
+            data: nodeCommand("process.stdout.write('AWEN_AFTER_FULLSCREEN\\n')"),
           });
           yield* Effect.promise(() =>
             waitFor("shell output after full-screen program", () =>
-              outputText(events).includes("ACODE_AFTER_FULLSCREEN"),
+              outputText(events).includes("AWEN_AFTER_FULLSCREEN"),
             ),
           );
 
@@ -200,19 +200,19 @@ async function main(): Promise<void> {
             threadId: THREAD_ID,
             terminalId: TERMINAL_ID,
             data: nodeCommand(
-              "process.stdout.write(`ACODE_SIZE:${process.stdout.rows} ${process.stdout.columns}:ACODE_SIZE_END\\n`)",
+              "process.stdout.write(`AWEN_SIZE:${process.stdout.rows} ${process.stdout.columns}:AWEN_SIZE_END\\n`)",
             ),
           });
           yield* Effect.promise(() =>
             waitFor("shell-visible PTY resize", () =>
               outputText(events).includes(
-                `ACODE_SIZE:${RESIZED_ROWS} ${RESIZED_COLS}:ACODE_SIZE_END`,
+                `AWEN_SIZE:${RESIZED_ROWS} ${RESIZED_COLS}:AWEN_SIZE_END`,
               ),
             ),
           );
 
           unsubscribe();
-          const detachedMarker = "ACODE_DETACHED_OUTPUT";
+          const detachedMarker = "AWEN_DETACHED_OUTPUT";
           yield* manager.write({
             threadId: THREAD_ID,
             terminalId: TERMINAL_ID,
@@ -248,11 +248,11 @@ async function main(): Promise<void> {
           yield* manager.write({
             threadId: THREAD_ID,
             terminalId: TERMINAL_ID,
-            data: nodeCommand("process.stdout.write('ACODE_LIVE_AFTER_ATTACH\\n')"),
+            data: nodeCommand("process.stdout.write('AWEN_LIVE_AFTER_ATTACH\\n')"),
           });
           yield* Effect.promise(() =>
             waitFor("live output after reattach", () =>
-              outputText(reattachedEvents).includes("ACODE_LIVE_AFTER_ATTACH"),
+              outputText(reattachedEvents).includes("AWEN_LIVE_AFTER_ATTACH"),
             ),
           );
 

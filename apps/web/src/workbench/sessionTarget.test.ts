@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type { EnvironmentId, WorkspaceId } from "@t3tools/contracts";
+import type { EnvironmentId, WorkspaceId } from "@awen/contracts";
 
 import { runtimeTerminalIdForTarget, terminalTargetForRuntime } from "./sessionTarget";
 import { targetKey } from "./viewRegistry";
@@ -11,7 +11,7 @@ const WS_A: WorkspaceId = "ws-a" as WorkspaceId;
 const WS_B: WorkspaceId = "ws-b" as WorkspaceId;
 
 describe("terminalTargetForRuntime", () => {
-  it("binds a runtime terminal to a workbench target with a typed ACode Session identity", () => {
+  it("binds a runtime terminal to a workbench target with a typed Awen Session identity", () => {
     const target = terminalTargetForRuntime({
       environmentId: ENV_A,
       workspaceId: WS_A,

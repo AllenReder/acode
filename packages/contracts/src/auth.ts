@@ -1,5 +1,4 @@
 import * as Schema from "effect/Schema";
-import * as HttpApiSchema from "effect/unstable/httpapi/HttpApiSchema";
 
 import {
   AuthSessionId,
@@ -68,13 +67,10 @@ export type ServerAuthBootstrapMethod = typeof ServerAuthBootstrapMethod.Type;
  *   app after bootstrap/pairing
  * - `bearer-access-token`: scoped token suitable for non-cookie or
  *   non-browser clients
- * - `dpop-access-token`: scoped proof-of-possession token used by managed
- *   relay connections
  */
 export const ServerAuthSessionMethod = Schema.Literals([
   "browser-session-cookie",
   "bearer-access-token",
-  "dpop-access-token",
 ]);
 export type ServerAuthSessionMethod = typeof ServerAuthSessionMethod.Type;
 
@@ -84,8 +80,6 @@ export const AuthTerminalOperateScope = "terminal:operate" as const;
 export const AuthReviewWriteScope = "review:write" as const;
 export const AuthAccessReadScope = "access:read" as const;
 export const AuthAccessWriteScope = "access:write" as const;
-export const AuthRelayReadScope = "relay:read" as const;
-export const AuthRelayWriteScope = "relay:write" as const;
 export const AuthEnvironmentScope = Schema.Literals([
   AuthOrchestrationReadScope,
   AuthOrchestrationOperateScope,
@@ -93,8 +87,6 @@ export const AuthEnvironmentScope = Schema.Literals([
   AuthReviewWriteScope,
   AuthAccessReadScope,
   AuthAccessWriteScope,
-  AuthRelayReadScope,
-  AuthRelayWriteScope,
 ]);
 export type AuthEnvironmentScope = typeof AuthEnvironmentScope.Type;
 export const AuthEnvironmentScopes = Schema.Array(AuthEnvironmentScope);
@@ -105,20 +97,12 @@ export const AuthStandardClientScopes = [
   AuthOrchestrationOperateScope,
   AuthTerminalOperateScope,
   AuthReviewWriteScope,
-  AuthRelayReadScope,
 ] as const;
 export const AuthAdministrativeScopes = [
   ...AuthStandardClientScopes,
   AuthAccessReadScope,
   AuthAccessWriteScope,
-  AuthRelayWriteScope,
 ] as const;
-
-export const AuthTokenExchangeGrantType =
-  "urn:ietf:params:oauth:grant-type:token-exchange" as const;
-export const AuthAccessTokenType = "urn:ietf:params:oauth:token-type:access_token" as const;
-export const AuthEnvironmentBootstrapTokenType =
-  "urn:t3:params:oauth:token-type:environment-bootstrap" as const;
 
 /**
  * Server-advertised auth capabilities for a specific execution environment.
@@ -183,26 +167,19 @@ export const AuthClientPresentationMetadata = Schema.Struct({
 });
 export type AuthClientPresentationMetadata = typeof AuthClientPresentationMetadata.Type;
 
-export const AuthTokenExchangeRequest = Schema.Struct({
-  grant_type: Schema.Literal(AuthTokenExchangeGrantType),
-  subject_token: TrimmedNonEmptyString,
-  subject_token_type: Schema.Literal(AuthEnvironmentBootstrapTokenType),
-  requested_token_type: Schema.Literal(AuthAccessTokenType),
-  scope: Schema.optionalKey(TrimmedNonEmptyString),
-  client_label: Schema.optionalKey(TrimmedNonEmptyString),
-  client_device_type: Schema.optionalKey(AuthClientMetadataDeviceType),
-  client_os: Schema.optionalKey(TrimmedNonEmptyString),
-}).pipe(HttpApiSchema.asFormUrlEncoded());
-export type AuthTokenExchangeRequest = typeof AuthTokenExchangeRequest.Type;
-
-export const AuthAccessTokenResult = Schema.Struct({
-  access_token: TrimmedNonEmptyString,
-  issued_token_type: Schema.Literal(AuthAccessTokenType),
-  token_type: Schema.Literals(["Bearer", "DPoP"]),
-  expires_in: Schema.Number,
-  scope: TrimmedNonEmptyString,
+export const AuthBearerSessionRequest = Schema.Struct({
+  credential: TrimmedNonEmptyString,
+  scopes: Schema.optionalKey(AuthEnvironmentScopes),
+  client: Schema.optionalKey(AuthClientPresentationMetadata),
 });
-export type AuthAccessTokenResult = typeof AuthAccessTokenResult.Type;
+export type AuthBearerSessionRequest = typeof AuthBearerSessionRequest.Type;
+
+export const AuthBearerSessionResult = Schema.Struct({
+  token: TrimmedNonEmptyString,
+  scopes: AuthEnvironmentScopes,
+  expiresInSeconds: Schema.Number,
+});
+export type AuthBearerSessionResult = typeof AuthBearerSessionResult.Type;
 
 export const AuthWebSocketTicketResult = Schema.Struct({
   ticket: TrimmedNonEmptyString,

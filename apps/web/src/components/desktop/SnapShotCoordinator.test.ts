@@ -1,10 +1,5 @@
-import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
-import {
-  type DesktopPendingSnapShot,
-  EnvironmentId,
-  ProjectId,
-  ThreadId,
-} from "@t3tools/contracts";
+import { scopeProjectRef, scopeThreadRef } from "@awen/client-runtime/environment";
+import { type DesktopPendingSnapShot, EnvironmentId, ProjectId, ThreadId } from "@awen/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { DraftId, useComposerDraftStore } from "../../composerDraftStore";

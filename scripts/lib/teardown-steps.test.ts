@@ -62,7 +62,7 @@ describe("removePathWithRetry", () => {
   });
 
   it("removes a real directory with the default primitive", async () => {
-    const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3code-teardown-"));
+    const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "awen-teardown-"));
     await NodeFSP.writeFile(NodePath.join(directory, "state.sqlite"), "x", "utf8");
 
     const result = await removePathWithRetry(directory);

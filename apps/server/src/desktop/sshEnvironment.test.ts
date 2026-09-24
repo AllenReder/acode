@@ -1,14 +1,14 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import type { DesktopDiscoveredSshHost, DesktopSshEnvironmentTarget } from "@t3tools/contracts";
+import type { DesktopDiscoveredSshHost, DesktopSshEnvironmentTarget } from "@awen/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
-import * as NetService from "@t3tools/shared/Net";
+import * as NetService from "@awen/shared/Net";
 
 import * as SshPasswordPrompts from "./sshPasswordPrompts.ts";
 import * as DesktopSshEnvironment from "./sshEnvironment.ts";
-import * as SshTunnel from "@t3tools/ssh/tunnel";
+import * as SshTunnel from "@awen/ssh/tunnel";
 
 const TARGET: DesktopSshEnvironmentTarget = {
   alias: "devbox",

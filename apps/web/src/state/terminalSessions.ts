@@ -5,14 +5,14 @@ import {
   selectRunningSubprocessTerminalIds,
   type KnownTerminalSession,
   type TerminalSessionState,
-} from "@t3tools/client-runtime/state/terminal";
+} from "@awen/client-runtime/state/terminal";
 import {
   ThreadId,
   WorkspaceId,
   type EnvironmentId,
   type TerminalAttachInput,
   type TerminalSummary,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import { useMemo } from "react";
 
 import { useEnvironmentQuery } from "./query";

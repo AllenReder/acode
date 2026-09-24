@@ -23,7 +23,7 @@ import {
   removePane,
   replaceLeafId,
   setSplitRatio,
-  type AcodeTab,
+  type AwenTab,
   type FocusDir,
   type PaneEdge,
   type PaneDropZone,
@@ -40,7 +40,7 @@ export interface ViewInstance {
 }
 
 /** Every layout leaf owns exactly one ViewInstance. */
-export interface WorkbenchTab extends AcodeTab {
+export interface WorkbenchTab extends AwenTab {
   readonly panes: ReadonlyMap<string, ViewInstance>;
   readonly layoutMode?: LayoutMode;
   readonly columns?: readonly Column[];
@@ -761,7 +761,7 @@ export function paneTargetKey(snapshot: WorkbenchSnapshot, paneId: string): stri
   return target === null ? null : targetKey(target);
 }
 
-export type { AcodeTab, SplitDir };
+export type { AwenTab, SplitDir };
 
 /** Create a presentation area; Tabs have no Workspace owner. */
 export function applyCreateTab(
@@ -837,7 +837,7 @@ function applyRemoveMatchingViews(
     }
     if (matchingPaneIds.length === 0) return tab;
     changed = true;
-    let currentTab: AcodeTab | null = { ...tab };
+    let currentTab: AwenTab | null = { ...tab };
     const panes = new Map(tab.panes);
     for (const paneId of matchingPaneIds) {
       panes.delete(paneId);

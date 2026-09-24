@@ -5,9 +5,9 @@ import {
   type TerminalSessionId,
   type ThreadId,
   type WorkspaceId,
-} from "@t3tools/contracts";
-import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
-import { normalizeProjectPathForComparison } from "@t3tools/shared/path";
+} from "@awen/contracts";
+import type { EnvironmentAwenProject } from "@awen/client-runtime/state/models";
+import { normalizeProjectPathForComparison } from "@awen/shared/path";
 import type { DraftId } from "../composerDraftStore";
 
 import type { ViewTarget } from "./viewRegistry";
@@ -54,7 +54,7 @@ export function resolveDraftRecoveryTarget(
     readonly worktreePath?: string | null | undefined;
     readonly promotedTo?: { readonly threadId: ThreadId } | null | undefined;
   },
-  projects: ReadonlyArray<EnvironmentAcodeProject>,
+  projects: ReadonlyArray<EnvironmentAwenProject>,
 ): SessionTarget | NewAgentSessionTarget | null {
   const threadId = draft.promotedTo?.threadId ?? draft.threadId;
   for (const project of projects) {
@@ -83,7 +83,7 @@ export function resolveNewAgentSessionTarget(
     readonly workspaceId: WorkspaceId;
     readonly worktreePath?: string | null | undefined;
   },
-  projects: ReadonlyArray<EnvironmentAcodeProject>,
+  projects: ReadonlyArray<EnvironmentAwenProject>,
 ): NewAgentSessionTarget | null {
   if (draft.worktreePath) {
     const normalizedCheckout = normalizeProjectPathForComparison(draft.worktreePath);
@@ -239,7 +239,7 @@ function pendingEnvironment(environment: DeepLinkEnvironmentState): DeepLinkReso
 }
 
 function workspaceFor(
-  projects: ReadonlyArray<EnvironmentAcodeProject>,
+  projects: ReadonlyArray<EnvironmentAwenProject>,
   environmentId: EnvironmentId,
   workspaceId: WorkspaceId,
 ) {
@@ -253,7 +253,7 @@ function workspaceFor(
 
 export function resolveDeepLink(
   input: DeepLinkRouteInput | null,
-  projects: ReadonlyArray<EnvironmentAcodeProject>,
+  projects: ReadonlyArray<EnvironmentAwenProject>,
   environment: DeepLinkEnvironmentState,
 ): DeepLinkResolution {
   if (input === null) return { state: "idle" };

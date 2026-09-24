@@ -1,4 +1,4 @@
-import type { DesktopUpdateState } from "@t3tools/contracts";
+import type { DesktopUpdateState } from "@awen/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
@@ -7,17 +7,17 @@ import {
   shouldUseSidebarUpdateReleaseNotesPopover,
 } from "./SidebarUpdatePill";
 
-const nightlyState: DesktopUpdateState = {
+const prereleaseState: DesktopUpdateState = {
   enabled: true,
   status: "available",
-  channel: "nightly",
+  channel: "prerelease",
   currentVersion: "0.0.35",
   hostArch: "arm64",
   appArch: "arm64",
   runningUnderArm64Translation: false,
-  availableVersion: "0.0.36-nightly.3",
+  availableVersion: "0.1.0-alpha.1",
   downloadedVersion: null,
-  releaseNotes: [{ version: "0.0.36-nightly.3", items: ["Newest change"], totalItems: 1 }],
+  releaseNotes: [{ version: "0.1.0-alpha.1", items: ["Newest change"], totalItems: 1 }],
   omittedReleaseCount: 0,
   downloadPercent: null,
   checkedAt: null,
@@ -27,18 +27,18 @@ const nightlyState: DesktopUpdateState = {
 };
 
 describe("sidebar update release notes popover", () => {
-  it("uses the popover only for visible nightly release notes", () => {
-    expect(shouldUseSidebarUpdateReleaseNotesPopover(true, nightlyState)).toBe(true);
-    expect(shouldUseSidebarUpdateReleaseNotesPopover(false, nightlyState)).toBe(false);
+  it("uses the popover only for visible prerelease release notes", () => {
+    expect(shouldUseSidebarUpdateReleaseNotesPopover(true, prereleaseState)).toBe(true);
+    expect(shouldUseSidebarUpdateReleaseNotesPopover(false, prereleaseState)).toBe(false);
     expect(
       shouldUseSidebarUpdateReleaseNotesPopover(true, {
-        ...nightlyState,
-        channel: "latest",
+        ...prereleaseState,
+        channel: "stable",
       }),
     ).toBe(false);
     expect(
       shouldUseSidebarUpdateReleaseNotesPopover(true, {
-        ...nightlyState,
+        ...prereleaseState,
         releaseNotes: [],
       }),
     ).toBe(false);
@@ -66,9 +66,9 @@ describe("sidebar update release notes popover", () => {
     const preventDefault = vi.fn();
     const event = { key: "Tab", shiftKey: false, preventDefault };
 
-    openSidebarUpdateReleaseNotesPopoverOnForwardTab(event, { open }, "nightly-release-notes");
+    openSidebarUpdateReleaseNotesPopoverOnForwardTab(event, { open }, "prerelease-release-notes");
 
-    expect(open).toHaveBeenCalledWith("nightly-release-notes");
+    expect(open).toHaveBeenCalledWith("prerelease-release-notes");
     expect(preventDefault).not.toHaveBeenCalled();
   });
 
@@ -78,7 +78,7 @@ describe("sidebar update release notes popover", () => {
     openSidebarUpdateReleaseNotesPopoverOnForwardTab(
       { key: "Tab", shiftKey: true },
       { open },
-      "nightly-release-notes",
+      "prerelease-release-notes",
     );
 
     expect(open).not.toHaveBeenCalled();

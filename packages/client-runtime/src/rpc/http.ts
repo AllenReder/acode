@@ -1,1 +1,1 @@
-export * from "@t3tools/shared/remoteEnvironmentHttp";
+export * from "@awen/shared/remoteEnvironmentHttp";

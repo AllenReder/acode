@@ -459,11 +459,11 @@ export const ServerSignalProcessResult = Schema.Struct({
 export type ServerSignalProcessResult = typeof ServerSignalProcessResult.Type;
 
 /**
- * A palette the environment's machine publishes for T3 Code to follow, read
+ * A palette the environment's machine publishes for Awen to follow, read
  * from a theme file next to the rest of the environment's state. Two seed
  * colors rather than a full palette: clients derive the remaining roles with
  * the same generator the guided theme editor uses, so a desktop theme carries
- * over as a coherent T3 Code palette instead of a foreign one.
+ * over as a coherent Awen palette instead of a foreign one.
  */
 export const EnvironmentThemeColor = Schema.String.check(
   Schema.isPattern(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/),
@@ -599,7 +599,7 @@ export type ServerConfig = typeof ServerConfig.Type;
 /**
  * The machine an environment should be drawn as: the user's pick, else what
  * the server detected, else a generic server. Settings only exist once
- * connected; a descriptor alone (relay discovery, before any connection)
+ * connected; a descriptor alone (endpoint discovery, before any connection)
  * still yields the detected kind. A null config (nothing known yet, or an
  * older server) resolves to the same generic so rows never flicker between
  * glyphs.
@@ -811,7 +811,7 @@ export class ServerProviderUpdateError extends Schema.TaggedError<ServerProvider
 }
 
 export const ServerSelfUpdateInput = Schema.Struct({
-  /** Exact npm version of the `t3` package to install (never a dist-tag, so
+  /** Exact npm version of the `awen` package to install (never a dist-tag, so
       the server and the acknowledging client agree on what was requested). */
   targetVersion: TrimmedNonEmptyString,
   /** Opt-in recovery for provider turns that are running when the server

@@ -33,7 +33,7 @@ const decodeManifest = Schema.decodeUnknownSync(Schema.fromJsonString(PackageMan
 
 describe("shouldBundleCliDependency", () => {
   it("bundles ordinary runtime dependencies", () => {
-    for (const id of ["effect", "@effect/platform", "hono", "@t3tools/shared/hostProcess"]) {
+    for (const id of ["effect", "@effect/platform", "hono", "@awen/shared/hostProcess"]) {
       assert.strictEqual(shouldBundleCliDependency(id), true, id);
     }
   });
@@ -48,7 +48,6 @@ describe("shouldBundleCliDependency", () => {
       "ffi-rs",
       "@yuuang/ffi-rs-win32-x64-msvc",
       "@ff-labs/fff-node",
-      "@clerk/electron-passkeys",
       "msgpackr-extract",
       "@msgpackr-extract/msgpackr-extract-win32-x64",
     ]) {

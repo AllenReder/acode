@@ -83,7 +83,7 @@ describe("environment themes", () => {
     expect(theme.variants?.light?.canvas).not.toBe(theme.colors.canvas);
   });
 
-  // A published `t3-iris.json` would show its palette on a card that applies
+  // A published `awen-iris.json` would show its palette on a card that applies
   // the built-in, and a published `dark.json` would capture everyone whose
   // stored preference is the stock "dark". Reserved ids never become cards.
   it("drops published themes with reserved ids", () => {

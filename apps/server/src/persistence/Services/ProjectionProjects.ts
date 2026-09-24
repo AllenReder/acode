@@ -13,7 +13,7 @@ import {
   ProjectId,
   ProjectScript,
   ThreadEnvMode,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Context from "effect/Context";
@@ -89,4 +89,4 @@ export interface ProjectionProjectRepositoryShape {
 export class ProjectionProjectRepository extends Context.Service<
   ProjectionProjectRepository,
   ProjectionProjectRepositoryShape
->()("t3/persistence/Services/ProjectionProjects/ProjectionProjectRepository") {}
+>()("@awen/server/persistence/Services/ProjectionProjects/ProjectionProjectRepository") {}

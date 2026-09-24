@@ -1,5 +1,5 @@
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { agentSessionsIn } from "@t3tools/contracts";
+import { scopeThreadRef } from "@awen/client-runtime/environment";
+import { agentSessionsIn } from "@awen/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
 
@@ -12,7 +12,7 @@ import {
 } from "../composerDraftStore";
 import { resolveDraftPromotionNavigationTarget } from "../components/ChatView.logic";
 import { waitForDraftHeroTransition } from "../components/chat/draftHeroTransition";
-import { useAcodeProjects, useThread, useThreadShell } from "../state/entities";
+import { useAwenProjects, useThread, useThreadShell } from "../state/entities";
 import { AgentView } from "./AgentView";
 import { useWorkspaceViewActions } from "./useWorkspaceViewActions";
 import { sessionRouteForTarget } from "./deepLinks";
@@ -37,7 +37,7 @@ export function AgentSessionView(props: AgentSessionViewProps) {
   );
 }
 
-/** Present the first-turn draft without assigning it an ACode Session identity. */
+/** Present the first-turn draft without assigning it an Awen Session identity. */
 export function NewAgentSessionView({
   target,
   paneId,
@@ -50,7 +50,7 @@ export function NewAgentSessionView({
   const navigate = useNavigate();
   const replaceTarget = useWorkbenchStore((state) => state.replaceTarget);
   const draft = useComposerDraftStore((state) => state.getDraftSession(target.draftId));
-  const projects = useAcodeProjects();
+  const projects = useAwenProjects();
   const { onBrowseFiles, onReviewChanges, onNewTerminalSession } = useWorkspaceViewActions({
     environmentId: target.environmentId,
     workspaceId: target.workspaceId,
@@ -125,17 +125,17 @@ export function NewAgentSessionView({
   return (
     <div className="relative flex h-full min-h-0 flex-col">
       <ChatView
-      environmentId={target.environmentId}
-      threadId={draft.threadId}
-      routeKind="draft"
-      draftId={target.draftId}
-      workbenchMode
-      focused={focused}
-      focusRequestId={focusRequestId}
-      availableSize={availableSize}
-      onBrowseFiles={onBrowseFiles}
-      onReviewChanges={onReviewChanges}
-      onNewTerminalSession={onNewTerminalSession}
+        environmentId={target.environmentId}
+        threadId={draft.threadId}
+        routeKind="draft"
+        draftId={target.draftId}
+        workbenchMode
+        focused={focused}
+        focusRequestId={focusRequestId}
+        availableSize={availableSize}
+        onBrowseFiles={onBrowseFiles}
+        onReviewChanges={onReviewChanges}
+        onNewTerminalSession={onNewTerminalSession}
       />
     </div>
   );

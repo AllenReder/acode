@@ -38,7 +38,7 @@ export function runWorktreeSetup({
   const worktreePath = resolveCodexWorktreePath(environment, cwd);
   const invocation = packageManagerInvocation(["install", "--frozen-lockfile"], { environment });
 
-  console.log(`[acode] installing dependencies in ${worktreePath}`);
+  console.log(`[awen] installing dependencies in ${worktreePath}`);
   const result = spawn(invocation.command, [...invocation.args], {
     cwd: worktreePath,
     env: environment,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { ThreadId } from "@t3tools/contracts";
+import { ThreadId } from "@awen/contracts";
 
 import {
   commandDetailRepeatsCommand,
@@ -207,12 +207,12 @@ describe("summarizeToolGroup", () => {
 
 describe("resolveWorkEntryToolPresentation", () => {
   it.each([
-    "mcp__t3-code__preview_click",
-    "mcp__t3_code__preview_click",
-    "mcp__t3code__preview_click",
-    "T3-code.preview_click",
-    "t3-code · preview_click completed",
-    "t3_code/preview_click",
+    "mcp__awen__preview_click",
+    "mcp__awen__preview_click",
+    "mcp__awen__preview_click",
+    "Awen.preview_click",
+    "awen · preview_click completed",
+    "awen/preview_click",
     "preview_click",
   ])("recognizes browser tool names across providers: %s", (label) => {
     expect(resolveWorkEntryToolPresentation({ label })).toEqual({
@@ -224,11 +224,11 @@ describe("resolveWorkEntryToolPresentation", () => {
   it("labels device tools with the device icon", () => {
     expect(
       resolveWorkEntryToolPresentation({
-        label: "mcp__t3-code__device_open",
+        label: "mcp__awen__device_open",
         toolLifecycleStatus: "completed",
       }),
     ).toEqual({ displayName: "Opened a device in the Device panel", icon: "device" });
-    expect(resolveWorkEntryToolPresentation({ label: "t3-code · device_screenshot" })).toEqual({
+    expect(resolveWorkEntryToolPresentation({ label: "awen · device_screenshot" })).toEqual({
       displayName: "Taking a screenshot of the device",
       icon: "device",
     });
@@ -239,7 +239,7 @@ describe("resolveWorkEntryToolPresentation", () => {
       resolveWorkEntryToolPresentation({
         label: "Tool call complete",
         toolTitle: "Inspect the current page",
-        toolData: { server: "t3-code", tool: "preview_snapshot", result: { title: "Example" } },
+        toolData: { server: "awen", tool: "preview_snapshot", result: { title: "Example" } },
       }),
     ).toEqual({ displayName: "Taking a snapshot of the preview page", icon: "browser" });
   });
@@ -254,14 +254,14 @@ describe("resolveWorkEntryToolPresentation", () => {
   ])("describes the tool's own %s state", (toolLifecycleStatus, displayName) => {
     expect(
       resolveWorkEntryToolPresentation({
-        label: "T3-code.preview_click",
+        label: "Awen.preview_click",
         toolLifecycleStatus,
       }),
     ).toEqual({ displayName, icon: "browser" });
   });
 
   it("uses the summary's state only when the provider omitted a lifecycle status", () => {
-    const entry = { label: "T3-code.preview_click" };
+    const entry = { label: "Awen.preview_click" };
     expect(resolveWorkEntryToolPresentation(entry, "inProgress")?.displayName).toBe(
       "Clicking in the preview browser",
     );
@@ -295,15 +295,15 @@ describe("resolveWorkEntryToolPresentation", () => {
       "Stopping recording the preview browser",
       "Stopped recording the preview browser",
     ],
-    ["t3_thread_read", "Reading a T3 thread", "Read a T3 thread"],
-    ["t3_thread_send", "Sending to a T3 thread", "Sent to a T3 thread"],
+    ["awen_thread_read", "Reading a Awen thread", "Read a Awen thread"],
+    ["awen_thread_send", "Sending to a Awen thread", "Sent to a Awen thread"],
     [
-      "t3_worktree_handoff",
+      "awen_worktree_handoff",
       "Handing off thread to a git worktree",
       "Handed off thread to a git worktree",
     ],
   ])("preserves verb forms and the rest of %s's label", (tool, running, completed) => {
-    const entry = { label: `t3-code.${tool}` };
+    const entry = { label: `awen.${tool}` };
     expect(
       resolveWorkEntryToolPresentation({ ...entry, toolLifecycleStatus: "inProgress" })
         ?.displayName,
@@ -313,20 +313,20 @@ describe("resolveWorkEntryToolPresentation", () => {
     ).toBe(completed);
   });
 
-  it("keeps T3 branding for non-browser tools and falls back to the original tool label", () => {
+  it("keeps Awen branding for non-browser tools and falls back to the original tool label", () => {
     expect(
       resolveWorkEntryToolPresentation({
-        label: "mcp__t3_code__task_status",
+        label: "mcp__awen__task_status",
         toolTitle: "Check the child task",
       }),
-    ).toEqual({ displayName: "Getting delegated task status", icon: "t3-code" });
+    ).toEqual({ displayName: "Getting delegated task status", icon: "awen" });
   });
 
   it("does not brand unknown tools or another server's matching tool name", () => {
     for (const label of [
       "mcp__github__preview_click",
-      "t3-code.unknown_tool",
-      "t3-code.toString",
+      "awen.unknown_tool",
+      "awen.toString",
       "Search files",
     ]) {
       expect(resolveWorkEntryToolPresentation({ label })).toBeNull();
@@ -343,7 +343,7 @@ describe("resolveWorkEntryToolPresentation", () => {
 describe("browser group summaries", () => {
   const browserEntry: WorkLogPresentationEntry = {
     label: "MCP tool call",
-    toolData: { server: "t3-code", tool: "preview_click" },
+    toolData: { server: "awen", tool: "preview_click" },
     itemType: "mcp_tool_call",
     toolLifecycleStatus: "completed",
     tone: "tool",
@@ -383,7 +383,7 @@ describe("browser group summaries", () => {
         commandEntry,
         {
           ...browserEntry,
-          toolData: { server: "t3-code", tool: "task_status" },
+          toolData: { server: "awen", tool: "task_status" },
         },
       ]),
     ).toBe("Used browser 1 time, ran 1 command, and used 1 tool");
@@ -395,7 +395,7 @@ describe("browser group summaries", () => {
         {
           ...browserEntry,
           command: "node inspect-page.js",
-          toolData: { toolName: "mcp__t3_code__preview_evaluate" },
+          toolData: { toolName: "mcp__awen__preview_evaluate" },
         },
       ]),
     ).toBe("Used browser 1 time");
@@ -557,8 +557,8 @@ describe("toolGroupAction", () => {
 describe("resolveViewedImageAsset", () => {
   const threadId = ThreadId.make("thread-1");
 
-  it("serves t3 attachment paths in place like any other host path", () => {
-    const path = "/Users/demo/.t3/dev/attachments/11111111-1111-4111-8111-111111111111.png";
+  it("serves awen attachment paths in place like any other host path", () => {
+    const path = "/Users/demo/.awen/dev/attachments/11111111-1111-4111-8111-111111111111.png";
     expect(resolveViewedImageAsset(path, { threadId, workspaceRoot: "/workspace" })).toEqual({
       resource: { _tag: "media-file", threadId, path },
       alt: "11111111-1111-4111-8111-111111111111.png",
@@ -587,10 +587,10 @@ describe("resolveViewedImageAsset", () => {
 
 describe("pull request tool presentation", () => {
   it.each([
-    "mcp__t3-code__link_pull_request",
-    "mcp__t3_code__link_pull_request",
-    "T3-code · link_pull_request",
-    "t3code/link_pull_request",
+    "mcp__awen__link_pull_request",
+    "mcp__awen__link_pull_request",
+    "Awen · link_pull_request",
+    "awen/link_pull_request",
     "link_pull_request",
   ])("recognizes the native linking tool: %s", (label) => {
     const entry = { label, tone: "tool" as const, toolLifecycleStatus: "completed" };
@@ -614,7 +614,7 @@ describe("pull request tool presentation", () => {
         toolTitle: "Custom title",
         toolLifecycleStatus,
         toolData: {
-          server: "t3-code",
+          server: "awen",
           tool: "link_pull_request",
           arguments: { url: "https://github.com/acme/web/pull/42" },
         },
@@ -628,7 +628,7 @@ describe("pull request tool presentation", () => {
         label: "MCP tool call",
         toolLifecycleStatus: "completed",
         toolData: {
-          toolName: "mcp__t3-code__unlink_pull_request",
+          toolName: "mcp__awen__unlink_pull_request",
           rawInput: { repository: "acme/web", number: 42 },
         },
       }),
@@ -637,20 +637,20 @@ describe("pull request tool presentation", () => {
 
   it("summarizes native PR work separately from ordinary tools and integration metadata", () => {
     const link: WorkLogPresentationEntry = {
-      label: "T3-code · link_pull_request",
+      label: "Awen · link_pull_request",
       tone: "tool",
       itemType: "mcp_tool_call",
       toolLifecycleStatus: "completed",
-      toolSource: { key: "t3-code", name: "T3 Code", kind: "integration" },
+      toolSource: { key: "awen", name: "Awen", kind: "integration" },
     };
     const list: WorkLogPresentationEntry = {
       ...link,
-      label: "T3-code · list_thread_pull_requests",
+      label: "Awen · list_thread_pull_requests",
     };
     expect(summarizeToolGroup([link, link, list])).toBe(
       "Linked 2 pull requests and checked linked pull requests",
     );
-    expect(summarizeToolGroup([{ ...link, label: "T3-code · unlink_pull_request" }])).toBe(
+    expect(summarizeToolGroup([{ ...link, label: "Awen · unlink_pull_request" }])).toBe(
       "Unlinked 1 pull request",
     );
     expect(toolGroupSummaryKind([link, link, list])).toBe("pull-request");
@@ -664,7 +664,7 @@ describe("pull request tool presentation", () => {
 describe("device group summaries", () => {
   const deviceEntry = (tool: string): WorkLogPresentationEntry => ({
     label: "MCP tool call",
-    toolData: { server: "t3-code", tool },
+    toolData: { server: "awen", tool },
     itemType: "mcp_tool_call",
     toolLifecycleStatus: "completed",
     tone: "tool",
@@ -692,14 +692,14 @@ describe("device group summaries", () => {
   it("recognizes Claude tool names and preserves screenshot previews", () => {
     const entry = {
       ...deviceEntry("device_screenshot"),
-      toolData: { toolName: "mcp__t3_code__device_screenshot" },
+      toolData: { toolName: "mcp__awen__device_screenshot" },
       viewedImagePath: "/workspace/device.png",
     };
     expect(summarizeToolGroup([entry])).toBe("Used device controls 1 time");
     expect(workEntryViewedImagePath(entry)).toBe("/workspace/device.png");
   });
 
-  it("does not classify another server's tools as T3 device controls", () => {
+  it("does not classify another server's tools as Awen device controls", () => {
     expect(
       summarizeToolGroup([
         {

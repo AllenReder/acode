@@ -1,5 +1,5 @@
-import { EnvironmentId, type ThreadPullRequestLink } from "@t3tools/contracts";
-import type { DesktopPreviewFavicon, PreviewSessionSnapshot } from "@t3tools/contracts";
+import { EnvironmentId, type ThreadPullRequestLink } from "@awen/contracts";
+import type { DesktopPreviewFavicon, PreviewSessionSnapshot } from "@awen/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 

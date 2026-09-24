@@ -1,10 +1,10 @@
-import { ProjectId } from "@t3tools/contracts";
-import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { ProjectId } from "@awen/contracts";
+import { HostProcessEnvironment, HostProcessPlatform } from "@awen/shared/hostProcess";
 import {
   projectScriptRuntimeEnv,
   resolveProjectScripts,
   setupProjectScript,
-} from "@t3tools/shared/projectScripts";
+} from "@awen/shared/projectScripts";
 import * as NodeCrypto from "node:crypto";
 
 import * as Clock from "effect/Clock";
@@ -55,7 +55,7 @@ export type ProjectSetupScriptRunnerResult =
 
 export interface ProjectSetupScriptRunnerInput {
   readonly threadId: string;
-  /** Workspace owner for setup terminals created by the ACode path. */
+  /** Workspace owner for setup terminals created by the Awen path. */
   readonly workspaceId?: string;
   readonly projectId?: string;
   readonly projectCwd?: string;
@@ -114,7 +114,7 @@ export class ProjectSetupScriptRunner extends Context.Service<
       input: ProjectSetupScriptRunnerInput,
     ) => Effect.Effect<ProjectSetupScriptRunnerResult, ProjectSetupScriptRunnerError>;
   }
->()("t3/project/ProjectSetupScriptRunner") {}
+>()("@awen/server/project/ProjectSetupScriptRunner") {}
 
 /** @public Service construction is part of the canonical Effect module API. */
 /**
@@ -122,7 +122,7 @@ export class ProjectSetupScriptRunner extends Context.Service<
  * the PTY stream. Each run gets its own random token so script output cannot
  * spoof completion, and the sentinel pattern is built per run from it.
  */
-const COMPLETION_SENTINEL_PREFIX = "__T3_SETUP_DONE__";
+const COMPLETION_SENTINEL_PREFIX = "__AWEN_SETUP_DONE__";
 const OUTPUT_LINE_MAX_LENGTH = 400;
 /** A partial line longer than this is a byte stream, not a line. Keep only the tail. */
 const PARTIAL_LINE_MAX_LENGTH = 4_096;
@@ -184,7 +184,7 @@ function wrapCommandForCompletion(
   const body = command.replace(/\r?\n/g, "\r");
   switch (shell) {
     case "powershell":
-      return `$global:LASTEXITCODE = $null; & {\r${body}\r}; if ($null -ne $LASTEXITCODE) { $__t3c = $LASTEXITCODE } elseif ($?) { $__t3c = 0 } else { $__t3c = 1 }; Write-Host "${sentinel}$__t3c"`;
+      return `$global:LASTEXITCODE = $null; & {\r${body}\r}; if ($null -ne $LASTEXITCODE) { $__awenc = $LASTEXITCODE } elseif ($?) { $__awenc = 0 } else { $__awenc = 1 }; Write-Host "${sentinel}$__awenc"`;
     case "fish":
       return `begin\r${body}\rend; printf '\\n${sentinel}%s\\n' $status`;
     case "posix":

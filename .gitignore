@@ -18,6 +18,7 @@ release/
 release-mock/
 release-server/
 .t3
+.awen
 .acode
 .idea/
 apps/web/.playwright

@@ -2,11 +2,11 @@ import { createElement, useMemo, useSyncExternalStore, type ComponentType } from
 
 import type {
   AgentSessionId,
-  AcodeProjectId,
+  AwenProjectId,
   EnvironmentId,
   TerminalSessionId,
   WorkspaceId,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import type { DraftId } from "../composerDraftStore";
 
 /** Product identities only. Runtime identities belong to trusted adapters. */
@@ -15,7 +15,7 @@ export type ViewTarget = (
   | {
       readonly kind: "project";
       readonly environmentId: EnvironmentId;
-      readonly projectId: AcodeProjectId;
+      readonly projectId: AwenProjectId;
     }
   | {
       readonly kind: "workspace";

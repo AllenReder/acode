@@ -21,9 +21,9 @@ import {
   type ScopedThreadRef,
   ThreadId,
   WorkspaceId,
-  workspaceIdForT3Project,
+  workspaceIdForAwenProject,
   SnapShotSource,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import {
   parseScopedProjectKey,
   parseScopedThreadKey,
@@ -31,13 +31,13 @@ import {
   scopeProjectRef,
   scopedThreadKey,
   scopeThreadRef,
-} from "@t3tools/client-runtime/environment";
-import { normalizeProjectPathForComparison } from "@t3tools/shared/path";
+} from "@awen/client-runtime/environment";
+import { normalizeProjectPathForComparison } from "@awen/shared/path";
 import * as Schema from "effect/Schema";
 import * as Equal from "effect/Equal";
 import * as Effect from "effect/Effect";
 import { DeepMutable } from "effect/Types";
-import { createModelSelection, normalizeModelSlug } from "@t3tools/shared/model";
+import { createModelSelection, normalizeModelSlug } from "@awen/shared/model";
 import { useMemo } from "react";
 import { getLocalStorageItem } from "./hooks/useLocalStorage";
 import { resolveAppModelSelection, resolveAppModelSelectionForInstance } from "./modelSelection";
@@ -75,8 +75,8 @@ import { persist, type PersistStorage, type StorageValue } from "zustand/middlew
 import { useShallow } from "zustand/react/shallow";
 import { createDeferredStorage, createMemoryStorage } from "./lib/storage";
 import { getDefaultServerModel } from "./providerModels";
-import { replaceComposerContextReferences } from "@t3tools/shared/composerContextReferences";
-import { UnifiedSettings } from "@t3tools/contracts/settings";
+import { replaceComposerContextReferences } from "@awen/shared/composerContextReferences";
+import { UnifiedSettings } from "@awen/contracts/settings";
 import { ReviewCommentContextSchema, type ReviewCommentContext } from "./reviewCommentContext";
 const isRuntimeMode = Schema.is(RuntimeMode);
 const isProviderDriverKind = Schema.is(ProviderDriverKind);
@@ -84,8 +84,8 @@ const isReviewCommentContext = Schema.is(ReviewCommentContextSchema);
 const isSnapShotSource = Schema.is(SnapShotSource);
 const isPreviewAnnotationPayload = Schema.is(PreviewAnnotationPayloadSchema);
 
-export const COMPOSER_DRAFT_STORAGE_KEY = "t3code:composer-drafts:v1";
-// v10 binds client-local Agent drafts to ACode Workspace identity and records
+export const COMPOSER_DRAFT_STORAGE_KEY = "awen:composer-drafts:v1";
+// v10 binds client-local Agent drafts to Awen Workspace identity and records
 // their last-updated time; legacy logical-project drafts migrate in place.
 const COMPOSER_DRAFT_STORAGE_VERSION = 10;
 const DraftThreadEnvModeSchema = Schema.Literals(["local", "worktree"]);
@@ -1584,7 +1584,7 @@ function createDraftThreadState(
     threadId,
     environmentId: projectRef.environmentId,
     projectId: projectRef.projectId,
-    workspaceId: options?.workspaceId ?? workspaceIdForT3Project(projectRef.projectId),
+    workspaceId: options?.workspaceId ?? workspaceIdForAwenProject(projectRef.projectId),
     logicalProjectKey,
     ...(environmentSelection ? { environmentSelection } : {}),
     ...(options?.loadBalancedEnvironmentId !== undefined
@@ -1772,7 +1772,7 @@ function normalizePersistedDraftThreads(
         workspaceId:
           typeof workspaceId === "string" && workspaceId.length > 0
             ? WorkspaceId.make(workspaceId)
-            : workspaceIdForT3Project(projectId as ProjectId),
+            : workspaceIdForAwenProject(projectId as ProjectId),
         logicalProjectKey:
           typeof candidateDraftThread.logicalProjectKey === "string" &&
           candidateDraftThread.logicalProjectKey.length > 0
@@ -1856,7 +1856,7 @@ function normalizePersistedDraftThreads(
           threadId: parsedThreadRef?.threadId ?? (threadKey as ThreadId),
           environmentId: projectRef.environmentId,
           projectId: projectRef.projectId,
-          workspaceId: workspaceIdForT3Project(projectRef.projectId),
+          workspaceId: workspaceIdForAwenProject(projectRef.projectId),
           logicalProjectKey,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -1991,7 +1991,7 @@ function normalizePersistedDraftsByThreadId(
     // Older drafts used producer ids (including dots and colons) directly in links.
     // Rewrite only links backed by this draft, before appending any missing references.
     const migratedPrompt = promptCandidate.replace(
-      /!?\[([^\]\r\n]*)\]\(t3-context:\/\/v1\/([a-z-]+)\/([^/()\r\n]+)\)/g,
+      /!?\[([^\]\r\n]*)\]\(awen-context:\/\/v1\/([a-z-]+)\/([^/()\r\n]+)\)/g,
       (source, label: string, kind: string, id: string) => {
         const contextId = contextIds.get(`${kind}/${id}`);
         return contextId ? formatInlineContextReference({ kind, contextId, label }) : source;
@@ -2535,8 +2535,7 @@ function toHydratedDraftThreadState(
     environmentId: persistedDraftThread.environmentId as EnvironmentId,
     projectId: persistedDraftThread.projectId,
     workspaceId:
-      persistedDraftThread.workspaceId ??
-      workspaceIdForT3Project(persistedDraftThread.projectId),
+      persistedDraftThread.workspaceId ?? workspaceIdForAwenProject(persistedDraftThread.projectId),
     logicalProjectKey:
       persistedDraftThread.logicalProjectKey ??
       projectDraftKey(

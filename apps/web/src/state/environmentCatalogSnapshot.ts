@@ -1,8 +1,8 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId } from "@awen/contracts";
 
 import { environmentCatalog } from "../connection/catalog";
-import type { ConnectionCatalogEntry } from "@t3tools/client-runtime/connection";
+import type { ConnectionCatalogEntry } from "@awen/client-runtime/connection";
 
 const EMPTY_CATALOG_SNAPSHOT = Object.freeze({
   isReady: false,

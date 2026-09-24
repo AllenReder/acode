@@ -1,5 +1,5 @@
-import { EnvironmentId } from "@t3tools/contracts";
-import type { ServerUpdateState } from "@t3tools/client-runtime/state/server";
+import { EnvironmentId } from "@awen/contracts";
+import type { ServerUpdateState } from "@awen/client-runtime/state/server";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 // Pinned so the direction cases below read as fixed versions instead of
@@ -22,7 +22,7 @@ import {
 } from "./versionSkew";
 
 const MISMATCH_HINT =
-  "Version mismatch. Try syncing the client and server to the same T3 Code version.";
+  "Version mismatch. Try syncing the client and server to the same Awen version.";
 
 describe("versionSkew", () => {
   beforeEach(() => {
@@ -79,7 +79,7 @@ describe("versionSkew", () => {
     expect(resolveVersionMismatch("9.9.9")).toBeNull();
   });
 
-  it("does not warn when a nightly and a stable build share a core version", () => {
+  it("does not warn when a prerelease and a stable build share a core version", () => {
     expect(resolveVersionMismatch("0.0.34-nightly.20260818.1124")).toBeNull();
 
     branding.APP_VERSION = "0.0.34-nightly.20260818.1124";
@@ -117,6 +117,17 @@ describe("versionSkew", () => {
       serverVersion: "0.0.34",
       hint: MISMATCH_HINT,
     });
+  });
+
+  it("compares alpha builds by their complete prerelease versions", () => {
+    branding.APP_VERSION = "0.1.0-alpha.2";
+
+    expect(resolveVersionMismatch("0.1.0-alpha.1")).toEqual({
+      clientVersion: "0.1.0-alpha.2",
+      serverVersion: "0.1.0-alpha.1",
+      hint: MISMATCH_HINT,
+    });
+    expect(resolveVersionMismatch("0.1.0-alpha.3")).toBeNull();
   });
 
   it("falls back to string inequality when a version is not semver", () => {

@@ -93,9 +93,9 @@ export function SessionRow({
       navigateTo({ ...route, replace: true });
       return;
     }
-    if (typeof window !== "undefined" && "__acodeRouter" in window) {
-      const router = (window as { __acodeRouter?: { navigate: (input: unknown) => void } })
-        .__acodeRouter;
+    if (typeof window !== "undefined" && "__awenRouter" in window) {
+      const router = (window as { __awenRouter?: { navigate: (input: unknown) => void } })
+        .__awenRouter;
       router?.navigate({ ...route, replace: true });
     }
   };

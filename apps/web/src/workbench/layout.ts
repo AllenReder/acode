@@ -1,5 +1,5 @@
 /**
- * Pure BSP layout primitives for the ACode workbench.
+ * Pure BSP layout primitives for the Awen workbench.
  *
  * Adopted from `hardbeat920/monocode@25dd57e599e33a1878ce7e45a3187f7863b8d74f`
  * (`src/lib/layout.ts`) and pruned to the surface that v1 needs: the split
@@ -64,7 +64,7 @@ export type LayoutSash = {
 };
 
 /**
- * One ACode Tab — C10 ships exactly one. Multi-tab is C11.
+ * One Awen Tab — C10 ships exactly one. Multi-tab is C11.
  *
  * A leaf id maps 1:1 to a `View instance` held outside this module; the workbench
  * store keeps a `Map<leafId, ViewInstance>`. Closing a leaf drops it from both
@@ -72,13 +72,13 @@ export type LayoutSash = {
  * terminated by `closePane` (D3: "Closing a View/Pane/Tab does not by itself
  * terminate a Session").
  */
-export type AcodeTab = {
+export type AwenTab = {
   id: string;
   layout: LayoutNode;
   focusedPaneId: string;
 };
 
-export function newTab(initialPaneId: string = cryptoRandomId()): AcodeTab {
+export function newTab(initialPaneId: string = cryptoRandomId()): AwenTab {
   return {
     id: cryptoRandomId(),
     layout: leaf(initialPaneId),
@@ -177,7 +177,7 @@ export function removePane(node: LayoutNode, leafId: string): LayoutNode | null 
  * Close one pane in a tab. Returns null only when this was the last leaf.
  * Focus moves to the closed pane's sibling when the closed pane was focused.
  */
-export function closeLeaf(tab: AcodeTab, leafId: string): AcodeTab | null {
+export function closeLeaf(tab: AwenTab, leafId: string): AwenTab | null {
   const nextLayout = removePane(tab.layout, leafId);
   if (!nextLayout) return null;
   const nextFocus =

@@ -23,5 +23,5 @@ const devRunnerEntry = NodePath.join(repositoryRoot, "scripts/dev-runner.ts");
 spawnInherited(nodeEntryInvocation(devRunnerEntry, ["dev:web"]), {
   cwd: repositoryRoot,
   env: withNodeModulesBin(process.env, [desktopRoot, repositoryRoot]),
-  failureLabel: "Unable to start the ACode web development server",
+  failureLabel: "Unable to start the Awen web development server",
 });

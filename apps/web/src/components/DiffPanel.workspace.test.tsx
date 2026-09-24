@@ -1,7 +1,7 @@
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import type { EnvironmentId, WorkspaceId } from "@t3tools/contracts";
+import type { EnvironmentId, WorkspaceId } from "@awen/contracts";
 
 const mockStatusQuery = {
   data: { isRepo: true, hasWorkingTreeChanges: true },
@@ -69,7 +69,9 @@ vi.mock("../state/use-atom-command", () => ({
 vi.mock("../state/query", () => ({
   useEnvironmentQuery: (query: unknown) => {
     if (!query) return { data: null, isPending: false, error: null };
-    const label = Array.isArray((query as any)?.label) ? (query as any).label[0] : (query as any)?.label;
+    const label = Array.isArray((query as any)?.label)
+      ? (query as any).label[0]
+      : (query as any)?.label;
     if (typeof label === "string" && label.includes("vcs:status")) {
       return mockStatusQuery;
     }

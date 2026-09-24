@@ -70,7 +70,7 @@ export type ServerSelfUpdateMethod = typeof ServerSelfUpdateMethod.Type;
 
 /** What update path a client should offer for a server: one of the RPC
     self-update methods above, or "desktop-managed" when the backend's
-    version belongs to the T3 Code desktop app supervising it — updating the
+    version belongs to the Awen desktop app supervising it — updating the
     app on that machine is the only way to update the server. */
 export const ServerSelfUpdateCapability = Schema.Literals([
   "boot-service",
@@ -151,12 +151,6 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   /** Server can durably mark running provider turns before a self-update and
       continue them after the replacement process starts. */
   serverUpdateThreadContinuation: Schema.optionalKey(Schema.Boolean),
-  /** Agent-activity publishes (push notifications and Live Activities)
-      currently leave this environment: the publish opt-in is enabled and the
-      relay link credentials exist. Clients skip seeding a Live Activity when
-      this is false — no update would ever repaint it. Absent on older
-      servers, which may still publish, so only an explicit false skips. */
-  agentActivityPublishing: Schema.optionalKey(Schema.Boolean),
   /** Server runs repository clones for new projects in the background and
       streams their progress (`projectClone.*`, `subscribeProjectClones`).
       Absent on older servers, where clients must clone with the blocking
@@ -171,7 +165,7 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
       desktop servers whose app predates the remote trigger, where clients
       must keep telling the user to update the app on that machine. */
   desktopAppUpdate: Schema.optionalKey(Schema.Boolean),
-  /** Server exposes the acodeWorkspace.associate / createWorktree / remove
+  /** Server exposes the awenWorkspace.associate / createWorktree / remove
       RPCs. Absent on servers from before workspace management shipped, where
       clients hide the sidebar actions instead of calling unknown methods. */
   workspaceManagement: Schema.optionalKey(Schema.Boolean),

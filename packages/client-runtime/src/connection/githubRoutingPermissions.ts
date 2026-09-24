@@ -1,4 +1,4 @@
-import { EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentId } from "@awen/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -22,8 +22,6 @@ export type StoredGitHubRoutingPermission = typeof StoredGitHubRoutingPermission
 /** Trust belongs to the saved endpoint, never to an environment id advertised by a server alone. */
 export function gitHubRoutingConnectionKey(entry: ConnectionCatalogEntry): string | null {
   const target = entry.target;
-  if (target._tag === "RelayConnectionTarget")
-    return JSON.stringify([target._tag, target.environmentId]);
   const profile = Option.getOrNull(entry.profile);
   if (target._tag === "SshConnectionTarget") {
     if (profile?._tag !== "SshConnectionProfile") return null;
@@ -73,7 +71,7 @@ export class GitHubRoutingPermissions extends Context.Reference<{
     permission: GitHubRoutingPermission,
   ) => Effect.Effect<void, ConnectionAttemptError>;
   readonly forget: (environmentId: EnvironmentId) => Effect.Effect<void, ConnectionAttemptError>;
-}>("@t3tools/client-runtime/connection/GitHubRoutingPermissions", {
+}>("@awen/client-runtime/connection/GitHubRoutingPermissions", {
   defaultValue: () => ({
     get: () => Effect.succeed("off"),
     changes: Stream.succeed([]),

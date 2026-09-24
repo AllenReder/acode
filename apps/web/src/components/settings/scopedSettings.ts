@@ -8,13 +8,13 @@ import {
   type ProjectSettingsOverrides,
   ServerSettings,
   type ServerSettingsPatch,
-} from "@t3tools/contracts";
-import type { EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
+} from "@awen/contracts";
+import type { EnvironmentConnectionPhase } from "@awen/client-runtime/connection";
 import {
   clearProjectSettingsOverrides,
   resolveProjectSettings,
   type ProjectSettingSource,
-} from "@t3tools/shared/projectSettings";
+} from "@awen/shared/projectSettings";
 import * as Equal from "effect/Equal";
 
 import type { ResolvedSettingsScope } from "./settingsScope";

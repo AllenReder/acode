@@ -2,11 +2,11 @@
 
 **Status: accepted**
 
-ACode requires the target daemon's provider capability catalog to be authoritative,
+Awen requires the target daemon's provider capability catalog to be authoritative,
 avoiding hardcoded model assumptions on the desktop client (D1, D3, D5, US08). While
 Codex already queries models dynamically via its `app-server` JSON-RPC `model/list`
 endpoint, upstream T3 Code hardcoded Claude models to a static `model-manifest.json`
-and discarded the dynamic model list reported by the Claude Agent SDK. ACode decouples
+and discarded the dynamic model list reported by the Claude Agent SDK. Awen decouples
 all providers from static whitelists, making runtime capability discovery primary.
 
 ## Decision
@@ -37,9 +37,9 @@ all providers from static whitelists, making runtime capability discovery primar
 
 ## Consequences
 
-Claude Provider in ACode gains parity with Codex and OpenCode: users running Claude Code
+Claude Provider in Awen gains parity with Codex and OpenCode: users running Claude Code
 backed by third-party models, Bedrock/Vertex, or local gateway proxies can select their
-actual configured models directly in the ACode Workbench without needing manual custom
+actual configured models directly in the Awen Workbench without needing manual custom
 model entries in settings.
 
 Existing test fixtures and unit tests for `ClaudeProvider` and `ClaudeAdapter` must be

@@ -1,12 +1,7 @@
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import type {
-  AcodeProjectId,
-  AgentSessionId,
-  EnvironmentId,
-  WorkspaceId,
-} from "@t3tools/contracts";
+import type { AwenProjectId, AgentSessionId, EnvironmentId, WorkspaceId } from "@awen/contracts";
 import {
   clearViewRegistry,
   registerViewDefinition,
@@ -28,7 +23,7 @@ it("renders a registered Project View with typed updates and only its granted co
     kind: "project",
     definitionId: "project-summary",
     environmentId: "local" as EnvironmentId,
-    projectId: "p1" as AcodeProjectId,
+    projectId: "p1" as AwenProjectId,
   } as const;
   let snapshot = "First name";
   const listeners = new Set<() => void>();

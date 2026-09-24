@@ -11,7 +11,7 @@ const ghosttyKeyboardCodes = [
   "Digit0",
   "Digit1",
   "Digit2",
-  "Digit3",
+  "Digiawen",
   "Digit4",
   "Digit5",
   "Digit6",

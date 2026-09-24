@@ -2,11 +2,11 @@
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as NetService from "@t3tools/shared/Net";
-import { BASE_DAEMON_PORT, BASE_WEB_DEV_PORT } from "@t3tools/shared/daemonPort";
-import { resolveGitWorktreePath } from "@t3tools/shared/devHome";
-import { HostProcessEnvironment, HostProcessWorkingDirectory } from "@t3tools/shared/hostProcess";
-import { resolveSpawnCommand } from "@t3tools/shared/shell";
+import * as NetService from "@awen/shared/Net";
+import { BASE_DAEMON_PORT, BASE_WEB_DEV_PORT } from "@awen/shared/daemonPort";
+import { resolveGitWorktreePath } from "@awen/shared/devHome";
+import { HostProcessEnvironment, HostProcessWorkingDirectory } from "@awen/shared/hostProcess";
+import { resolveSpawnCommand } from "@awen/shared/shell";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Hash from "effect/Hash";
@@ -68,8 +68,8 @@ export function isProxiableBindHost(host: string): boolean {
   );
 }
 
-export const DEFAULT_ACODE_HOME = Effect.map(Effect.service(Path.Path), (path) =>
-  path.resolve(path.join(import.meta.dirname, "..", ".acode")),
+export const DEFAULT_AWEN_HOME = Effect.map(Effect.service(Path.Path), (path) =>
+  path.resolve(path.join(import.meta.dirname, "..", ".awen")),
 );
 
 export interface DevHomeResolutionInput {
@@ -81,34 +81,34 @@ export interface DevHomeResolutionInput {
 
 /**
  * Keep development state inside the checkout by default. An explicit home or
- * a linked worktree still wins, while an ambient T3CODE_HOME remains an
+ * a linked worktree still wins, while an ambient AWEN_HOME remains an
  * intentional override for developers who need it.
  */
 export function resolveDevHome(input: DevHomeResolutionInput): string {
   return (
     input.explicitHome?.trim() ||
-    (input.worktreeRoot?.trim() && `${input.worktreeRoot.trim()}/.acode`) ||
+    (input.worktreeRoot?.trim() && `${input.worktreeRoot.trim()}/.awen`) ||
     input.ambientHome?.trim() ||
-    `${input.checkoutRoot}/.acode`
+    `${input.checkoutRoot}/.awen`
   );
 }
 
 const MODE_ARGS = {
   dev: [
     "run",
-    "--filter=@t3tools/contracts",
-    "--filter=@t3tools/web",
-    "--filter=t3",
+    "--filter=@awen/contracts",
+    "--filter=@awen/web",
+    "--filter=@awen/server",
     "--parallel",
     "dev",
   ],
-  "dev:server": ["run", "--filter=t3", "dev"],
-  "dev:web": ["run", "--filter=@t3tools/web", "dev"],
+  "dev:server": ["run", "--filter=@awen/server", "dev"],
+  "dev:web": ["run", "--filter=@awen/web", "dev"],
 } as const satisfies Record<string, ReadonlyArray<string>>;
 
 type DevMode = keyof typeof MODE_ARGS;
 /**
- * `role` matters because only the backend honours `--host`/`T3CODE_HOST`; the
+ * `role` matters because only the backend honours `--host`/`AWEN_HOST`; the
  * web port is always loopback. Passed explicitly rather than inferred from the
  * port number, which stops distinguishing them under a large port offset.
  */
@@ -142,7 +142,7 @@ export class DevRunnerConfigurationError extends Schema.TaggedError<DevRunnerCon
 export class DevRunnerInvalidPortOffsetError extends Schema.TaggedError<DevRunnerInvalidPortOffsetError>()(
   "DevRunnerInvalidPortOffsetError",
   {
-    configKey: Schema.Literal("T3CODE_PORT_OFFSET"),
+    configKey: Schema.Literal("AWEN_PORT_OFFSET"),
     portOffset: Schema.Number,
     minimum: Schema.Number,
   },
@@ -268,12 +268,12 @@ const optionalIntegerConfig = (name: string): Config.Config<number | undefined> 
     Config.map((value) => Option.getOrUndefined(value)),
   );
 const OffsetConfig = Config.all({
-  portOffset: optionalIntegerConfig("T3CODE_PORT_OFFSET"),
-  devInstance: optionalStringConfig("T3CODE_DEV_INSTANCE"),
+  portOffset: optionalIntegerConfig("AWEN_PORT_OFFSET"),
+  devInstance: optionalStringConfig("AWEN_DEV_INSTANCE"),
   // Set by the desktop dev wrapper: its window URL and the backend port it
   // proxies to are literals in the Tauri config, so the runner must not move
   // off them. Absent for `pnpm dev`/`dev:web`, which stay free to walk ports.
-  strictPorts: optionalBooleanConfig("T3CODE_STRICT_DEV_PORTS"),
+  strictPorts: optionalBooleanConfig("AWEN_STRICT_DEV_PORTS"),
 });
 
 export function resolveOffset(config: {
@@ -288,7 +288,7 @@ export function resolveOffset(config: {
     if (config.portOffset < 0) {
       return Effect.fail(
         new DevRunnerInvalidPortOffsetError({
-          configKey: "T3CODE_PORT_OFFSET",
+          configKey: "AWEN_PORT_OFFSET",
           portOffset: config.portOffset,
           minimum: 0,
         }),
@@ -296,7 +296,7 @@ export function resolveOffset(config: {
     }
     return Effect.succeed({
       offset: config.portOffset,
-      source: `T3CODE_PORT_OFFSET=${config.portOffset}`,
+      source: `AWEN_PORT_OFFSET=${config.portOffset}`,
     });
   }
 
@@ -305,12 +305,12 @@ export function resolveOffset(config: {
     if (/^\d+$/.test(seed)) {
       return Effect.succeed({
         offset: Number(seed),
-        source: `numeric T3CODE_DEV_INSTANCE=${seed}`,
+        source: `numeric AWEN_DEV_INSTANCE=${seed}`,
       });
     }
 
     const offset = ((Hash.string(seed) >>> 0) % MAX_HASH_OFFSET) + 1;
-    return Effect.succeed({ offset, source: `hashed T3CODE_DEV_INSTANCE=${seed}` });
+    return Effect.succeed({ offset, source: `hashed AWEN_DEV_INSTANCE=${seed}` });
   }
 
   // Each checkout gets ports derived from its path so every one is stable across
@@ -336,7 +336,7 @@ function resolveBaseDir(baseDir: string | undefined): Effect.Effect<string, neve
       return path.resolve(configured);
     }
 
-    return yield* DEFAULT_ACODE_HOME;
+    return yield* DEFAULT_AWEN_HOME;
   });
 }
 
@@ -345,7 +345,7 @@ interface CreateDevRunnerEnvInput {
   readonly baseEnv: NodeJS.ProcessEnv;
   readonly serverOffset: number;
   readonly webOffset: number;
-  readonly t3Home: string | undefined;
+  readonly awenHome: string | undefined;
   readonly browser: boolean | undefined;
   readonly autoBootstrapProjectFromCwd: boolean | undefined;
   readonly logWebSocketEvents: boolean | undefined;
@@ -359,7 +359,7 @@ export function createDevRunnerEnv({
   baseEnv,
   serverOffset,
   webOffset,
-  t3Home,
+  awenHome,
   browser,
   autoBootstrapProjectFromCwd,
   logWebSocketEvents,
@@ -370,9 +370,9 @@ export function createDevRunnerEnv({
   return Effect.gen(function* () {
     const serverPort = port ?? BASE_SERVER_PORT + serverOffset;
     const webPort = BASE_WEB_PORT + webOffset;
-    // Precedence (--home-dir > worktree .acode > ambient T3CODE_HOME) is resolved
-    // by the caller; an unset t3Home here genuinely means "use the default".
-    const configuredBaseDir = t3Home?.trim() || undefined;
+    // Precedence (--home-dir > worktree .awen > ambient AWEN_HOME) is resolved
+    // by the caller; an unset awenHome here genuinely means "use the default".
+    const configuredBaseDir = awenHome?.trim() || undefined;
     const resolvedBaseDir = yield* resolveBaseDir(configuredBaseDir);
 
     const output: NodeJS.ProcessEnv = {
@@ -382,20 +382,20 @@ export function createDevRunnerEnv({
     };
 
     if (configuredBaseDir !== undefined) {
-      output.T3CODE_HOME = resolvedBaseDir;
+      output.AWEN_HOME = resolvedBaseDir;
     } else {
-      delete output.T3CODE_HOME;
+      delete output.AWEN_HOME;
     }
 
     // A dev-runner server is never launcher-managed. When the shell that runs
-    // this script was itself spawned by the machine's managed t3 service (an
-    // agent working inside T3 Code), these leak through and the child server
-    // fails startup with "The service launcher started a different t3 version"
+    // this script was itself spawned by the machine's managed awen service (an
+    // agent working inside Awen), these leak through and the child server
+    // fails startup with "The service launcher started a different awen version"
     // (serviceLauncherClient.ts resolveStartup).
-    delete output.T3_SERVICE_LAUNCHER_CONTEXT;
-    delete output.T3_BOOT_SERVICE_UNIT;
+    delete output.AWEN_SERVICE_LAUNCHER_CONTEXT;
+    delete output.AWEN_BOOT_SERVICE_UNIT;
 
-    output.T3CODE_PORT = String(serverPort);
+    output.AWEN_PORT = String(serverPort);
     // Browser dev is single-origin: everything (including /ws) is proxied
     // through Vite, so the client must resolve its backend from
     // window.location.origin rather than a baked-in localhost URL. See
@@ -412,39 +412,39 @@ export function createDevRunnerEnv({
       // ignore those values rather than infer from their absence.
       delete output.VITE_HTTP_URL;
       delete output.VITE_WS_URL;
-      output.T3CODE_SINGLE_ORIGIN_DEV = "1";
+      output.AWEN_SINGLE_ORIGIN_DEV = "1";
     } else {
       output.VITE_HTTP_URL = `http://localhost:${serverPort}`;
       output.VITE_WS_URL = `ws://localhost:${serverPort}`;
-      delete output.T3CODE_SINGLE_ORIGIN_DEV;
+      delete output.AWEN_SINGLE_ORIGIN_DEV;
     }
 
     if (host !== undefined) {
-      output.T3CODE_HOST = host;
+      output.AWEN_HOST = host;
     }
 
-    output.T3CODE_NO_BROWSER = browser === true ? "0" : "1";
+    output.AWEN_NO_BROWSER = browser === true ? "0" : "1";
 
     if (autoBootstrapProjectFromCwd !== undefined) {
-      output.T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD = autoBootstrapProjectFromCwd ? "1" : "0";
+      output.AWEN_AUTO_BOOTSTRAP_PROJECT_FROM_CWD = autoBootstrapProjectFromCwd ? "1" : "0";
     } else {
-      delete output.T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD;
+      delete output.AWEN_AUTO_BOOTSTRAP_PROJECT_FROM_CWD;
     }
 
     if (logWebSocketEvents !== undefined) {
-      output.T3CODE_LOG_WS_EVENTS = logWebSocketEvents ? "1" : "0";
+      output.AWEN_LOG_WS_EVENTS = logWebSocketEvents ? "1" : "0";
     } else {
-      delete output.T3CODE_LOG_WS_EVENTS;
+      delete output.AWEN_LOG_WS_EVENTS;
     }
 
     if (mode === "dev") {
-      output.T3CODE_MODE = "web";
-      delete output.T3CODE_DESKTOP_WS_URL;
+      output.AWEN_MODE = "web";
+      delete output.AWEN_DESKTOP_WS_URL;
     }
 
     if (mode === "dev:server" || mode === "dev:web") {
-      output.T3CODE_MODE = "web";
-      delete output.T3CODE_DESKTOP_WS_URL;
+      output.AWEN_MODE = "web";
+      delete output.AWEN_DESKTOP_WS_URL;
     }
 
     return output;
@@ -481,7 +481,7 @@ export function checkPortAvailabilityOnHosts<R>(
  * Hosts to probe for a dev server bound to `configuredHost`.
  *
  * Loopback is always checked because the Web client proxies through it. When
- * `--host`/`T3CODE_HOST` moves the backend onto
+ * `--host`/`AWEN_HOST` moves the backend onto
  * another interface, that interface decides whether the bind actually
  * succeeds — probing only loopback would hand back a port that is free here
  * and taken there, and the server would fail to start.
@@ -605,7 +605,7 @@ export function resolveModePortOffsets<R = NetService.NetService>({
       defaultCheckPortAvailability) as PortAvailabilityCheck<R>;
     // Name the knob, not a `key=value` pair: the value comes from a boolean
     // config, so quoting "=1" would misreport a run that set it to "true".
-    const pinSource = "T3CODE_STRICT_DEV_PORTS";
+    const pinSource = "AWEN_STRICT_DEV_PORTS";
 
     if (mode === "dev:web") {
       if (hasExplicitDevUrl) {
@@ -698,7 +698,7 @@ export function resolveModePortOffsets<R = NetService.NetService>({
 
 interface DevRunnerCliInput {
   readonly mode: DevMode;
-  readonly t3Home: string | undefined;
+  readonly awenHome: string | undefined;
   readonly browser: boolean | undefined;
   readonly autoBootstrapProjectFromCwd: boolean | undefined;
   readonly logWebSocketEvents: boolean | undefined;
@@ -716,7 +716,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       Effect.mapError(
         (cause) =>
           new DevRunnerConfigurationError({
-            configKeys: ["T3CODE_PORT_OFFSET", "T3CODE_DEV_INSTANCE", "T3CODE_STRICT_DEV_PORTS"],
+            configKeys: ["AWEN_PORT_OFFSET", "AWEN_DEV_INSTANCE", "AWEN_STRICT_DEV_PORTS"],
             cause,
           }),
       ),
@@ -758,18 +758,18 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
     });
 
     const hostEnvironment = yield* HostProcessEnvironment;
-    const resolvedT3Home = resolveDevHome({
+    const resolvedAwenHome = resolveDevHome({
       checkoutRoot,
-      explicitHome: input.t3Home,
+      explicitHome: input.awenHome,
       worktreeRoot: worktreePath,
-      ambientHome: hostEnvironment.T3CODE_HOME,
+      ambientHome: hostEnvironment.AWEN_HOME,
     });
     const env = yield* createDevRunnerEnv({
       mode: input.mode,
       baseEnv: hostEnvironment,
       serverOffset,
       webOffset,
-      t3Home: resolvedT3Home,
+      awenHome: resolvedAwenHome,
       browser: input.browser,
       autoBootstrapProjectFromCwd: input.autoBootstrapProjectFromCwd,
       logWebSocketEvents: input.logWebSocketEvents,
@@ -782,10 +782,10 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       serverOffset !== offset || webOffset !== offset
         ? ` selectedOffset(server=${serverOffset},web=${webOffset})`
         : "";
-    const baseDir = env.T3CODE_HOME ?? (yield* DEFAULT_ACODE_HOME);
+    const baseDir = env.AWEN_HOME ?? (yield* DEFAULT_AWEN_HOME);
 
     yield* Effect.logInfo(
-      `[dev-runner] mode=${input.mode} source=${source}${selectionSuffix} serverPort=${String(env.T3CODE_PORT)} webPort=${String(env.PORT)} baseDir=${baseDir}`,
+      `[dev-runner] mode=${input.mode} source=${source}${selectionSuffix} serverPort=${String(env.AWEN_PORT)} webPort=${String(env.PORT)} baseDir=${baseDir}`,
     );
 
     // Before the share block: --dry-run only resolves and prints. Sharing would
@@ -845,10 +845,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
           // The app is reached from the tailnet origin. Vite already allows
           // *.ts.net hosts; the backend needs the origin for credentialed
           // requests that bypass the proxy (for example, direct calls).
-          env.T3CODE_DEV_ALLOWED_ORIGINS = [
-            env.T3CODE_DEV_ALLOWED_ORIGINS,
-            new URL(shared.url).origin,
-          ]
+          env.AWEN_DEV_ALLOWED_ORIGINS = [env.AWEN_DEV_ALLOWED_ORIGINS, new URL(shared.url).origin]
             .filter((entry) => entry && entry.length > 0)
             .join(",");
           // The server builds its pairing URL from this, so the URL printed at
@@ -860,10 +857,10 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
           // A shared origin serves a remote browser, where unbundled dev's
           // per-module requests each pay a tailnet round trip — a cold module
           // graph takes minutes to first paint. Bundled dev collapses that to
-          // a few chunk requests. Only defaulted, so T3CODE_BUNDLED_DEV=0
+          // a few chunk requests. Only defaulted, so AWEN_BUNDLED_DEV=0
           // still opts a --share run back out.
-          if (env.T3CODE_BUNDLED_DEV === undefined) {
-            env.T3CODE_BUNDLED_DEV = "1";
+          if (env.AWEN_BUNDLED_DEV === undefined) {
+            env.AWEN_BUNDLED_DEV = "1";
           }
           yield* Effect.logInfo(`[dev-runner] shared on tailnet: ${shared.url}`);
         }
@@ -927,9 +924,9 @@ const devRunnerCli = Command.make("dev-runner", {
   mode: Argument.choice("mode", DEV_RUNNER_MODES).pipe(
     Argument.withDescription("Development mode to run."),
   ),
-  t3Home: Flag.string("home-dir").pipe(
+  awenHome: Flag.string("home-dir").pipe(
     Flag.withDescription(
-      "Explicit T3 Code data directory; runtime state is stored under userdata (equivalent to T3CODE_HOME). By default this checkout uses its own .acode directory so development state stays isolated.",
+      "Explicit Awen data directory; runtime state is stored under userdata (equivalent to AWEN_HOME). By default this checkout uses its own .awen directory so development state stays isolated.",
     ),
     Flag.optional,
     Flag.map(Option.getOrUndefined),
@@ -940,23 +937,23 @@ const devRunnerCli = Command.make("dev-runner", {
   ),
   autoBootstrapProjectFromCwd: Flag.boolean("auto-bootstrap-project-from-cwd").pipe(
     Flag.withDescription(
-      "Auto-bootstrap toggle (equivalent to T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD).",
+      "Auto-bootstrap toggle (equivalent to AWEN_AUTO_BOOTSTRAP_PROJECT_FROM_CWD).",
     ),
-    Flag.withFallbackConfig(optionalBooleanConfig("T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD")),
+    Flag.withFallbackConfig(optionalBooleanConfig("AWEN_AUTO_BOOTSTRAP_PROJECT_FROM_CWD")),
   ),
   logWebSocketEvents: Flag.boolean("log-websocket-events").pipe(
-    Flag.withDescription("WebSocket event logging toggle (equivalent to T3CODE_LOG_WS_EVENTS)."),
+    Flag.withDescription("WebSocket event logging toggle (equivalent to AWEN_LOG_WS_EVENTS)."),
     Flag.withAlias("log-ws-events"),
-    Flag.withFallbackConfig(optionalBooleanConfig("T3CODE_LOG_WS_EVENTS")),
+    Flag.withFallbackConfig(optionalBooleanConfig("AWEN_LOG_WS_EVENTS")),
   ),
   host: Flag.string("host").pipe(
-    Flag.withDescription("Server host/interface override (forwards to T3CODE_HOST)."),
-    Flag.withFallbackConfig(optionalStringConfig("T3CODE_HOST")),
+    Flag.withDescription("Server host/interface override (forwards to AWEN_HOST)."),
+    Flag.withFallbackConfig(optionalStringConfig("AWEN_HOST")),
   ),
   port: Flag.integer("port").pipe(
     Flag.withSchema(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }))),
-    Flag.withDescription("Server port override (forwards to T3CODE_PORT)."),
-    Flag.withFallbackConfig(optionalPortConfig("T3CODE_PORT")),
+    Flag.withDescription("Server port override (forwards to AWEN_PORT)."),
+    Flag.withFallbackConfig(optionalPortConfig("AWEN_PORT")),
   ),
   devUrl: Flag.string("dev-url").pipe(
     Flag.withSchema(Schema.URLFromString),

@@ -6,7 +6,7 @@ and the web client renders the stream with xterm.js (`@xterm/xterm`).
 There is one terminal identity per `(workspaceId, terminalId)` pair. The
 `terminalId` is always chosen by the client; `term-1` is only the conventional
 first id. The old `(threadId, terminalId)` shape remains a decode-compatible
-adapter for donor/setup clients and is not the ACode ownership path.
+adapter for donor/setup clients and is not the Awen ownership path.
 
 ## Public operations
 
@@ -65,16 +65,16 @@ typed input:
 The daemon deliberately answers none of these. It runs no emulator, so it could
 only invent a cursor position, and it cannot know which theme the client is
 painting. Paseo answers them in its daemon because that daemon hosts a headless
-xterm; ACode's daemon does not.
+xterm; Awen's daemon does not.
 
 `createTerminalSpawnEnv` therefore drops an inherited `COLORFGBG` rather than
 guessing an appearance, and declares the PTY it actually provides:
-`TERM=xterm-256color`, `TERM_PROGRAM=acode`, `COLORTERM=truecolor`. An explicit
+`TERM=xterm-256color`, `TERM_PROGRAM=awen`, `COLORTERM=truecolor`. An explicit
 per-session `env` from the client still overrides those defaults.
 
 ## Workspace ownership
 
-The ACode path maps a Terminal Session to the persisted Workspace and keeps
+The Awen path maps a Terminal Session to the persisted Workspace and keeps
 the PTY state in the single `TerminalManager`. The terminal summary exposes
 `kind: "terminal"`, `workspaceId`, and a monotonically increasing `generation`.
 The daemon persists the Session index beside terminal history. On daemon
@@ -114,9 +114,9 @@ visible Web client: `ThreadTerminalDrawer` → `useAttachedTerminalSession` →
 Related regression commands:
 
 ```bash
-pnpm --filter t3 exec vp test run src/terminal/Manager.test.ts src/terminal/NodePtyAdapter.test.ts src/terminal/OutputProtocol.test.ts
-pnpm --filter @t3tools/client-runtime exec vp test run src/state/terminalSession.test.ts
-pnpm --filter @t3tools/web exec vp test run --project unit src/terminal/xterm/surface.test.ts
+pnpm --filter awen exec vp test run src/terminal/Manager.test.ts src/terminal/NodePtyAdapter.test.ts src/terminal/OutputProtocol.test.ts
+pnpm --filter @awen/client-runtime exec vp test run src/state/terminalSession.test.ts
+pnpm --filter @awen/web exec vp test run --project unit src/terminal/xterm/surface.test.ts
 pnpm smoke:desktop-terminal
 ```
 
@@ -136,7 +136,7 @@ Observed on 2026-09-18 in this checkout:
   output after restore, detach/attach history reuse, and invalid cwd errors.
 - The local v1 client was opened with `pnpm dev` on checkout
   `codex/implement-5`. The terminal drawer accepted `printf` input, rendered
-  `ACODE_UI` and `ACODE_UI_RED 中文`, and restored both lines after the drawer
+  `AWEN_UI` and `AWEN_UI_RED 中文`, and restored both lines after the drawer
   was hidden and shown again. This exercised the typed client path named above;
   no agent turn was sent during this check.
 - `pnpm smoke:desktop-terminal` failed on Chromium when the renderer's protocol

@@ -1,5 +1,3 @@
-import { DEFAULT_HOSTED_APP_URL } from "@t3tools/shared/connectAuth";
-
 import { getPairingTokenFromUrl, setPairingTokenOnUrl } from "./pairingUrl";
 
 export interface HostedPairingRequest {
@@ -8,19 +6,14 @@ export interface HostedPairingRequest {
   readonly label: string;
 }
 
-export type HostedAppChannel = "latest" | "nightly";
-
 function configuredHostedAppUrl(): string {
-  return import.meta.env.VITE_HOSTED_APP_URL?.trim() || DEFAULT_HOSTED_APP_URL;
+  const configured = import.meta.env.VITE_HOSTED_APP_URL?.trim();
+  if (configured) return configured;
+  return typeof window === "undefined" ? "http://localhost" : window.location.origin;
 }
 
 function configuredBackendUrl(): string {
   return import.meta.env.VITE_HTTP_URL?.trim() || import.meta.env.VITE_WS_URL?.trim() || "";
-}
-
-function configuredHostedAppChannel(): HostedAppChannel | null {
-  const channel = import.meta.env.VITE_HOSTED_APP_CHANNEL?.trim().toLowerCase();
-  return channel === "latest" || channel === "nightly" ? channel : null;
 }
 
 function originFromUrl(value: string): string | null {
@@ -36,17 +29,15 @@ export function isHostedStaticApp(url?: URL): boolean {
     return false;
   }
 
-  if (configuredHostedAppChannel()) {
-    return true;
-  }
-
   // No window, or a window without a location (tests, static render), means
   // no origin to be hosted at.
   if (url === undefined && (typeof window === "undefined" || window.location === undefined)) {
     return false;
   }
 
-  const hostedOrigin = originFromUrl(configuredHostedAppUrl());
+  const configuredUrl = import.meta.env.VITE_HOSTED_APP_URL?.trim();
+  if (!configuredUrl) return false;
+  const hostedOrigin = originFromUrl(configuredUrl);
   return hostedOrigin !== null && (url ?? new URL(window.location.href)).origin === hostedOrigin;
 }
 
@@ -84,12 +75,4 @@ export function buildHostedPairingUrl(input: {
   }
 
   return setPairingTokenOnUrl(url, input.token).toString();
-}
-
-export function buildHostedChannelSelectionUrl(input: {
-  readonly channel: HostedAppChannel;
-}): string {
-  const url = new URL("/__t3code/channel", configuredHostedAppUrl());
-  url.searchParams.set("channel", input.channel);
-  return url.toString();
 }

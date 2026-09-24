@@ -93,7 +93,9 @@ export interface SidebarHeaderInsets {
   readonly titlebarHeight: number;
 }
 
-export function resolveSidebarHeaderInsets(options: { readonly isMac: boolean }): SidebarHeaderInsets {
+export function resolveSidebarHeaderInsets(options: {
+  readonly isMac: boolean;
+}): SidebarHeaderInsets {
   return {
     trafficLightsInset: options.isMac ? BASE_SPACING : 0,
     sidebarTriggerLeft: options.isMac ? SIDEBAR_TRIGGER_LEFT_MAC : SIDEBAR_TRIGGER_LEFT_WIN,

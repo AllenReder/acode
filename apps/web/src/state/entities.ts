@@ -3,20 +3,20 @@ import type {
   EnvironmentProject,
   EnvironmentThread,
   EnvironmentThreadShell,
-} from "@t3tools/client-runtime/state/shell";
+} from "@awen/client-runtime/state/shell";
 import {
   type EnvironmentThreadStatus,
   mergeEnvironmentThread,
-} from "@t3tools/client-runtime/state/threads";
-import type { ScopedProjectRef, ScopedThreadRef, ServerConfig } from "@t3tools/contracts";
+} from "@awen/client-runtime/state/threads";
+import type { ScopedProjectRef, ScopedThreadRef, ServerConfig } from "@awen/contracts";
 import {
   agentSessionsIn,
-  type AcodeAgentSessionShell,
-  type AcodeWorkspaceShell,
+  type AwenAgentSessionShell,
+  type AwenWorkspaceShell,
   type AgentSessionId,
   type EnvironmentId,
   type WorkspaceId,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import { Atom } from "effect/unstable/reactivity";
 import * as Option from "effect/Option";
 import { useMemo } from "react";
@@ -28,7 +28,7 @@ import {
   allEnvironmentShellsBootstrappedAtom,
   environmentShell,
 } from "./shell";
-import type { EnvironmentShellState } from "@t3tools/client-runtime/state/shell";
+import type { EnvironmentShellState } from "@awen/client-runtime/state/shell";
 import { environmentThreadDetails, environmentThreadShells } from "./threads";
 
 const EMPTY_THREAD_REFS: ReadonlyArray<ScopedThreadRef> = Object.freeze([]);
@@ -90,8 +90,8 @@ export function useProjects(): ReadonlyArray<EnvironmentProject> {
   return useAtomValue(environmentProjects.projectsAtom);
 }
 
-export function useAcodeProjects() {
-  return useAtomValue(environmentWorkspace.acodeProjectsAtom);
+export function useAwenProjects() {
+  return useAtomValue(environmentWorkspace.awenProjectsAtom);
 }
 
 export function useEnvironmentShellSnapshotPresent(environmentId: EnvironmentId | null): boolean {
@@ -188,16 +188,16 @@ export function readProjects(): ReadonlyArray<EnvironmentProject> {
 }
 
 /**
- * Look up an ACode Workspace shell by (environmentId, workspaceId).
+ * Look up an Awen Workspace shell by (environmentId, workspaceId).
  * Returns null while the workspace snapshot is not yet hydrated or when the
  * id is unknown. Used by the workbench to resolve an Agent Session's owning
- * Workspace (and through it, the matching AcodeAgentSessionShell).
+ * Workspace (and through it, the matching AwenAgentSessionShell).
  */
-export function useAcodeWorkspace(
+export function useAwenWorkspace(
   environmentId: EnvironmentId | null,
   workspaceId: WorkspaceId | null,
-): AcodeWorkspaceShell | null {
-  const projects = useAcodeProjects();
+): AwenWorkspaceShell | null {
+  const projects = useAwenProjects();
   if (environmentId === null || workspaceId === null) return null;
   for (const project of projects) {
     if (project.environmentId !== environmentId) continue;
@@ -208,17 +208,17 @@ export function useAcodeWorkspace(
 }
 
 /**
- * Look up an ACode Agent Session shell by (workspaceId, agentSessionId).
+ * Look up an Awen Agent Session shell by (workspaceId, agentSessionId).
  * The workspace shell is the durable authority for the Agent Session's
  * thread id — see D3. Returns null when the workspace or session is unknown
  * or when the id names a Terminal Session.
  */
-export function useAcodeAgentSessionShell(
+export function useAwenAgentSessionShell(
   environmentId: EnvironmentId | null,
   workspaceId: WorkspaceId | null,
   agentSessionId: AgentSessionId | null,
-): AcodeAgentSessionShell | null {
-  const workspace = useAcodeWorkspace(environmentId, workspaceId);
+): AwenAgentSessionShell | null {
+  const workspace = useAwenWorkspace(environmentId, workspaceId);
   if (workspace === null || agentSessionId === null) return null;
   return agentSessionsIn(workspace).find((session) => session.id === agentSessionId) ?? null;
 }

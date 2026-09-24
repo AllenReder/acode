@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { useAcodeWorkspace } from "../state/entities";
+import { useAwenWorkspace } from "../state/entities";
 import type { ViewTarget } from "./viewRegistry";
 import { Spinner } from "~/components/ui/spinner";
 
@@ -20,7 +20,7 @@ export function WorkspaceFileView({
   focusRequestId: _focusRequestId = 0,
   availableSize: _availableSize,
 }: WorkspaceFileViewProps) {
-  const workspace = useAcodeWorkspace(target.environmentId, target.workspaceId);
+  const workspace = useAwenWorkspace(target.environmentId, target.workspaceId);
   const [selectedPath, setSelectedPath] = useState<string | null>(
     "initialPath" in target && typeof target.initialPath === "string" ? target.initialPath : null,
   );

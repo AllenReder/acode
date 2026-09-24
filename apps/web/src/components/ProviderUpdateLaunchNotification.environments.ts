@@ -1,5 +1,5 @@
-import type { ConnectionCatalogEntry } from "@t3tools/client-runtime/connection";
-import type { ServerConfig } from "@t3tools/contracts";
+import type { ConnectionCatalogEntry } from "@awen/client-runtime/connection";
+import type { ServerConfig } from "@awen/contracts";
 import { useMemo } from "react";
 
 import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
@@ -16,7 +16,7 @@ import {
  * A local environment is either the same-origin primary backend or a
  * desktop-local secondary (the parallel WSL backend), which connects over
  * loopback with a bearer token and carries a `local:<backendInstanceId>`
- * connection id. SSH, relay, and other remote targets are excluded.
+ * connection id. SSH and user-saved remote targets are excluded.
  */
 function isLocalConnectionTarget(target: ConnectionCatalogEntry["target"]): boolean {
   return target._tag === "PrimaryConnectionTarget" || isDesktopLocalConnectionTarget(target);

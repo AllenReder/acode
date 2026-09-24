@@ -150,7 +150,9 @@ describe("WindowControls", () => {
 
   describe("handleTopbarDoubleClick", () => {
     it("does not toggle maximize on non-Windows platform", () => {
-      const toggleSpy = vi.spyOn(defaultWindowOperations, "toggleMaximize").mockResolvedValue(undefined);
+      const toggleSpy = vi
+        .spyOn(defaultWindowOperations, "toggleMaximize")
+        .mockResolvedValue(undefined);
       vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
       vi.stubGlobal("navigator", { platform: "MacIntel" });
 
@@ -162,7 +164,9 @@ describe("WindowControls", () => {
     });
 
     it("does not toggle maximize when in non-desktop browser on Windows", () => {
-      const toggleSpy = vi.spyOn(defaultWindowOperations, "toggleMaximize").mockResolvedValue(undefined);
+      const toggleSpy = vi
+        .spyOn(defaultWindowOperations, "toggleMaximize")
+        .mockResolvedValue(undefined);
       vi.stubGlobal("window", {});
       vi.stubGlobal("navigator", { platform: "Win32" });
 
@@ -174,7 +178,9 @@ describe("WindowControls", () => {
     });
 
     it("toggles maximize on Windows desktop for empty topbar regions", () => {
-      const toggleSpy = vi.spyOn(defaultWindowOperations, "toggleMaximize").mockResolvedValue(undefined);
+      const toggleSpy = vi
+        .spyOn(defaultWindowOperations, "toggleMaximize")
+        .mockResolvedValue(undefined);
       vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
       vi.stubGlobal("navigator", { platform: "Win32" });
 
@@ -186,7 +192,9 @@ describe("WindowControls", () => {
     });
 
     it("does not toggle maximize when double clicking interactive elements", () => {
-      const toggleSpy = vi.spyOn(defaultWindowOperations, "toggleMaximize").mockResolvedValue(undefined);
+      const toggleSpy = vi
+        .spyOn(defaultWindowOperations, "toggleMaximize")
+        .mockResolvedValue(undefined);
       vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
       vi.stubGlobal("navigator", { platform: "Win32" });
 

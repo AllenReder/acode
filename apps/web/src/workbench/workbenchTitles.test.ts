@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 import type {
-  AcodeProjectId,
+  AwenProjectId,
   AgentSessionId,
   EnvironmentId,
   TerminalSessionId,
   WorkspaceId,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 
-import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
+import type { EnvironmentAwenProject } from "@awen/client-runtime/state/models";
 import type { ViewTarget } from "./viewRegistry";
 import {
   resolveTargetBreadcrumbs,
@@ -17,7 +17,7 @@ import {
 
 const environmentId = "env-a" as EnvironmentId;
 const workspaceId = "ws-a" as WorkspaceId;
-const projectId = "project-a" as AcodeProjectId;
+const projectId = "project-a" as AwenProjectId;
 const agentSessionId = "agent-a" as AgentSessionId;
 const terminalSessionId = "terminal-a" as TerminalSessionId;
 const now = "2026-09-20T00:00:00.000Z";
@@ -28,18 +28,18 @@ const agentTarget = {
   agentSessionId,
 } satisfies ViewTarget;
 
-const projects: ReadonlyArray<EnvironmentAcodeProject> = [
+const projects: ReadonlyArray<EnvironmentAwenProject> = [
   {
     id: projectId,
     environmentId,
-    title: "ACode",
+    title: "Awen",
     createdAt: now,
     updatedAt: now,
     workspaces: [
       {
         id: workspaceId,
         projectId,
-        t3ProjectId: "t3-project-a" as never,
+        awenProjectId: "awen-project-a" as never,
         title: "Main checkout",
         workspaceRoot: "/workspace",
         role: "main",
@@ -74,7 +74,7 @@ const projects: ReadonlyArray<EnvironmentAcodeProject> = [
 describe("resolveTargetTitle", () => {
   it.each([
     [{ kind: "workspace", environmentId, workspaceId } satisfies ViewTarget, "Main checkout"],
-    [{ kind: "project", environmentId, projectId } satisfies ViewTarget, "ACode"],
+    [{ kind: "project", environmentId, projectId } satisfies ViewTarget, "Awen"],
     [agentTarget, "Implement tabs"],
     [
       {
@@ -99,7 +99,7 @@ describe("resolveTargetTitle", () => {
 
     expect(resolveTargetTitle(fileViewTarget, projects)).toBe("Main checkout: Files");
     expect(resolveTargetBreadcrumbs(fileViewTarget, projects)).toEqual([
-      "ACode",
+      "Awen",
       "Main checkout",
       "Files",
     ]);
@@ -115,7 +115,7 @@ describe("resolveTargetTitle", () => {
 
     expect(resolveTargetTitle(gitViewTarget, projects)).toBe("Main checkout: Changes");
     expect(resolveTargetBreadcrumbs(gitViewTarget, projects)).toEqual([
-      "ACode",
+      "Awen",
       "Main checkout",
       "Changes",
     ]);
@@ -141,7 +141,7 @@ describe("resolveTargetTitle", () => {
 
   it("builds Project, Workspace, and View breadcrumbs for Session Panes", () => {
     expect(resolveTargetBreadcrumbs(agentTarget, projects)).toEqual([
-      "ACode",
+      "Awen",
       "Main checkout",
       "Implement tabs",
     ]);
@@ -155,7 +155,7 @@ describe("resolveTargetTitle", () => {
         } satisfies ViewTarget,
         projects,
       ),
-    ).toEqual(["ACode", "Main checkout", "Dev server"]);
+    ).toEqual(["Awen", "Main checkout", "Dev server"]);
   });
 
   it("keeps stable breadcrumb fallbacks while a target is offline", () => {
@@ -169,7 +169,7 @@ describe("resolveTargetTitle", () => {
         },
         projects,
       ),
-    ).toEqual(["ACode", "Main checkout", "Agent"]);
+    ).toEqual(["Awen", "Main checkout", "Agent"]);
     expect(resolveTargetBreadcrumbs({ kind: "welcome" }, projects)).toEqual(["Welcome"]);
   });
 });

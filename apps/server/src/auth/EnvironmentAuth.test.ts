@@ -1,5 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { AuthAdministrativeScopes } from "@t3tools/contracts";
+import { AuthAdministrativeScopes } from "@awen/contracts";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -35,7 +35,9 @@ const makeServerConfigLayer = (overrides?: Partial<ServerConfig.ServerConfig["Se
         port: TEST_SERVER_PORT,
       } satisfies ServerConfig.ServerConfig["Service"];
     }),
-  ).pipe(Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-auth-server-test-" })));
+  ).pipe(
+    Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "awen-auth-server-test-" })),
+  );
 
 const makeEnvironmentAuthLayer = (overrides?: Partial<ServerConfig.ServerConfig["Service"]>) =>
   EnvironmentAuth.layer.pipe(
@@ -100,7 +102,7 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
       >[0];
 
       const authenticated = yield* serverAuth.authenticateHttpRequest(request);
-      expect(devExchange.cookieName).toMatch(/^t3_dev_session_/);
+      expect(devExchange.cookieName).toMatch(/^awen_dev_session_/);
       expect(devExchange.expireNormalCookie).toBe(true);
       expect(authenticated.scopes).toEqual(["orchestration:read"]);
     }).pipe(
@@ -176,40 +178,30 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
     ),
   );
 
-  it.effect("exchanges the reusable dev token for a local scoped OAuth session", () =>
+  it.effect("creates a scoped bearer session from a reusable dev token", () =>
     Effect.gen(function* () {
       const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
       const sessions = yield* SessionStore.SessionStore;
       const token = "reusable-dev-auth-token-that-is-long-enough";
-      const exchanged = yield* serverAuth.exchangeBootstrapCredentialForAccessToken(
+      const exchanged = yield* serverAuth.createBearerSession(
         token,
         ["orchestration:read"],
         requestMetadata,
       );
 
-      expect(exchanged.access_token).not.toBe(token);
-      expect(exchanged.scope).toBe("orchestration:read");
-      const dpop = yield* serverAuth.exchangeBootstrapCredentialForAccessToken(
-        token,
-        ["orchestration:read"],
-        requestMetadata,
-        { proofKeyThumbprint: "test-proof-key" },
-      );
-      expect(dpop.access_token).not.toBe(token);
-      expect(dpop.access_token).not.toBe(exchanged.access_token);
-      expect(dpop.token_type).toBe("DPoP");
-      expect(dpop.scope).toBe("orchestration:read");
+      expect(exchanged.token).not.toBe(token);
+      expect(exchanged.scopes).toEqual(["orchestration:read"]);
 
-      const secondBearer = yield* serverAuth.exchangeBootstrapCredentialForAccessToken(
+      const secondBearer = yield* serverAuth.createBearerSession(
         token,
         ["orchestration:read"],
         requestMetadata,
       );
       const firstSession = yield* serverAuth.authenticateHttpRequest(
-        makeBearerRequest(exchanged.access_token),
+        makeBearerRequest(exchanged.token),
       );
       const secondSession = yield* serverAuth.authenticateHttpRequest(
-        makeBearerRequest(secondBearer.access_token),
+        makeBearerRequest(secondBearer.token),
       );
       expect(firstSession.subject).toBe("reusable-dev-token-child");
       expect(secondSession.subject).toBe("reusable-dev-token-child");
@@ -333,7 +325,6 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
         "orchestration:operate",
         "terminal:operate",
         "review:write",
-        "relay:read",
       ]);
       expect(verified.subject).toBe("one-time-token");
     }).pipe(Effect.provide(makeEnvironmentAuthLayer())),
@@ -345,7 +336,7 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
       const sessions = yield* SessionStore.SessionStore;
       const bearer = yield* serverAuth.issueSession();
       const verified = yield* serverAuth.authenticateHttpRequest({
-        cookies: { [sessions.legacyCookieName ?? "t3_session"]: "stale" },
+        cookies: { [sessions.legacyCookieName ?? "awen_session"]: "stale" },
         headers: { authorization: `Bearer ${bearer.token}` },
       } as never);
 
@@ -353,13 +344,13 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
     }).pipe(Effect.provide(makeEnvironmentAuthLayer({ mode: "web", host: "192.168.1.50" }))),
   );
 
-  it.effect("does not exchange ordinary pairing grants for administrative access tokens", () =>
+  it.effect("does not broaden ordinary pairing grants to administrative scopes", () =>
     Effect.gen(function* () {
       const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
       const pairingCredential = yield* serverAuth.issuePairingCredential();
 
       const error = yield* serverAuth
-        .exchangeBootstrapCredentialForAccessToken(
+        .createBearerSession(
           pairingCredential.credential,
           ["orchestration:read", "access:write"],
           requestMetadata,
@@ -370,20 +361,20 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
     }).pipe(Effect.provide(makeEnvironmentAuthLayer())),
   );
 
-  it.effect("inherits a constrained pairing grant when token exchange omits scope", () =>
+  it.effect("inherits the scopes from a pairing grant when no narrower set is requested", () =>
     Effect.gen(function* () {
       const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
       const pairingCredential = yield* serverAuth.issuePairingCredential({
         scopes: ["orchestration:read"],
       });
 
-      const token = yield* serverAuth.exchangeBootstrapCredentialForAccessToken(
+      const token = yield* serverAuth.createBearerSession(
         pairingCredential.credential,
         undefined,
         requestMetadata,
       );
 
-      expect(token.scope).toBe("orchestration:read");
+      expect(token.scopes).toEqual(["orchestration:read"]);
     }).pipe(Effect.provide(makeEnvironmentAuthLayer())),
   );
 
@@ -402,20 +393,19 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
         sessions.issue({ subject: "desktop-bootstrap", method: "bearer-access-token" }),
       );
       const pairing = yield* serverAuth.issuePairingCredential();
-      const paired = yield* serverAuth.exchangeBootstrapCredentialForAccessToken(
-        pairing.credential,
-        undefined,
-        { ...requestMetadata, label: "T3 Code Desktop" },
-      );
-      const first = yield* serverAuth.exchangeBootstrapCredentialForAccessToken(
+      const paired = yield* serverAuth.createBearerSession(pairing.credential, undefined, {
+        ...requestMetadata,
+        label: "Awen desktop",
+      });
+      const first = yield* serverAuth.createBearerSession(
         "desktop-bootstrap-token",
         undefined,
         requestMetadata,
       );
       const firstSession = yield* serverAuth.authenticateHttpRequest(
-        makeBearerRequest(first.access_token),
+        makeBearerRequest(first.token),
       );
-      const second = yield* serverAuth.exchangeBootstrapCredentialForAccessToken(
+      const second = yield* serverAuth.createBearerSession(
         "desktop-bootstrap-token",
         undefined,
         requestMetadata,
@@ -423,10 +413,10 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
 
       const active = yield* serverAuth.listSessions();
       const firstError = yield* serverAuth
-        .authenticateHttpRequest(makeBearerRequest(first.access_token))
+        .authenticateHttpRequest(makeBearerRequest(first.token))
         .pipe(Effect.flip);
       const secondSession = yield* serverAuth.authenticateHttpRequest(
-        makeBearerRequest(second.access_token),
+        makeBearerRequest(second.token),
       );
 
       expect(active).toHaveLength(3);
@@ -439,7 +429,7 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
         expect(error._tag).toBe("SessionTokenRevokedError");
       }
       const pairedSession = yield* serverAuth.authenticateHttpRequest(
-        makeBearerRequest(paired.access_token),
+        makeBearerRequest(paired.token),
       );
       expect(pairedSession.subject).toBe("one-time-token");
       expect(active.map((entry) => entry.sessionId)).toContain(pairedSession.sessionId);
@@ -491,10 +481,8 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
         "orchestration:operate",
         "terminal:operate",
         "review:write",
-        "relay:read",
         "access:read",
         "access:write",
-        "relay:write",
       ]);
       expect(verified.subject).toBe("administrative-bootstrap");
     }).pipe(Effect.provide(makeEnvironmentAuthLayer())),

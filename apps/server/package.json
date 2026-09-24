@@ -1,15 +1,15 @@
 {
-  "name": "t3",
-  "version": "0.0.43",
+  "name": "@awen/server",
+  "version": "0.1.0-alpha.1",
+  "private": true,
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/pingdotgg/t3code",
+    "url": "https://github.com/AllenReder/awen",
     "directory": "apps/server"
   },
   "bin": {
-    "acode": "./dist/bin.mjs",
-    "t3": "./dist/bin.mjs"
+    "awen": "./dist/bin.mjs"
   },
   "files": [
     "dist"
@@ -39,12 +39,12 @@
     "yauzl": "^3.4.0"
   },
   "devDependencies": {
+    "@awen/contracts": "workspace:*",
+    "@awen/shared": "workspace:*",
+    "@awen/ssh": "workspace:*",
+    "@awen/tailscale": "workspace:*",
+    "@awen/web": "workspace:*",
     "@effect/vitest": "catalog:",
-    "@t3tools/contracts": "workspace:*",
-    "@t3tools/shared": "workspace:*",
-    "@t3tools/ssh": "workspace:*",
-    "@t3tools/tailscale": "workspace:*",
-    "@t3tools/web": "workspace:*",
     "@types/node": "catalog:",
     "@types/yauzl": "^3.4.0",
     "effect-acp": "workspace:*",

@@ -1,4 +1,4 @@
-import type { DevicePlatformAvailability } from "@t3tools/contracts";
+import type { DevicePlatformAvailability } from "@awen/contracts";
 import { Check, Minus } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 

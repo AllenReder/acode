@@ -2,23 +2,20 @@ import { useAtomValue } from "@effect/atom-react";
 import {
   connectionCatalogDisplayUrl,
   type EnvironmentPresentation as BaseEnvironmentPresentation,
-} from "@t3tools/client-runtime/connection";
-import { Discovery } from "@t3tools/client-runtime/relay";
-import type { EnvironmentId } from "@t3tools/contracts";
+} from "@awen/client-runtime/connection";
+import type { EnvironmentId } from "@awen/contracts";
 import * as Option from "effect/Option";
 import { useMemo } from "react";
 
 import { environmentCatalog } from "../connection/catalog";
 import { environmentPresentations, useEnvironmentPresentation } from "./presentation";
 import { primaryEnvironmentIdAtom } from "./primaryEnvironment";
-import { relayEnvironmentDiscovery } from "./relay";
 import { usePreparedConnection } from "./session";
 
 export interface EnvironmentPresentation extends BaseEnvironmentPresentation {
   readonly environmentId: EnvironmentId;
   readonly label: string;
   readonly displayUrl: string | null;
-  readonly relayManaged: boolean;
 }
 
 function projectEnvironmentPresentation(
@@ -30,7 +27,6 @@ function projectEnvironmentPresentation(
     environmentId,
     label: presentation.entry.target.label,
     displayUrl: connectionCatalogDisplayUrl(presentation.entry),
-    relayManaged: presentation.entry.target._tag === "RelayConnectionTarget",
   };
 }
 
@@ -79,8 +75,4 @@ export function usePrimaryEnvironment(): EnvironmentPresentation | null {
 export function useEnvironmentHttpBaseUrl(environmentId: EnvironmentId | null): string | null {
   const prepared = usePreparedConnection(environmentId);
   return Option.isSome(prepared) ? prepared.value.httpBaseUrl : null;
-}
-
-export function useRelayEnvironmentDiscovery(): Discovery.RelayEnvironmentDiscoveryState {
-  return useAtomValue(relayEnvironmentDiscovery.stateValueAtom);
 }

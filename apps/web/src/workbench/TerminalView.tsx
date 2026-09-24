@@ -1,5 +1,5 @@
 import { TerminalViewport } from "../components/ThreadTerminalDrawer";
-import { useAcodeWorkspace } from "../state/entities";
+import { useAwenWorkspace } from "../state/entities";
 import { runtimeTerminalIdForTarget } from "./sessionTarget";
 import type { ViewTarget } from "./viewRegistry";
 
@@ -12,7 +12,7 @@ interface TerminalViewProps {
 }
 
 /**
- * View definition rendering one ACode Workspace-owned Terminal Session inside
+ * View definition rendering one Awen Workspace-owned Terminal Session inside
  * a Pane.
  *
  * Reuses the existing `<TerminalViewport>` (the xterm.js-backed emulator that
@@ -20,7 +20,7 @@ interface TerminalViewProps {
  * passes the Workspace's cwd and the pane's focus flag through without
  * re-implementing the emulator.
  *
- * The pane carries the ACode Terminal Session identity; the runtime PTY id the
+ * The pane carries the Awen Terminal Session identity; the runtime PTY id the
  * emulator attaches to is resolved at this adapter boundary, so no other
  * Workbench code has to know it.
  *
@@ -34,7 +34,7 @@ export function TerminalView({
   focusRequestId = 0,
   availableSize,
 }: TerminalViewProps) {
-  const workspace = useAcodeWorkspace(target.environmentId, target.workspaceId);
+  const workspace = useAwenWorkspace(target.environmentId, target.workspaceId);
   const terminalId = runtimeTerminalIdForTarget(target);
   if (workspace === null || terminalId === null) {
     return (

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { BUILT_IN_THEMES } from "@t3tools/shared/themePalettes";
+import { BUILT_IN_THEMES } from "@awen/shared/themePalettes";
 
 import {
   applyThemeColorPreview,
@@ -27,7 +27,7 @@ import {
   subscribeToThemePreview,
   subscribeToCustomThemes,
   themeAllowsSidebarArtwork,
-  ACODE_DEFAULT_THEME,
+  AWEN_DEFAULT_THEME,
   FOREST_THEME,
   MIDNIGHT_THEME,
   OCEAN_THEME,
@@ -285,13 +285,13 @@ describe("theme files", () => {
 
   it("canonicalizes the explicitly exported theme", () => {
     const serialized = serializeThemeFile({
-      ...ACODE_DEFAULT_THEME,
-      colors: { ...ACODE_DEFAULT_THEME.colors, accent: "hsl(263 70% 58%)" },
+      ...AWEN_DEFAULT_THEME,
+      colors: { ...AWEN_DEFAULT_THEME.colors, accent: "hsl(263 70% 58%)" },
     });
     expect(JSON.parse(serialized)).toMatchObject({
       version: THEME_FILE_VERSION,
-      id: ACODE_DEFAULT_THEME.id,
-      name: ACODE_DEFAULT_THEME.label,
+      id: AWEN_DEFAULT_THEME.id,
+      name: AWEN_DEFAULT_THEME.label,
       appearance: "dark",
       colors: { accent: canonical("hsl(263 70% 58%)") },
     });
@@ -343,7 +343,7 @@ describe("theme files", () => {
       },
     });
 
-    applyThemeColorPreview(ACODE_DEFAULT_THEME.colors, "dark");
+    applyThemeColorPreview(AWEN_DEFAULT_THEME.colors, "dark");
     expect(getThemePreviewSidebarArtwork()).toBe(false);
     expect(listener).toHaveBeenCalledTimes(1);
 
@@ -372,24 +372,28 @@ describe("theme files", () => {
       canvas: canonical("#101827"),
       text: canonical("#eef5ff"),
     });
-    expect(getThemeModes(ACODE_DEFAULT_THEME)).toEqual(["light", "dark"]);
-    expect(resolveThemeAppearance(ACODE_DEFAULT_THEME.id, true, true)).toBe("dark");
-    expect(resolveDesktopTheme(ACODE_DEFAULT_THEME.id, true)).toBe("system");
-    expect(resolveThemeAppearance(ACODE_DEFAULT_THEME.id, false, false, "dark")).toBe("dark");
-    expect(resolveDesktopTheme(ACODE_DEFAULT_THEME.id, false, "dark")).toBe("dark");
+    expect(getThemeModes(AWEN_DEFAULT_THEME)).toEqual(["light", "dark"]);
+    expect(resolveThemeAppearance(AWEN_DEFAULT_THEME.id, true, true)).toBe("dark");
+    expect(resolveDesktopTheme(AWEN_DEFAULT_THEME.id, true)).toBe("system");
+    expect(resolveThemeAppearance(AWEN_DEFAULT_THEME.id, false, false, "dark")).toBe("dark");
+    expect(resolveDesktopTheme(AWEN_DEFAULT_THEME.id, false, "dark")).toBe("dark");
     expect(JSON.parse(serializeThemeFile(theme)).variants.dark).toMatchObject({
       canvas: canonical("#101827"),
       text: canonical("#eef5ff"),
     });
   });
 
-  it("keeps the ACode Default palette faithful and readable", () => {
+  it("keeps the Awen Default palette faithful and readable", () => {
     for (const mode of ["light", "dark"] as const) {
-      const colors = getThemeColorsForMode(ACODE_DEFAULT_THEME, mode)!;
+      const colors = getThemeColorsForMode(AWEN_DEFAULT_THEME, mode)!;
       expect(contrastRatio(colors.text, colors.canvas)).toBeGreaterThanOrEqual(7);
       expect(contrastRatio(colors.textMuted, colors.canvas)).toBeGreaterThanOrEqual(4.5);
-      expect(contrastRatio(colors.messageForeground, colors.messageSurface)).toBeGreaterThanOrEqual(4.5);
-      expect(contrastRatio(colors.secondaryForeground, colors.secondary)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(colors.messageForeground, colors.messageSurface)).toBeGreaterThanOrEqual(
+        4.5,
+      );
+      expect(contrastRatio(colors.secondaryForeground, colors.secondary)).toBeGreaterThanOrEqual(
+        4.5,
+      );
       expect(contrastRatio(colors.sidebarForeground, colors.sidebar)).toBeGreaterThanOrEqual(4.5);
       expect(contrastRatio(colors.accentForeground, colors.accent)).toBeGreaterThanOrEqual(4.5);
     }
@@ -951,12 +955,8 @@ describe("stored theme preferences", () => {
     }
   });
 
-
-
-
-
   it("recognizes only preferences the runtime can render", () => {
-    for (const preference of ["light", "dark", "system", ACODE_DEFAULT_THEME.id, FOREST_THEME.id]) {
+    for (const preference of ["light", "dark", "system", AWEN_DEFAULT_THEME.id, FOREST_THEME.id]) {
       expect(isKnownThemePreference(preference)).toBe(true);
     }
     expect(isKnownThemePreference(`${FOREST_THEME.id}:dark`)).toBe(false);
@@ -1006,8 +1006,8 @@ describe("stored theme preferences", () => {
 
 describe("singleAppearanceOf", () => {
   it("reports the only half a theme can claim, and null for a pair", () => {
-    const { variants: _pair, ...base } = ACODE_DEFAULT_THEME;
+    const { variants: _pair, ...base } = AWEN_DEFAULT_THEME;
     expect(singleAppearanceOf({ ...base, id: "x", appearance: "dark" })).toBe("dark");
-    expect(singleAppearanceOf(ACODE_DEFAULT_THEME)).toBe(null);
+    expect(singleAppearanceOf(AWEN_DEFAULT_THEME)).toBe(null);
   });
 });

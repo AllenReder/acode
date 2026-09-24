@@ -43,10 +43,10 @@ import {
   CodexSettings,
   ProviderInstanceId,
   WorkspaceId,
-} from "@t3tools/contracts";
-import { makeKeyedCoalescingWorker } from "@t3tools/shared/KeyedCoalescingWorker";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
-import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
+} from "@awen/contracts";
+import { makeKeyedCoalescingWorker } from "@awen/shared/KeyedCoalescingWorker";
+import { HostProcessPlatform } from "@awen/shared/hostProcess";
+import { getTerminalLabel } from "@awen/shared/terminalLabels";
 import * as DateTime from "effect/DateTime";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -249,7 +249,7 @@ export class TerminalManager extends Context.Service<
       listener: (event: TerminalMetadataStreamEvent) => Effect.Effect<void>,
     ) => Effect.Effect<() => void>;
   }
->()("t3/terminal/Manager/TerminalManager") {}
+>()("@awen/server/terminal/Manager/TerminalManager") {}
 
 interface TerminalSubprocessInspectResult {
   readonly hasRunningSubprocess: boolean;
@@ -294,10 +294,10 @@ export interface TerminalStartInput extends TerminalOpenInput {
 }
 
 interface TerminalSessionState {
-  /** Storage and lock identity; a WorkspaceId for the ACode path. */
+  /** Storage and lock identity; a WorkspaceId for the Awen path. */
   ownerId: string;
   workspaceId: string | null;
-  /** Compatibility-only T3 thread owner. */
+  /** Compatibility-only Awen thread owner. */
   threadId: string;
   terminalId: string;
   /** Stable default title assigned from Workspace creation order. */
@@ -1414,7 +1414,7 @@ function toSessionKey(threadId: string, terminalId: string): string {
 
 function shouldExcludeTerminalEnvKey(key: string): boolean {
   const normalizedKey = key.toUpperCase();
-  if (normalizedKey.startsWith("T3CODE_")) {
+  if (normalizedKey.startsWith("AWEN_")) {
     return true;
   }
   if (normalizedKey.startsWith("VITE_")) {
@@ -1428,7 +1428,7 @@ function shouldExcludeTerminalEnvKey(key: string): boolean {
 // not inherit them.
 const APPIMAGE_RUNTIME_ENV_KEYS = ["APPIMAGE", "APPDIR", "ARGV0", "OWD"] as const;
 // Colon-separated search-path variables the AppImage runtime points at its
-// temporary mount (e.g. /tmp/.mount_T3-XXXX/usr/bin, the bundled glib schemas,
+// temporary mount (e.g. /tmp/.mount_Awen-XXXX/usr/bin, the bundled glib schemas,
 // and an $APPDIR/usr/share XDG data entry). Only the mount segments are
 // dropped; the user's real entries are preserved. When nothing but mount
 // segments remain the variable is removed entirely so consumers fall back to
@@ -1499,7 +1499,7 @@ function createTerminalSpawnEnv(
   // per-session value from the client still wins, because the overrides are
   // applied below.
   spawnEnv.TERM = "xterm-256color";
-  spawnEnv.TERM_PROGRAM = "acode";
+  spawnEnv.TERM_PROGRAM = "awen";
   if (runtimeEnv) {
     for (const [key, value] of Object.entries(runtimeEnv)) {
       spawnEnv[key] =
@@ -1555,7 +1555,7 @@ interface TerminalManagerOptions {
     Record<string, string>,
     TerminalProviderInstanceNotFoundError | TerminalProviderEnvironmentError
   >;
-  /** Resolves the authoritative Workspace root for new ACode terminal opens. */
+  /** Resolves the authoritative Workspace root for new Awen terminal opens. */
   resolveWorkspaceRoot?: (
     workspaceId: string,
   ) => Effect.Effect<string, TerminalWorkspaceNotFoundError>;
@@ -1700,11 +1700,11 @@ export const make = Effect.fn("TerminalManager.make")(function* () {
     }),
   );
   const workspaceResolver = Option.isSome(projectionQuery)
-    ? projectionQuery.value.getAcodeWorkspaceById
+    ? projectionQuery.value.getAwenWorkspaceById
     : undefined;
   if (workspaceResolver === undefined) {
     yield* Effect.logWarning(
-      "TerminalManager built without workspace-root resolution: workspace-owned terminal open/attach/restart will fail with TerminalWorkspaceResolutionUnavailableError. ProjectionSnapshotQuery is absent from the layer context or lacks getAcodeWorkspaceById.",
+      "TerminalManager built without workspace-root resolution: workspace-owned terminal open/attach/restart will fail with TerminalWorkspaceResolutionUnavailableError. ProjectionSnapshotQuery is absent from the layer context or lacks getAwenWorkspaceById.",
     );
   }
   return yield* makeWithOptions({

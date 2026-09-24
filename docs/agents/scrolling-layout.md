@@ -48,7 +48,7 @@ separate smoke with the models allowed by AGENTS.md.
 Review notes: the Standards review found no documented-standard breaches. Its
 column identity collision and missing focus-reveal dependency findings were fixed,
 and the shared width bound was centralized. Spec verification covers store
-operations, persistence, stable View mounts, and the real PTY E2E. Native ACode
+operations, persistence, stable View mounts, and the real PTY E2E. Native Awen
 Dev verification observed shell PID 12265 before and after BSP/Scrolling switches.
 A real streaming Agent turn was not run; provider continuity relies on preserving
 the existing View component and runtime subscription, with that live-provider

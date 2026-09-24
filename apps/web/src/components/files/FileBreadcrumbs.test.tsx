@@ -1,7 +1,7 @@
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId } from "@awen/contracts";
 
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
 

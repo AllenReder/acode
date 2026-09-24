@@ -93,7 +93,9 @@ describe("SidebarChromeHeader and SidebarActionControl", () => {
       renderer = create(<SidebarActionControl mode="settings" />);
     });
 
-    expect(renderer.root.findAllByProps({ "data-testid": "sidebar-settings-button" })).toHaveLength(0);
+    expect(renderer.root.findAllByProps({ "data-testid": "sidebar-settings-button" })).toHaveLength(
+      0,
+    );
 
     const backButton = renderer.root.findByProps({ "data-testid": "sidebar-back-button" });
     expect(backButton.props["aria-label"]).toBe("Back to workspace");
@@ -112,10 +114,14 @@ describe("SidebarChromeHeader and SidebarActionControl", () => {
       renderer = create(<SidebarChromeHeader />);
     });
 
-    const togglePlaceholder = renderer.root.findByProps({ "data-testid": "sidebar-toggle-placeholder" });
+    const togglePlaceholder = renderer.root.findByProps({
+      "data-testid": "sidebar-toggle-placeholder",
+    });
     expect(togglePlaceholder).toBeDefined();
 
-    const actionPlaceholder = renderer.root.findByProps({ "data-testid": "sidebar-action-placeholder" });
+    const actionPlaceholder = renderer.root.findByProps({
+      "data-testid": "sidebar-action-placeholder",
+    });
     expect(actionPlaceholder).toBeDefined();
   });
 });

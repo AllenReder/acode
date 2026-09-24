@@ -9,8 +9,8 @@ import {
 } from "react";
 import { CopyPlusIcon } from "lucide-react";
 
-import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
-import type { PaneShadow } from "@t3tools/contracts/settings";
+import type { EnvironmentAwenProject } from "@awen/client-runtime/state/models";
+import type { PaneShadow } from "@awen/contracts/settings";
 import { usePrimarySettings } from "../hooks/useSettings";
 import { readLocalApi } from "../localApi";
 import type { SplitDir } from "./layout";
@@ -29,10 +29,10 @@ import {
 
 interface PaneTreeProps {
   readonly snapshot: WorkbenchSnapshot;
-  readonly projects?: ReadonlyArray<EnvironmentAcodeProject>;
+  readonly projects?: ReadonlyArray<EnvironmentAwenProject>;
 }
 
-const EMPTY_PROJECTS: ReadonlyArray<EnvironmentAcodeProject> = [];
+const EMPTY_PROJECTS: ReadonlyArray<EnvironmentAwenProject> = [];
 
 function resolvePaneBoxShadow(paneGap: number, paneShadow: PaneShadow): string {
   if (paneGap === 0) return "none";
@@ -129,10 +129,7 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
   const previousSizeRef = useRef(size);
   const isInitialMountRef = useRef(true);
 
-  const layout = useMemo(
-    () => computePaneLayoutRects(tab, size, paneGap),
-    [tab, size, paneGap],
-  );
+  const layout = useMemo(() => computePaneLayoutRects(tab, size, paneGap), [tab, size, paneGap]);
 
   const previewLayout = useMemo(
     () => (previewTab ? computePaneLayoutRects(previewTab, size, paneGap) : undefined),
@@ -204,16 +201,7 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
     }
 
     return animateScrollTo(viewport, target.targetLeft, target.targetTop);
-  }, [
-    scrolling,
-    tab.id,
-    tab.focusedPaneId,
-    tab.columns,
-    layout,
-    size,
-    paneGap,
-    dragState?.phase,
-  ]);
+  }, [scrolling, tab.id, tab.focusedPaneId, tab.columns, layout, size, paneGap, dragState?.phase]);
 
   const activeLayout = previewLayout ?? layout;
   const canvasStyle = {
@@ -254,7 +242,9 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
                       typeof (activeEl as { blur?: unknown }).blur === "function" &&
                       typeof (activeEl as { closest?: unknown }).closest === "function"
                     ) {
-                      const activePane = (activeEl as HTMLElement).closest<HTMLElement>(".workbench-pane");
+                      const activePane = (activeEl as HTMLElement).closest<HTMLElement>(
+                        ".workbench-pane",
+                      );
                       if (activePane && activePane.dataset.paneId !== paneId) {
                         (activeEl as HTMLElement).blur();
                         if (typeof window !== "undefined") {
@@ -280,12 +270,7 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
                 className="workbench-pane-preview"
                 data-previewing={Boolean(previewTab)}
                 style={{
-                  opacity:
-                    previewTab && !preview
-                      ? 0.2
-                      : isDraggedPane
-                        ? 0.5
-                        : undefined,
+                  opacity: previewTab && !preview ? 0.2 : isDraggedPane ? 0.5 : undefined,
                 }}
               >
                 <Pane
@@ -375,7 +360,7 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
 
 interface PaneProps {
   readonly snapshot: WorkbenchSnapshot;
-  readonly projects: ReadonlyArray<EnvironmentAcodeProject>;
+  readonly projects: ReadonlyArray<EnvironmentAwenProject>;
   readonly paneId: string;
   readonly focused: boolean;
 }
@@ -409,7 +394,8 @@ function Pane({ snapshot, projects, paneId, focused }: PaneProps) {
         typeof document === "undefined" ||
         (document.activeElement &&
           event.currentTarget.contains(document.activeElement) &&
-          (document.activeElement as HTMLElement).closest<HTMLElement>(".workbench-pane")?.dataset.paneId === paneId)
+          (document.activeElement as HTMLElement).closest<HTMLElement>(".workbench-pane")?.dataset
+            .paneId === paneId)
       ) {
         setFocused(paneId);
       }
@@ -524,7 +510,9 @@ function PaneHeader({
         const targetElement = event.target as HTMLElement;
         if (targetElement.closest("button") === null) {
           event.preventDefault();
-          (event?.currentTarget?.closest?.<HTMLElement>(".workbench-pane"))?.focus({ preventScroll: true });
+          event?.currentTarget
+            ?.closest?.<HTMLElement>(".workbench-pane")
+            ?.focus({ preventScroll: true });
         }
       }}
       onPointerDown={(event) => {

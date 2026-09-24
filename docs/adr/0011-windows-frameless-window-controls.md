@@ -1,6 +1,6 @@
 # Windows Frameless Window Controls and Topbar Integration
 
-ACode adopts a frameless window configuration on Windows (`decorations: false`) paired with React-rendered native-style caption buttons integrated into the Topbar Surface. This eliminates the duplicate native titlebar while preserving macOS native traffic light overlay behavior, aligning Windows topbar controls with the dual-chrome architecture established in ADR 0005.
+Awen adopts a frameless window configuration on Windows (`decorations: false`) paired with React-rendered native-style caption buttons integrated into the Topbar Surface. This eliminates the duplicate native titlebar while preserving macOS native traffic light overlay behavior, aligning Windows topbar controls with the dual-chrome architecture established in ADR 0005.
 
 ## Status
 
@@ -8,7 +8,7 @@ Accepted.
 
 ## Context
 
-On macOS, ACode configures `titleBarStyle: "Overlay"` with `hiddenTitle: true`, allowing the native traffic lights to float cleanly over the full-height Sidebar and Workbench header without an extra title strip. On Windows, however, `titleBarStyle` has no effect in Tauri 2; leaving `decorations: true` resulted in an independent, full-height OS native titlebar sitting above the ACode topbar.
+On macOS, Awen configures `titleBarStyle: "Overlay"` with `hiddenTitle: true`, allowing the native traffic lights to float cleanly over the full-height Sidebar and Workbench header without an extra title strip. On Windows, however, `titleBarStyle` has no effect in Tauri 2; leaving `decorations: true` resulted in an independent, full-height OS native titlebar sitting above the Awen topbar.
 
 Furthermore, WebView2's native Window Controls Overlay (WCO) API is unsupported in Tauri/Wry upstream (`tauri-apps/wry#1650`), making client-rendered window controls necessary. Finally, `SIDEBAR_TRIGGER_LEFT_WIN` was previously set to `0`, gluing the sidebar toggle button directly against the left window border on Windows.
 

@@ -1,10 +1,16 @@
-const NIGHTLY_SERVER_VERSION_PATTERN = /^[^-+]+-(?:nightly|preview)\.\d{8}\.\d+$/;
+const SEMVER_CORE = "(?:0|[1-9]\\d*)";
+const SEMVER_PRERELEASE_IDENTIFIER = "(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)";
+const SEMVER_BUILD_IDENTIFIER = "[0-9A-Za-z-]+";
+const PRERELEASE_SERVER_VERSION_PATTERN = new RegExp(
+  `^${SEMVER_CORE}\\.${SEMVER_CORE}\\.${SEMVER_CORE}-${SEMVER_PRERELEASE_IDENTIFIER}(?:\\.${SEMVER_PRERELEASE_IDENTIFIER})*(?:\\+${SEMVER_BUILD_IDENTIFIER}(?:\\.${SEMVER_BUILD_IDENTIFIER})*)?$`,
+  "u",
+);
 
 export function formatAppDisplayName(input: {
   readonly baseName: string;
   readonly stageLabel: string;
 }): string {
-  if (input.stageLabel.trim().toLowerCase() === "latest") {
+  if (input.stageLabel.trim().toLowerCase() === "stable") {
     return input.baseName;
   }
 
@@ -16,8 +22,8 @@ export function resolveServerBackedAppStageLabel(input: {
   readonly fallbackStageLabel: string;
 }): string {
   return input.primaryServerVersion &&
-    NIGHTLY_SERVER_VERSION_PATTERN.test(input.primaryServerVersion)
-    ? "Nightly"
+    PRERELEASE_SERVER_VERSION_PATTERN.test(input.primaryServerVersion)
+    ? "Alpha"
     : input.fallbackStageLabel;
 }
 

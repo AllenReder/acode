@@ -6,7 +6,7 @@ import type {
   TerminalSummary,
   ThreadId,
   WorkspaceId,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import {
   appendOutput,
   DEFAULT_MAX_TERMINAL_BUFFER_BYTES,

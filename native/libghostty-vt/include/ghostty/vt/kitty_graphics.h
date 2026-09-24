@@ -222,8 +222,8 @@ typedef enum GHOSTTY_ENUM_TYPED {
  * Z-layer classification for kitty graphics placements.
  *
  * Based on the kitty protocol z-index conventions:
- * - BELOW_BG:   z < INT32_MIN/2  (drawn below cell background)
- * - BELOW_TEXT:  INT32_MIN/2 <= z < 0  (above background, below text)
+ * - BELOW_BG:   z < INAwen2_MIN/2  (drawn below cell background)
+ * - BELOW_TEXT:  INAwen2_MIN/2 <= z < 0  (above background, below text)
  * - ABOVE_TEXT:  z >= 0  (above text)
  * - ALL:         no filtering (current behavior)
  *

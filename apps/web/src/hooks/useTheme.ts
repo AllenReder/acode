@@ -1,5 +1,5 @@
-import type { DesktopBridge } from "@t3tools/contracts";
-import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
+import type { DesktopBridge } from "@awen/contracts";
+import { safeErrorLogAttributes } from "@awen/client-runtime/errors";
 import * as Schema from "effect/Schema";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import {
@@ -13,7 +13,7 @@ import {
   resolveDesktopTheme,
   resolveThemeAppearance,
   resolveThemeHalf,
-  ACODE_DEFAULT_THEME_ID,
+  AWEN_DEFAULT_THEME_ID,
   THEME_PREVIEW_ID,
   THEME_STORAGE_KEY,
   THEME_APPEARANCE_MODE_STORAGE_KEY,
@@ -40,7 +40,7 @@ type DesktopThemeBridge = Pick<DesktopBridge, "setTheme">;
 const STORAGE_KEY = THEME_STORAGE_KEY;
 const MEDIA_QUERY = "(prefers-color-scheme: dark)";
 const DEFAULT_THEME_SNAPSHOT: ThemeSnapshot = {
-  theme: ACODE_DEFAULT_THEME_ID,
+  theme: AWEN_DEFAULT_THEME_ID,
   resolvedTheme: "dark",
   systemDark: true,
   followSystem: false,
@@ -216,7 +216,7 @@ export function readThemePreference(): Theme {
   if (raw !== null && isKnownThemePreference(raw)) {
     return canonicalThemePreference(raw);
   }
-  return ACODE_DEFAULT_THEME_ID;
+  return AWEN_DEFAULT_THEME_ID;
 }
 
 export function writeThemePreference(theme: Theme): void {

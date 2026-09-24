@@ -14,12 +14,13 @@ const VERSIONED_FILES = [
   "apps/desktop/package.json",
   "packages/contracts/package.json",
   "apps/desktop/src-tauri/tauri.conf.json",
+  "apps/desktop/src-tauri/tauri.macos.conf.json",
   "apps/desktop/src-tauri/Cargo.toml",
   "apps/desktop/src-tauri/Cargo.lock",
 ];
 
 function withVersionFixture(run: (rootDir: string) => void): void {
-  const rootDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "acode-version-"));
+  const rootDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "awen-version-"));
   try {
     for (const relativePath of VERSIONED_FILES) {
       const target = NodePath.join(rootDir, relativePath);
@@ -54,6 +55,23 @@ describe("product version", () => {
           "utf8",
         ),
       ).toContain('"version": "../../../package.json"');
+      const macosConfig = JSON.parse(
+        NodeFS.readFileSync(
+          NodePath.join(rootDir, "apps/desktop/src-tauri/tauri.macos.conf.json"),
+          "utf8",
+        ),
+      ) as { version: string; bundle: { macOS: { bundleVersion: string } } };
+      expect(macosConfig.version).toBe("1.2.3");
+      expect(macosConfig.bundle.macOS.bundleVersion).toBe("45");
+
+      setVersion("1.2.3-rc.1", rootDir);
+      const repeatedMacosConfig = JSON.parse(
+        NodeFS.readFileSync(
+          NodePath.join(rootDir, "apps/desktop/src-tauri/tauri.macos.conf.json"),
+          "utf8",
+        ),
+      ) as { bundle: { macOS: { bundleVersion: string } } };
+      expect(repeatedMacosConfig.bundle.macOS.bundleVersion).toBe("45");
     });
   });
 
@@ -63,6 +81,7 @@ describe("product version", () => {
       const original = NodeFS.readFileSync(webPackagePath, "utf8");
       const currentVersion = JSON.parse(original).version as string;
       expect(() => setVersion("latest", rootDir)).toThrow(/exact semver-like/u);
+      expect(() => setVersion("0.1.0-alpha.01", rootDir)).toThrow(/exact semver-like/u);
       expect(NodeFS.readFileSync(webPackagePath, "utf8")).toBe(original);
 
       NodeFS.writeFileSync(

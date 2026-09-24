@@ -12,9 +12,9 @@ import {
   EnvironmentOrchestrationHttpApi,
   ProviderInstanceId,
   ThreadId,
-} from "@t3tools/contracts";
-import * as NetService from "@t3tools/shared/Net";
-import { HostProcessEnvironment } from "@t3tools/shared/hostProcess";
+} from "@awen/contracts";
+import * as NetService from "@awen/shared/Net";
+import { HostProcessEnvironment } from "@awen/shared/hostProcess";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as DateTime from "effect/DateTime";
@@ -28,11 +28,11 @@ import * as TestConsole from "effect/testing/TestConsole";
 import { Command } from "effect/unstable/cli";
 
 import { cli, makeCli } from "./bin.ts";
-import * as ServiceLauncherClient from "./cloud/serviceLauncherClient.ts";
+import * as ServiceLauncherClient from "./service/serviceLauncherClient.ts";
 import {
   SERVICE_LAUNCHER_CONTEXT_ENV,
   SERVICE_LAUNCHER_PROTOCOL,
-} from "./cloud/serviceProtocol.ts";
+} from "./service/serviceProtocol.ts";
 import * as ServerConfig from "./config.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import * as ProjectionSnapshotQuery from "./orchestration/Services/ProjectionSnapshotQuery.ts";
@@ -71,11 +71,8 @@ const DisconnectedLauncherChildLayer = Layer.mergeAll(
 );
 class ProjectCliHttpApi extends HttpApi.make("environment").add(EnvironmentOrchestrationHttpApi) {}
 
-const connectCli = makeCli({ cloudEnabled: true });
-const noConnectCli = makeCli({ cloudEnabled: false });
 const runCli = (args: ReadonlyArray<string>, command = cli) =>
   Command.runWith(command, { version: "0.0.0" })(args);
-const runConnectCli = (args: ReadonlyArray<string>) => runCli(args, connectCli);
 const runCliWithRuntime = (args: ReadonlyArray<string>) =>
   runCli(args).pipe(Effect.provide(CliRuntimeLayer));
 
@@ -101,7 +98,7 @@ const makeCliTestServerConfig = (baseDir: string) =>
       otlpTracesUrl: undefined,
       otlpMetricsUrl: undefined,
       otlpExportIntervalMs: 10_000,
-      otlpServiceName: "t3-server",
+      otlpServiceName: "awen-server",
       otlpHeaders: undefined,
       otlpProtocol: "http/json",
       mode: "web",
@@ -146,10 +143,10 @@ const makeProjectLookupFixture = Effect.fn("makeProjectLookupFixture")(function*
   removeWorkspace: boolean,
 ) {
   const baseDir = NodeFS.mkdtempSync(
-    NodePath.join(NodeOS.tmpdir(), "t3-cli-project-lookup-state-"),
+    NodePath.join(NodeOS.tmpdir(), "awen-cli-project-lookup-state-"),
   );
   const workspaceRoot = NodeFS.mkdtempSync(
-    NodePath.join(NodeOS.tmpdir(), "t3-cli-project-lookup-git-"),
+    NodePath.join(NodeOS.tmpdir(), "awen-cli-project-lookup-git-"),
   );
   NodeChildProcess.execFileSync("git", ["init", "--initial-branch=main", workspaceRoot], {
     stdio: "ignore",
@@ -236,7 +233,7 @@ it.layer(NodeServices.layer)("project lookup with unavailable workspaces", (it) 
     Effect.gen(function* () {
       const { baseDir, project } = yield* makeProjectLookupFixture(true, true);
       const replacementDir = NodeFS.mkdtempSync(
-        NodePath.join(NodeOS.tmpdir(), "t3-cli-project-lookup-new-state-"),
+        NodePath.join(NodeOS.tmpdir(), "awen-cli-project-lookup-new-state-"),
       );
       const error = yield* runCliWithRuntime([
         "project",
@@ -449,30 +446,11 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
     }),
   );
 
-  it.effect("rejects connect commands when public configuration is missing", () =>
+  it.effect("exposes service lifecycle commands", () =>
     Effect.gen(function* () {
-      const error = yield* runCli(["connect", "status"], noConnectCli).pipe(Effect.flip);
+      const { output } = yield* captureStdout(runCli(["service", "--help"]));
 
-      if (!CliError.isCliError(error)) {
-        assert.fail(`Expected CliError, got ${String(error)}`);
-      }
-      if (error._tag !== "ShowHelp") {
-        assert.fail(`Expected ShowHelp, got ${error._tag}`);
-      }
-      assert.deepEqual(error.commandPath, ["t3", "connect"]);
-      assert.include(error.errors[0]?.message ?? "", "missing T3 Connect public configuration");
-
-      const output = (yield* TestConsole.errorLines).join("\n");
-      assert.include(output, "ERROR");
-      assert.include(output, "missing T3 Connect public configuration");
-    }).pipe(Effect.provide(Layer.mergeAll(CliRuntimeLayer, TestConsole.layer))),
-  );
-
-  it.effect("exposes service lifecycle commands without T3 Connect configuration", () =>
-    Effect.gen(function* () {
-      const { output } = yield* captureStdout(runCli(["service", "--help"], noConnectCli));
-
-      assert.include(output, "Manage the T3 Code background service.");
+      assert.include(output, "Manage the Awen background service.");
       assert.include(output, "install");
       assert.include(output, "uninstall");
       assert.include(output, "update");
@@ -480,121 +458,10 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
     }),
   );
 
-  it.effect("reports fresh headless connect state without requiring local configuration", () =>
-    Effect.gen(function* () {
-      const baseDir = NodeFS.mkdtempSync(
-        NodePath.join(NodeOS.tmpdir(), "t3-cli-cloud-status-test-"),
-      );
-      const { output } = yield* captureStdout(
-        runConnectCli(["connect", "status", "--base-dir", baseDir, "--json"]),
-      );
-      // @effect-diagnostics-next-line preferSchemaOverJson:off - CLI JSON output is decoded as a presentation DTO.
-      const status = JSON.parse(output) as {
-        readonly desired: boolean;
-        readonly authenticated: boolean;
-        readonly linked: boolean;
-        readonly cloudUserId: string | null;
-        readonly relayUrl: string | null;
-      };
-
-      assert.equal(status.desired, false);
-      assert.equal(status.authenticated, false);
-      assert.equal(status.linked, false);
-      assert.equal(status.cloudUserId, null);
-      assert.equal(status.relayUrl, null);
-    }).pipe(Effect.provide(DisconnectedLauncherChildLayer)),
-  );
-
-  it.effect("reports actionable human-readable headless connect state", () =>
-    Effect.gen(function* () {
-      const baseDir = NodeFS.mkdtempSync(
-        NodePath.join(NodeOS.tmpdir(), "t3-cli-cloud-status-human-test-"),
-      );
-      const { output } = yield* captureStdout(
-        runConnectCli(["connect", "status", "--base-dir", baseDir]),
-      );
-
-      assert.include(output, "T3 Connect\n  Exposure: disabled");
-      assert.include(output, "  Authorization: missing");
-      assert.include(output, "  Environment link: not provisioned");
-      assert.include(output, "Next: Run `t3 connect link` to authorize and enable T3 Connect.");
-    }),
-  );
-
-  it.effect("accepts the --headless login override without enabling access", () =>
-    Effect.gen(function* () {
-      const baseDir = NodeFS.mkdtempSync(
-        NodePath.join(NodeOS.tmpdir(), "t3-cli-cloud-login-test-"),
-      );
-      const { secretsDir } = yield* ServerConfig.deriveServerPaths(baseDir, undefined);
-      NodeFS.mkdirSync(secretsDir, { recursive: true });
-      NodeFS.writeFileSync(
-        NodePath.join(secretsDir, "cloud-cli-oauth-token.bin"),
-        // @effect-diagnostics-next-line preferSchemaOverJson:off - Test fixture matches the persisted CLI token representation.
-        JSON.stringify({
-          accessToken: "access-token",
-          refreshToken: "refresh-token",
-          expiresAtEpochMs: Number.MAX_SAFE_INTEGER,
-        }),
-      );
-
-      const login = yield* captureStdout(
-        runConnectCli(["connect", "login", "--base-dir", baseDir, "--headless"]),
-      );
-      const status = yield* captureStdout(
-        runConnectCli(["connect", "status", "--base-dir", baseDir, "--json"]),
-      );
-      // @effect-diagnostics-next-line preferSchemaOverJson:off - CLI JSON output is decoded as a presentation DTO.
-      const decoded = JSON.parse(status.output) as {
-        readonly desired: boolean;
-        readonly authenticated: boolean;
-      };
-
-      assert.equal(login.output, "✓ Signed in");
-      assert.isFalse(decoded.desired);
-      assert.isTrue(decoded.authenticated);
-    }),
-  );
-
-  it.effect("disables headless connect without a running server", () =>
-    Effect.gen(function* () {
-      const baseDir = NodeFS.mkdtempSync(
-        NodePath.join(NodeOS.tmpdir(), "t3-cli-cloud-unlink-test-"),
-      );
-      const { output } = yield* captureStdout(
-        runConnectCli(["connect", "unlink", "--base-dir", baseDir]),
-      );
-
-      assert.equal(output, "T3 Connect is disabled locally.");
-    }),
-  );
-
-  it.effect("logs out of headless connect and removes the stored CLI authorization", () =>
-    Effect.gen(function* () {
-      const baseDir = NodeFS.mkdtempSync(
-        NodePath.join(NodeOS.tmpdir(), "t3-cli-cloud-logout-test-"),
-      );
-      const { secretsDir } = yield* ServerConfig.deriveServerPaths(baseDir, undefined);
-      const tokenPath = NodePath.join(secretsDir, "cloud-cli-oauth-token.bin");
-      NodeFS.mkdirSync(secretsDir, { recursive: true });
-      NodeFS.writeFileSync(tokenPath, "invalid persisted token");
-
-      const { output } = yield* captureStdout(
-        runConnectCli(["connect", "logout", "--base-dir", baseDir]),
-      );
-
-      assert.equal(
-        output,
-        "Signed out of T3 Connect locally.\nThe background service is managed separately with `t3 service`.",
-      );
-      assert.isFalse(NodeFS.existsSync(tokenPath));
-    }),
-  );
-
   it.effect("executes auth pairing subcommands and redacts secrets from list output", () =>
     Effect.gen(function* () {
       const baseDir = NodeFS.mkdtempSync(
-        NodePath.join(NodeOS.tmpdir(), "t3-cli-auth-pairing-test-"),
+        NodePath.join(NodeOS.tmpdir(), "awen-cli-auth-pairing-test-"),
       );
 
       const createdOutput = yield* captureStdout(
@@ -626,7 +493,7 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
   it.effect("executes auth session subcommands and redacts secrets from list output", () =>
     Effect.gen(function* () {
       const baseDir = NodeFS.mkdtempSync(
-        NodePath.join(NodeOS.tmpdir(), "t3-cli-auth-session-test-"),
+        NodePath.join(NodeOS.tmpdir(), "awen-cli-auth-session-test-"),
       );
 
       const issuedOutput = yield* captureStdout(
@@ -655,10 +522,8 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
         "orchestration:operate",
         "terminal:operate",
         "review:write",
-        "relay:read",
         "access:read",
         "access:write",
-        "relay:write",
       ]);
       assert.equal(listed.length, 1);
       assert.equal(listed[0]?.sessionId, issued.sessionId);
@@ -667,10 +532,8 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
         "orchestration:operate",
         "terminal:operate",
         "review:write",
-        "relay:read",
         "access:read",
         "access:write",
-        "relay:write",
       ]);
       assert.equal("token" in (listed[0] ?? {}), false);
     }).pipe(Effect.provide(DisconnectedLauncherChildLayer)),
@@ -688,7 +551,7 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
       if (error._tag !== "ShowHelp") {
         assert.fail(`Expected ShowHelp, got ${error._tag}`);
       }
-      assert.deepEqual(error.commandPath, ["t3", "auth", "pairing", "create"]);
+      assert.deepEqual(error.commandPath, ["awen", "auth", "pairing", "create"]);
       const ttlError = error.errors[0] as CliError.CliError | undefined;
       if (!ttlError || ttlError._tag !== "InvalidValue") {
         assert.fail(`Expected InvalidValue, got ${String(ttlError?._tag)}`);
@@ -703,10 +566,10 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
   it.effect("adds, renames, and removes projects offline through the orchestration engine", () =>
     Effect.gen(function* () {
       const baseDir = NodeFS.mkdtempSync(
-        NodePath.join(NodeOS.tmpdir(), "t3-cli-projects-offline-test-"),
+        NodePath.join(NodeOS.tmpdir(), "awen-cli-projects-offline-test-"),
       );
       const workspaceRoot = NodeFS.mkdtempSync(
-        NodePath.join(NodeOS.tmpdir(), "t3-cli-projects-workspace-"),
+        NodePath.join(NodeOS.tmpdir(), "awen-cli-projects-workspace-"),
       );
 
       yield* runCliWithRuntime([
@@ -751,10 +614,10 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
   it.effect("force removes projects that still contain threads", () =>
     Effect.gen(function* () {
       const baseDir = NodeFS.mkdtempSync(
-        NodePath.join(NodeOS.tmpdir(), "t3-cli-projects-force-remove-test-"),
+        NodePath.join(NodeOS.tmpdir(), "awen-cli-projects-force-remove-test-"),
       );
       const workspaceRoot = NodeFS.mkdtempSync(
-        NodePath.join(NodeOS.tmpdir(), "t3-cli-projects-force-remove-workspace-"),
+        NodePath.join(NodeOS.tmpdir(), "awen-cli-projects-force-remove-workspace-"),
       );
 
       yield* runCliWithRuntime(["project", "add", workspaceRoot, "--base-dir", baseDir]);
@@ -808,10 +671,10 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
   it.effect("routes project commands through a running server when runtime state is present", () =>
     Effect.gen(function* () {
       const baseDir = NodeFS.mkdtempSync(
-        NodePath.join(NodeOS.tmpdir(), "t3-cli-projects-live-test-"),
+        NodePath.join(NodeOS.tmpdir(), "awen-cli-projects-live-test-"),
       );
       const workspaceRoot = NodeFS.mkdtempSync(
-        NodePath.join(NodeOS.tmpdir(), "t3-cli-projects-live-workspace-"),
+        NodePath.join(NodeOS.tmpdir(), "awen-cli-projects-live-workspace-"),
       );
 
       yield* withLiveProjectCliServer(baseDir, () =>
@@ -840,7 +703,7 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
   it.effect("rejects dev-url on project commands", () =>
     Effect.gen(function* () {
       const workspaceRoot = NodeFS.mkdtempSync(
-        NodePath.join(NodeOS.tmpdir(), "t3-cli-projects-unknown-option-workspace-"),
+        NodePath.join(NodeOS.tmpdir(), "awen-cli-projects-unknown-option-workspace-"),
       );
       const error = yield* runCliWithRuntime([
         "project",
@@ -856,7 +719,7 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
       if (error._tag !== "ShowHelp") {
         assert.fail(`Expected ShowHelp, got ${error._tag}`);
       }
-      assert.deepEqual(error.commandPath, ["t3", "project", "add"]);
+      assert.deepEqual(error.commandPath, ["awen", "project", "add"]);
       const optionError = error.errors[0] as CliError.CliError | undefined;
       if (!optionError || optionError._tag !== "UnrecognizedOption") {
         assert.fail(`Expected UnrecognizedOption, got ${String(optionError?._tag)}`);

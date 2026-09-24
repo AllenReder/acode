@@ -34,8 +34,8 @@ import {
   ThreadPullRequestSnapshot,
   ThreadPullRequestStack,
   type ThreadPullRequestLink,
-} from "@t3tools/contracts";
-import { legacyLinkedPullRequestOf } from "@t3tools/shared/threadPullRequests";
+} from "@awen/contracts";
+import { legacyLinkedPullRequestOf } from "@awen/shared/threadPullRequests";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -53,8 +53,8 @@ import {
   type ProjectionRepositoryError,
 } from "../../persistence/Errors.ts";
 import { ProjectionCheckpoint } from "../../persistence/Services/ProjectionCheckpoints.ts";
-import { ProjectionAcodeProjectRepository } from "../../persistence/Services/ProjectionAcodeProjects.ts";
-import { ProjectionAcodeProjectRepositoryLive } from "../../persistence/Layers/ProjectionAcodeProjects.ts";
+import { ProjectionAwenProjectRepository } from "../../persistence/Services/ProjectionAwenProjects.ts";
+import { ProjectionAwenProjectRepositoryLive } from "../../persistence/Layers/ProjectionAwenProjects.ts";
 import { ThreadBackgroundLivenessService } from "../ThreadBackgroundLiveness.ts";
 import { ThreadPlanProgressService } from "../ThreadPlanProgress.ts";
 import { ProjectionProject } from "../../persistence/Services/ProjectionProjects.ts";
@@ -490,7 +490,7 @@ function toPersistenceSqlOrDecodeError(sqlOperation: string, decodeOperation: st
 const makeProjectionSnapshotQuery = Effect.gen(function* () {
   const threadBackgroundLiveness = yield* ThreadBackgroundLivenessService;
   const threadPlanProgress = yield* ThreadPlanProgressService;
-  const acodeProjectRepository = yield* ProjectionAcodeProjectRepository;
+  const awenProjectRepository = yield* ProjectionAwenProjectRepository;
   const sql = yield* SqlClient.SqlClient;
   const repositoryIdentityResolver = yield* RepositoryIdentityResolver.RepositoryIdentityResolver;
   const repositoryIdentityResolutionConcurrency = 4;
@@ -2629,7 +2629,7 @@ pending_approval_requests AS (
               ),
             ),
           ),
-          acodeProjectRepository.listTree(),
+          awenProjectRepository.listTree(),
         ]),
       )
       .pipe(
@@ -2641,7 +2641,7 @@ pending_approval_requests AS (
             pullRequestRows,
             latestTurnRows,
             stateRows,
-            acodeProjects,
+            awenProjects,
           ]) =>
             Effect.gen(function* () {
               let updatedAt: string | null = null;
@@ -2666,7 +2666,7 @@ pending_approval_requests AS (
               for (const row of stateRows) {
                 updatedAt = maxIso(updatedAt, row.updatedAt);
               }
-              for (const project of acodeProjects) {
+              for (const project of awenProjects) {
                 updatedAt = maxIso(updatedAt, project.updatedAt);
                 for (const workspace of project.workspaces) {
                   updatedAt = maxIso(updatedAt, workspace.updatedAt);
@@ -2735,7 +2735,7 @@ pending_approval_requests AS (
                       } satisfies OrchestrationThreadShell)
                     : Result.failVoid,
                 ),
-                acodeProjects,
+                awenProjects,
                 updatedAt: updatedAt ?? "1970-01-01T00:00:00.000Z",
               };
 
@@ -3756,14 +3756,14 @@ pending_approval_requests AS (
     getActiveProjectByWorkspaceRoot,
     getProjectShellById,
     getProjectShells,
-    listAcodeProjects: acodeProjectRepository.listTree,
-    getAcodeProjectByT3ProjectId: acodeProjectRepository.getByT3ProjectId,
-    getAcodeProjectById: acodeProjectRepository.getProjectById,
-    getAcodeWorkspaceById: acodeProjectRepository.getWorkspaceById,
-    updateAcodeWorkspaceTitle: acodeProjectRepository.updateWorkspaceTitle,
-    updateAcodeProjectTitle: acodeProjectRepository.updateProjectTitle,
-    getAcodeProjectByThreadId: acodeProjectRepository.getByThreadId,
-    getAcodeAgentSessionByThreadId: acodeProjectRepository.getAgentSessionByThreadId,
+    listAwenProjects: awenProjectRepository.listTree,
+    getAwenProjectByAwenProjectId: awenProjectRepository.getByProjectId,
+    getAwenProjectById: awenProjectRepository.getProjectById,
+    getAwenWorkspaceById: awenProjectRepository.getWorkspaceById,
+    updateAwenWorkspaceTitle: awenProjectRepository.updateWorkspaceTitle,
+    updateAwenProjectTitle: awenProjectRepository.updateProjectTitle,
+    getAwenProjectByThreadId: awenProjectRepository.getByThreadId,
+    getAwenAgentSessionByThreadId: awenProjectRepository.getAgentSessionByThreadId,
     getFirstActiveThreadIdByProjectId,
     getImportedAgentSessionSources,
     getThreadCheckpointContext,
@@ -3779,4 +3779,4 @@ pending_approval_requests AS (
 export const OrchestrationProjectionSnapshotQueryLive = Layer.effect(
   ProjectionSnapshotQuery,
   makeProjectionSnapshotQuery,
-).pipe(Layer.provideMerge(ProjectionAcodeProjectRepositoryLive));
+).pipe(Layer.provideMerge(ProjectionAwenProjectRepositoryLive));

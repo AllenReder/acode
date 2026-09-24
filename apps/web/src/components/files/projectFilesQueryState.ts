@@ -3,11 +3,8 @@ import type {
   EnvironmentId,
   ProjectListEntriesResult,
   ProjectReadFileResult,
-} from "@t3tools/contracts";
-import {
-  isWorkspaceImagePreviewPath,
-  isWorkspaceVideoPreviewPath,
-} from "@t3tools/shared/filePreview";
+} from "@awen/contracts";
+import { isWorkspaceImagePreviewPath, isWorkspaceVideoPreviewPath } from "@awen/shared/filePreview";
 import * as Cause from "effect/Cause";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
@@ -16,7 +13,7 @@ import { useCallback } from "react";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { projectEnvironment } from "~/state/projects";
 import { useProjectPathSearch } from "~/state/queries";
-import { executeAtomQuery } from "@t3tools/client-runtime/state/runtime";
+import { executeAtomQuery } from "@awen/client-runtime/state/runtime";
 
 const EMPTY_PROJECT_FILE_PATH = "";
 const EMPTY_PROJECT_FILE_QUERY_ATOM = Atom.make(

@@ -18,8 +18,8 @@ import {
   TrimmedNonEmptyString,
   type ProviderDriverKind,
   type ServerProviderModel,
-} from "@t3tools/contracts";
-import { codexModelFamily } from "@t3tools/shared/model";
+} from "@awen/contracts";
+import { codexModelFamily } from "@awen/shared/model";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -37,7 +37,7 @@ import bundledManifestJson from "./model-manifest.json" with { type: "json" };
 import type { ServerProviderDraft } from "./providerSnapshot.ts";
 
 const MODEL_MANIFEST_URL =
-  "https://raw.githubusercontent.com/pingdotgg/t3code/main/apps/server/src/provider/model-manifest.json";
+  "https://raw.githubusercontent.com/AllenReder/awen/main/apps/server/src/provider/model-manifest.json";
 
 /** How long a fetched manifest stays fresh before the next probe re-fetches. */
 const MANIFEST_TTL_MS = 60 * 60 * 1000;
@@ -320,7 +320,7 @@ export class ModelManifest extends Context.Service<
      * the teardown of whichever instance happened to trigger it. */
     readonly refreshInBackground: Effect.Effect<void>;
   }
->()("t3/provider/ModelManifest") {}
+>()("@awen/server/provider/ModelManifest") {}
 
 /** Constant service backing the bundled-data test layer. */
 const BundledOnlyModelManifest: ModelManifest["Service"] = {

@@ -2,21 +2,21 @@ import type {
   DesktopSshEnvironmentBootstrap,
   DesktopSshEnvironmentTarget,
   DesktopSshEnvironmentPlan,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import {
   describeReadinessCause,
   waitForHttpReady as waitForHttpReadyShared,
-} from "@t3tools/shared/httpReadiness";
-import { parseChecksums } from "@t3tools/shared/cliRelease";
+} from "@awen/shared/httpReadiness";
+import { parseChecksums } from "@awen/shared/cliRelease";
 import {
   SERVER_RELEASE_CHECKSUMS_FILE,
   serverReleaseArchiveName,
   serverReleaseDownloadBaseUrl,
-} from "@t3tools/shared/serverRelease";
-import * as NetService from "@t3tools/shared/Net";
-import { extractJsonObject, fromLenientJson } from "@t3tools/shared/schemaJson";
-import { satisfiesSemverRange } from "@t3tools/shared/semver";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+} from "@awen/shared/serverRelease";
+import * as NetService from "@awen/shared/Net";
+import { extractJsonObject, fromLenientJson } from "@awen/shared/schemaJson";
+import { satisfiesSemverRange } from "@awen/shared/semver";
+import { HostProcessPlatform } from "@awen/shared/hostProcess";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -111,7 +111,7 @@ export const resolveRemoteLocalArchivePaths = (staged: {
 });
 
 export function parseRemotePackageStageHome(stdout: string): string | null {
-  const prefix = "ACODE_STAGE_HOME=";
+  const prefix = "AWEN_STAGE_HOME=";
   const line = stdout.split(/\r?\n/u).findLast((entry) => entry.startsWith(prefix));
   const home = line?.slice(prefix.length);
   return home !== undefined && home.startsWith("/") && !home.includes("\0") ? home : null;
@@ -122,7 +122,7 @@ export class SshLocalPackageError extends Data.TaggedError("SshLocalPackageError
   readonly cause?: unknown;
 }> {}
 
-export interface RemoteT3RunnerOptions {
+export interface RemoteAwenRunnerOptions {
   /**
    * Dev mode: run `node <path>` on the remote instead of a release archive.
    * The only mode that needs Node on the remote.
@@ -141,7 +141,7 @@ export interface RemoteT3RunnerOptions {
 }
 
 export interface SshEnvironmentManagerOptions {
-  readonly resolveCliRunner?: Effect.Effect<RemoteT3RunnerOptions>;
+  readonly resolveCliRunner?: Effect.Effect<RemoteAwenRunnerOptions>;
 }
 
 interface SshTunnelEntry {
@@ -185,11 +185,11 @@ function sshTargetLogFields(target: DesktopSshEnvironmentTarget) {
   };
 }
 
-function isNodeScriptRunner(runner: RemoteT3RunnerOptions | undefined): boolean {
+function isNodeScriptRunner(runner: RemoteAwenRunnerOptions | undefined): boolean {
   return Boolean(runner?.nodeScriptPath?.trim());
 }
 
-function sshRunnerLogFields(runner: RemoteT3RunnerOptions | undefined) {
+function sshRunnerLogFields(runner: RemoteAwenRunnerOptions | undefined) {
   if (runner?.nodeScriptPath?.trim()) {
     return { runner: "node-script", nodeScriptPath: runner.nodeScriptPath.trim() };
   }
@@ -204,11 +204,11 @@ const localServerPackageCacheDir = Effect.fn("ssh/tunnel.localServerPackageCache
 ) {
   const path = yield* Path.Path;
   const home = yield* Effect.sync(() => process.env.HOME ?? process.cwd());
-  return path.join(home, ".acode", "caches", "server-packages", version);
+  return path.join(home, ".awen", "caches", "server-packages", version);
 });
 
 const ensureLocalServerPackage = Effect.fn("ssh/tunnel.ensureLocalServerPackage")(function* (
-  runner: RemoteT3RunnerOptions,
+  runner: RemoteAwenRunnerOptions,
 ) {
   const version = runner.archiveVersion?.trim() || "";
   if (version === "") {
@@ -253,7 +253,7 @@ const ensureLocalServerPackage = Effect.fn("ssh/tunnel.ensureLocalServerPackage"
   // equivalent) is the last-resort source when the GitHub prerelease is gone.
   // It goes through the same SHA256SUMS verification as a downloaded one.
   const localPackageDir = yield* Effect.sync(
-    () => process.env.ACODE_SERVER_PACKAGE_DIR?.trim() || null,
+    () => process.env.AWEN_SERVER_PACKAGE_DIR?.trim() || null,
   );
   if (localPackageDir !== null) {
     const builtArchivePath = path.join(localPackageDir, archiveName);
@@ -283,7 +283,7 @@ const ensureLocalServerPackage = Effect.fn("ssh/tunnel.ensureLocalServerPackage"
         };
       }
       return yield* new SshLocalPackageError({
-        message: `Local ACode server package ${archiveName} in ${localPackageDir} failed SHA256 verification.`,
+        message: `Local Awen server package ${archiveName} in ${localPackageDir} failed SHA256 verification.`,
       });
     }
   }
@@ -324,7 +324,7 @@ const ensureLocalServerPackage = Effect.fn("ssh/tunnel.ensureLocalServerPackage"
   yield* download(archiveName, archivePath);
   if (!(yield* verifyCachedPackage)) {
     return yield* new SshLocalPackageError({
-      message: `Downloaded ACode server package ${archiveName} failed SHA256 verification.`,
+      message: `Downloaded Awen server package ${archiveName} failed SHA256 verification.`,
     });
   }
   return {
@@ -510,7 +510,7 @@ const stageLocalServerPackageOnRemote = Effect.fn("ssh/tunnel.stageLocalServerPa
     });
     const staging = yield* runSshCommand(target, {
       remoteCommandArgs: ["sh", "-s"],
-      stdin: `set -eu\nACODE_HOME="\${ACODE_HOME:-\${HOME}/.acode}"\nmkdir -p "$ACODE_HOME/ssh-launch/${stateKey}/packages/${localPackage.version}"\nrm -f "$ACODE_HOME/${remotePaths.archivePath}" "$ACODE_HOME/${remotePaths.checksumsPath}"\nprintf 'ACODE_STAGE_HOME=%s\\n' "$(cd "$ACODE_HOME" && pwd -P)"\n`,
+      stdin: `set -eu\nAWEN_HOME="\${AWEN_HOME:-\${HOME}/.awen}"\nmkdir -p "$AWEN_HOME/ssh-launch/${stateKey}/packages/${localPackage.version}"\nrm -f "$AWEN_HOME/${remotePaths.archivePath}" "$AWEN_HOME/${remotePaths.checksumsPath}"\nprintf 'AWEN_STAGE_HOME=%s\\n' "$(cd "$AWEN_HOME" && pwd -P)"\n`,
       timeoutMs: 30_000,
       ...spreadAuthOptions(authOptions),
     });
@@ -520,7 +520,7 @@ const stageLocalServerPackageOnRemote = Effect.fn("ssh/tunnel.stageLocalServerPa
         command: ["ssh"],
         exitCode: null,
         stderr: staging.stderr,
-        message: "SSH staging did not return the remote ACode home directory.",
+        message: "SSH staging did not return the remote Awen home directory.",
       });
     }
     const remoteRoot = remoteHome.replace(/\/+$/u, "");
@@ -721,7 +721,7 @@ function sleep(ms) {
 }
 
 // Probe the public environment descriptor, not "/": reuse must only adopt a
-// daemon that actually speaks the ACode discovery API, not any server that
+// daemon that actually speaks the Awen discovery API, not any server that
 // happens to answer on the recorded port.
 function probe() {
   return new Promise((resolve) => {
@@ -729,7 +729,7 @@ function probe() {
       {
         hostname: "127.0.0.1",
         port,
-        path: "/.well-known/t3/environment",
+        path: "/.well-known/awen/environment",
         timeout: probeTimeoutMs,
       },
       (response) => {
@@ -768,12 +768,12 @@ const REMOTE_NODE_ENV_SCRIPT = `prepend_path_if_dir() {
 }
 
 remote_node_satisfies_engine() {
-  ACODE_NODE_ENGINE_RANGE=@@ACODE_NODE_ENGINE_RANGE@@
-  if [ -z "$ACODE_NODE_ENGINE_RANGE" ]; then
+  AWEN_NODE_ENGINE_RANGE=@@AWEN_NODE_ENGINE_RANGE@@
+  if [ -z "$AWEN_NODE_ENGINE_RANGE" ]; then
     return 0
   fi
-  node - "$ACODE_NODE_ENGINE_RANGE" <<'NODE'
-@@ACODE_NODE_ENGINE_CHECK_SCRIPT@@
+  node - "$AWEN_NODE_ENGINE_RANGE" <<'NODE'
+@@AWEN_NODE_ENGINE_CHECK_SCRIPT@@
 NODE
 }
 
@@ -839,9 +839,9 @@ ensure_remote_node_path() {
   fi
 
   if ! command -v node >/dev/null 2>&1 && [ -d "$NVM_DIR/versions/node" ]; then
-    for ACODE_NODE_BIN in "$NVM_DIR"/versions/node/*/bin; do
-      if [ -x "$ACODE_NODE_BIN/node" ]; then
-        PATH="$ACODE_NODE_BIN:$PATH"
+    for AWEN_NODE_BIN in "$NVM_DIR"/versions/node/*/bin; do
+      if [ -x "$AWEN_NODE_BIN/node" ]; then
+        PATH="$AWEN_NODE_BIN:$PATH"
         export PATH
       fi
     done
@@ -853,200 +853,200 @@ ensure_remote_node_path() {
 
 const REMOTE_RUNNER_SCRIPT = `#!/bin/sh
 set -eu
-@@ACODE_NODE_ENV_SCRIPT@@
-ACODE_NODE_SCRIPT_PATH=@@ACODE_NODE_SCRIPT_PATH@@
-if [ -n "$ACODE_NODE_SCRIPT_PATH" ]; then
+@@AWEN_NODE_ENV_SCRIPT@@
+AWEN_NODE_SCRIPT_PATH=@@AWEN_NODE_SCRIPT_PATH@@
+if [ -n "$AWEN_NODE_SCRIPT_PATH" ]; then
   ensure_remote_node_path || true
   if ! command -v node >/dev/null 2>&1; then
     printf 'Remote host is missing node on PATH. Install Node or configure a supported version manager for non-interactive shells.\\n' >&2
     exit 1
   fi
-  exec node "$ACODE_NODE_SCRIPT_PATH" "$@"
+  exec node "$AWEN_NODE_SCRIPT_PATH" "$@"
 fi
-ACODE_ARCHIVE_VERSION=@@ACODE_ARCHIVE_VERSION@@
-if [ -z "$ACODE_ARCHIVE_VERSION" ]; then
-  printf 'No ACode server release version was provided for the remote runtime.\\n' >&2
+AWEN_ARCHIVE_VERSION=@@AWEN_ARCHIVE_VERSION@@
+if [ -z "$AWEN_ARCHIVE_VERSION" ]; then
+  printf 'No Awen server release version was provided for the remote runtime.\\n' >&2
   exit 1
 fi
 if [ "$(uname -s)" != "Linux" ]; then
-  printf 'ACode remote daemon install currently supports Linux x64 only; remote OS is %s.\\n' "$(uname -s)" >&2
+  printf 'Awen remote daemon install currently supports Linux x64 only; remote OS is %s.\\n' "$(uname -s)" >&2
   exit 1
 fi
 case "$(uname -m)" in
   x86_64 | amd64) ;;
-  *) printf 'ACode remote daemon install currently supports Linux x64 only; remote architecture is %s.\\n' "$(uname -m)" >&2; exit 1 ;;
+  *) printf 'Awen remote daemon install currently supports Linux x64 only; remote architecture is %s.\\n' "$(uname -m)" >&2; exit 1 ;;
 esac
 if ! ensure_remote_node_path; then
   printf 'Remote host is missing Node.js 22 or newer on PATH. Install Node.js or configure a supported version manager for non-interactive shells.\\n' >&2
   exit 1
 fi
 if ! command -v git >/dev/null 2>&1; then
-  printf 'Remote host is missing Git on PATH. Install Git before connecting ACode.\\n' >&2
+  printf 'Remote host is missing Git on PATH. Install Git before connecting Awen.\\n' >&2
   exit 1
 fi
-ACODE_RELEASE_BASE_URL=@@ACODE_RELEASE_BASE_URL@@
-ACODE_LOCAL_ARCHIVE_PATH=@@ACODE_LOCAL_ARCHIVE_PATH@@
-ACODE_LOCAL_CHECKSUMS_PATH=@@ACODE_LOCAL_CHECKSUMS_PATH@@
-ACODE_HOME="\${ACODE_HOME:-\${HOME}/.acode}"
-ACODE_RUNTIME_DIR="$ACODE_HOME/runtime/versions/$ACODE_ARCHIVE_VERSION"
-acode_runtime_ready() {
-  [ -x "$ACODE_RUNTIME_DIR/bin/acode" ] && [ "$(cat "$ACODE_RUNTIME_DIR/.install-complete" 2>/dev/null)" = "$ACODE_ARCHIVE_VERSION" ]
+AWEN_RELEASE_BASE_URL=@@AWEN_RELEASE_BASE_URL@@
+AWEN_LOCAL_ARCHIVE_PATH=@@AWEN_LOCAL_ARCHIVE_PATH@@
+AWEN_LOCAL_CHECKSUMS_PATH=@@AWEN_LOCAL_CHECKSUMS_PATH@@
+AWEN_HOME="\${AWEN_HOME:-\${HOME}/.awen}"
+AWEN_RUNTIME_DIR="$AWEN_HOME/runtime/versions/$AWEN_ARCHIVE_VERSION"
+awen_runtime_ready() {
+  [ -x "$AWEN_RUNTIME_DIR/bin/awen" ] && [ "$(cat "$AWEN_RUNTIME_DIR/.install-complete" 2>/dev/null)" = "$AWEN_ARCHIVE_VERSION" ]
 }
-if ! acode_runtime_ready; then
-  mkdir -p "$ACODE_HOME/runtime/versions"
-  ACODE_LOCK="$ACODE_HOME/runtime/versions/.$ACODE_ARCHIVE_VERSION.install.lock"
-  ACODE_LOCK_WAITED=0
-  ACODE_LOCK_UNOWNED=0
-  while ! mkdir "$ACODE_LOCK" 2>/dev/null; do
-    ACODE_LOCK_OWNER="$(cat "$ACODE_LOCK/pid" 2>/dev/null || true)"
-    if [ -n "$ACODE_LOCK_OWNER" ]; then
-      ACODE_LOCK_UNOWNED=0
-      if ! kill -0 "$ACODE_LOCK_OWNER" 2>/dev/null; then
-        rm -rf "$ACODE_LOCK"
+if ! awen_runtime_ready; then
+  mkdir -p "$AWEN_HOME/runtime/versions"
+  AWEN_LOCK="$AWEN_HOME/runtime/versions/.$AWEN_ARCHIVE_VERSION.install.lock"
+  AWEN_LOCK_WAITED=0
+  AWEN_LOCK_UNOWNED=0
+  while ! mkdir "$AWEN_LOCK" 2>/dev/null; do
+    AWEN_LOCK_OWNER="$(cat "$AWEN_LOCK/pid" 2>/dev/null || true)"
+    if [ -n "$AWEN_LOCK_OWNER" ]; then
+      AWEN_LOCK_UNOWNED=0
+      if ! kill -0 "$AWEN_LOCK_OWNER" 2>/dev/null; then
+        rm -rf "$AWEN_LOCK"
         continue
       fi
     else
-      ACODE_LOCK_UNOWNED=$((ACODE_LOCK_UNOWNED + 1))
-      if [ "$ACODE_LOCK_UNOWNED" -ge 5 ]; then
-        rm -rf "$ACODE_LOCK"
+      AWEN_LOCK_UNOWNED=$((AWEN_LOCK_UNOWNED + 1))
+      if [ "$AWEN_LOCK_UNOWNED" -ge 5 ]; then
+        rm -rf "$AWEN_LOCK"
         continue
       fi
     fi
-    if [ "$ACODE_LOCK_WAITED" -ge @@ACODE_ARCHIVE_LOCK_WAIT_SECONDS@@ ]; then
-      printf 'Another ACode %s installation has held %s for too long.\\n' "$ACODE_ARCHIVE_VERSION" "$ACODE_LOCK" >&2
+    if [ "$AWEN_LOCK_WAITED" -ge @@AWEN_ARCHIVE_LOCK_WAIT_SECONDS@@ ]; then
+      printf 'Another Awen %s installation has held %s for too long.\\n' "$AWEN_ARCHIVE_VERSION" "$AWEN_LOCK" >&2
       exit 1
     fi
     sleep 1
-    ACODE_LOCK_WAITED=$((ACODE_LOCK_WAITED + 1))
+    AWEN_LOCK_WAITED=$((AWEN_LOCK_WAITED + 1))
   done
-  printf '%s\\n' "$$" > "$ACODE_LOCK/pid.tmp" && mv "$ACODE_LOCK/pid.tmp" "$ACODE_LOCK/pid"
-  trap 'rm -rf "$ACODE_LOCK"' EXIT
+  printf '%s\\n' "$$" > "$AWEN_LOCK/pid.tmp" && mv "$AWEN_LOCK/pid.tmp" "$AWEN_LOCK/pid"
+  trap 'rm -rf "$AWEN_LOCK"' EXIT
 fi
-if ! acode_runtime_ready; then
-  ACODE_ARCHIVE="acode-server-$ACODE_ARCHIVE_VERSION-linux-x64.tar.gz"
-  ACODE_STAGING="$(mktemp -d "$ACODE_HOME/runtime/versions/.staging-XXXXXX")"
-  trap 'rm -rf "$ACODE_STAGING" "$ACODE_LOCK"' EXIT
-  if [ -n "$ACODE_LOCAL_ARCHIVE_PATH" ] && [ -n "$ACODE_LOCAL_CHECKSUMS_PATH" ]; then
-ACODE_HOME_FALLBACK="\${ACODE_HOME:-\${HOME}/.acode}"
-    cp "$ACODE_HOME_FALLBACK/$ACODE_LOCAL_ARCHIVE_PATH" "$ACODE_STAGING/$ACODE_ARCHIVE"
-    cp "$ACODE_HOME_FALLBACK/$ACODE_LOCAL_CHECKSUMS_PATH" "$ACODE_STAGING/SHA256SUMS"
+if ! awen_runtime_ready; then
+  AWEN_ARCHIVE="awen-server-$AWEN_ARCHIVE_VERSION-linux-x64.tar.gz"
+  AWEN_STAGING="$(mktemp -d "$AWEN_HOME/runtime/versions/.staging-XXXXXX")"
+  trap 'rm -rf "$AWEN_STAGING" "$AWEN_LOCK"' EXIT
+  if [ -n "$AWEN_LOCAL_ARCHIVE_PATH" ] && [ -n "$AWEN_LOCAL_CHECKSUMS_PATH" ]; then
+AWEN_HOME_FALLBACK="\${AWEN_HOME:-\${HOME}/.awen}"
+    cp "$AWEN_HOME_FALLBACK/$AWEN_LOCAL_ARCHIVE_PATH" "$AWEN_STAGING/$AWEN_ARCHIVE"
+    cp "$AWEN_HOME_FALLBACK/$AWEN_LOCAL_CHECKSUMS_PATH" "$AWEN_STAGING/SHA256SUMS"
   else
-    acode_fetch() {
-      ACODE_PROGRESS_FLAG="$ACODE_STAGING/.progress-active"
-      if [ "$2" = "$ACODE_STAGING/$ACODE_ARCHIVE" ]; then
-        : > "$ACODE_PROGRESS_FLAG"
+    awen_fetch() {
+      AWEN_PROGRESS_FLAG="$AWEN_STAGING/.progress-active"
+      if [ "$2" = "$AWEN_STAGING/$AWEN_ARCHIVE" ]; then
+        : > "$AWEN_PROGRESS_FLAG"
         (
-          while [ -f "$ACODE_PROGRESS_FLAG" ]; do
+          while [ -f "$AWEN_PROGRESS_FLAG" ]; do
             if [ -f "$2" ]; then
-              ACODE_PROGRESS_TOTAL=0
-              if [ -f "$ACODE_STAGING/.download-headers" ]; then
-                ACODE_PROGRESS_TOTAL="$(awk '/^HTTP\\// { size=0 } tolower($1) == "content-length:" { gsub("\\r", "", $2); size=$2 } END { print size+0 }' "$ACODE_STAGING/.download-headers")"
+              AWEN_PROGRESS_TOTAL=0
+              if [ -f "$AWEN_STAGING/.download-headers" ]; then
+                AWEN_PROGRESS_TOTAL="$(awk '/^HTTP\\// { size=0 } tolower($1) == "content-length:" { gsub("\\r", "", $2); size=$2 } END { print size+0 }' "$AWEN_STAGING/.download-headers")"
               fi
-              printf 'ACODE_PROGRESS download %s %s\\n' "$(wc -c < "$2" | tr -d ' ')" "$ACODE_PROGRESS_TOTAL" >&2
+              printf 'AWEN_PROGRESS download %s %s\\n' "$(wc -c < "$2" | tr -d ' ')" "$AWEN_PROGRESS_TOTAL" >&2
             fi
             sleep 1
           done
         ) &
-        ACODE_PROGRESS_PID=$!
+        AWEN_PROGRESS_PID=$!
       fi
       if command -v curl >/dev/null 2>&1; then
-        curl -fsSL --connect-timeout 30 --max-time "$3" "$1" -o "$2" -D "$ACODE_STAGING/.download-headers" && ACODE_FETCH_OK=1 || ACODE_FETCH_OK=0
+        curl -fsSL --connect-timeout 30 --max-time "$3" "$1" -o "$2" -D "$AWEN_STAGING/.download-headers" && AWEN_FETCH_OK=1 || AWEN_FETCH_OK=0
       elif command -v wget >/dev/null 2>&1; then
-        wget -q --timeout=30 --tries=1 "$1" -O "$2" && ACODE_FETCH_OK=1 || ACODE_FETCH_OK=0
+        wget -q --timeout=30 --tries=1 "$1" -O "$2" && AWEN_FETCH_OK=1 || AWEN_FETCH_OK=0
       else
-        printf 'Remote host needs curl or wget to download %s.\\n' "$ACODE_ARCHIVE" >&2
-        ACODE_FETCH_OK=0
+        printf 'Remote host needs curl or wget to download %s.\\n' "$AWEN_ARCHIVE" >&2
+        AWEN_FETCH_OK=0
       fi
-      if [ -n "\${ACODE_PROGRESS_PID:-}" ]; then
-        rm -f "$ACODE_PROGRESS_FLAG"
-        kill "$ACODE_PROGRESS_PID" 2>/dev/null || true
-        wait "$ACODE_PROGRESS_PID" 2>/dev/null || true
-        ACODE_PROGRESS_TOTAL=0
-        if [ -f "$ACODE_STAGING/.download-headers" ]; then
-          ACODE_PROGRESS_TOTAL="$(awk '/^HTTP\\// { size=0 } tolower($1) == "content-length:" { gsub("\\r", "", $2); size=$2 } END { print size+0 }' "$ACODE_STAGING/.download-headers")"
+      if [ -n "\${AWEN_PROGRESS_PID:-}" ]; then
+        rm -f "$AWEN_PROGRESS_FLAG"
+        kill "$AWEN_PROGRESS_PID" 2>/dev/null || true
+        wait "$AWEN_PROGRESS_PID" 2>/dev/null || true
+        AWEN_PROGRESS_TOTAL=0
+        if [ -f "$AWEN_STAGING/.download-headers" ]; then
+          AWEN_PROGRESS_TOTAL="$(awk '/^HTTP\\// { size=0 } tolower($1) == "content-length:" { gsub("\\r", "", $2); size=$2 } END { print size+0 }' "$AWEN_STAGING/.download-headers")"
         fi
-        printf 'ACODE_PROGRESS download %s %s\\n' "$(wc -c < "$2" 2>/dev/null | tr -d ' ')" "$ACODE_PROGRESS_TOTAL" >&2
-        unset ACODE_PROGRESS_PID
+        printf 'AWEN_PROGRESS download %s %s\\n' "$(wc -c < "$2" 2>/dev/null | tr -d ' ')" "$AWEN_PROGRESS_TOTAL" >&2
+        unset AWEN_PROGRESS_PID
       fi
-      rm -f "$ACODE_STAGING/.download-headers"
-      [ "$ACODE_FETCH_OK" -eq 1 ]
+      rm -f "$AWEN_STAGING/.download-headers"
+      [ "$AWEN_FETCH_OK" -eq 1 ]
     }
-    acode_fetch "$ACODE_RELEASE_BASE_URL/v$ACODE_ARCHIVE_VERSION/SHA256SUMS" "$ACODE_STAGING/SHA256SUMS" @@ACODE_ARCHIVE_CHECKSUMS_SECONDS@@
-    acode_fetch "$ACODE_RELEASE_BASE_URL/v$ACODE_ARCHIVE_VERSION/$ACODE_ARCHIVE" "$ACODE_STAGING/$ACODE_ARCHIVE" @@ACODE_ARCHIVE_DOWNLOAD_SECONDS@@
+    awen_fetch "$AWEN_RELEASE_BASE_URL/v$AWEN_ARCHIVE_VERSION/SHA256SUMS" "$AWEN_STAGING/SHA256SUMS" @@AWEN_ARCHIVE_CHECKSUMS_SECONDS@@
+    awen_fetch "$AWEN_RELEASE_BASE_URL/v$AWEN_ARCHIVE_VERSION/$AWEN_ARCHIVE" "$AWEN_STAGING/$AWEN_ARCHIVE" @@AWEN_ARCHIVE_DOWNLOAD_SECONDS@@
   fi
-  printf 'ACODE_PROGRESS stage installing\\n' >&2
-  ACODE_EXPECTED="$(grep " \\*\\{0,1\\}$ACODE_ARCHIVE$" "$ACODE_STAGING/SHA256SUMS" | cut -d' ' -f1)"
+  printf 'AWEN_PROGRESS stage installing\\n' >&2
+  AWEN_EXPECTED="$(grep " \\*\\{0,1\\}$AWEN_ARCHIVE$" "$AWEN_STAGING/SHA256SUMS" | cut -d' ' -f1)"
   if command -v sha256sum >/dev/null 2>&1; then
-    ACODE_ACTUAL="$(sha256sum "$ACODE_STAGING/$ACODE_ARCHIVE" | cut -d' ' -f1)"
+    AWEN_ACTUAL="$(sha256sum "$AWEN_STAGING/$AWEN_ARCHIVE" | cut -d' ' -f1)"
   else
-    ACODE_ACTUAL="$(shasum -a 256 "$ACODE_STAGING/$ACODE_ARCHIVE" | cut -d' ' -f1)"
+    AWEN_ACTUAL="$(shasum -a 256 "$AWEN_STAGING/$AWEN_ARCHIVE" | cut -d' ' -f1)"
   fi
-  if [ -z "$ACODE_EXPECTED" ] || [ "$ACODE_ACTUAL" != "$ACODE_EXPECTED" ]; then
-    printf 'Checksum mismatch for %s.\\n' "$ACODE_ARCHIVE" >&2; exit 1
+  if [ -z "$AWEN_EXPECTED" ] || [ "$AWEN_ACTUAL" != "$AWEN_EXPECTED" ]; then
+    printf 'Checksum mismatch for %s.\\n' "$AWEN_ARCHIVE" >&2; exit 1
   fi
-  tar -xzf "$ACODE_STAGING/$ACODE_ARCHIVE" -C "$ACODE_STAGING" --strip-components=1
-  rm -f "$ACODE_STAGING/$ACODE_ARCHIVE" "$ACODE_STAGING/SHA256SUMS"
-  if ! "$ACODE_STAGING/bin/acode" --version >/dev/null 2>&1; then
-    printf 'The ACode %s executable does not run on this host.\\n' "$ACODE_ARCHIVE_VERSION" >&2; exit 1
+  tar -xzf "$AWEN_STAGING/$AWEN_ARCHIVE" -C "$AWEN_STAGING" --strip-components=1
+  rm -f "$AWEN_STAGING/$AWEN_ARCHIVE" "$AWEN_STAGING/SHA256SUMS"
+  if ! "$AWEN_STAGING/bin/awen" --version >/dev/null 2>&1; then
+    printf 'The Awen %s executable does not run on this host.\\n' "$AWEN_ARCHIVE_VERSION" >&2; exit 1
   fi
-  printf '%s\\n' "$ACODE_ARCHIVE_VERSION" > "$ACODE_STAGING/.install-complete"
-  rm -rf "$ACODE_RUNTIME_DIR"
-  mv "$ACODE_STAGING" "$ACODE_RUNTIME_DIR"
+  printf '%s\\n' "$AWEN_ARCHIVE_VERSION" > "$AWEN_STAGING/.install-complete"
+  rm -rf "$AWEN_RUNTIME_DIR"
+  mv "$AWEN_STAGING" "$AWEN_RUNTIME_DIR"
 fi
-if [ -n "\${ACODE_LOCK:-}" ]; then
-  rm -rf "$ACODE_LOCK"
+if [ -n "\${AWEN_LOCK:-}" ]; then
+  rm -rf "$AWEN_LOCK"
   trap - EXIT
 fi
-printf 'ACODE_PROGRESS stage starting\\n' >&2
-exec "$ACODE_RUNTIME_DIR/bin/acode" "$@"
+printf 'AWEN_PROGRESS stage starting\\n' >&2
+exec "$AWEN_RUNTIME_DIR/bin/awen" "$@"
 `;
 
 const REMOTE_LAUNCH_SCRIPT = `set -eu
-@@ACODE_NODE_ENV_SCRIPT@@
+@@AWEN_NODE_ENV_SCRIPT@@
 STATE_KEY="$1"
-ACODE_HOME="\${ACODE_HOME:-\${HOME}/.acode}"
-STATE_DIR="$ACODE_HOME/ssh-launch/$STATE_KEY"
-DEFAULT_SERVER_HOME="$ACODE_HOME"
+AWEN_HOME="\${AWEN_HOME:-\${HOME}/.awen}"
+STATE_DIR="$AWEN_HOME/ssh-launch/$STATE_KEY"
+DEFAULT_SERVER_HOME="$AWEN_HOME"
 DEFAULT_RUNTIME_FILE="$DEFAULT_SERVER_HOME/userdata/server-runtime.json"
 PORT_FILE="$STATE_DIR/port"
 PID_FILE="$STATE_DIR/pid"
 MANAGED_FILE="$STATE_DIR/managed"
 LOG_FILE="$STATE_DIR/server.log"
-RUNNER_FILE="$STATE_DIR/run-acode.sh"
-RUNNER_NEXT="$STATE_DIR/run-t3.next.$$"
+RUNNER_FILE="$STATE_DIR/run-awen.sh"
+RUNNER_NEXT="$STATE_DIR/run-awen.next.$$"
 mkdir -p "$STATE_DIR"
 cleanup_runner_next() {
   rm -f "$RUNNER_NEXT"
 }
 trap cleanup_runner_next EXIT
 cat >"$RUNNER_NEXT" <<'SH'
-@@ACODE_RUNNER_SCRIPT@@
+@@AWEN_RUNNER_SCRIPT@@
 SH
 mv "$RUNNER_NEXT" "$RUNNER_FILE"
 chmod 700 "$RUNNER_FILE"
-ACODE_ARCHIVE_MODE=@@ACODE_ARCHIVE_MODE@@
-if [ "$ACODE_ARCHIVE_MODE" = "1" ]; then
+AWEN_ARCHIVE_MODE=@@AWEN_ARCHIVE_MODE@@
+if [ "$AWEN_ARCHIVE_MODE" = "1" ]; then
   "$RUNNER_FILE" --version >/dev/null
 elif ! ensure_remote_node_path; then
   printf 'Remote host is missing node on PATH. Install Node or configure a supported version manager for non-interactive shells.\\n' >&2
   exit 1
 fi
 pick_port() {
-  if [ "$ACODE_ARCHIVE_MODE" = "1" ]; then
-    "$RUNNER_FILE" __ssh-helper pick-port "$PORT_FILE" "@@ACODE_DEFAULT_REMOTE_PORT@@" "@@ACODE_REMOTE_PORT_SCAN_WINDOW@@"
+  if [ "$AWEN_ARCHIVE_MODE" = "1" ]; then
+    "$RUNNER_FILE" __ssh-helper pick-port "$PORT_FILE" "@@AWEN_DEFAULT_REMOTE_PORT@@" "@@AWEN_REMOTE_PORT_SCAN_WINDOW@@"
     return
   fi
-  node - "$PORT_FILE" "@@ACODE_DEFAULT_REMOTE_PORT@@" "@@ACODE_REMOTE_PORT_SCAN_WINDOW@@" <<'NODE'
-@@ACODE_PICK_PORT_SCRIPT@@
+  node - "$PORT_FILE" "@@AWEN_DEFAULT_REMOTE_PORT@@" "@@AWEN_REMOTE_PORT_SCAN_WINDOW@@" <<'NODE'
+@@AWEN_PICK_PORT_SCRIPT@@
 NODE
 }
 wait_ready() {
-  if [ "$ACODE_ARCHIVE_MODE" = "1" ]; then
-    "$RUNNER_FILE" __ssh-helper wait-ready "$REMOTE_PORT" "$1" "@@ACODE_READY_PROBE_TIMEOUT_MS@@"
+  if [ "$AWEN_ARCHIVE_MODE" = "1" ]; then
+    "$RUNNER_FILE" __ssh-helper wait-ready "$REMOTE_PORT" "$1" "@@AWEN_READY_PROBE_TIMEOUT_MS@@"
     return
   fi
-  node - "$REMOTE_PORT" "$1" "@@ACODE_READY_PROBE_TIMEOUT_MS@@" <<'NODE'
-@@ACODE_WAIT_READY_SCRIPT@@
+  node - "$REMOTE_PORT" "$1" "@@AWEN_READY_PROBE_TIMEOUT_MS@@" <<'NODE'
+@@AWEN_WAIT_READY_SCRIPT@@
 NODE
 }
 wait_for_pid_exit() {
@@ -1058,7 +1058,7 @@ wait_for_pid_exit() {
   done
 }
 resolve_default_runtime_port() {
-  if [ "$ACODE_ARCHIVE_MODE" = "1" ]; then
+  if [ "$AWEN_ARCHIVE_MODE" = "1" ]; then
     "$RUNNER_FILE" __ssh-helper runtime-port "$DEFAULT_RUNTIME_FILE"
     return
   fi
@@ -1096,12 +1096,12 @@ if [ -n "$DEFAULT_REMOTE_PORT" ]; then
   if [ "$REMOTE_MANAGED" = "managed" ] && [ -n "$REMOTE_PID" ] && kill -0 "$REMOTE_PID" 2>/dev/null; then
     MANAGED_ALIVE=1
   fi
-  # A live ACode-managed daemon wins over the default runtime record: adopting
-  # the external daemon would mean stopping ours, and ACode never silently
+  # A live Awen-managed daemon wins over the default runtime record: adopting
+  # the external daemon would mean stopping ours, and Awen never silently
   # stops a daemon that may own active Sessions.
   if [ "$MANAGED_ALIVE" != "1" ]; then
     REMOTE_PORT="$DEFAULT_REMOTE_PORT"
-    if wait_ready "@@ACODE_REUSE_READY_TIMEOUT_MS@@"; then
+    if wait_ready "@@AWEN_REUSE_READY_TIMEOUT_MS@@"; then
       REMOTE_PID=""
       REMOTE_PORT="$DEFAULT_REMOTE_PORT"
       REMOTE_MANAGED="external"
@@ -1116,7 +1116,7 @@ if [ -n "$DEFAULT_REMOTE_PORT" ]; then
   fi
 fi
 if [ "$REMOTE_MANAGED" = "external" ]; then
-  if [ -z "$REMOTE_PORT" ] || ! wait_ready "@@ACODE_REUSE_READY_TIMEOUT_MS@@"; then
+  if [ -z "$REMOTE_PORT" ] || ! wait_ready "@@AWEN_REUSE_READY_TIMEOUT_MS@@"; then
     REMOTE_PID=""
     REMOTE_PORT=""
     REMOTE_MANAGED=""
@@ -1125,7 +1125,7 @@ elif [ -n "$REMOTE_PID" ] && [ -n "$REMOTE_PORT" ] && kill -0 "$REMOTE_PID" 2>/d
   # A live managed daemon is reused even when the runner script changed; the
   # updated runner takes effect on the daemon's next natural start. Only an
   # unhealthy daemon is restarted here.
-  if ! wait_ready "@@ACODE_REUSE_READY_TIMEOUT_MS@@"; then
+  if ! wait_ready "@@AWEN_REUSE_READY_TIMEOUT_MS@@"; then
     kill "$REMOTE_PID" 2>/dev/null || true
     wait_for_pid_exit "$REMOTE_PID"
     REMOTE_PID=""
@@ -1140,20 +1140,20 @@ fi
 if [ -z "$REMOTE_PORT" ]; then
   REMOTE_PORT="$(pick_port)" || true
   if [ -z "$REMOTE_PORT" ]; then
-    if [ "$ACODE_ARCHIVE_MODE" = "1" ]; then
+    if [ "$AWEN_ARCHIVE_MODE" = "1" ]; then
       printf 'Failed to find an available port on the remote host.\\n' >&2
     else
       printf 'Failed to find an available port on the remote host. Ensure node is available on PATH.\\n' >&2
     fi
     exit 1
   fi
-  nohup env T3CODE_NO_BROWSER=1 ACODE_HOME="$ACODE_HOME" "$RUNNER_FILE" serve --host 127.0.0.1 --port "$REMOTE_PORT" --base-dir "$DEFAULT_SERVER_HOME" >>"$LOG_FILE" 2>&1 < /dev/null &
+  nohup env AWEN_NO_BROWSER=1 AWEN_HOME="$AWEN_HOME" "$RUNNER_FILE" serve --host 127.0.0.1 --port "$REMOTE_PORT" --base-dir "$DEFAULT_SERVER_HOME" >>"$LOG_FILE" 2>&1 < /dev/null &
   REMOTE_PID="$!"
   printf '%s\\n' "$REMOTE_PID" >"$PID_FILE"
   printf '%s\\n' "$REMOTE_PORT" >"$PORT_FILE"
   printf 'managed\\n' >"$MANAGED_FILE"
-  if ! wait_ready "@@ACODE_READY_TIMEOUT_MS@@"; then
-    printf 'Remote ACode daemon did not become ready on 127.0.0.1:%s.\\n' "$REMOTE_PORT" >&2
+  if ! wait_ready "@@AWEN_READY_TIMEOUT_MS@@"; then
+    printf 'Remote Awen daemon did not become ready on 127.0.0.1:%s.\\n' "$REMOTE_PORT" >&2
     if [ -s "$LOG_FILE" ]; then
       tail -n 80 "$LOG_FILE" >&2 2>/dev/null || true
     else
@@ -1170,17 +1170,17 @@ printf '{"remotePort":%s,"serverKind":"%s"}\\n' "$REMOTE_PORT" "\${REMOTE_MANAGE
 
 const REMOTE_INSPECT_SCRIPT = `set -eu
 STATE_KEY="$1"
-ACODE_HOME="$(printenv ACODE_HOME || true)"
-if [ -z "$ACODE_HOME" ]; then ACODE_HOME="$HOME/.acode"; fi
+AWEN_HOME="$(printenv AWEN_HOME || true)"
+if [ -z "$AWEN_HOME" ]; then AWEN_HOME="$HOME/.awen"; fi
 OS="$(uname -s 2>/dev/null || true)"
 ARCH="$(uname -m 2>/dev/null || true)"
 ensure_remote_node_path || true
 NODE_VERSION="$(node -v 2>/dev/null || true)"
 if command -v git >/dev/null 2>&1; then GIT_AVAILABLE=yes; else GIT_AVAILABLE=no; fi
 DAEMON=install
-PORT="$(cat "$ACODE_HOME/ssh-launch/$STATE_KEY/port" 2>/dev/null || true)"
+PORT="$(cat "$AWEN_HOME/ssh-launch/$STATE_KEY/port" 2>/dev/null || true)"
 if command -v node >/dev/null 2>&1; then
-  DEFAULT_PORT="$(node - "$ACODE_HOME/userdata/server-runtime.json" <<'NODE' 2>/dev/null || true
+  DEFAULT_PORT="$(node - "$AWEN_HOME/userdata/server-runtime.json" <<'NODE' 2>/dev/null || true
 const fs = require("node:fs");
 try {
   const runtime = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
@@ -1192,20 +1192,20 @@ try {
 NODE
 )"
   for CANDIDATE_PORT in "$PORT" "$DEFAULT_PORT"; do
-    if [ -n "$CANDIDATE_PORT" ] && node -e 'const port = Number(process.argv[1]); if (!Number.isInteger(port) || port < 1 || port > 65535) process.exit(1); fetch("http://127.0.0.1:" + port + "/.well-known/t3/environment", { signal: AbortSignal.timeout(1500) }).then(async response => { const body = await response.json(); process.exit(response.ok && typeof body.environmentId === "string" ? 0 : 1) }).catch(() => process.exit(1))' "$CANDIDATE_PORT" >/dev/null 2>&1; then
+    if [ -n "$CANDIDATE_PORT" ] && node -e 'const port = Number(process.argv[1]); if (!Number.isInteger(port) || port < 1 || port > 65535) process.exit(1); fetch("http://127.0.0.1:" + port + "/.well-known/awen/environment", { signal: AbortSignal.timeout(1500) }).then(async response => { const body = await response.json(); process.exit(response.ok && typeof body.environmentId === "string" ? 0 : 1) }).catch(() => process.exit(1))' "$CANDIDATE_PORT" >/dev/null 2>&1; then
       DAEMON=reuse
       break
     fi
   done
 fi
-printf 'ACODE_PREFLIGHT\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "$OS" "$ARCH" "$NODE_VERSION" "$GIT_AVAILABLE" "$DAEMON"
+printf 'AWEN_PREFLIGHT\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "$OS" "$ARCH" "$NODE_VERSION" "$GIT_AVAILABLE" "$DAEMON"
 `;
 
 export function parseSshEnvironmentInspection(
   stdout: string,
-  runner?: RemoteT3RunnerOptions,
+  runner?: RemoteAwenRunnerOptions,
 ): DesktopSshEnvironmentPlan | null {
-  const line = stdout.split(/\r?\n/u).findLast((entry) => entry.startsWith("ACODE_PREFLIGHT\t"));
+  const line = stdout.split(/\r?\n/u).findLast((entry) => entry.startsWith("AWEN_PREFLIGHT\t"));
   const fields = line?.split("\t");
   if (fields?.length !== 6) return null;
   const [, os, arch, rawNodeVersion, gitAvailable, daemon] = fields;
@@ -1226,22 +1226,22 @@ export function parseSshEnvironmentInspection(
 }
 
 const REMOTE_PAIRING_SCRIPT = `set -eu
-ACODE_HOME="\${ACODE_HOME:-\${HOME}/.acode}"
-STATE_DIR="$ACODE_HOME/ssh-launch/@@T3_STATE_KEY@@"
-DEFAULT_SERVER_HOME="$ACODE_HOME"
-RUNNER_FILE="$STATE_DIR/run-acode.sh"
+AWEN_HOME="\${AWEN_HOME:-\${HOME}/.awen}"
+STATE_DIR="$AWEN_HOME/ssh-launch/@@AWEN_STATE_KEY@@"
+DEFAULT_SERVER_HOME="$AWEN_HOME"
+RUNNER_FILE="$STATE_DIR/run-awen.sh"
 mkdir -p "$STATE_DIR"
 cat >"$RUNNER_FILE" <<'SH'
-@@ACODE_RUNNER_SCRIPT@@
+@@AWEN_RUNNER_SCRIPT@@
 SH
 chmod 700 "$RUNNER_FILE"
 PAIRING_BASE_DIR="$DEFAULT_SERVER_HOME"
-ACODE_HOME="$ACODE_HOME" "$RUNNER_FILE" auth pairing create --base-dir "$PAIRING_BASE_DIR" --json
+AWEN_HOME="$AWEN_HOME" "$RUNNER_FILE" auth pairing create --base-dir "$PAIRING_BASE_DIR" --json
 `;
 
 const REMOTE_LOG_TAIL_SCRIPT = `set -eu
-ACODE_HOME="\${ACODE_HOME:-\${HOME}/.acode}"
-STATE_DIR="$ACODE_HOME/ssh-launch/@@T3_STATE_KEY@@"
+AWEN_HOME="\${AWEN_HOME:-\${HOME}/.awen}"
+STATE_DIR="$AWEN_HOME/ssh-launch/@@AWEN_STATE_KEY@@"
 LOG_FILE="$STATE_DIR/server.log"
 if [ -f "$LOG_FILE" ]; then
   tail -n 80 "$LOG_FILE" 2>/dev/null || true
@@ -1253,7 +1253,7 @@ export class SshInvalidArchiveVersionError extends Schema.TaggedError<SshInvalid
   { archiveVersion: Schema.String },
 ) {
   override get message(): string {
-    return `'${this.archiveVersion}' is not an exact t3 version and cannot name a runtime directory.`;
+    return `'${this.archiveVersion}' is not an exact awen version and cannot name a runtime directory.`;
   }
 }
 
@@ -1268,11 +1268,11 @@ export class SshMissingRunnerError extends Schema.TaggedError<SshMissingRunnerEr
   {},
 ) {
   override get message(): string {
-    return "A remote t3 runner needs an archive version or a node script path.";
+    return "A remote awen runner needs an archive version or a node script path.";
   }
 }
 
-export function buildRemoteT3RunnerScript(input?: RemoteT3RunnerOptions): string {
+export function buildRemoteAwenRunnerScript(input?: RemoteAwenRunnerOptions): string {
   const nodeScriptPath = input?.nodeScriptPath?.trim() || "";
   const archiveVersion = input?.archiveVersion?.trim() || "";
   if (nodeScriptPath === "" && archiveVersion === "") {
@@ -1293,56 +1293,56 @@ export function buildRemoteT3RunnerScript(input?: RemoteT3RunnerOptions): string
   }
   return stripTrailingNewlines(
     applyScriptPlaceholders(REMOTE_RUNNER_SCRIPT, {
-      ACODE_NODE_SCRIPT_PATH: shellSingleQuote(nodeScriptPath),
-      ACODE_ARCHIVE_VERSION: shellSingleQuote(archiveVersion),
-      ACODE_RELEASE_BASE_URL: shellSingleQuote(releaseBaseUrl),
-      ACODE_LOCAL_ARCHIVE_PATH: shellSingleQuote(localArchivePath),
-      ACODE_LOCAL_CHECKSUMS_PATH: shellSingleQuote(localChecksumsPath),
-      ACODE_ARCHIVE_LOCK_WAIT_SECONDS: String(REMOTE_ARCHIVE_LOCK_WAIT_SECONDS),
-      ACODE_ARCHIVE_DOWNLOAD_SECONDS: String(REMOTE_ARCHIVE_DOWNLOAD_SECONDS),
-      ACODE_ARCHIVE_CHECKSUMS_SECONDS: String(REMOTE_ARCHIVE_CHECKSUMS_SECONDS),
-      ACODE_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
+      AWEN_NODE_SCRIPT_PATH: shellSingleQuote(nodeScriptPath),
+      AWEN_ARCHIVE_VERSION: shellSingleQuote(archiveVersion),
+      AWEN_RELEASE_BASE_URL: shellSingleQuote(releaseBaseUrl),
+      AWEN_LOCAL_ARCHIVE_PATH: shellSingleQuote(localArchivePath),
+      AWEN_LOCAL_CHECKSUMS_PATH: shellSingleQuote(localChecksumsPath),
+      AWEN_ARCHIVE_LOCK_WAIT_SECONDS: String(REMOTE_ARCHIVE_LOCK_WAIT_SECONDS),
+      AWEN_ARCHIVE_DOWNLOAD_SECONDS: String(REMOTE_ARCHIVE_DOWNLOAD_SECONDS),
+      AWEN_ARCHIVE_CHECKSUMS_SECONDS: String(REMOTE_ARCHIVE_CHECKSUMS_SECONDS),
+      AWEN_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
     }),
   );
 }
 
-export function buildRemoteNodeEnvScript(input?: RemoteT3RunnerOptions): string {
+export function buildRemoteNodeEnvScript(input?: RemoteAwenRunnerOptions): string {
   return stripTrailingNewlines(
     applyScriptPlaceholders(REMOTE_NODE_ENV_SCRIPT, {
-      ACODE_NODE_ENGINE_RANGE: shellSingleQuote(input?.nodeEngineRange?.trim() || ""),
-      ACODE_NODE_ENGINE_CHECK_SCRIPT: stripTrailingNewlines(buildRemoteNodeEngineCheckScript()),
+      AWEN_NODE_ENGINE_RANGE: shellSingleQuote(input?.nodeEngineRange?.trim() || ""),
+      AWEN_NODE_ENGINE_CHECK_SCRIPT: stripTrailingNewlines(buildRemoteNodeEngineCheckScript()),
     }),
   );
 }
 
-export function buildRemoteLaunchScript(input?: RemoteT3RunnerOptions): string {
+export function buildRemoteLaunchScript(input?: RemoteAwenRunnerOptions): string {
   return applyScriptPlaceholders(REMOTE_LAUNCH_SCRIPT, {
-    ACODE_ARCHIVE_MODE: isNodeScriptRunner(input) ? "0" : "1",
-    ACODE_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
-    ACODE_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteT3RunnerScript(input)),
-    ACODE_PICK_PORT_SCRIPT: stripTrailingNewlines(REMOTE_PICK_PORT_SCRIPT),
-    ACODE_WAIT_READY_SCRIPT: stripTrailingNewlines(REMOTE_WAIT_READY_SCRIPT),
-    ACODE_DEFAULT_REMOTE_PORT: String(DEFAULT_REMOTE_PORT),
-    ACODE_REMOTE_PORT_SCAN_WINDOW: String(REMOTE_PORT_SCAN_WINDOW),
-    ACODE_READY_TIMEOUT_MS: String(REMOTE_READY_TIMEOUT_MS),
-    ACODE_REUSE_READY_TIMEOUT_MS: String(REMOTE_REUSE_READY_TIMEOUT_MS),
-    ACODE_READY_PROBE_TIMEOUT_MS: String(SSH_READY_PROBE_TIMEOUT_MS),
+    AWEN_ARCHIVE_MODE: isNodeScriptRunner(input) ? "0" : "1",
+    AWEN_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
+    AWEN_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteAwenRunnerScript(input)),
+    AWEN_PICK_PORT_SCRIPT: stripTrailingNewlines(REMOTE_PICK_PORT_SCRIPT),
+    AWEN_WAIT_READY_SCRIPT: stripTrailingNewlines(REMOTE_WAIT_READY_SCRIPT),
+    AWEN_DEFAULT_REMOTE_PORT: String(DEFAULT_REMOTE_PORT),
+    AWEN_REMOTE_PORT_SCAN_WINDOW: String(REMOTE_PORT_SCAN_WINDOW),
+    AWEN_READY_TIMEOUT_MS: String(REMOTE_READY_TIMEOUT_MS),
+    AWEN_REUSE_READY_TIMEOUT_MS: String(REMOTE_REUSE_READY_TIMEOUT_MS),
+    AWEN_READY_PROBE_TIMEOUT_MS: String(SSH_READY_PROBE_TIMEOUT_MS),
   });
 }
 
 export function buildRemotePairingScript(
   target: DesktopSshEnvironmentTarget,
-  input?: RemoteT3RunnerOptions,
+  input?: RemoteAwenRunnerOptions,
 ): string {
   return applyScriptPlaceholders(REMOTE_PAIRING_SCRIPT, {
-    T3_STATE_KEY: remoteStateKey(target),
-    ACODE_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteT3RunnerScript(input)),
+    AWEN_STATE_KEY: remoteStateKey(target),
+    AWEN_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteAwenRunnerScript(input)),
   });
 }
 
 function buildRemoteLogTailScript(target: DesktopSshEnvironmentTarget): string {
   return applyScriptPlaceholders(REMOTE_LOG_TAIL_SCRIPT, {
-    T3_STATE_KEY: remoteStateKey(target),
+    AWEN_STATE_KEY: remoteStateKey(target),
   });
 }
 
@@ -1350,7 +1350,7 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
   function* (
     target: DesktopSshEnvironmentTarget,
     input?: SshAuthOptions,
-    runner?: RemoteT3RunnerOptions,
+    runner?: RemoteAwenRunnerOptions,
   ): Effect.fn.Return<
     { readonly remotePort: number; readonly remoteServerKind: "external" | "managed" | null },
     SshCommandError | SshInvalidTargetError | SshLaunchError,
@@ -1375,7 +1375,7 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
         const lines = stderrRemainder.split(/\r?\n/u);
         stderrRemainder = lines.pop() ?? "";
         for (const line of lines) {
-          const match = /^ACODE_PROGRESS download (\d+) (\d+)$/u.exec(line);
+          const match = /^AWEN_PROGRESS download (\d+) (\d+)$/u.exec(line);
           if (match && Option.isSome(progressService)) {
             const totalBytes = Number(match[2]);
             progressService.value.report(
@@ -1384,9 +1384,9 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
                 totalBytes: totalBytes > 0 ? totalBytes : null,
               }),
             );
-          } else if (line === "ACODE_PROGRESS stage installing" && Option.isSome(progressService)) {
+          } else if (line === "AWEN_PROGRESS stage installing" && Option.isSome(progressService)) {
             progressService.value.report(sshProgress("installing"));
-          } else if (line === "ACODE_PROGRESS stage starting" && Option.isSome(progressService)) {
+          } else if (line === "AWEN_PROGRESS stage starting" && Option.isSome(progressService)) {
             progressService.value.report(sshProgress("starting"));
           }
         }
@@ -1431,7 +1431,7 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
 export const issueRemotePairingToken = Effect.fn("ssh/tunnel.issueRemotePairingToken")(function* (
   target: DesktopSshEnvironmentTarget,
   input?: SshAuthOptions,
-  runner?: RemoteT3RunnerOptions,
+  runner?: RemoteAwenRunnerOptions,
 ): Effect.fn.Return<
   {
     readonly credential: string;
@@ -1508,7 +1508,7 @@ export const waitForHttpReady = (input: {
 }): Effect.Effect<void, SshReadinessError, HttpClient.HttpClient> =>
   waitForHttpReadyShared({
     baseUrl: input.baseUrl,
-    path: input.path ?? "/.well-known/t3/environment",
+    path: input.path ?? "/.well-known/awen/environment",
     ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
     ...(input.intervalMs === undefined ? {} : { intervalMs: input.intervalMs }),
     probeTimeoutMs: input.probeTimeoutMs ?? SSH_READY_PROBE_TIMEOUT_MS,
@@ -1966,7 +1966,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
   const createTunnelEntry = Effect.fn("ssh/tunnel.ensureTunnelEntry.create")(function* (input: {
     readonly key: string;
     readonly resolvedTarget: DesktopSshEnvironmentTarget;
-    readonly runner?: RemoteT3RunnerOptions;
+    readonly runner?: RemoteAwenRunnerOptions;
   }): Effect.fn.Return<SshTunnelEntry, SshEnvironmentEffectError, SshEnvironmentEffectContext> {
     yield* Effect.logDebug("ssh.environment.tunnel.create.start", {
       ...sshTargetLogFields(input.resolvedTarget),
@@ -2092,7 +2092,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
   const ensureTunnelEntry = Effect.fn("ssh/tunnel.ensureTunnelEntry")(function* (
     key: string,
     resolvedTarget: DesktopSshEnvironmentTarget,
-    runner?: RemoteT3RunnerOptions,
+    runner?: RemoteAwenRunnerOptions,
   ): Effect.fn.Return<SshTunnelEntry, SshEnvironmentEffectError, SshEnvironmentEffectContext> {
     const entry = tunnels.get(key) ?? null;
 
@@ -2288,7 +2288,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
 export class SshEnvironmentManager extends Context.Service<
   SshEnvironmentManager,
   SshEnvironmentManagerShape
->()("@t3tools/ssh/tunnel/SshEnvironmentManager") {
+>()("@awen/ssh/tunnel/SshEnvironmentManager") {
   static readonly layer = (options: SshEnvironmentManagerOptions = {}) =>
     Layer.effect(SshEnvironmentManager, makeSshEnvironmentManager(options));
 }

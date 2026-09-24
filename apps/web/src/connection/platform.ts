@@ -1,12 +1,10 @@
 import {
   ClientPresentation,
-  CloudSession,
   EnvironmentOwnedDataCleanup,
   PlatformConnectionSource,
   PrimaryEnvironmentAuth,
-  RelayDeviceIdentity,
   SshEnvironmentGateway,
-} from "@t3tools/client-runtime/platform";
+} from "@awen/client-runtime/platform";
 import {
   BearerConnectionCredential,
   BearerConnectionProfile,
@@ -20,11 +18,10 @@ import {
   PrimaryConnectionRegistration,
   PrimaryConnectionTarget,
   Wakeups,
-} from "@t3tools/client-runtime/connection";
-import { bootstrapRemoteBearerSession } from "@t3tools/client-runtime/authorization";
-import { fetchRemoteEnvironmentDescriptor } from "@t3tools/client-runtime/environment";
-import { managedRelayAccountChanges, managedRelaySessionAtom } from "@t3tools/client-runtime/relay";
-import { EnvironmentRpcRequestObserver } from "@t3tools/client-runtime/rpc";
+} from "@awen/client-runtime/connection";
+import { bootstrapRemoteBearerSession } from "@awen/client-runtime/authorization";
+import { fetchRemoteEnvironmentDescriptor } from "@awen/client-runtime/environment";
+import { EnvironmentRpcRequestObserver } from "@awen/client-runtime/rpc";
 import {
   AuthStandardClientScopes,
   type DesktopBridge,
@@ -32,7 +29,7 @@ import {
   type DesktopSshEnvironmentBootstrap,
   type DesktopSshEnvironmentTarget,
   PRIMARY_LOCAL_ENVIRONMENT_ID,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -54,7 +51,6 @@ import {
 import { clearComposerDraftsEnvironment } from "../composerDraftStore";
 import { isHostedStaticApp } from "../hostedPairing";
 import { isLocalEnvironmentDisabled } from "../localEnvironment";
-import { appAtomRegistry } from "../rpc/atomRegistry";
 import { acknowledgeRpcRequest, trackRpcRequestSent } from "../rpc/requestLatencyState";
 import {
   desktopLocalConnectionId,
@@ -94,27 +90,22 @@ const connectivityLayer = Connectivity.layer({
 });
 
 const wakeupsLayer = Wakeups.layer({
-  changes: Stream.merge(
-    Stream.callback<"application-active">((queue) =>
-      Effect.acquireRelease(
+  changes: Stream.callback<"application-active">((queue) =>
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        const listener = () => {
+          if (document.visibilityState === "visible") {
+            Queue.offerUnsafe(queue, "application-active");
+          }
+        };
+        document.addEventListener("visibilitychange", listener);
+        return listener;
+      }),
+      (listener) =>
         Effect.sync(() => {
-          const listener = () => {
-            if (document.visibilityState === "visible") {
-              Queue.offerUnsafe(queue, "application-active");
-            }
-          };
-          document.addEventListener("visibilitychange", listener);
-          return listener;
+          document.removeEventListener("visibilitychange", listener);
         }),
-        (listener) =>
-          Effect.sync(() => {
-            document.removeEventListener("visibilitychange", listener);
-          }),
-      ).pipe(Effect.asVoid),
-    ),
-    managedRelayAccountChanges(appAtomRegistry).pipe(
-      Stream.map(() => "credentials-changed" as const),
-    ),
+    ).pipe(Effect.asVoid),
   ),
 });
 
@@ -166,14 +157,14 @@ const assertSshHostTrusted = Effect.fn("web.connectionPlatform.ssh.assertTrusted
     return yield* new ConnectionBlockedError({
       reason: "unsupported",
       detail:
-        "The SSH host key changed for this target. ACode blocks the connection; verify the key outside the app and remove the old known_hosts entry to trust a new key.",
+        "The SSH host key changed for this target. Awen blocks the connection; verify the key outside the app and remove the old known_hosts entry to trust a new key.",
     });
   }
   if (trust.status === "new") {
     return yield* new ConnectionBlockedError({
       reason: "permission",
       detail:
-        "The SSH host key must be trusted before ACode can install or start the remote daemon.",
+        "The SSH host key must be trusted before Awen can install or start the remote daemon.",
     });
   }
 });
@@ -214,7 +205,7 @@ const exchangeSshPairingCredential = Effect.fn("web.connectionPlatform.ssh.excha
         bridge.bootstrapSshBearerSession(bootstrap.httpBaseUrl, bootstrap.pairingToken!),
       catch: sshPreparationError,
     });
-    return access.access_token;
+    return access.token;
   },
 );
 
@@ -250,39 +241,6 @@ const capabilitiesLayer = Layer.effectContext(
     const presentation = ClientPresentation.of({
       metadata: clientMetadata(),
       scopes: AuthStandardClientScopes,
-    });
-    const cloudSession = CloudSession.of({
-      identity: Effect.sync(() =>
-        Option.fromNullishOr(appAtomRegistry.get(managedRelaySessionAtom)),
-      ),
-      clerkToken: Effect.gen(function* () {
-        const session = appAtomRegistry.get(managedRelaySessionAtom);
-        if (session === null) {
-          return yield* new ConnectionBlockedError({
-            reason: "authentication",
-            detail: "Sign in to T3 Connect to connect this environment.",
-          });
-        }
-        const token = yield* session.readClerkToken().pipe(
-          Effect.mapError(
-            (error) =>
-              new ConnectionTransientError({
-                reason: "network",
-                detail: error.message,
-              }),
-          ),
-        );
-        if (token === null) {
-          return yield* new ConnectionBlockedError({
-            reason: "authentication",
-            detail: "The T3 Connect session is unavailable.",
-          });
-        }
-        return token;
-      }),
-    });
-    const identity = RelayDeviceIdentity.of({
-      deviceId: Effect.succeed(Option.none()),
     });
     const primaryAuth = PrimaryEnvironmentAuth.of({
       bearerToken: Effect.tryPromise({
@@ -341,10 +299,8 @@ const capabilitiesLayer = Layer.effectContext(
       }),
     });
 
-    return Context.make(CloudSession, cloudSession).pipe(
+    return Context.make(ClientPresentation, presentation).pipe(
       Context.add(PrimaryEnvironmentAuth, primaryAuth),
-      Context.add(RelayDeviceIdentity, identity),
-      Context.add(ClientPresentation, presentation),
       Context.add(SshEnvironmentGateway, ssh),
     );
   }),
@@ -417,10 +373,10 @@ const loadSecondaryConnectionRegistration = Effect.fn(
         httpBaseUrl,
         wsBaseUrl,
       }),
-      credential: new BearerConnectionCredential({ token: access.access_token }),
+      credential: new BearerConnectionCredential({ token: access.token }),
     }),
-    expiresAtEpochMs: secondaryBearerExpiresAtEpochMs(issuedAtEpochMs, access.expires_in),
-    refreshAtEpochMs: secondaryBearerRefreshAtEpochMs(issuedAtEpochMs, access.expires_in),
+    expiresAtEpochMs: secondaryBearerExpiresAtEpochMs(issuedAtEpochMs, access.expiresInSeconds),
+    refreshAtEpochMs: secondaryBearerRefreshAtEpochMs(issuedAtEpochMs, access.expiresInSeconds),
   };
 });
 

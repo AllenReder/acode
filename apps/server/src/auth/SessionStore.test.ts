@@ -1,5 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentId } from "@awen/contracts";
 import { expect, it } from "@effect/vitest";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -33,7 +33,9 @@ const makeServerConfigLayer = (overrides?: Partial<ServerConfig.ServerConfig["Se
         ...overrides,
       } satisfies ServerConfig.ServerConfig["Service"];
     }),
-  ).pipe(Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-auth-session-test-" })));
+  ).pipe(
+    Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "awen-auth-session-test-" })),
+  );
 
 const makeServerEnvironmentLayer = (environmentId: EnvironmentId) =>
   Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
@@ -51,12 +53,11 @@ const makeSessionStoreLayer = (
     Layer.provide(makeServerConfigLayer(overrides)),
   );
 
-const relaySessionInput = {
-  subject: "managed-relay-bootstrap",
-  method: "dpop-access-token",
-  proofKeyThumbprint: "relay-proof-key",
+const remoteSessionInput = {
+  subject: "paired-remote-client",
+  method: "bearer-access-token",
   ttl: Duration.hours(1),
-  client: { label: "Relay desktop", deviceType: "desktop" },
+  client: { label: "Awen desktop", deviceType: "desktop" },
 } as const;
 
 const makeDiskSessionStoreLayer = Effect.fn("makeDiskSessionStoreLayer")(function* (
@@ -126,9 +127,9 @@ it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
           ),
         );
 
-      const original = yield* cookieName("/srv/t3-one", EnvironmentId.make("environment-one"));
-      const moved = yield* cookieName("/srv/t3-moved", EnvironmentId.make("environment-one"));
-      const other = yield* cookieName("/srv/t3-one", EnvironmentId.make("environment-two"));
+      const original = yield* cookieName("/srv/awen-one", EnvironmentId.make("environment-one"));
+      const moved = yield* cookieName("/srv/awen-moved", EnvironmentId.make("environment-one"));
+      const other = yield* cookieName("/srv/awen-one", EnvironmentId.make("environment-two"));
 
       expect(moved).toBe(original);
       expect(other).not.toBe(original);
@@ -139,8 +140,8 @@ it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const token = "reusable-dev-auth-token-that-is-long-enough";
-      const baseA = yield* fs.makeTempDirectoryScoped({ prefix: "t3-dev-auth-a-" });
-      const baseB = yield* fs.makeTempDirectoryScoped({ prefix: "t3-dev-auth-b-" });
+      const baseA = yield* fs.makeTempDirectoryScoped({ prefix: "awen-dev-auth-a-" });
+      const baseB = yield* fs.makeTempDirectoryScoped({ prefix: "awen-dev-auth-b-" });
       const layerA = yield* makeDiskSessionStoreLayer(baseA, token);
       const fromA = yield* Effect.gen(function* () {
         const sessions = yield* SessionStore.SessionStore;
@@ -184,7 +185,7 @@ it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
   it.effect("invalidates old dev credentials and tickets after rotation or removal", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-dev-auth-rotation-" });
+      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "awen-dev-auth-rotation-" });
       const oldToken = "old-reusable-dev-auth-token-that-is-long-enough";
       const newToken = "new-reusable-dev-auth-token-that-is-long-enough";
       const initialLayer = yield* makeDiskSessionStoreLayer(baseDir, oldToken);
@@ -339,7 +340,6 @@ it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
         "orchestration:operate",
         "terminal:operate",
         "review:write",
-        "relay:read",
       ]);
     }).pipe(Effect.provide(Layer.merge(makeSessionStoreLayer(), TestClock.layer()))),
   );
@@ -582,10 +582,10 @@ it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
     }).pipe(Effect.provide(Layer.merge(makeSessionStoreLayer(), TestClock.layer()))),
   );
 
-  it.effect("keeps connected relay sessions visible through expiry and HTTP renewal", () =>
+  it.effect("keeps connected bearer sessions visible through expiry and renewal", () =>
     Effect.gen(function* () {
       const sessions = yield* SessionStore.SessionStore;
-      const original = yield* sessions.issue(relaySessionInput);
+      const original = yield* sessions.issue(remoteSessionInput);
       const websocket = yield* sessions.issueWebSocketToken(original.sessionId, {
         ttl: Duration.hours(2),
       });
@@ -605,7 +605,7 @@ it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
         _tag: "WebSocketSessionExpiredError",
       });
 
-      const renewed = yield* sessions.issue(relaySessionInput);
+      const renewed = yield* sessions.issue(remoteSessionInput);
       const afterRenewal = yield* sessions.listActive();
       expect(renewed.sessionId).not.toBe(original.sessionId);
       expect(afterRenewal).toHaveLength(2);
@@ -627,7 +627,7 @@ it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
     (socketCount) =>
       Effect.gen(function* () {
         const sessions = yield* SessionStore.SessionStore;
-        const issued = yield* sessions.issue(relaySessionInput);
+        const issued = yield* sessions.issue(remoteSessionInput);
         const changes = yield* Queue.unbounded<SessionStore.SessionCredentialChange>();
         yield* sessions.streamChanges.pipe(
           Stream.runForEach((change) => Queue.offer(changes, change)),
@@ -671,7 +671,7 @@ it.layer(NodeServices.layer)("SessionStore.layer", (it) => {
       Effect.gen(function* () {
         const sessions = yield* SessionStore.SessionStore;
         const administrative = yield* sessions.issue({ subject: "desktop-bootstrap" });
-        const client = yield* sessions.issue(relaySessionInput);
+        const client = yield* sessions.issue(remoteSessionInput);
         yield* sessions.markConnected(client.sessionId);
         yield* TestClock.adjust(Duration.minutes(61));
         const changes = yield* Queue.unbounded<SessionStore.SessionCredentialChange>();

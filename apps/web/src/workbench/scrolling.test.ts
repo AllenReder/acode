@@ -3,7 +3,7 @@ import type {
   WorkspaceId,
   AgentSessionId,
   TerminalSessionId,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import { deserializeWorkbenchSnapshot, serializeWorkbenchSnapshot } from "./workbenchPersistence";
 import { describe, expect, it } from "vite-plus/test";
 import { createWorkbenchStore } from "./workbenchStore";

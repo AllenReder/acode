@@ -14,10 +14,10 @@
       (() => {
         const LIGHT_BACKGROUND = "#ffffff";
         const DARK_BACKGROUND = "#0a0a0a";
-        const CUSTOM_THEMES_STORAGE_KEY = "acode:themes:v1";
-        const THEME_FOLLOW_SYSTEM_STORAGE_KEY = "acode:theme-follow-system";
-        const THEME_APPEARANCE_MODE_STORAGE_KEY = "acode:theme-appearance-mode";
-        const THEME_HALVES_STORAGE_KEY = "acode:theme-halves:v1";
+        const CUSTOM_THEMES_STORAGE_KEY = "awen:themes:v1";
+        const THEME_FOLLOW_SYSTEM_STORAGE_KEY = "awen:theme-follow-system";
+        const THEME_APPEARANCE_MODE_STORAGE_KEY = "awen:theme-appearance-mode";
+        const THEME_HALVES_STORAGE_KEY = "awen:theme-halves:v1";
         const SPLASH_COLORS = {
           light: {
             background: "#ffffff",
@@ -51,7 +51,7 @@
         // Keep this small boot-time copy in sync with the built-in palettes so
         // the selected theme is visible before the app has mounted.
         const BUILT_IN_THEME_PALETTES = {
-          "acode-default": {
+          "awen-default": {
             light: {
               background: "oklch(0.985 0.002 260)",
               foreground: "oklch(0.2 0.005 260)",
@@ -137,7 +137,7 @@
           },
         };
         // Keep the built-in mode list in sync with the runtime so the selected
-        // T3 Chat palette is visible before React has mounted.
+        // Awen Chat palette is visible before React has mounted.
         const BUILT_IN_THEME_MODES = Object.fromEntries(
           Object.entries(BUILT_IN_THEME_PALETTES).map(([id, palettes]) => [
             id,
@@ -148,7 +148,7 @@
           "system",
           "light",
           "dark",
-          "acode-default",
+          "awen-default",
           "zinc",
           "slate",
           "midnight",
@@ -227,10 +227,10 @@
         };
 
         try {
-          const storedTheme = window.localStorage.getItem("acode:theme");
+          const storedTheme = window.localStorage.getItem("awen:theme");
           const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-          // Older builds stored the dark T3 Chat palette as its own theme id
-          // and every maintainer theme under a t3- prefix; keep those
+          // Older builds stored the dark Awen Chat palette as its own theme id
+          // and every maintainer theme under a awen- prefix; keep those
           // preferences readable. Mirrors the runtime's legacy alias table.
           const themeId = storedTheme === null ? "" : storedTheme;
           const legacyMode = null;
@@ -488,13 +488,13 @@
         cursor: pointer;
       }
     </style>
-    <title>T3 Code (Alpha)</title>
+    <title>Awen (Alpha)</title>
   </head>
   <body>
     <div id="root">
       <div id="boot-shell">
-        <div id="boot-shell-card" aria-label="T3 Code splash screen">
-          <img id="boot-shell-logo" src="/apple-touch-icon.png" alt="T3 Code" />
+        <div id="boot-shell-card" aria-label="Awen splash screen">
+          <img id="boot-shell-logo" src="/apple-touch-icon.png" alt="Awen" />
         </div>
       </div>
     </div>

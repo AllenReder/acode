@@ -1,4 +1,4 @@
-import { EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentId } from "@awen/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Option from "effect/Option";
 
@@ -123,14 +123,14 @@ describe("connection presentation", () => {
           attempt: 2,
           lastFailure: new ConnectionTransientError({
             reason: "transport",
-            detail: "Relay connection timed out.",
+            detail: "Remote bearer connection timed out.",
             traceId: "trace-retry",
           }),
         }),
       ),
     ).toEqual({
       phase: "reconnecting",
-      error: "Relay connection timed out.",
+      error: "Remote bearer connection timed out.",
       traceId: "trace-retry",
     });
   });
@@ -138,11 +138,11 @@ describe("connection presentation", () => {
   it("combines reconnect progress with the latest failure", () => {
     const connection = {
       phase: "reconnecting",
-      error: "Relay request timed out.",
+      error: "Remote bearer request timed out.",
       traceId: "trace-retry",
     } as const;
     expect(connectionStatusText(connection)).toBe(
-      "Failed to connect. Reconnecting... Reason: Relay request timed out.",
+      "Failed to connect. Reconnecting... Reason: Remote bearer request timed out.",
     );
     expect(connectionStatusTitle(connection)).toBe("Failed to connect. Reconnecting...");
   });

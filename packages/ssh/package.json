@@ -1,5 +1,5 @@
 {
-  "name": "@t3tools/ssh",
+  "name": "@awen/ssh",
   "private": true,
   "type": "module",
   "exports": {
@@ -37,8 +37,8 @@
     "test": "vp test run"
   },
   "dependencies": {
-    "@t3tools/contracts": "workspace:*",
-    "@t3tools/shared": "workspace:*",
+    "@awen/contracts": "workspace:*",
+    "@awen/shared": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

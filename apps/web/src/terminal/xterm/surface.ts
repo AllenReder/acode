@@ -131,7 +131,7 @@ export class XtermTerminalSurface {
       shouldXtermHandleKey(event, this.options.beforeKey),
     );
 
-    mount.classList.add("acode-terminal-surface");
+    mount.classList.add("awen-terminal-surface");
     this.terminal.open(mount);
     if (options.topFade) {
       const update = () => this.updateTopFade();

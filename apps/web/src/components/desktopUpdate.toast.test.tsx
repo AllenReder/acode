@@ -1,6 +1,6 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import type { DesktopUpdateState } from "@t3tools/contracts";
+import type { DesktopUpdateState } from "@awen/contracts";
 
 const testState = vi.hoisted(() => ({
   addToast: vi.fn(),
@@ -42,7 +42,7 @@ function downloadedState(overrides: Partial<DesktopUpdateState> = {}): DesktopUp
   return {
     enabled: true,
     status: "downloaded",
-    channel: "latest",
+    channel: "stable",
     currentVersion: "0.0.29",
     hostArch: "arm64",
     appArch: "arm64",
@@ -73,7 +73,7 @@ describe("showDesktopUpdateDownloadedToast", () => {
     link?.props.onClick?.();
     await vi.waitFor(() => {
       expect(openExternal).toHaveBeenCalledWith(
-        "https://github.com/pingdotgg/t3code/releases/tag/v0.0.30",
+        "https://github.com/AllenReder/awen/releases/tag/v0.0.30",
       );
     });
     expect(testState.addToast).toHaveBeenCalledTimes(1);
@@ -91,7 +91,7 @@ describe("showDesktopUpdateDownloadedToast", () => {
 
     await vi.waitFor(() => {
       expect(openExternal).toHaveBeenCalledWith(
-        "https://github.com/pingdotgg/t3code/releases/tag/v0.0.30",
+        "https://github.com/AllenReder/awen/releases/tag/v0.0.30",
       );
     });
   });

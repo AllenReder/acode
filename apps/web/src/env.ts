@@ -1,4 +1,4 @@
-/** True when the WebView is running inside the ACode Tauri shell. */
+/** True when the WebView is running inside the Awen Tauri shell. */
 export const isTauri =
   typeof window !== "undefined" &&
   ("__TAURI_INTERNALS__" in window ||

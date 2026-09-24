@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
+  formatAppDisplayName,
   resolveServerBackedAppDisplayName,
   resolveServerBackedAppStageLabel,
 } from "./branding.logic";
@@ -24,9 +25,9 @@ describe("branding", () => {
       value: {
         desktopBridge: {
           getAppBranding: () => ({
-            baseName: "T3 Code",
-            stageLabel: "Nightly",
-            displayName: "T3 Code (Nightly)",
+            baseName: "Awen",
+            stageLabel: "Alpha",
+            displayName: "Awen (Alpha)",
           }),
         },
       },
@@ -34,83 +35,56 @@ describe("branding", () => {
 
     const branding = await import("./branding");
 
-    expect(branding.APP_BASE_NAME).toBe("T3 Code");
-    expect(branding.APP_STAGE_LABEL).toBe("Nightly");
-    expect(branding.APP_DISPLAY_NAME).toBe("T3 Code (Nightly)");
-  });
-
-  it("normalizes hosted app channel metadata", async () => {
-    vi.stubEnv("VITE_HOSTED_APP_CHANNEL", "nightly");
-
-    const branding = await import("./branding");
-
-    expect(branding.HOSTED_APP_CHANNEL).toBe("nightly");
-    expect(branding.HOSTED_APP_CHANNEL_LABEL).toBe("Nightly");
-    expect(branding.APP_STAGE_LABEL).toBe("Nightly");
-    expect(branding.APP_DISPLAY_NAME).toBe("T3 Code (Nightly)");
-  });
-
-  it("does not label the latest hosted app channel", async () => {
-    vi.stubEnv("VITE_HOSTED_APP_CHANNEL", "latest");
-
-    const branding = await import("./branding");
-
-    expect(branding.HOSTED_APP_CHANNEL).toBe("latest");
-    expect(branding.HOSTED_APP_CHANNEL_LABEL).toBe("Latest");
-    expect(branding.APP_STAGE_LABEL).toBe("Latest");
-    expect(branding.APP_DISPLAY_NAME).toBe("T3 Code");
-  });
-
-  it("ignores unknown hosted app channels", async () => {
-    vi.stubEnv("VITE_HOSTED_APP_CHANNEL", "preview");
-
-    const branding = await import("./branding");
-
-    expect(branding.HOSTED_APP_CHANNEL).toBeNull();
-    expect(branding.HOSTED_APP_CHANNEL_LABEL).toBeNull();
+    expect(branding.APP_BASE_NAME).toBe("Awen");
+    expect(branding.APP_STAGE_LABEL).toBe("Alpha");
+    expect(branding.APP_DISPLAY_NAME).toBe("Awen (Alpha)");
   });
 });
 
 describe("branding logic", () => {
-  it("returns Nightly for nightly primary server versions", () => {
-    expect(
-      resolveServerBackedAppStageLabel({
-        primaryServerVersion: "0.0.28-nightly.20260616.12",
-        fallbackStageLabel: "Alpha",
-      }),
-    ).toBe("Nightly");
+  it("uses the product name alone for stable builds", () => {
+    expect(formatAppDisplayName({ baseName: "Awen", stageLabel: "Stable" })).toBe("Awen");
   });
 
-  it("updates the display name for nightly primary server versions", () => {
+  it("returns Alpha for prerelease primary server versions", () => {
+    expect(
+      resolveServerBackedAppStageLabel({
+        primaryServerVersion: "0.1.0-alpha.1",
+        fallbackStageLabel: "Dev",
+      }),
+    ).toBe("Alpha");
+  });
+
+  it("updates the display name for prerelease primary server versions", () => {
     expect(
       resolveServerBackedAppDisplayName({
-        baseName: "T3 Code",
-        fallbackDisplayName: "T3 Code (Alpha)",
-        fallbackStageLabel: "Alpha",
-        primaryServerVersion: "0.0.28-nightly.20260616.12",
+        baseName: "Awen",
+        fallbackDisplayName: "Awen (Dev)",
+        fallbackStageLabel: "Dev",
+        primaryServerVersion: "0.1.0-alpha.1",
       }),
-    ).toBe("T3 Code (Nightly)");
+    ).toBe("Awen (Alpha)");
   });
 
   it("keeps the fallback display name for stable primary server versions", () => {
     expect(
       resolveServerBackedAppDisplayName({
-        baseName: "T3 Code",
-        fallbackDisplayName: "T3 Code (Alpha)",
+        baseName: "Awen",
+        fallbackDisplayName: "Awen (Alpha)",
         fallbackStageLabel: "Alpha",
         primaryServerVersion: "0.0.27",
       }),
-    ).toBe("T3 Code (Alpha)");
+    ).toBe("Awen (Alpha)");
   });
 
-  it("keeps the fallback display name for malformed nightly primary server versions", () => {
+  it("keeps the fallback display name for malformed prerelease versions", () => {
     expect(
       resolveServerBackedAppDisplayName({
-        baseName: "T3 Code",
-        fallbackDisplayName: "T3 Code (Alpha)",
-        fallbackStageLabel: "Alpha",
-        primaryServerVersion: "0.0.28-nightly.20260616",
+        baseName: "Awen",
+        fallbackDisplayName: "Awen (Dev)",
+        fallbackStageLabel: "Dev",
+        primaryServerVersion: "0.1.0-alpha.01",
       }),
-    ).toBe("T3 Code (Alpha)");
+    ).toBe("Awen (Dev)");
   });
 });

@@ -1,7 +1,7 @@
-import { Connection } from "@t3tools/client-runtime/connection";
-import { shellSnapshotLoaderLayer } from "@t3tools/client-runtime/state/shell";
-import { threadSnapshotLoaderLayer } from "@t3tools/client-runtime/state/threads";
-import { pullRequestDiffLoaderLayer } from "@t3tools/client-runtime/state/pull-requests";
+import { Connection } from "@awen/client-runtime/connection";
+import { shellSnapshotLoaderLayer } from "@awen/client-runtime/state/shell";
+import { threadSnapshotLoaderLayer } from "@awen/client-runtime/state/threads";
+import { pullRequestDiffLoaderLayer } from "@awen/client-runtime/state/pull-requests";
 import * as Layer from "effect/Layer";
 import { Atom } from "effect/unstable/reactivity";
 
@@ -21,14 +21,6 @@ const snapshotLoaderLayer = Layer.mergeAll(
   shellSnapshotLoaderLayer,
   pullRequestDiffLoaderLayer,
 );
-
-type ConnectionLayerSource =
-  | typeof Connection.layer
-  | typeof snapshotLoaderLayer
-  | typeof runtimeContextLayer
-  | typeof connectionPlatformLayer
-  | typeof backgroundActivityObserverLayer
-  | typeof backgroundActivityReporterLayer;
 
 const providedClientConnectionLayer = snapshotLoaderLayer.pipe(
   Layer.provideMerge(
@@ -52,6 +44,6 @@ const connectionLayer = backgroundActivityReporterLayer.pipe(
 );
 
 export const connectionAtomRuntime: Atom.AtomRuntime<
-  Layer.Success<ConnectionLayerSource>,
-  Layer.Error<ConnectionLayerSource>
+  Layer.Success<typeof connectionLayer>,
+  Layer.Error<typeof connectionLayer>
 > = Atom.runtime(connectionLayer);

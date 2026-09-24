@@ -1,4 +1,4 @@
-import type { DispatchResult, OrchestrationCommand } from "@t3tools/contracts";
+import type { DispatchResult, OrchestrationCommand } from "@awen/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
@@ -6,25 +6,25 @@ import type { ProjectionSnapshotQueryShape } from "./Services/ProjectionSnapshot
 
 /**
  * Enrich successful thread creation, including bootstrap creation, with the
- * durable ACode identity. The enrichment is additive so older projection
- * services can still acknowledge the underlying T3 command.
+ * durable Awen identity. The enrichment is additive so older projection
+ * services can still acknowledge the underlying Awen command.
  */
 export function enrichOrchestrationDispatchResult(input: {
   readonly command: OrchestrationCommand;
   readonly result: DispatchResult;
-  readonly readAcodeAgentSessionByThreadId?: ProjectionSnapshotQueryShape["getAcodeAgentSessionByThreadId"];
+  readonly readAwenAgentSessionByThreadId?: ProjectionSnapshotQueryShape["getAwenAgentSessionByThreadId"];
 }): Effect.Effect<DispatchResult> {
-  const { command, result, readAcodeAgentSessionByThreadId } = input;
+  const { command, result, readAwenAgentSessionByThreadId } = input;
   const threadId =
     command.type === "thread.create" ||
     (command.type === "thread.turn.start" && command.bootstrap?.createThread !== undefined)
       ? command.threadId
       : null;
-  if (threadId === null || readAcodeAgentSessionByThreadId === undefined) {
+  if (threadId === null || readAwenAgentSessionByThreadId === undefined) {
     return Effect.succeed(result);
   }
 
-  return readAcodeAgentSessionByThreadId(threadId).pipe(
+  return readAwenAgentSessionByThreadId(threadId).pipe(
     Effect.map((session) =>
       Option.isSome(session)
         ? { ...result, agentSession: session.value }

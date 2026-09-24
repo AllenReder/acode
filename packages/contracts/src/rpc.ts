@@ -53,17 +53,17 @@ import {
   WorktreeSetupSubscribeInput,
 } from "./worktreeSetup.ts";
 import {
-  AcodeWorkspaceAssociateInput,
-  AcodeWorkspaceAssociateResult,
-  AcodeWorkspaceCreateWorktreeInput,
-  AcodeWorkspaceCreateWorktreeResult,
-  AcodeWorkspaceError,
-  AcodeWorkspaceRemoveInput,
-  AcodeWorkspaceRemoveResult,
-  AcodeWorkspaceRenameInput,
-  AcodeWorkspaceRenameResult,
-  AcodeProjectRenameInput,
-  AcodeProjectRenameResult,
+  AwenWorkspaceAssociateInput,
+  AwenWorkspaceAssociateResult,
+  AwenWorkspaceCreateWorktreeInput,
+  AwenWorkspaceCreateWorktreeResult,
+  AwenWorkspaceError,
+  AwenWorkspaceRemoveInput,
+  AwenWorkspaceRemoveResult,
+  AwenWorkspaceRenameInput,
+  AwenWorkspaceRenameResult,
+  AwenProjectRenameInput,
+  AwenProjectRenameResult,
 } from "./workspace.ts";
 import {
   GitActionProgressEvent,
@@ -152,11 +152,6 @@ import {
   PullRequestUnavailableError,
   PullRequestUpdateInput,
 } from "./pullRequest.ts";
-import {
-  RelayClientInstallFailedError,
-  RelayClientInstallProgressEventSchema,
-  RelayClientStatusSchema,
-} from "./relayClient.ts";
 import {
   ProjectListEntriesError,
   ProjectListEntriesInput,
@@ -334,12 +329,12 @@ export const WS_METHODS = {
   gitResolvePullRequest: "git.resolvePullRequest",
   gitPreparePullRequestThread: "git.preparePullRequestThread",
 
-  // ACode Workspace methods
-  acodeWorkspaceAssociate: "acodeWorkspace.associate",
-  acodeWorkspaceCreateWorktree: "acodeWorkspace.createWorktree",
-  acodeWorkspaceRemove: "acodeWorkspace.remove",
-  acodeWorkspaceRename: "acodeWorkspace.rename",
-  acodeProjectRename: "acodeProject.rename",
+  // Awen Workspace methods
+  awenWorkspaceAssociate: "awenWorkspace.associate",
+  awenWorkspaceCreateWorktree: "awenWorkspace.createWorktree",
+  awenWorkspaceRemove: "awenWorkspace.remove",
+  awenWorkspaceRename: "awenWorkspace.rename",
+  awenProjectRename: "awenProject.rename",
 
   // Review methods
   reviewGetDiffPreview: "review.getDiffPreview",
@@ -402,10 +397,6 @@ export const WS_METHODS = {
   serverGetBackgroundPolicy: "server.getBackgroundPolicy",
   serverGetUsageSummary: "server.getUsageSummary",
   serverRefreshUsageRates: "server.refreshUsageRates",
-
-  // Cloud environment methods
-  cloudGetRelayClientStatus: "cloud.getRelayClientStatus",
-  cloudInstallRelayClient: "cloud.installRelayClient",
 
   // Pull request methods
   pullRequestsList: "pullRequests.list",
@@ -666,19 +657,6 @@ const WsServerSignalProcessRpc = Rpc.make(WS_METHODS.serverSignalProcess, {
   payload: ServerSignalProcessInput,
   success: ServerSignalProcessResult,
   error: EnvironmentAuthorizationError,
-});
-
-const WsCloudGetRelayClientStatusRpc = Rpc.make(WS_METHODS.cloudGetRelayClientStatus, {
-  payload: Schema.Struct({}),
-  success: RelayClientStatusSchema,
-  error: EnvironmentAuthorizationError,
-});
-
-const WsCloudInstallRelayClientRpc = Rpc.make(WS_METHODS.cloudInstallRelayClient, {
-  payload: Schema.Struct({}),
-  success: RelayClientInstallProgressEventSchema,
-  error: Schema.Union([RelayClientInstallFailedError, EnvironmentAuthorizationError]),
-  stream: true,
 });
 
 const WsServerReportClientActivityRpc = Rpc.make(WS_METHODS.serverReportClientActivity, {
@@ -1080,39 +1058,39 @@ const WsVcsInitRpc = Rpc.make(WS_METHODS.vcsInit, {
   error: Schema.Union([VcsError, EnvironmentAuthorizationError]),
 });
 
-const WsAcodeWorkspaceAssociateRpc = Rpc.make(WS_METHODS.acodeWorkspaceAssociate, {
-  payload: AcodeWorkspaceAssociateInput,
-  success: AcodeWorkspaceAssociateResult,
-  error: Schema.Union([AcodeWorkspaceError, EnvironmentAuthorizationError]),
+const WsAwenWorkspaceAssociateRpc = Rpc.make(WS_METHODS.awenWorkspaceAssociate, {
+  payload: AwenWorkspaceAssociateInput,
+  success: AwenWorkspaceAssociateResult,
+  error: Schema.Union([AwenWorkspaceError, EnvironmentAuthorizationError]),
 });
 
-const WsAcodeWorkspaceCreateWorktreeRpc = Rpc.make(WS_METHODS.acodeWorkspaceCreateWorktree, {
-  payload: AcodeWorkspaceCreateWorktreeInput,
-  success: AcodeWorkspaceCreateWorktreeResult,
-  error: Schema.Union([AcodeWorkspaceError, EnvironmentAuthorizationError]),
+const WsAwenWorkspaceCreateWorktreeRpc = Rpc.make(WS_METHODS.awenWorkspaceCreateWorktree, {
+  payload: AwenWorkspaceCreateWorktreeInput,
+  success: AwenWorkspaceCreateWorktreeResult,
+  error: Schema.Union([AwenWorkspaceError, EnvironmentAuthorizationError]),
 });
 
-const WsAcodeWorkspaceRemoveRpc = Rpc.make(WS_METHODS.acodeWorkspaceRemove, {
-  payload: AcodeWorkspaceRemoveInput,
-  success: AcodeWorkspaceRemoveResult,
-  error: Schema.Union([AcodeWorkspaceError, EnvironmentAuthorizationError]),
+const WsAwenWorkspaceRemoveRpc = Rpc.make(WS_METHODS.awenWorkspaceRemove, {
+  payload: AwenWorkspaceRemoveInput,
+  success: AwenWorkspaceRemoveResult,
+  error: Schema.Union([AwenWorkspaceError, EnvironmentAuthorizationError]),
 });
 
-const WsAcodeWorkspaceRenameRpc = Rpc.make(WS_METHODS.acodeWorkspaceRename, {
-  payload: AcodeWorkspaceRenameInput,
-  success: AcodeWorkspaceRenameResult,
-  error: Schema.Union([AcodeWorkspaceError, EnvironmentAuthorizationError]),
+const WsAwenWorkspaceRenameRpc = Rpc.make(WS_METHODS.awenWorkspaceRename, {
+  payload: AwenWorkspaceRenameInput,
+  success: AwenWorkspaceRenameResult,
+  error: Schema.Union([AwenWorkspaceError, EnvironmentAuthorizationError]),
 });
 
-const WsAcodeProjectRenameRpc = Rpc.make(WS_METHODS.acodeProjectRename, {
-  payload: AcodeProjectRenameInput,
-  success: AcodeProjectRenameResult,
-  error: Schema.Union([AcodeWorkspaceError, EnvironmentAuthorizationError]),
+const WsAwenProjectRenameRpc = Rpc.make(WS_METHODS.awenProjectRename, {
+  payload: AwenProjectRenameInput,
+  success: AwenProjectRenameResult,
+  error: Schema.Union([AwenWorkspaceError, EnvironmentAuthorizationError]),
 });
 
 /**
  * Ephemeral live diff preview for compact/mobile surfaces.
- * Not the persisted T3 Review model. Future review sessions should use
+ * Not the persisted Awen Review model. Future review sessions should use
  * review.open* + review.getSnapshot.
  */
 const WsReviewGetDiffPreviewRpc = Rpc.make(WS_METHODS.reviewGetDiffPreview, {
@@ -1451,8 +1429,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerReportClientActivityRpc,
   WsServerReportHostPowerStateRpc,
   WsServerGetBackgroundPolicyRpc,
-  WsCloudGetRelayClientStatusRpc,
-  WsCloudInstallRelayClientRpc,
   WsPullRequestsListRpc,
   WsPullRequestsListStatsRpc,
   WsPullRequestsSummaryRpc,
@@ -1561,17 +1537,17 @@ export const WsRpcGroup = RpcGroup.make(
 );
 
 /**
- * ACode Workspace management methods live in their own group on purpose: the
+ * Awen Workspace management methods live in their own group on purpose: the
  * server's handler layer type inference (`toLayer` over `HandlersServices`)
  * collapses to `any` once a single group crosses ~140 members, so the base
  * group stays put and this group gets its own handler layer.
  */
-export const WsAcodeWorkspaceRpcGroup = RpcGroup.make(
-  WsAcodeWorkspaceAssociateRpc,
-  WsAcodeWorkspaceCreateWorktreeRpc,
-  WsAcodeWorkspaceRemoveRpc,
-  WsAcodeWorkspaceRenameRpc,
-  WsAcodeProjectRenameRpc,
+export const WsAwenWorkspaceRpcGroup = RpcGroup.make(
+  WsAwenWorkspaceAssociateRpc,
+  WsAwenWorkspaceCreateWorktreeRpc,
+  WsAwenWorkspaceRemoveRpc,
+  WsAwenWorkspaceRenameRpc,
+  WsAwenProjectRenameRpc,
 );
 
 /**
@@ -1579,4 +1555,4 @@ export const WsAcodeWorkspaceRpcGroup = RpcGroup.make(
  * clients (`RpcClient.make`) must see every method, so they use this merged
  * group; only server handler construction uses the part groups.
  */
-export const WsRpcGroupAll = WsRpcGroup.merge(WsAcodeWorkspaceRpcGroup);
+export const WsRpcGroupAll = WsRpcGroup.merge(WsAwenWorkspaceRpcGroup);

@@ -1,6 +1,6 @@
 {
-  "name": "@t3tools/contracts",
-  "version": "0.0.43",
+  "name": "@awen/contracts",
+  "version": "0.1.0-alpha.1",
   "private": true,
   "files": [
     "dist"
@@ -14,10 +14,6 @@
     "./settings": {
       "types": "./src/settings.ts",
       "import": "./src/settings.ts"
-    },
-    "./relay": {
-      "types": "./src/relay.ts",
-      "import": "./src/relay.ts"
     }
   },
   "scripts": {

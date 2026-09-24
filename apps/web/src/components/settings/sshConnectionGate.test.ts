@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import type { DesktopSshEnvironmentTarget, DesktopSshHostKeyTrust } from "@t3tools/contracts";
+import type { DesktopSshEnvironmentTarget, DesktopSshHostKeyTrust } from "@awen/contracts";
 
 import { gateSshEnvironmentConnection, type SshConnectionGateDeps } from "./sshConnectionGate";
 
@@ -182,8 +182,8 @@ describe("gateSshEnvironmentConnection", () => {
     const message = confirm.mock.calls[0]?.[0] as string;
     expect(message).toContain("allen@devbox.example.test:22");
     expect(message).toContain("1.2.3");
-    expect(message).toContain("~/.acode/runtime/versions/1.2.3/");
-    expect(message).toContain("acode-server-1.2.3-linux-x64.tar.gz");
+    expect(message).toContain("~/.awen/runtime/versions/1.2.3/");
+    expect(message).toContain("awen-server-1.2.3-linux-x64.tar.gz");
     expect(message).toContain("SHA256SUMS");
     expect(message).toContain("OS: Linux");
     expect(message).toContain("Architecture: x86_64");
@@ -240,7 +240,7 @@ describe("gateSshEnvironmentConnection", () => {
 
     expect(confirm).toHaveBeenCalledTimes(2);
     expect(confirm.mock.calls[0]?.[0]).toContain("Trust this SSH host?");
-    expect(confirm.mock.calls[1]?.[0]).toContain("Set up the ACode daemon");
+    expect(confirm.mock.calls[1]?.[0]).toContain("Set up the Awen daemon");
   });
 
   it("cancels the connect when the install plan is declined", async () => {

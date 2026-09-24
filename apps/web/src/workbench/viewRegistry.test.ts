@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from "vite-plus/test";
 import type { ComponentType } from "react";
 
-import type { AgentSessionId, EnvironmentId, WorkspaceId } from "@t3tools/contracts";
+import type { AgentSessionId, EnvironmentId, WorkspaceId } from "@awen/contracts";
 
 import {
   clearViewRegistry,

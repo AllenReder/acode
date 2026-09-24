@@ -3,7 +3,7 @@
 See the open-source projects in `_refs/` for reference. They are read-only,
 gitignored, and not part of the build.
 
-The current `main` branch is the clean-slate ACode v1 implementation line.
+The current `main` branch is the clean-slate Awen v1 implementation line.
 Prefer adopting and adapting mature implementations from reference projects
 over reimplementing equivalent infrastructure from scratch. Do not restore
 pre-v1 implementation patterns unless a ticket or current architecture
@@ -35,7 +35,7 @@ docs: record the token split
 
 ### Issue tracker
 
-Issues and specs live as GitHub issues in `AllenReder/acode`, driven by the
+Issues and specs live as GitHub issues in `AllenReder/awen`, driven by the
 `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels

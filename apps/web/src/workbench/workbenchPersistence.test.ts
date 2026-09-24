@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { AgentSessionId, EnvironmentId, WorkspaceId } from "@t3tools/contracts";
+import type { AgentSessionId, EnvironmentId, WorkspaceId } from "@awen/contracts";
 
 import { leafIds } from "./layout";
 import type { ViewTarget } from "./viewRegistry";

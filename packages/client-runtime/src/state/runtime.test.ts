@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentId } from "@awen/contracts";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -57,7 +57,7 @@ class TestQueryError extends Schema.TaggedError<TestQueryError>()("TestQueryErro
 
 const OFFLINE_QUERY_FAILURE = new ConnectionTransientError({
   reason: "transport",
-  detail: "Relay is unavailable.",
+  detail: "Remote environment is unavailable.",
 });
 
 const BLOCKED_QUERY_FAILURE = new ConnectionBlockedError({
@@ -340,7 +340,7 @@ describe("environment query lifecycle", () => {
               stage: null,
               lastFailure: new ConnectionTransientError({
                 reason: "transport",
-                detail: "Relay session is reconnecting.",
+                detail: "Remote session is reconnecting.",
               }),
               retryAt: 1,
             }),

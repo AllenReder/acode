@@ -177,7 +177,7 @@ async function stopDaemonProcessTree(child) {
   if (typeof child.pid !== "number") return;
   const port = createProcessTreePort({
     hasRootExited: () => child.exitCode !== null || child.signalCode !== null,
-    // oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone browser harness owns native child process groups.
+    // oxlint-disable-next-line awen/no-global-process-runtime -- Standalone browser harness owns native child process groups.
     platform: NodeOS.platform(),
     rootExited: waitForChildExit(child),
   });
@@ -213,7 +213,7 @@ async function finishTemporaryHome(directory, keepTemporary) {
 
 async function main() {
   const temporaryRoot = await NodeFSP.mkdtemp(
-    NodePath.join(NodeOS.tmpdir(), "acode-workbench-e2e-"),
+    NodePath.join(NodeOS.tmpdir(), "awen-workbench-e2e-"),
   );
   const home = NodePath.join(temporaryRoot, "home");
   await NodeFSP.mkdir(home, { recursive: true });
@@ -228,13 +228,13 @@ async function main() {
   );
   const child = NodeChildProcess.spawn(devRunnerInvocation.command, devRunnerInvocation.args, {
     cwd: repositoryRoot,
-    // oxlint-disable-next-line t3code/no-global-process-runtime -- This standalone browser harness owns native child process groups.
+    // oxlint-disable-next-line awen/no-global-process-runtime -- This standalone browser harness owns native child process groups.
     detached: NodeOS.platform() !== "win32",
     env: withNodeModulesBin(
       {
         ...process.env,
         CI: "1",
-        T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "1",
+        AWEN_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "1",
       },
       [repositoryRoot],
     ),
@@ -261,7 +261,7 @@ async function main() {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     await context.addInitScript(() => {
       localStorage.setItem(
-        "acode:client-settings:v1",
+        "awen:client-settings:v1",
         JSON.stringify({ onboardingCompletedAt: new Date().toISOString() }),
       );
     });
@@ -283,7 +283,7 @@ async function main() {
       timeout: timeoutMs,
     });
     NodeAssert.equal(await page.locator(".sidebar-stage-backdrop").count(), 0);
-    NodeAssert.equal(await page.getByText("T3 Code", { exact: true }).count(), 0);
+    NodeAssert.equal(await page.getByText("Awen", { exact: true }).count(), 0);
 
     if (process.env.WORKBENCH_E2E_APPEARANCE_ONLY === "1") {
       await verifyWorkbenchAppearance(page);
@@ -743,7 +743,7 @@ async function main() {
       state: "detached",
       timeout: timeoutMs,
     });
-    await page.getByText("Welcome to ACode", { exact: true }).waitFor({ timeout: timeoutMs });
+    await page.getByText("Welcome to Awen", { exact: true }).waitFor({ timeout: timeoutMs });
     NodeAssert.equal(await page.locator("[data-pane-id]").count(), 1);
     NodeAssert.deepEqual(pageErrors, []);
 

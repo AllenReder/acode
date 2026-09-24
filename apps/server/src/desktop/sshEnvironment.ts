@@ -4,11 +4,11 @@ import type {
   DesktopSshEnvironmentTarget,
   DesktopSshEnvironmentPlan,
   DesktopSshHostKeyTrust,
-} from "@t3tools/contracts";
-import * as NetService from "@t3tools/shared/Net";
-import * as SshAuth from "@t3tools/ssh/auth";
-import { resolveSshTarget } from "@t3tools/ssh/command";
-import { discoverSshHosts } from "@t3tools/ssh/config";
+} from "@awen/contracts";
+import * as NetService from "@awen/shared/Net";
+import * as SshAuth from "@awen/ssh/auth";
+import { resolveSshTarget } from "@awen/ssh/command";
+import { discoverSshHosts } from "@awen/ssh/config";
 import {
   SshCommandError,
   SshHostDiscoveryError,
@@ -17,10 +17,10 @@ import {
   SshPairingError,
   SshPasswordPromptError,
   SshReadinessError,
-} from "@t3tools/ssh/errors";
-import * as SshTunnel from "@t3tools/ssh/tunnel";
-import { SshLocalPackageError } from "@t3tools/ssh/tunnel";
-import { inspectSshHostTrust, trustSshHostKey, type SshTrustError } from "@t3tools/ssh/trust";
+} from "@awen/ssh/errors";
+import * as SshTunnel from "@awen/ssh/tunnel";
+import { SshLocalPackageError } from "@awen/ssh/tunnel";
+import { inspectSshHostTrust, trustSshHostKey, type SshTrustError } from "@awen/ssh/trust";
 import { HttpClientError } from "effect/unstable/http";
 import * as Scope from "effect/Scope";
 import * as Context from "effect/Context";
@@ -86,10 +86,10 @@ export class DesktopSshEnvironment extends Context.Service<
       target: DesktopSshEnvironmentTarget,
     ) => Effect.Effect<void, DesktopSshEnvironmentOperationError>;
   }
->()("t3/desktop/sshEnvironment/DesktopSshEnvironment") {}
+>()("@awen/server/desktop/sshEnvironment/DesktopSshEnvironment") {}
 
 export interface DesktopSshEnvironmentLayerOptions {
-  readonly resolveCliRunner?: Effect.Effect<SshTunnel.RemoteT3RunnerOptions>;
+  readonly resolveCliRunner?: Effect.Effect<SshTunnel.RemoteAwenRunnerOptions>;
 }
 
 export function isDesktopSshPasswordPromptCancellation(

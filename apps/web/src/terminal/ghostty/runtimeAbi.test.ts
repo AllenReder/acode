@@ -22,7 +22,7 @@ describe("vendored libghostty-vt WebAssembly", () => {
     // revision as semver build metadata, so the repository's canonical VERSION
     // file is the single source of truth and drift is caught here without a copy.
     const result = await WebAssembly.instantiate(wasm.buffer as ArrayBuffer, {
-      env: { log: () => {} },
+      env: { log: () => {}, t3_write_pty: () => {} },
     });
     const instance = result instanceof WebAssembly.Instance ? result : result.instance;
     const memory = instance.exports.memory as WebAssembly.Memory;
@@ -44,6 +44,7 @@ describe("vendored libghostty-vt WebAssembly", () => {
     const instantiated = await WebAssembly.instantiate(bytes.buffer as ArrayBuffer, {
       env: {
         log: () => {},
+        t3_write_pty: () => {},
       },
     });
     const instance =
@@ -86,7 +87,7 @@ describe("vendored libghostty-vt WebAssembly", () => {
   it("blinks the default cursor until a program asks for a steady one", async () => {
     const result = await WebAssembly.instantiate(
       decodeWasmDataUrl(wasmDataUrl).buffer as ArrayBuffer,
-      { env: { log: () => {} } },
+      { env: { log: () => {}, t3_write_pty: () => {} } },
     );
     const instance = result instanceof WebAssembly.Instance ? result : result.instance;
     const memory = instance.exports.memory as WebAssembly.Memory;
@@ -159,7 +160,7 @@ describe("vendored libghostty-vt WebAssembly", () => {
   it("reports and scrolls the viewport with Ghostty's scrollbar state", async () => {
     const result = await WebAssembly.instantiate(
       decodeWasmDataUrl(wasmDataUrl).buffer as ArrayBuffer,
-      { env: { log: () => {} } },
+      { env: { log: () => {}, t3_write_pty: () => {} } },
     );
     const instance = result instanceof WebAssembly.Instance ? result : result.instance;
     const memory = instance.exports.memory as WebAssembly.Memory;
@@ -207,7 +208,7 @@ describe("vendored libghostty-vt WebAssembly", () => {
   it("routes terminal-generated replies through the shared callback table", async () => {
     const mainResult = await WebAssembly.instantiate(
       decodeWasmDataUrl(wasmDataUrl).buffer as ArrayBuffer,
-      { env: { log: () => {} } },
+      { env: { log: () => {}, t3_write_pty: () => {} } },
     );
     const main = mainResult instanceof WebAssembly.Instance ? mainResult : mainResult.instance;
     const memory = main.exports.memory as WebAssembly.Memory;
@@ -263,7 +264,7 @@ describe("vendored libghostty-vt WebAssembly", () => {
   it("formats the active selection with Ghostty's copy semantics", async () => {
     const result = await WebAssembly.instantiate(
       decodeWasmDataUrl(wasmDataUrl).buffer as ArrayBuffer,
-      { env: { log: () => {} } },
+      { env: { log: () => {}, t3_write_pty: () => {} } },
     );
     const instance = result instanceof WebAssembly.Instance ? result : result.instance;
     const memory = instance.exports.memory as WebAssembly.Memory;
@@ -323,7 +324,7 @@ describe("vendored libghostty-vt WebAssembly", () => {
   it("formats a cell-drag selection installed from screen grid refs", async () => {
     const result = await WebAssembly.instantiate(
       decodeWasmDataUrl(wasmDataUrl).buffer as ArrayBuffer,
-      { env: { log: () => {} } },
+      { env: { log: () => {}, t3_write_pty: () => {} } },
     );
     const instance = result instanceof WebAssembly.Instance ? result : result.instance;
     const memory = instance.exports.memory as WebAssembly.Memory;
@@ -406,7 +407,7 @@ describe("vendored libghostty-vt WebAssembly", () => {
   it("uses Ghostty for mouse encoding, word selection, and OSC 8 hit testing", async () => {
     const result = await WebAssembly.instantiate(
       decodeWasmDataUrl(wasmDataUrl).buffer as ArrayBuffer,
-      { env: { log: () => {} } },
+      { env: { log: () => {}, t3_write_pty: () => {} } },
     );
     const instance = result instanceof WebAssembly.Instance ? result : result.instance;
     const memory = instance.exports.memory as WebAssembly.Memory;
@@ -424,7 +425,7 @@ describe("vendored libghostty-vt WebAssembly", () => {
     expect(call("ghostty_terminal_new", 0, terminalSlot, terminalOptions)).toBe(0);
     const terminal = new DataView(memory.buffer).getUint32(terminalSlot, true);
     const input = new TextEncoder().encode(
-      "\u001b[?1000h\u001b[?1006h\u001b]8;;https://t3.codes/docs\u001b\\linked\u001b]8;;\u001b\\ plain",
+      "\u001b[?1000h\u001b[?1006h\u001b]8;;https://awen.codes/docs\u001b\\linked\u001b]8;;\u001b\\ plain",
     );
     const inputPointer = alloc(input.length);
     new Uint8Array(memory.buffer, inputPointer, input.length).set(input);
@@ -470,7 +471,7 @@ describe("vendored libghostty-vt WebAssembly", () => {
       0,
     );
     expect(new TextDecoder().decode(new Uint8Array(memory.buffer, hyperlink, hyperlinkSize))).toBe(
-      "https://t3.codes/docs",
+      "https://awen.codes/docs",
     );
 
     const wordOptions = alloc(24);
@@ -599,7 +600,7 @@ describe("vendored libghostty-vt WebAssembly", () => {
   it("encodes modified printable keys in Kitty keyboard mode", async () => {
     const result = await WebAssembly.instantiate(
       decodeWasmDataUrl(wasmDataUrl).buffer as ArrayBuffer,
-      { env: { log: () => {} } },
+      { env: { log: () => {}, t3_write_pty: () => {} } },
     );
     const instance = result instanceof WebAssembly.Instance ? result : result.instance;
     const memory = instance.exports.memory as WebAssembly.Memory;

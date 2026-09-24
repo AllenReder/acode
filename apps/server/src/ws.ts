@@ -1,7 +1,4 @@
-import {
-  sameUsageLimitCommandCoverage,
-  withUsageLimitsCommands,
-} from "@t3tools/shared/usageLimits";
+import { sameUsageLimitCommandCoverage, withUsageLimitsCommands } from "@awen/shared/usageLimits";
 import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -23,9 +20,9 @@ import {
   type AuthAccessStreamEvent,
   type AuthEnvironmentScope,
   AuthSessionId,
-  acodeProjectIdForT3Project,
+  awenProjectIdForAwenProject,
   projectTerminalSessions,
-  workspaceIdForT3Project,
+  workspaceIdForAwenProject,
   ClientConnectionMethod,
   ClientDeviceType,
   ClientOs,
@@ -60,8 +57,6 @@ import {
   ProjectWriteFileError,
   ProviderUploadFeedbackError,
   ProviderSetupError,
-  RelayClientInstallFailedError,
-  type RelayClientInstallProgressEvent,
   ServerSelfUpdateError,
   type ServerSelfUpdateProgressEvent,
   type ServerLifecycleStreamEvent,
@@ -79,13 +74,13 @@ import {
   type PullRequestRef,
   WS_METHODS,
   WsRpcGroup,
-  WsAcodeWorkspaceRpcGroup,
+  WsAwenWorkspaceRpcGroup,
   WsRpcGroupAll,
   WORKTREE_SETUP_ACTIVITY_KIND,
   worktreeSetupActivityId,
   type WorktreeSetupSnapshot,
-} from "@t3tools/contracts";
-import { resolveServerBackgroundActivitySettings } from "@t3tools/shared/backgroundActivitySettings";
+} from "@awen/contracts";
+import { resolveServerBackgroundActivitySettings } from "@awen/shared/backgroundActivitySettings";
 import { HttpRouter, HttpServerRequest, HttpServerRespondable } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
@@ -120,7 +115,7 @@ import * as ProviderMaintenanceRunner from "./provider/providerMaintenanceRunner
 import { ProviderAuthService } from "./provider/Services/ProviderAuthService.ts";
 import { ProviderInstanceRegistry } from "./provider/Services/ProviderInstanceRegistry.ts";
 import { makeProviderInstallation } from "./provider/providerInstallation.ts";
-import * as ServerSelfUpdate from "./cloud/selfUpdate.ts";
+import * as ServerSelfUpdate from "./service/selfUpdate.ts";
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as ServerSettings from "./serverSettings.ts";
@@ -137,7 +132,7 @@ import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
 import { readWorkflowScript } from "./orchestration/workflowScriptQuery.ts";
 import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
-import * as AcodeWorkspaceService from "./workspace/AcodeWorkspaceService.ts";
+import * as AwenWorkspaceService from "./workspace/AwenWorkspaceService.ts";
 import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
 import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
 import * as GitWorkflowService from "./git/GitWorkflowService.ts";
@@ -181,7 +176,6 @@ import * as VcsProjectConfig from "./vcs/VcsProjectConfig.ts";
 import * as PairingGrantStore from "./auth/PairingGrantStore.ts";
 import * as SessionStore from "./auth/SessionStore.ts";
 import { failEnvironmentAuthInvalid, failEnvironmentInternal } from "./auth/http.ts";
-import * as RelayClient from "@t3tools/shared/relayClient";
 const isOrchestrationDispatchCommandError = Schema.is(OrchestrationDispatchCommandError);
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
@@ -512,9 +506,9 @@ const makeWsRpcLayer = (
   clientOrigin: OrchestrationClientOrigin,
   clientAnalyticsProps: Readonly<Record<string, unknown>>,
   previewAutomationBroker: PreviewAutomationBroker.PreviewAutomationBroker["Service"],
-  workspaceService: AcodeWorkspaceService.AcodeWorkspaceService["Service"],
+  workspaceService: AwenWorkspaceService.AwenWorkspaceService["Service"],
 ) => {
-  const observeAcodeWorkspaceRpcEffect = <A, E, R>(
+  const observeAwenWorkspaceRpcEffect = <A, E, R>(
     method: string,
     effect: Effect.Effect<A, E, R>,
   ) => {
@@ -530,32 +524,32 @@ const makeWsRpcLayer = (
     return instrumentRpcEffect(method, authorizedEffect, { "rpc.aggregate": "workspace" });
   };
 
-  const acodeWorkspaceRpcLayer = WsAcodeWorkspaceRpcGroup.toLayer(
+  const awenWorkspaceRpcLayer = WsAwenWorkspaceRpcGroup.toLayer(
     Effect.gen(function* () {
-      return WsAcodeWorkspaceRpcGroup.of({
-        [WS_METHODS.acodeWorkspaceAssociate]: (input) =>
-          observeAcodeWorkspaceRpcEffect(
-            WS_METHODS.acodeWorkspaceAssociate,
+      return WsAwenWorkspaceRpcGroup.of({
+        [WS_METHODS.awenWorkspaceAssociate]: (input) =>
+          observeAwenWorkspaceRpcEffect(
+            WS_METHODS.awenWorkspaceAssociate,
             workspaceService.associate(input),
           ),
-        [WS_METHODS.acodeWorkspaceCreateWorktree]: (input) =>
-          observeAcodeWorkspaceRpcEffect(
-            WS_METHODS.acodeWorkspaceCreateWorktree,
+        [WS_METHODS.awenWorkspaceCreateWorktree]: (input) =>
+          observeAwenWorkspaceRpcEffect(
+            WS_METHODS.awenWorkspaceCreateWorktree,
             workspaceService.createWorktree(input),
           ),
-        [WS_METHODS.acodeWorkspaceRemove]: (input) =>
-          observeAcodeWorkspaceRpcEffect(
-            WS_METHODS.acodeWorkspaceRemove,
+        [WS_METHODS.awenWorkspaceRemove]: (input) =>
+          observeAwenWorkspaceRpcEffect(
+            WS_METHODS.awenWorkspaceRemove,
             workspaceService.remove(input),
           ),
-        [WS_METHODS.acodeWorkspaceRename]: (input) =>
-          observeAcodeWorkspaceRpcEffect(
-            WS_METHODS.acodeWorkspaceRename,
+        [WS_METHODS.awenWorkspaceRename]: (input) =>
+          observeAwenWorkspaceRpcEffect(
+            WS_METHODS.awenWorkspaceRename,
             workspaceService.rename(input),
           ),
-        [WS_METHODS.acodeProjectRename]: (input) =>
-          observeAcodeWorkspaceRpcEffect(
-            WS_METHODS.acodeProjectRename,
+        [WS_METHODS.awenProjectRename]: (input) =>
+          observeAwenWorkspaceRpcEffect(
+            WS_METHODS.awenProjectRename,
             workspaceService.renameProject(input),
           ),
       });
@@ -732,7 +726,6 @@ const makeWsRpcLayer = (
         const processResourceMonitor = yield* ProcessResourceMonitor.ProcessResourceMonitor;
         const resourceTelemetry = yield* ResourceTelemetry.ResourceTelemetry;
         const usage = yield* UsageService.UsageService;
-        const relayClient = yield* RelayClient.RelayClient;
         const authorizationError = (requiredScope: AuthEnvironmentScope) =>
           new EnvironmentAuthorizationError({
             message: `The authenticated token is missing required scope: ${requiredScope}.`,
@@ -920,20 +913,20 @@ const makeWsRpcLayer = (
               return retryShellProjectionRead(
                 "project",
                 event.aggregateId,
-                projectionSnapshotQuery.getAcodeProjectByT3ProjectId?.(
+                projectionSnapshotQuery.getAwenProjectByAwenProjectId?.(
                   ProjectId.make(event.aggregateId),
                 ) ?? Effect.succeed(Option.none()),
               ).pipe(
                 Effect.map(Option.flatten),
-                Effect.map((acodeProject) =>
+                Effect.map((awenProject) =>
                   Option.some({
                     kind: "project-removed" as const,
                     sequence: event.sequence,
                     projectId: ProjectId.make(event.aggregateId),
-                    ...(Option.isSome(acodeProject)
-                      ? { acodeProject: acodeProject.value }
+                    ...(Option.isSome(awenProject)
+                      ? { awenProject: awenProject.value }
                       : {
-                          acodeProjectId: acodeProjectIdForT3Project(
+                          awenProjectId: awenProjectIdForAwenProject(
                             ProjectId.make(event.aggregateId),
                           ),
                         }),
@@ -975,7 +968,7 @@ const makeWsRpcLayer = (
             ),
             Effect.orElseSucceed(() => Option.none()),
             // Older test seams and pre-C08 service implementations expose the
-            // optional ACode lookup as an unimplemented defect. A shell update
+            // optional Awen lookup as an unimplemented defect. A shell update
             // must remain usable without that enrichment.
             Effect.catchCause(() => Effect.succeed(Option.none())),
           );
@@ -998,25 +991,23 @@ const makeWsRpcLayer = (
                       kind: "project-removed" as const,
                       sequence,
                       projectId,
-                      acodeProjectId: acodeProjectIdForT3Project(projectId),
+                      awenProjectId: awenProjectIdForAwenProject(projectId),
                     }),
                   ),
                 onSome: (nextProject) =>
                   retryShellProjectionRead(
                     "project",
                     projectId,
-                    projectionSnapshotQuery.getAcodeProjectByT3ProjectId?.(projectId) ??
+                    projectionSnapshotQuery.getAwenProjectByAwenProjectId?.(projectId) ??
                       Effect.succeed(Option.none()),
                   ).pipe(
                     Effect.map(Option.flatten),
-                    Effect.map((acodeProject) =>
+                    Effect.map((awenProject) =>
                       Option.some<OrchestrationShellStreamEvent>({
                         kind: "project-upserted" as const,
                         sequence,
                         project: nextProject,
-                        ...(Option.isSome(acodeProject)
-                          ? { acodeProject: acodeProject.value }
-                          : {}),
+                        ...(Option.isSome(awenProject) ? { awenProject: awenProject.value } : {}),
                       }),
                     ),
                   ),
@@ -1050,18 +1041,16 @@ const makeWsRpcLayer = (
                   retryShellProjectionRead(
                     "thread",
                     threadId,
-                    projectionSnapshotQuery.getAcodeProjectByThreadId?.(threadId) ??
+                    projectionSnapshotQuery.getAwenProjectByThreadId?.(threadId) ??
                       Effect.succeed(Option.none()),
                   ).pipe(
                     Effect.map(Option.flatten),
-                    Effect.map((acodeProject) =>
+                    Effect.map((awenProject) =>
                       Option.some<OrchestrationShellStreamEvent>({
                         kind: "thread-removed" as const,
                         sequence,
                         threadId,
-                        ...(Option.isSome(acodeProject)
-                          ? { acodeProject: acodeProject.value }
-                          : {}),
+                        ...(Option.isSome(awenProject) ? { awenProject: awenProject.value } : {}),
                       }),
                     ),
                   ),
@@ -1069,18 +1058,16 @@ const makeWsRpcLayer = (
                   retryShellProjectionRead(
                     "thread",
                     threadId,
-                    projectionSnapshotQuery.getAcodeProjectByT3ProjectId?.(nextThread.projectId) ??
+                    projectionSnapshotQuery.getAwenProjectByAwenProjectId?.(nextThread.projectId) ??
                       Effect.succeed(Option.none()),
                   ).pipe(
                     Effect.map(Option.flatten),
-                    Effect.map((acodeProject) =>
+                    Effect.map((awenProject) =>
                       Option.some<OrchestrationShellStreamEvent>({
                         kind: "thread-upserted" as const,
                         sequence,
                         thread: nextThread,
-                        ...(Option.isSome(acodeProject)
-                          ? { acodeProject: acodeProject.value }
-                          : {}),
+                        ...(Option.isSome(awenProject) ? { awenProject: awenProject.value } : {}),
                       }),
                     ),
                   ),
@@ -1319,7 +1306,7 @@ const makeWsRpcLayer = (
                   .runForThread({
                     threadId,
                     ...(targetProjectId
-                      ? { workspaceId: workspaceIdForT3Project(targetProjectId) }
+                      ? { workspaceId: workspaceIdForAwenProject(targetProjectId) }
                       : {}),
                     ...(targetProjectId ? { projectId: targetProjectId } : {}),
                     ...(targetProjectCwd ? { projectCwd: targetProjectCwd } : {}),
@@ -1759,7 +1746,7 @@ const makeWsRpcLayer = (
                   const closeSetupTerminal = setupTerminalId
                     ? terminalManager.close({
                         ...(targetProjectId
-                          ? { workspaceId: workspaceIdForT3Project(targetProjectId) }
+                          ? { workspaceId: workspaceIdForAwenProject(targetProjectId) }
                           : { threadId }),
                         terminalId: setupTerminalId,
                         deleteHistory: true,
@@ -2012,8 +1999,8 @@ const makeWsRpcLayer = (
                 return yield* enrichOrchestrationDispatchResult({
                   command: normalizedCommand,
                   result,
-                  readAcodeAgentSessionByThreadId:
-                    projectionSnapshotQuery.getAcodeAgentSessionByThreadId,
+                  readAwenAgentSessionByThreadId:
+                    projectionSnapshotQuery.getAwenAgentSessionByThreadId,
                 });
               }).pipe(
                 Effect.mapError((cause) =>
@@ -2146,8 +2133,8 @@ const makeWsRpcLayer = (
                     terminalManager.getMetadata().pipe(
                       Effect.map((terminals) => ({
                         ...snapshot,
-                        acodeProjects: projectTerminalSessions(
-                          snapshot.acodeProjects ?? [],
+                        awenProjects: projectTerminalSessions(
+                          snapshot.awenProjects ?? [],
                           terminals,
                         ),
                       })),
@@ -2760,39 +2747,6 @@ const makeWsRpcLayer = (
             observeRpcEffect(WS_METHODS.serverGetBackgroundPolicy, backgroundPolicy.snapshot, {
               "rpc.aggregate": "server",
             }),
-          [WS_METHODS.cloudGetRelayClientStatus]: (_input) =>
-            observeRpcEffect(WS_METHODS.cloudGetRelayClientStatus, relayClient.resolve, {
-              "rpc.aggregate": "cloud",
-            }),
-          [WS_METHODS.cloudInstallRelayClient]: (_input) =>
-            observeRpcStream(
-              WS_METHODS.cloudInstallRelayClient,
-              Stream.callback<RelayClientInstallProgressEvent, RelayClientInstallFailedError>(
-                (queue) =>
-                  relayClient
-                    .installWithProgress((event) => Queue.offer(queue, event).pipe(Effect.asVoid))
-                    .pipe(
-                      Effect.flatMap((status) =>
-                        Queue.offer(queue, {
-                          type: "complete",
-                          status,
-                        }),
-                      ),
-                      Effect.catchTag("RelayClientInstallError", (error) =>
-                        Queue.fail(
-                          queue,
-                          new RelayClientInstallFailedError({
-                            reason: error.reason,
-                            message: error.message,
-                          }),
-                        ),
-                      ),
-                      Effect.andThen(Queue.end(queue)),
-                      Effect.forkScoped,
-                    ),
-              ),
-              { "rpc.aggregate": "cloud" },
-            ),
           [WS_METHODS.pullRequestsList]: (input) =>
             observeRpcEffect(WS_METHODS.pullRequestsList, pullRequests.list(input), {
               "rpc.aggregate": "pull-requests",
@@ -3808,7 +3762,7 @@ const makeWsRpcLayer = (
         });
       }),
     ),
-    acodeWorkspaceRpcLayer,
+    awenWorkspaceRpcLayer,
   );
 };
 
@@ -3843,7 +3797,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
     });
     const pullRequests = yield* PullRequestService.PullRequestService;
     const sql = yield* SqlClient.SqlClient;
-    const acodeWorkspaceService = yield* AcodeWorkspaceService.make;
+    const awenWorkspaceService = yield* AwenWorkspaceService.make;
     return HttpRouter.add(
       "GET",
       "/ws",
@@ -3854,10 +3808,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
         const analytics = yield* AnalyticsService.AnalyticsService;
         const session = yield* serverAuth.authenticateWebSocketUpgrade(request).pipe(
           Effect.catchIf(EnvironmentAuth.isServerAuthCredentialError, (error) =>
-            failEnvironmentAuthInvalid(
-              EnvironmentAuth.serverAuthCredentialReason(error),
-              EnvironmentAuth.serverAuthDpopFailureReason(error),
-            ),
+            failEnvironmentAuthInvalid(EnvironmentAuth.serverAuthCredentialReason(error)),
           ),
           Effect.catchIf(EnvironmentAuth.isServerAuthInternalError, (error) =>
             failEnvironmentInternal("internal_error", error),
@@ -3882,7 +3833,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
               clientOrigin,
               clientAnalyticsProps,
               previewAutomationBroker,
-              acodeWorkspaceService,
+              awenWorkspaceService,
             ).pipe(
               Layer.provideMerge(RpcSerialization.layerJson),
               Layer.provide(Layer.succeed(SqlClient.SqlClient, sql)),

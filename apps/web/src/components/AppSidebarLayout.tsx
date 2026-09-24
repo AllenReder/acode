@@ -22,7 +22,7 @@ import {
   usePanelAnimationSettings,
   usePanelNavigationSuppression,
 } from "../panelAnimations";
-import { AcodeSidebar } from "./AcodeSidebar";
+import { AwenSidebar } from "./AwenSidebar";
 import { MaterialSurface } from "./MaterialSurface";
 import { WorkbenchDragProvider } from "../workbench/workbenchDrag";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
@@ -273,7 +273,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
               className="flex h-full min-h-0 w-full flex-col border-r border-[var(--material-edge)]"
               data-tauri-drag-region="deep"
             >
-              {isOnSettings ? <SettingsSidebarNav pathname={pathname} /> : <AcodeSidebar />}
+              {isOnSettings ? <SettingsSidebarNav pathname={pathname} /> : <AwenSidebar />}
             </MaterialSurface>
             <SidebarRail onDoubleClick={resetSidebarWidth} />
           </Sidebar>

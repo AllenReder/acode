@@ -4,12 +4,12 @@
 
 Agent-session creation starts in a Workbench-owned **New Agent Session View**
 bound to one Workspace and a client-local draft identity. A draft is not a
-Session and gains an ACode Session identity only when its first send creates
+Session and gains an Awen Session identity only when its first send creates
 the Agent Session. One Workspace has at most one draft and each draft has at
 most one View across the Workbench; different Workspaces may have distinct
 drafts and Views. Closing a View retains the draft, while discarding it is a
 separate explicit action. The internal draft route is a client-local recovery
-input, not an ACode Deep Link, and promotion replaces it with the canonical
+input, not an Awen Deep Link, and promotion replaces it with the canonical
 Agent Session route.
 
 We rejected treating a draft as a provisional Session because that would make
@@ -30,5 +30,5 @@ model without inventing a second work lifecycle.
 - The New Agent Session View has presentation actions such as open, focus,
   split, close view, and discard; it does not have Session lifecycle actions.
 - Thread-only navigation and lifecycle actions do not return through this
-  path. Pin, snooze, settle, or archive behavior requires an explicit ACode
+  path. Pin, snooze, settle, or archive behavior requires an explicit Awen
   Session model decision if it is wanted again.

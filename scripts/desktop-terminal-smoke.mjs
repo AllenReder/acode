@@ -28,7 +28,7 @@ const devConfig = JSON.parse(
 );
 const devSecurity = { ...config.app.security, ...devConfig.app?.security };
 const engine = process.argv.includes("--webkit") ? webkit : chromium;
-const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "acode-desktop-terminal-"));
+const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "awen-desktop-terminal-"));
 // The palette the page paints with, and the replies that must come back.
 const TERMINAL_BACKGROUND = "#fcfcfc";
 const EXPECTED_BACKGROUND_REPLY = "\u001b]11;rgb:fcfc/fcfc/fcfc\u001b\\";
@@ -62,11 +62,7 @@ try {
     });
     await page.route("**/*", async (route) => {
       const url = new URL(route.request().url());
-      NodeAssert.equal(
-        url.origin,
-        "http://acode.test",
-        "The smoke must not access remote services",
-      );
+      NodeAssert.equal(url.origin, "http://awen.test", "The smoke must not access remote services");
       if (url.pathname === "/") {
         await route.fulfill({
           contentType: "text/html",
@@ -124,7 +120,7 @@ try {
         });
       }
     });
-    await page.goto("http://acode.test/");
+    await page.goto("http://awen.test/");
     await page.waitForFunction(() => window.result !== undefined, undefined, { timeout: 10_000 });
     const result = await page.evaluate(() => window.result);
     NodeAssert.equal(result.ok, true, `${label}: ${result.error}\n${errors.join("\n")}`);

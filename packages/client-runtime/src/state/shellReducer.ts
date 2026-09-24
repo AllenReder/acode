@@ -1,13 +1,13 @@
 import * as Arr from "effect/Array";
 import type {
-  AcodeProjectShell,
+  AwenProjectShell,
   OrchestrationShellSnapshot,
   OrchestrationShellStreamEvent,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 
-function applyAcodeProjectUpdate(
-  projects: OrchestrationShellSnapshot["acodeProjects"],
-  nextProject: AcodeProjectShell | undefined,
+function applyAwenProjectUpdate(
+  projects: OrchestrationShellSnapshot["awenProjects"],
+  nextProject: AwenProjectShell | undefined,
 ) {
   if (nextProject === undefined) return projects;
   const current = projects ?? [];
@@ -35,21 +35,21 @@ export function applyShellStreamEvent(
       const projects = snapshot.projects.some((p) => p.id === event.project.id)
         ? Arr.map(snapshot.projects, (p) => (p.id === event.project.id ? event.project : p))
         : Arr.append(snapshot.projects, event.project);
-      const acodeProjects = applyAcodeProjectUpdate(snapshot.acodeProjects, event.acodeProject);
-      return { ...snapshot, projects, acodeProjects, snapshotSequence: event.sequence };
+      const awenProjects = applyAwenProjectUpdate(snapshot.awenProjects, event.awenProject);
+      return { ...snapshot, projects, awenProjects, snapshotSequence: event.sequence };
     }
     case "project-removed":
       return {
         ...snapshot,
         projects: Arr.filter(snapshot.projects, (p) => p.id !== event.projectId),
-        acodeProjects:
-          event.acodeProject !== undefined
-            ? applyAcodeProjectUpdate(snapshot.acodeProjects, event.acodeProject)
-            : event.acodeProjectId === undefined
-              ? snapshot.acodeProjects
+        awenProjects:
+          event.awenProject !== undefined
+            ? applyAwenProjectUpdate(snapshot.awenProjects, event.awenProject)
+            : event.awenProjectId === undefined
+              ? snapshot.awenProjects
               : Arr.filter(
-                  snapshot.acodeProjects ?? [],
-                  (project) => project.id !== event.acodeProjectId,
+                  snapshot.awenProjects ?? [],
+                  (project) => project.id !== event.awenProjectId,
                 ),
         snapshotSequence: event.sequence,
       };
@@ -57,14 +57,14 @@ export function applyShellStreamEvent(
       const threads = snapshot.threads.some((t) => t.id === event.thread.id)
         ? Arr.map(snapshot.threads, (t) => (t.id === event.thread.id ? event.thread : t))
         : Arr.append(snapshot.threads, event.thread);
-      const acodeProjects = applyAcodeProjectUpdate(snapshot.acodeProjects, event.acodeProject);
-      return { ...snapshot, threads, acodeProjects, snapshotSequence: event.sequence };
+      const awenProjects = applyAwenProjectUpdate(snapshot.awenProjects, event.awenProject);
+      return { ...snapshot, threads, awenProjects, snapshotSequence: event.sequence };
     }
     case "thread-removed":
       return {
         ...snapshot,
         threads: Arr.filter(snapshot.threads, (t) => t.id !== event.threadId),
-        acodeProjects: applyAcodeProjectUpdate(snapshot.acodeProjects, event.acodeProject),
+        awenProjects: applyAwenProjectUpdate(snapshot.awenProjects, event.awenProject),
         snapshotSequence: event.sequence,
       };
     default:

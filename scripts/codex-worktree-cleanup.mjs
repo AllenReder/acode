@@ -9,7 +9,7 @@ import { resolveCodexWorktreePath } from "./codex-worktree-setup.mjs";
 // global pnpm store, or shared caches here: Codex may run several worktrees
 // for the same user at once.
 export const WORKTREE_CLEANUP_TARGETS = [
-  ".acode",
+  ".awen",
   ".generated",
   ".vite-plus",
   "apps/desktop/src-tauri/target",
@@ -37,7 +37,7 @@ export function runWorktreeCleanup({ environment = process.env, cwd = process.cw
     if (!NodeFS.existsSync(targetPath)) continue;
 
     NodeFS.rmSync(targetPath, { force: true, recursive: true });
-    console.log(`[acode] removed ${NodePath.relative(worktreePath, targetPath)}`);
+    console.log(`[awen] removed ${NodePath.relative(worktreePath, targetPath)}`);
   }
 }
 

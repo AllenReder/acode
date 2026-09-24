@@ -1,8 +1,8 @@
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import type { EnvironmentId, WorkspaceId } from "@t3tools/contracts";
-import { EMPTY_TERMINAL_SESSION_STATE } from "@t3tools/client-runtime/state/terminal";
+import type { EnvironmentId, WorkspaceId } from "@awen/contracts";
+import { EMPTY_TERMINAL_SESSION_STATE } from "@awen/client-runtime/state/terminal";
 import type { XtermTerminalSurfaceOptions } from "../terminal/xterm/surface";
 import { TerminalView } from "./TerminalView";
 import { terminalTargetForRuntime } from "./sessionTarget";
@@ -14,7 +14,7 @@ const boundary = vi.hoisted(() => ({
   create: vi.fn(),
 }));
 vi.mock("@effect/atom-react", () => ({ useAtomValue: () => null }));
-vi.mock("../state/entities", () => ({ useAcodeWorkspace: () => ({ workspaceRoot: "/checkout" }) }));
+vi.mock("../state/entities", () => ({ useAwenWorkspace: () => ({ workspaceRoot: "/checkout" }) }));
 vi.mock("../state/terminalSessions", () => ({
   useAttachedTerminalSession: (input: unknown) => boundary.attach(input),
 }));

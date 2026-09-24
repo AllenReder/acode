@@ -1,4 +1,4 @@
-import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
+import { collectComposerContextReferences } from "@awen/shared/composerContextReferences";
 import { PLAN_IMPLEMENTATION_PROMPT_PREFIX } from "../../proposedPlan";
 
 /**

@@ -5,7 +5,7 @@ import {
   ProviderDriverKind,
   ThreadId,
   type OrchestrationEvent,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import * as Effect from "effect/Effect";
 import { it as effectIt } from "@effect/vitest";
 import { describe, expect, it } from "vite-plus/test";
@@ -123,7 +123,7 @@ describe("orchestration projector", () => {
           projects: [
             {
               id: ProjectId.make("project-1"),
-              title: "T3 Code",
+              title: "Awen",
               workspaceRoot: "/repo",
               defaultModelSelection: null,
               scripts: [],
@@ -131,13 +131,13 @@ describe("orchestration projector", () => {
               updatedAt: now,
               deletedAt: null,
               repositoryIdentity: {
-                canonicalKey: "github.com/pingdotgg/t3code",
+                canonicalKey: "github.com/allenreder/awen",
                 provider: "github",
-                displayName: "pingdotgg/t3code",
+                displayName: "allenreder/awen",
                 locator: {
                   source: "git-remote",
                   remoteName: "origin",
-                  remoteUrl: "https://github.com/pingdotgg/t3code.git",
+                  remoteUrl: "https://github.com/AllenReder/awen.git",
                 },
               },
             },
@@ -162,14 +162,14 @@ describe("orchestration projector", () => {
       );
       const linkedPullRequest = {
         projectId: "project-1",
-        repository: "pingdotgg/t3code",
+        repository: "allenreder/awen",
         number: 42,
-        url: "https://github.com/pingdotgg/t3code/pull/42",
+        url: "https://github.com/AllenReder/awen/pull/42",
       };
       const branchPullRequest = {
         ...linkedPullRequest,
         number: 43,
-        url: "https://github.com/pingdotgg/t3code/pull/43",
+        url: "https://github.com/AllenReder/awen/pull/43",
       };
       const updates = [
         { payload: { linkedPullRequest, branchPullRequest }, expected: branchPullRequest },
@@ -447,7 +447,7 @@ describe("orchestration projector", () => {
               threadId: "thread-1",
               turnId: "turn-1",
               checkpointTurnCount: 1,
-              checkpointRef: "refs/t3/checkpoints/thread-1/turn/1",
+              checkpointRef: "refs/awen/checkpoints/thread-1/turn/1",
               status: "ready",
               files: [],
               assistantMessageId: "assistant:turn-1",
@@ -546,7 +546,7 @@ describe("orchestration projector", () => {
           event(5, "thread.turn-diff-completed", {
             ...checkpoint,
             status: "ready",
-            checkpointRef: "refs/t3/checkpoints/thread-placeholder/turn/1",
+            checkpointRef: "refs/awen/checkpoints/thread-placeholder/turn/1",
           }),
         );
         expect(model.threads[0]?.latestTurn?.state).toBe(
@@ -782,7 +782,7 @@ describe("orchestration projector", () => {
           threadId: "thread-1",
           turnId: "turn-1",
           checkpointTurnCount: 1,
-          checkpointRef: "refs/t3/checkpoints/thread-1/turn/1",
+          checkpointRef: "refs/awen/checkpoints/thread-1/turn/1",
           status: "ready",
           files: [],
           assistantMessageId: "assistant-msg-1",
@@ -856,7 +856,7 @@ describe("orchestration projector", () => {
           threadId: "thread-1",
           turnId: "turn-2",
           checkpointTurnCount: 2,
-          checkpointRef: "refs/t3/checkpoints/thread-1/turn/2",
+          checkpointRef: "refs/awen/checkpoints/thread-1/turn/2",
           status: "ready",
           files: [],
           assistantMessageId: "assistant-msg-2",
@@ -961,7 +961,7 @@ describe("orchestration projector", () => {
           threadId: "thread-revert",
           turnId: "turn-1",
           checkpointTurnCount: 1,
-          checkpointRef: "refs/t3/checkpoints/thread-revert/turn/1",
+          checkpointRef: "refs/awen/checkpoints/thread-revert/turn/1",
           status: "ready",
           files: [],
           assistantMessageId: "assistant-keep",
@@ -997,7 +997,7 @@ describe("orchestration projector", () => {
           threadId: "thread-revert",
           turnId: "turn-2",
           checkpointTurnCount: 2,
-          checkpointRef: "refs/t3/checkpoints/thread-revert/turn/2",
+          checkpointRef: "refs/awen/checkpoints/thread-revert/turn/2",
           status: "ready",
           files: [],
           assistantMessageId: "assistant-remove",
@@ -1146,7 +1146,7 @@ describe("orchestration projector", () => {
             threadId: "thread-capped",
             turnId: `turn-${index}`,
             checkpointTurnCount: index + 1,
-            checkpointRef: `refs/t3/checkpoints/thread-capped/turn/${index + 1}`,
+            checkpointRef: `refs/awen/checkpoints/thread-capped/turn/${index + 1}`,
             status: "ready",
             files: [],
             assistantMessageId: `msg-${index}`,

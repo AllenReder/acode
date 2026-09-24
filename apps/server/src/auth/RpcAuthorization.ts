@@ -2,15 +2,13 @@ import {
   AuthAccessReadScope,
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
-  AuthRelayReadScope,
-  AuthRelayWriteScope,
   AuthReviewWriteScope,
   AuthTerminalOperateScope,
   ORCHESTRATION_WS_METHODS,
   type AuthEnvironmentScope,
   WS_METHODS,
   WsRpcGroupAll,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
 type WsRpcMethod = RpcGroup.Rpcs<typeof WsRpcGroupAll>["_tag"];
@@ -63,8 +61,6 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.serverReportClientActivity]: AuthOrchestrationReadScope,
   [WS_METHODS.serverReportHostPowerState]: AuthOrchestrationOperateScope,
   [WS_METHODS.serverGetBackgroundPolicy]: AuthOrchestrationReadScope,
-  [WS_METHODS.cloudGetRelayClientStatus]: AuthRelayReadScope,
-  [WS_METHODS.cloudInstallRelayClient]: AuthRelayWriteScope,
   [WS_METHODS.pullRequestsList]: AuthOrchestrationReadScope,
   [WS_METHODS.pullRequestsListStats]: AuthOrchestrationReadScope,
   [WS_METHODS.pullRequestsSummary]: AuthOrchestrationReadScope,
@@ -131,11 +127,11 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.vcsInit]: AuthOrchestrationOperateScope,
   // All three workspace mutations register work, create checkouts, or remove
   // them, so they share the operate scope of the VCS mutations they compose.
-  [WS_METHODS.acodeWorkspaceAssociate]: AuthOrchestrationOperateScope,
-  [WS_METHODS.acodeWorkspaceCreateWorktree]: AuthOrchestrationOperateScope,
-  [WS_METHODS.acodeWorkspaceRemove]: AuthOrchestrationOperateScope,
-  [WS_METHODS.acodeWorkspaceRename]: AuthOrchestrationOperateScope,
-  [WS_METHODS.acodeProjectRename]: AuthOrchestrationOperateScope,
+  [WS_METHODS.awenWorkspaceAssociate]: AuthOrchestrationOperateScope,
+  [WS_METHODS.awenWorkspaceCreateWorktree]: AuthOrchestrationOperateScope,
+  [WS_METHODS.awenWorkspaceRemove]: AuthOrchestrationOperateScope,
+  [WS_METHODS.awenWorkspaceRename]: AuthOrchestrationOperateScope,
+  [WS_METHODS.awenProjectRename]: AuthOrchestrationOperateScope,
   [WS_METHODS.reviewGetDiffPreview]: AuthReviewWriteScope,
   [WS_METHODS.reviewGetDiffFileContents]: AuthReviewWriteScope,
   [WS_METHODS.terminalOpen]: AuthTerminalOperateScope,

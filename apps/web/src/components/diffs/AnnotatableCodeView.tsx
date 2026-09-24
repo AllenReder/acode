@@ -7,7 +7,7 @@ import type {
   SelectedLineRange,
 } from "@pierre/diffs";
 import type { CodeViewHandle } from "@pierre/diffs/react";
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import type { ScopedThreadRef } from "@awen/contracts";
 import { useCallback, useMemo, useState, type ReactNode, type Ref } from "react";
 
 import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
@@ -112,8 +112,10 @@ export function AnnotatableCodeView({
 }: AnnotatableCodeViewProps) {
   const addReviewComment = useComposerDraftStore((store) => store.addReviewComment);
   const removeReviewComment = useComposerDraftStore((store) => store.removeReviewComment);
-  const reviewComments = useComposerDraftStore(
-    (store) => (composerDraftTarget ? store.getComposerDraft(composerDraftTarget)?.reviewComments ?? EMPTY_REVIEW_COMMENTS : EMPTY_REVIEW_COMMENTS),
+  const reviewComments = useComposerDraftStore((store) =>
+    composerDraftTarget
+      ? (store.getComposerDraft(composerDraftTarget)?.reviewComments ?? EMPTY_REVIEW_COMMENTS)
+      : EMPTY_REVIEW_COMMENTS,
   );
   const [selectedLines, setSelectedLines] = useState<{
     id: string;

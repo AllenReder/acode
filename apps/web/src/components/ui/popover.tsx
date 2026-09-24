@@ -1,5 +1,5 @@
 import { GlassBackdrop } from "~/components/ui/GlassBackdrop";
-"use client";
+("use client");
 
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 

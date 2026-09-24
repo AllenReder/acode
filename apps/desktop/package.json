@@ -1,6 +1,6 @@
 {
-  "name": "@acode/desktop",
-  "version": "0.0.43",
+  "name": "@awen/desktop",
+  "version": "0.1.0-alpha.1",
   "private": true,
   "type": "module",
   "scripts": {

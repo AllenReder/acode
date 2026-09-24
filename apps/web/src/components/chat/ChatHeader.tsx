@@ -4,14 +4,20 @@ import {
   type ProjectScript,
   type ResolvedKeybindingsConfig,
   type ThreadId,
-} from "@t3tools/contracts";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
+} from "@awen/contracts";
+import { scopeThreadRef } from "@awen/client-runtime/environment";
+import type { EnvironmentProject } from "@awen/client-runtime/state/shell";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
-import { ChevronDownIcon, EllipsisIcon, FolderIcon, GitBranchIcon, TerminalIcon } from "lucide-react";
+} from "@awen/client-runtime/state/runtime";
+import {
+  ChevronDownIcon,
+  EllipsisIcon,
+  FolderIcon,
+  GitBranchIcon,
+  TerminalIcon,
+} from "lucide-react";
 import {
   memo,
   useCallback,
@@ -36,7 +42,7 @@ import ProjectScriptsControl, {
 import { OpenInPicker } from "./OpenInPicker";
 import { useRemoteOpenState, type RemoteOpenMode } from "../../remoteOpen";
 import { usePrimaryEnvironmentId } from "../../state/environments";
-import { useT3ProjectFileScripts } from "~/hooks/useT3ProjectFileScripts";
+import { useAwenProjectFileScripts } from "~/hooks/useAwenProjectFileScripts";
 import { useThreadActionMenu } from "~/hooks/useThreadActionMenu";
 import { readLocalApi } from "~/localApi";
 import { threadEnvironment } from "../../state/threads";
@@ -168,7 +174,7 @@ export const ChatHeader = memo(function ChatHeader({
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const activeProjectName = activeProject?.title;
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
-  const fileScripts = useT3ProjectFileScripts(
+  const fileScripts = useAwenProjectFileScripts(
     activeThreadEnvironmentId,
     activeProjectScripts ? activeProjectCwd : null,
   );
@@ -384,7 +390,10 @@ export const ChatHeader = memo(function ChatHeader({
             <Tooltip>
               <TooltipTrigger
                 render={
-                  <h2 aria-label={activeThreadTitle} className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                  <h2
+                    aria-label={activeThreadTitle}
+                    className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
+                  >
                     {activeThreadTitle}
                   </h2>
                 }
@@ -494,11 +503,7 @@ export const ChatHeader = memo(function ChatHeader({
                 render={
                   <MenuTrigger
                     render={
-                      <Button
-                        size="icon-xs"
-                        variant="outline"
-                        aria-label="Workspace views"
-                      >
+                      <Button size="icon-xs" variant="outline" aria-label="Workspace views">
                         <EllipsisIcon className="size-3.5" />
                       </Button>
                     }

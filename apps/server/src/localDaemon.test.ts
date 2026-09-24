@@ -21,7 +21,7 @@ import {
 
 describe("local daemon discovery", () => {
   it("uses one state root and keeps credential paths out of discovery records", async () => {
-    const baseDir = NodePath.join("/tmp", "ACode path with spaces");
+    const baseDir = NodePath.join("/tmp", "Awen path with spaces");
     const paths = deriveLocalDaemonPaths(baseDir);
     const discovery = makeLocalDaemonDiscovery({
       daemonId: "daemon-1",
@@ -40,7 +40,7 @@ describe("local daemon discovery", () => {
       version: 1,
       daemonProtocolVersion: LOCAL_DAEMON_PROTOCOL_VERSION,
       daemonId: "daemon-1",
-      daemonOwner: "acode-local-daemon",
+      daemonOwner: "awen-local-daemon",
       daemonWorkingDirectory: "/worktree with spaces",
       daemonManaged: true,
       pid: 321,
@@ -56,7 +56,7 @@ describe("local daemon discovery", () => {
         version: 1,
         daemonProtocolVersion: LOCAL_DAEMON_PROTOCOL_VERSION,
         daemonId: "daemon-1",
-        daemonOwner: "acode-local-daemon",
+        daemonOwner: "awen-local-daemon",
         daemonWorkingDirectory: "/worktree",
         daemonManaged: true,
         pid: 321,
@@ -88,7 +88,7 @@ describe("local daemon discovery", () => {
 
 describe("local daemon launch lock", () => {
   it("serializes concurrent work for one data root", async () => {
-    const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "acode-local-daemon-lock-"));
+    const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "awen-local-daemon-lock-"));
     const order: string[] = [];
 
     const first = withLocalDaemonLaunchLock(root, async () => {
@@ -111,23 +111,23 @@ describe("local daemon launch lock", () => {
 
 describe("requested daemon port", () => {
   it("treats daemon-specific keys as contracts and the server port as a preference", () => {
-    expect(requestedDaemonPort({ ACODE_DAEMON_PORT: "13773" })).toEqual({
+    expect(requestedDaemonPort({ AWEN_DAEMON_PORT: "13773" })).toEqual({
       _tag: "set",
-      key: "ACODE_DAEMON_PORT",
+      key: "AWEN_DAEMON_PORT",
       port: 13_773,
       required: true,
     });
-    expect(requestedDaemonPort({ T3CODE_DAEMON_PORT: "13773" })).toEqual({
+    expect(requestedDaemonPort({ AWEN_DAEMON_PORT: "13773" })).toEqual({
       _tag: "set",
-      key: "T3CODE_DAEMON_PORT",
+      key: "AWEN_DAEMON_PORT",
       port: 13_773,
       required: true,
     });
-    // `T3CODE_PORT` is the web dev runner's general server port: a leftover
+    // `AWEN_PORT` is the web dev runner's general server port: a leftover
     // listener must not stop `pnpm dev` from taking a free port instead.
-    expect(requestedDaemonPort({ T3CODE_PORT: "13773" })).toEqual({
+    expect(requestedDaemonPort({ AWEN_PORT: "13773" })).toEqual({
       _tag: "set",
-      key: "T3CODE_PORT",
+      key: "AWEN_PORT",
       port: 13_773,
       required: false,
     });
@@ -137,23 +137,21 @@ describe("requested daemon port", () => {
   it("keeps the documented precedence and skips blank values", () => {
     expect(
       requestedDaemonPort({
-        ACODE_DAEMON_PORT: "1111",
-        ACODE_PORT: "2222",
-        T3CODE_DAEMON_PORT: "3333",
-        T3CODE_PORT: "4444",
+        AWEN_DAEMON_PORT: "3333",
+        AWEN_PORT: "4444",
       }),
-    ).toMatchObject({ _tag: "set", key: "ACODE_DAEMON_PORT" });
-    expect(requestedDaemonPort({ ACODE_DAEMON_PORT: "  ", T3CODE_PORT: "4444" })).toMatchObject({
+    ).toEqual({ _tag: "set", key: "AWEN_DAEMON_PORT", port: 3333, required: true });
+    expect(requestedDaemonPort({ AWEN_DAEMON_PORT: "  ", AWEN_PORT: "4444" })).toMatchObject({
       _tag: "set",
-      key: "T3CODE_PORT",
+      key: "AWEN_PORT",
     });
   });
 
   it("rejects an unusable value instead of silently ignoring it", () => {
-    expect(() => requestedDaemonPort({ ACODE_DAEMON_PORT: "not-a-port" })).toThrowError(
+    expect(() => requestedDaemonPort({ AWEN_DAEMON_PORT: "not-a-port" })).toThrowError(
       /must be a port number between 1 and 65535/,
     );
-    expect(() => requestedDaemonPort({ T3CODE_PORT: "0" })).toThrowError(
+    expect(() => requestedDaemonPort({ AWEN_PORT: "0" })).toThrowError(
       /must be a port number between 1 and 65535/,
     );
   });
@@ -194,13 +192,13 @@ const listenForHandshake = async (
 
 describe("local daemon discovery diagnostics", () => {
   it("diagnoses malformed and stale records without starting a process", async () => {
-    const malformedRoot = await NodeFSP.mkdtemp(NodePath.join("/tmp", "acode-daemon-invalid-"));
+    const malformedRoot = await NodeFSP.mkdtemp(NodePath.join("/tmp", "awen-daemon-invalid-"));
     const malformedPaths = deriveLocalDaemonPaths(malformedRoot);
     await NodeFSP.mkdir(malformedPaths.stateDir, { recursive: true });
     await NodeFSP.writeFile(malformedPaths.runtimeStatePath, "{not-json", "utf8");
     await expect(inspectLocalDaemon(malformedRoot)).resolves.toMatchObject({ status: "invalid" });
 
-    const staleRoot = await NodeFSP.mkdtemp(NodePath.join("/tmp", "acode-daemon-stale-"));
+    const staleRoot = await NodeFSP.mkdtemp(NodePath.join("/tmp", "awen-daemon-stale-"));
     const stale = makeLocalDaemonDiscovery({
       daemonId: "stale-daemon",
       pid: 2_147_483_647,
@@ -217,14 +215,14 @@ describe("local daemon discovery diagnostics", () => {
       status: 200,
       body: {
         protocolVersion: LOCAL_DAEMON_PROTOCOL_VERSION,
-        owner: "acode-local-daemon",
+        owner: "awen-local-daemon",
         daemonId: "foreign-daemon",
         pid: process.pid,
         managed: true,
       },
     }));
     try {
-      const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "acode-daemon-foreign-"));
+      const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "awen-daemon-foreign-"));
       const state = makeLocalDaemonDiscovery({
         daemonId: "expected-daemon",
         pid: process.pid,
@@ -243,12 +241,12 @@ describe("local daemon discovery diagnostics", () => {
 
   it("diagnoses a rejected credential without replacing it", async () => {
     const server = await listenForHandshake((request) => ({
-      status: request.url === "/.well-known/acode/daemon" ? 200 : 401,
+      status: request.url === "/.well-known/awen/daemon" ? 200 : 401,
       body:
-        request.url === "/.well-known/acode/daemon"
+        request.url === "/.well-known/awen/daemon"
           ? {
               protocolVersion: LOCAL_DAEMON_PROTOCOL_VERSION,
-              owner: "acode-local-daemon",
+              owner: "awen-local-daemon",
               daemonId: "auth-daemon",
               pid: process.pid,
               managed: true,
@@ -256,7 +254,7 @@ describe("local daemon discovery diagnostics", () => {
           : { error: "auth_invalid" },
     }));
     try {
-      const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "acode-daemon-auth-"));
+      const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "awen-daemon-auth-"));
       const state = makeLocalDaemonDiscovery({
         daemonId: "auth-daemon",
         pid: process.pid,
@@ -276,7 +274,7 @@ describe("local daemon discovery diagnostics", () => {
   });
 
   it("resolves credential path under secrets directory", async () => {
-    const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "acode-daemon-paths-"));
+    const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "awen-daemon-paths-"));
     const paths = deriveLocalDaemonPaths(root);
     expect(paths.credentialPath).toBe(
       NodePath.join(root, "userdata", "secrets", "desktop-bootstrap.token"),
@@ -323,10 +321,10 @@ const listenOnLoopback = async (): Promise<{ port: number; close: () => Promise<
 
 describe("local daemon port contract", () => {
   it("refuses to drift to a free port when an explicit daemon port is taken", async () => {
-    const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "acode-daemon-strict-port-"));
+    const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "awen-daemon-strict-port-"));
     const holder = await listenOnLoopback();
-    const previous = process.env.ACODE_DAEMON_PORT;
-    process.env.ACODE_DAEMON_PORT = String(holder.port);
+    const previous = process.env.AWEN_DAEMON_PORT;
+    process.env.AWEN_DAEMON_PORT = String(holder.port);
     try {
       // A daemon on another port leaves the desktop shell and the web dev proxy
       // dialing a port nothing serves: fail loudly instead.
@@ -334,8 +332,8 @@ describe("local daemon port contract", () => {
         code: "daemon-port-unavailable",
       });
     } finally {
-      if (previous === undefined) delete process.env.ACODE_DAEMON_PORT;
-      else process.env.ACODE_DAEMON_PORT = previous;
+      if (previous === undefined) delete process.env.AWEN_DAEMON_PORT;
+      else process.env.AWEN_DAEMON_PORT = previous;
       await holder.close();
     }
   });
@@ -346,7 +344,7 @@ describe("local daemon port contract", () => {
   // otherwise a foreign process holding 13773 left the developer with no daemon at
   // all instead of a working one plus a clear error.
   it("leaves the running daemon alone when the required port is unavailable", async () => {
-    const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "acode-daemon-keep-old-"));
+    const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "awen-daemon-keep-old-"));
     const running = await spawnIdleProcess();
     const pid = running.pid;
     if (pid === undefined) throw new Error("idle holder did not expose a pid");
@@ -354,15 +352,15 @@ describe("local daemon port contract", () => {
       status: 200,
       body: {
         protocolVersion: LOCAL_DAEMON_PROTOCOL_VERSION,
-        owner: "acode-local-daemon",
+        owner: "awen-local-daemon",
         daemonId: "running-daemon",
         pid,
         managed: true,
       },
     }));
     const taken = await listenOnLoopback();
-    const previousPort = process.env.ACODE_DAEMON_PORT;
-    process.env.ACODE_DAEMON_PORT = String(taken.port);
+    const previousPort = process.env.AWEN_DAEMON_PORT;
+    process.env.AWEN_DAEMON_PORT = String(taken.port);
     try {
       const paths = await writeDiscovery(
         root,
@@ -386,8 +384,8 @@ describe("local daemon port contract", () => {
         "running-daemon",
       );
     } finally {
-      if (previousPort === undefined) delete process.env.ACODE_DAEMON_PORT;
-      else process.env.ACODE_DAEMON_PORT = previousPort;
+      if (previousPort === undefined) delete process.env.AWEN_DAEMON_PORT;
+      else process.env.AWEN_DAEMON_PORT = previousPort;
       running.kill("SIGKILL");
       await server.close();
       await taken.close();
@@ -400,7 +398,7 @@ describe("local daemon port contract", () => {
   // after LOCK_TIMEOUT_MS, leaving the outdated daemon running, its descriptor in
   // place, and the proxy pointing at a port nothing served.
   it("stops a daemon on another port instead of deadlocking on its own launch lock", async () => {
-    const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "acode-daemon-reconcile-"));
+    const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "awen-daemon-reconcile-"));
     const outdated = await spawnIdleProcess();
     const pid = outdated.pid;
     if (pid === undefined) throw new Error("idle holder did not expose a pid");
@@ -408,16 +406,16 @@ describe("local daemon port contract", () => {
       status: 200,
       body: {
         protocolVersion: LOCAL_DAEMON_PROTOCOL_VERSION,
-        owner: "acode-local-daemon",
+        owner: "awen-local-daemon",
         daemonId: "outdated-daemon",
         pid,
         managed: true,
       },
     }));
-    const previousPort = process.env.T3CODE_PORT;
+    const previousPort = process.env.AWEN_PORT;
     // Any port other than the recorded daemon's own moves the launcher onto the
     // reconciliation path.
-    process.env.T3CODE_PORT = String(Number(new URL(server.origin).port) + 1);
+    process.env.AWEN_PORT = String(Number(new URL(server.origin).port) + 1);
     try {
       const paths = await writeDiscovery(
         root,
@@ -450,8 +448,8 @@ describe("local daemon port contract", () => {
         NodeFSP.readFile(deriveLocalDaemonPaths(root).runtimeStatePath, "utf8"),
       ).rejects.toThrowError(/ENOENT/);
     } finally {
-      if (previousPort === undefined) delete process.env.T3CODE_PORT;
-      else process.env.T3CODE_PORT = previousPort;
+      if (previousPort === undefined) delete process.env.AWEN_PORT;
+      else process.env.AWEN_PORT = previousPort;
       outdated.kill("SIGKILL");
       await server.close();
     }

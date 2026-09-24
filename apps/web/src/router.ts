@@ -13,7 +13,7 @@ export function getRouter(history: RouterHistory) {
     defaultPreload: "intent",
   });
   if (typeof window !== "undefined") {
-    (window as { __acodeRouter?: unknown }).__acodeRouter = router;
+    (window as { __awenRouter?: unknown }).__awenRouter = router;
   }
   return router;
 }

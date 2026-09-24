@@ -3,7 +3,7 @@ import {
   type ServerConfigStreamEvent,
   WsSubscribeServerConfigRpc,
   WS_METHODS,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
@@ -15,7 +15,6 @@ import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type * as Rpc from "effect/unstable/rpc/Rpc";
@@ -25,7 +24,6 @@ import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 import * as Socket from "effect/unstable/socket/Socket";
 
 import { makeWsRpcProtocolClient, type WsRpcProtocolClient } from "./protocol.ts";
-import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
 import type {
   ConnectionAttemptError,
   ConnectionTransientError,
@@ -69,7 +67,7 @@ export class RpcSessionFactory extends Context.Service<
       connection: PreparedConnection,
     ) => Effect.Effect<RpcSession, ConnectionAttemptError, Scope.Scope>;
   }
->()("@t3tools/client-runtime/rpc/session/RpcSessionFactory") {}
+>()("@awen/client-runtime/rpc/session/RpcSessionFactory") {}
 
 type InitialConfigError = Effect.Error<
   ReturnType<WsRpcProtocolClient[typeof WS_METHODS.serverGetConfig]>
@@ -122,11 +120,8 @@ function serverConfigReplayEvents(
   ];
 }
 
-const isSocketErrorReason = Schema.is(Socket.SocketErrorReason);
-
 function mapSessionRpcError(
   error: InitialConfigError | ProbeError | ServerConfigSubscriptionError,
-  networkHint: string,
 ): ConnectionAttemptError {
   switch (error._tag) {
     case "EnvironmentAuthorizationError":
@@ -143,7 +138,7 @@ function mapSessionRpcError(
     case "RpcClientError":
       return new ConnectionTransientErrorClass({
         reason: "transport",
-        detail: `${error.message}${isSocketErrorReason(error.reason) ? networkHint : ""}`,
+        detail: error.message,
       });
   }
 }
@@ -160,10 +155,7 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
   };
 
   const connect = Effect.fnUntraced(function* (connection: PreparedConnection) {
-    const networkHint =
-      connection.target._tag === "RelayConnectionTarget" ? ` ${NETWORK_BLOCKING_HINT}` : "";
-    const mapRpcError = (error: Parameters<typeof mapSessionRpcError>[0]) =>
-      mapSessionRpcError(error, networkHint);
+    const mapRpcError = mapSessionRpcError;
     yield* Effect.annotateCurrentSpan({
       "connection.environment.id": connection.environmentId,
     });
@@ -178,11 +170,9 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
             disconnected,
             new ConnectionTransientErrorClass({
               reason: "transport",
-              detail: `${
-                wasConnected
-                  ? `${connection.label} disconnected.`
-                  : `${connection.label} could not establish a WebSocket connection.`
-              }${networkHint}`,
+              detail: wasConnected
+                ? `${connection.label} disconnected.`
+                : `${connection.label} could not establish a WebSocket connection.`,
             }),
           ),
         ),

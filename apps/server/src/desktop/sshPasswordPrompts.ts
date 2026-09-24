@@ -1,6 +1,6 @@
-import type { DesktopSshPasswordPromptRequest } from "@t3tools/contracts";
-import { DesktopSshPasswordPromptResolutionInputSchema } from "@t3tools/contracts";
-import type { SshPasswordRequest } from "@t3tools/ssh/auth";
+import type { DesktopSshPasswordPromptRequest } from "@awen/contracts";
+import { DesktopSshPasswordPromptResolutionInputSchema } from "@awen/contracts";
+import type { SshPasswordRequest } from "@awen/ssh/auth";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -119,7 +119,7 @@ export class DesktopSshPasswordPrompts extends Context.Service<
       input: DesktopSshPasswordPromptResolutionInput,
     ) => Effect.Effect<void, DesktopSshPasswordPromptResolveError>;
   }
->()("t3/desktop/sshPasswordPrompts/DesktopSshPasswordPrompts") {}
+>()("@awen/server/desktop/sshPasswordPrompts/DesktopSshPasswordPrompts") {}
 
 interface PendingSshPasswordPrompt {
   readonly request: DesktopSshPasswordPromptRequest;
@@ -227,9 +227,7 @@ export const make = Effect.fn("desktop.sshPasswordPrompts.make")(function* (
       destination: input.destination,
       username: input.username,
       prompt: input.prompt,
-      expiresAt: DateTime.formatIso(
-        DateTime.add(now, { milliseconds: passwordPromptTimeoutMs }),
-      ),
+      expiresAt: DateTime.formatIso(DateTime.add(now, { milliseconds: passwordPromptTimeoutMs })),
     };
     const deferred = yield* Deferred.make<string, DesktopSshPasswordPromptRequestError>();
     yield* Ref.update(pendingRef, (pending) =>

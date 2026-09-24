@@ -1,6 +1,6 @@
 # Native Window Glass and Appearance Architecture
 
-ACode adopts native OS-level desktop translucency (macOS WindowServer blur and Windows Acrylic) and completely overhauls its appearance and theme system. We retire all legacy t3code palettes and storage keys in favor of an ACode-native curated theme suite, configurable dual-pane translucency (full-height Sidebar and optional Workbench Glass), custom chat background wallpapers, and a clean `acode:*` storage namespace.
+Awen adopts native OS-level desktop translucency (macOS WindowServer blur and Windows Acrylic) and completely overhauls its appearance and theme system. We retire all legacy awen palettes and storage keys in favor of an Awen-native curated theme suite, configurable dual-pane translucency (full-height Sidebar and optional Workbench Glass), custom chat background wallpapers, and a clean `awen:*` storage namespace.
 
 ## Status
 
@@ -8,7 +8,7 @@ Accepted.
 
 ## Context
 
-Previously, the desktop shell ran with an opaque window background (`#0a0a0a`), relying only on CSS `backdrop-filter` which could not blur or reveal the user's desktop wallpaper. Additionally, the theme engine, built-in palettes (`t3-chat`, etc.), and persistence keys were heavily coupled to pre-v1 t3code artifacts. Monocode demonstrated a high-fidelity desktop experience on macOS and Windows by combining native compositor effects with finely tuned CSS translucency.
+Previously, the desktop shell ran with an opaque window background (`#0a0a0a`), relying only on CSS `backdrop-filter` which could not blur or reveal the user's desktop wallpaper. Additionally, the theme engine, built-in palettes (`awen-chat`, etc.), and persistence keys were heavily coupled to pre-v1 awen artifacts. Monocode demonstrated a high-fidelity desktop experience on macOS and Windows by combining native compositor effects with finely tuned CSS translucency.
 
 ## Decision
 
@@ -24,13 +24,13 @@ Previously, the desktop shell ran with an opaque window background (`#0a0a0a`), 
    - **Workbench Glass**: Configurable toggle allowing users to choose between an opaque Workbench (for focused code editing) and a translucent Workbench (50%–100% opacity, default 88%).
    - **Floating Chrome**: Dialogs, popovers, and menus leverage `GlassBackdrop` with high-blur diffusion.
 
-3. **ACode Native Theme Suite**:
-   - Completely purge legacy `t3-chat` and `t3-*` aliases.
-   - Introduce official curated themes: `acode-default` (Monocode-inspired neutral dark aesthetic, optimized for glass), `zinc`, `slate`, `midnight`, `forest`, and `ocean`, each with matched light variants.
+3. **Awen Native Theme Suite**:
+   - Completely purge legacy `awen-chat` and `awen-*` aliases.
+   - Introduce official curated themes: `awen-default` (Monocode-inspired neutral dark aesthetic, optimized for glass), `zinc`, `slate`, `midnight`, `forest`, and `ocean`, each with matched light variants.
    - Retain full compatibility with VS Code and OpenVSX theme imports and custom theme editing.
 
 4. **Storage & Namespace Cutover**:
-   - Clean break migration to `acode:*` keys (`acode:theme`, `acode:themes:v1`, `acode:theme-halves:v1`, `acode:ui-state:v1`, `acode:terminal-state:v1`).
+   - Clean break migration to `awen:*` keys (`awen:theme`, `awen:themes:v1`, `awen:theme-halves:v1`, `awen:ui-state:v1`, `awen:terminal-state:v1`).
 
 5. **Chat Background Wallpaper**:
    - Support user-selected local wallpaper images displayed behind session transcripts, with adjustable opacity (5%–65%) and scope (empty session vs. all turns).
@@ -39,4 +39,4 @@ Previously, the desktop shell ran with an opaque window background (`#0a0a0a`), 
 
 - The desktop window is transparent from initialization, requiring proper launch field handling to avoid flashes before web styles load.
 - Theme tokens now cleanly separate opaque canvas colors from glass-mixed background values.
-- All pre-v1 `t3code` branding and storage keys are eliminated across the desktop shell and web client.
+- All pre-v1 `awen` branding and storage keys are eliminated across the desktop shell and web client.

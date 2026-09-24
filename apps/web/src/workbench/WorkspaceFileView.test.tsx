@@ -1,14 +1,14 @@
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import type { EnvironmentId, WorkspaceId } from "@t3tools/contracts";
+import type { EnvironmentId, WorkspaceId } from "@awen/contracts";
 
 import { WorkspaceFileView } from "./WorkspaceFileView";
 import { resolveViewDefinition, type ViewTarget } from "./viewRegistry";
 import { workspaceFileViewDefinition, registerCoreViewDefinitions } from "./viewDefinitions";
 
 vi.mock("../state/entities", () => ({
-  useAcodeWorkspace: (env: string, id: string) =>
+  useAwenWorkspace: (env: string, id: string) =>
     id === "ws-missing" ? null : { id, workspaceRoot: `/repos/${id}`, title: "Repo Title" },
 }));
 

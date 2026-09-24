@@ -13,14 +13,14 @@ import {
   type ThreadPullRequestKey,
   type ThreadPullRequestLink,
   type OrchestrationThreadActivity,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import {
   legacyLinkedPullRequestOf,
   legacyThreadPullRequestKey,
   normalizeThreadPullRequestKey,
   threadPullRequestKeysEqual,
-} from "@t3tools/shared/threadPullRequests";
-import { compareDateTimeStrings } from "@t3tools/shared/dateTime";
+} from "@awen/shared/threadPullRequests";
+import { compareDateTimeStrings } from "@awen/shared/dateTime";
 import * as DateTime from "effect/DateTime";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -247,9 +247,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           projectId: command.projectId,
           title: command.title,
           workspaceRoot: command.workspaceRoot,
-          ...(command.acodeWorkspace !== undefined
-            ? { acodeWorkspace: command.acodeWorkspace }
-            : {}),
+          ...(command.awenWorkspace !== undefined ? { awenWorkspace: command.awenWorkspace } : {}),
           // Project creation has no user model choice. Older clients sent an
           // automatic seed here, but only a metadata update records an
           // explicit project default.

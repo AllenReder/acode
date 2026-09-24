@@ -33,9 +33,7 @@ function makeLayer(input: {
       Layer.provide(vcsMock),
       Layer.provide(Layer.mock(GitVcsDriver.GitVcsDriver)({})),
       Layer.provide(
-        Layer.mock(ProjectionSnapshotQuery.ProjectionSnapshotQuery)(
-          input.projectionSnapshotQuery,
-        ),
+        Layer.mock(ProjectionSnapshotQuery.ProjectionSnapshotQuery)(input.projectionSnapshotQuery),
       ),
       Layer.provide(ServerConfig.layerTest(input.workspaceRoot, input.baseDir)),
       Layer.provideMerge(NodeServices.layer),
@@ -54,9 +52,9 @@ describe("ReviewService", () => {
   it.effect("rejects diff preview cwd outside the configured workspace roots", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const workspaceRoot = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-workspace-" });
-      const outsideRoot = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-outside-" });
-      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-base-" });
+      const workspaceRoot = yield* fs.makeTempDirectoryScoped({ prefix: "awen-review-workspace-" });
+      const outsideRoot = yield* fs.makeTempDirectoryScoped({ prefix: "awen-review-outside-" });
+      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "awen-review-base-" });
       const detectCalls: Array<{ readonly cwd: string }> = [];
 
       const error = yield* Effect.gen(function* () {
@@ -77,9 +75,9 @@ describe("ReviewService", () => {
   it.effect("attributes file-content workspace violations to the file-content operation", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const workspaceRoot = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-workspace-" });
-      const outsideRoot = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-outside-" });
-      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-base-" });
+      const workspaceRoot = yield* fs.makeTempDirectoryScoped({ prefix: "awen-review-workspace-" });
+      const outsideRoot = yield* fs.makeTempDirectoryScoped({ prefix: "awen-review-outside-" });
+      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "awen-review-base-" });
       const detectCalls: Array<{ readonly cwd: string }> = [];
 
       const error = yield* Effect.gen(function* () {
@@ -110,8 +108,8 @@ describe("ReviewService", () => {
   it.effect("allows diff preview cwd inside the configured workspace root", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const workspaceRoot = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-workspace-" });
-      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-base-" });
+      const workspaceRoot = yield* fs.makeTempDirectoryScoped({ prefix: "awen-review-workspace-" });
+      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "awen-review-base-" });
       const detectCalls: Array<{ readonly cwd: string }> = [];
 
       const result = yield* Effect.gen(function* () {
@@ -125,18 +123,20 @@ describe("ReviewService", () => {
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("allows diff preview cwd inside a registered ACode project workspace root", () =>
+  it.effect("allows diff preview cwd inside a registered Awen project workspace root", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const workspaceRoot = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-workspace-" });
-      const additionalWorkspace = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-additional-" });
-      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-base-" });
+      const workspaceRoot = yield* fs.makeTempDirectoryScoped({ prefix: "awen-review-workspace-" });
+      const additionalWorkspace = yield* fs.makeTempDirectoryScoped({
+        prefix: "awen-review-additional-",
+      });
+      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "awen-review-base-" });
       const detectCalls: Array<{ readonly cwd: string }> = [];
 
       const projectionSnapshotQuery = {
         getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
         getProjectShells: () => Effect.succeed([]),
-        listAcodeProjects: () =>
+        listAwenProjects: () =>
           Effect.succeed([
             {
               id: "proj-1" as any,
@@ -149,9 +149,7 @@ describe("ReviewService", () => {
         const review = yield* ReviewService.ReviewService;
         return yield* review.getDiffPreview({ cwd: additionalWorkspace });
       }).pipe(
-        Effect.provide(
-          makeLayer({ workspaceRoot, baseDir, detectCalls, projectionSnapshotQuery }),
-        ),
+        Effect.provide(makeLayer({ workspaceRoot, baseDir, detectCalls, projectionSnapshotQuery })),
       );
 
       assert.strictEqual(result.cwd, additionalWorkspace);
@@ -162,8 +160,8 @@ describe("ReviewService", () => {
   it.effect("preserves unexpected path-resolution failures", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const workspaceRoot = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-workspace-" });
-      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-base-" });
+      const workspaceRoot = yield* fs.makeTempDirectoryScoped({ prefix: "awen-review-workspace-" });
+      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "awen-review-base-" });
       const invalidCwd = `${workspaceRoot}\0invalid`;
       const detectCalls: Array<{ readonly cwd: string }> = [];
 

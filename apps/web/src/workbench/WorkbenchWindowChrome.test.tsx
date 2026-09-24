@@ -1,13 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vite-plus/test";
 import type {
-  AcodeProjectId,
+  AwenProjectId,
   AgentSessionId,
   EnvironmentId,
   TerminalSessionId,
   WorkspaceId,
-} from "@t3tools/contracts";
-import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
+} from "@awen/contracts";
+import type { EnvironmentAwenProject } from "@awen/client-runtime/state/models";
 
 import { SidebarProvider } from "../components/ui/sidebar";
 import { WorkbenchWindowChrome } from "./WorkbenchWindowChrome";
@@ -16,7 +16,7 @@ import type { ViewTarget } from "./viewRegistry";
 
 const environmentId = "env-a" as EnvironmentId;
 const workspaceId = "ws-a" as WorkspaceId;
-const projectId = "project-a" as AcodeProjectId;
+const projectId = "project-a" as AwenProjectId;
 const agentSessionId = "agent-a" as AgentSessionId;
 const now = "2026-09-20T00:00:00.000Z";
 
@@ -34,18 +34,18 @@ const terminalTarget = {
   terminalSessionId: "terminal-a" as TerminalSessionId,
 } satisfies ViewTarget;
 
-const projects: ReadonlyArray<EnvironmentAcodeProject> = [
+const projects: ReadonlyArray<EnvironmentAwenProject> = [
   {
     id: projectId,
     environmentId,
-    title: "ACode",
+    title: "Awen",
     createdAt: now,
     updatedAt: now,
     workspaces: [
       {
         id: workspaceId,
         projectId,
-        t3ProjectId: "t3-project-a" as never,
+        awenProjectId: "awen-project-a" as never,
         title: "Main",
         workspaceRoot: "/workspace",
         role: "main",
@@ -101,7 +101,7 @@ it("renders the selected compact tab strip with real titles and a new-tab action
   expect(html).toContain("Dev server");
   expect(html).toContain('aria-label="Open Implement tabs"');
   expect(html).toContain('aria-label="New tab"');
-  expect(html).not.toContain("T3 Code");
+  expect(html).not.toContain("Awen");
 });
 
 it("does not render titlebar separator in WorkbenchWindowChrome when sidebar is expanded", () => {
@@ -179,4 +179,3 @@ it("renders window controls at the trailing end of the topbar when on Windows de
 
   vi.unstubAllGlobals();
 });
-

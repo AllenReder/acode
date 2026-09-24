@@ -1,37 +1,62 @@
 #!/usr/bin/env node
 // @effect-diagnostics globalConsole:off
-import { isExactServerPackageVersion } from "./build-server-package.ts";
 import packageJson from "../apps/server/package.json" with { type: "json" };
 import productPackageJson from "../package.json" with { type: "json" };
 
-const [version, tag] = process.argv.slice(2);
+const isExactServerPackageVersion = (version: string): boolean => {
+  const core = "(?:0|[1-9]\\d*)";
+  const prerelease = "(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)";
+  return new RegExp(
+    `^${core}\\.${core}\\.${core}(?:-${prerelease}(?:\\.${prerelease})*)?$`,
+    "u",
+  ).test(version);
+};
 
-if (!isExactServerPackageVersion(version ?? "")) {
-  console.error("Version must be an exact semver-like value, not latest or a dist-tag.");
-  process.exit(1);
+export interface VerifyServerReleaseInputs {
+  readonly version: string;
+  readonly tag?: string | undefined;
+  readonly productVersion: string;
+  readonly serverVersion: string;
 }
 
-if (version !== productPackageJson.version) {
-  console.error(
-    `Version ${version} does not match the product version ${productPackageJson.version}.`,
-  );
-  process.exit(1);
+export function verifyServerReleaseInputs(input: VerifyServerReleaseInputs): string[] {
+  const problems: string[] = [];
+
+  if (!isExactServerPackageVersion(input.version)) {
+    problems.push("Version must be an exact semver-like value, not latest or a dist-tag.");
+  }
+  if (input.version !== input.productVersion) {
+    problems.push(
+      `Version ${input.version} does not match the product version ${input.productVersion}.`,
+    );
+  }
+  if (input.version !== input.serverVersion) {
+    problems.push(
+      `Version ${input.version} does not match the checked-out daemon version ${input.serverVersion}.`,
+    );
+  }
+
+  const reservedAliases = new Set(["latest", "nightly", "preview"]);
+  if (reservedAliases.has((input.tag ?? "").toLowerCase())) {
+    problems.push("The server release workflow must not publish a shared channel alias.");
+  }
+  if (input.tag && input.tag !== `v${input.version}`) {
+    problems.push(`SSH installation requires the release tag v${input.version}.`);
+  }
+
+  return problems;
 }
 
-if (version !== packageJson.version) {
-  console.error(
-    `Version ${version} does not match the checked-out daemon version ${packageJson.version}.`,
-  );
-  process.exit(1);
-}
-
-const reservedAliases = new Set(["latest", "nightly", "preview"]);
-
-if (reservedAliases.has((tag ?? "").toLowerCase())) {
-  console.error("The server release workflow must not publish a shared channel alias.");
-  process.exit(1);
-}
-if (tag && tag !== `v${version}`) {
-  console.error(`SSH installation requires the release tag v${version}.`);
-  process.exit(1);
+if (import.meta.main) {
+  const [version = "", tag] = process.argv.slice(2);
+  const problems = verifyServerReleaseInputs({
+    version,
+    tag,
+    productVersion: productPackageJson.version,
+    serverVersion: packageJson.version,
+  });
+  if (problems.length > 0) {
+    process.stderr.write(`${problems.join("\n")}\n`);
+    process.exitCode = 1;
+  }
 }

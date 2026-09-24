@@ -1,5 +1,5 @@
-import type { EnvironmentId } from "@t3tools/contracts";
-import { WS_METHODS as RpcMethods } from "@t3tools/contracts";
+import type { EnvironmentId } from "@awen/contracts";
+import { WS_METHODS as RpcMethods } from "@awen/contracts";
 import { Atom } from "effect/unstable/reactivity";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
@@ -23,31 +23,31 @@ export function createEnvironmentWorkspaceCommandAtoms<R, E>(
   return {
     associate: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:workspace:associate",
-      tag: RpcMethods.acodeWorkspaceAssociate,
+      tag: RpcMethods.awenWorkspaceAssociate,
       scheduler: workspaceCommandScheduler,
       concurrency: workspaceCommandConcurrency,
     }),
     createWorktree: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:workspace:create-worktree",
-      tag: RpcMethods.acodeWorkspaceCreateWorktree,
+      tag: RpcMethods.awenWorkspaceCreateWorktree,
       scheduler: workspaceCommandScheduler,
       concurrency: workspaceCommandConcurrency,
     }),
     remove: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:workspace:remove",
-      tag: RpcMethods.acodeWorkspaceRemove,
+      tag: RpcMethods.awenWorkspaceRemove,
       scheduler: workspaceCommandScheduler,
       concurrency: workspaceCommandConcurrency,
     }),
     rename: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:workspace:rename",
-      tag: RpcMethods.acodeWorkspaceRename,
+      tag: RpcMethods.awenWorkspaceRename,
       scheduler: workspaceCommandScheduler,
       concurrency: workspaceCommandConcurrency,
     }),
     renameProject: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:project:rename",
-      tag: RpcMethods.acodeProjectRename,
+      tag: RpcMethods.awenProjectRename,
       scheduler: workspaceCommandScheduler,
       concurrency: workspaceCommandConcurrency,
     }),

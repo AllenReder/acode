@@ -1,4 +1,4 @@
-import type { EnvironmentTheme } from "@t3tools/contracts";
+import type { EnvironmentTheme } from "@awen/contracts";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 const NIGHTFALL_THEME = {
@@ -16,7 +16,7 @@ const LIGHT_THEME = {
 } as const satisfies EnvironmentTheme;
 
 async function setupThemeSync(mode: "dark" | "system" = "dark") {
-  const storage = new Map<string, string>([["acode:theme", NIGHTFALL_THEME.id]]);
+  const storage = new Map<string, string>([["awen:theme", NIGHTFALL_THEME.id]]);
   const styles = new Map<string, string>();
   const classes = new Set<string>();
   const root = {
@@ -141,7 +141,7 @@ describe("published theme refresh", () => {
     expectPreview();
     publish([LIGHT_THEME, { ...NIGHTFALL_THEME, id: "unused-theme" }]);
     expectPreview();
-    expect(publish([]).theme).toBe(palette.ACODE_DEFAULT_THEME_ID);
+    expect(publish([]).theme).toBe(palette.AWEN_DEFAULT_THEME_ID);
     expectPreview();
 
     const current = publish([{ ...NIGHTFALL_THEME, canvas: "#112233" }]);

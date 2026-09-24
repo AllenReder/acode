@@ -1,8 +1,8 @@
-import type { EnvironmentId, WorkspaceId } from "@t3tools/contracts";
+import type { EnvironmentId, WorkspaceId } from "@awen/contracts";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+} from "@awen/client-runtime/state/runtime";
 import { useCallback } from "react";
 
 import { nextWorkspaceTerminalId } from "../components/Sidebar.logic";

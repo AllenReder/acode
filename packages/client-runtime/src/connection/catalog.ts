@@ -1,11 +1,10 @@
-import { DesktopSshEnvironmentTargetSchema, EnvironmentId } from "@t3tools/contracts";
+import { DesktopSshEnvironmentTargetSchema, EnvironmentId } from "@awen/contracts";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import {
   BearerConnectionTarget,
   PrimaryConnectionTarget,
-  RelayConnectionTarget,
   SshConnectionTarget,
   type ConnectionTarget,
 } from "./model.ts";
@@ -62,13 +61,6 @@ export class PrimaryConnectionRegistration extends Schema.TaggedClass<PrimaryCon
   },
 ) {}
 
-export class RelayConnectionRegistration extends Schema.TaggedClass<RelayConnectionRegistration>()(
-  "RelayConnectionRegistration",
-  {
-    target: RelayConnectionTarget,
-  },
-) {}
-
 export class BearerConnectionRegistration extends Schema.TaggedClass<BearerConnectionRegistration>()(
   "BearerConnectionRegistration",
   {
@@ -87,7 +79,6 @@ export class SshConnectionRegistration extends Schema.TaggedClass<SshConnectionR
 ) {}
 
 export const ConnectionRegistration = Schema.Union([
-  RelayConnectionRegistration,
   BearerConnectionRegistration,
   SshConnectionRegistration,
 ]);
@@ -113,7 +104,6 @@ export function connectionRegistrationCatalogEntry(
 ): ConnectionCatalogEntry {
   switch (registration._tag) {
     case "PrimaryConnectionRegistration":
-    case "RelayConnectionRegistration":
       return {
         target: registration.target,
         profile: Option.none(),

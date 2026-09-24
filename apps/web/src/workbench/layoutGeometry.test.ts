@@ -3,7 +3,7 @@ import { computePaneLayoutRects } from "./layoutGeometry";
 import { leaf, type LayoutNode } from "./layout";
 import type { WorkbenchTab } from "./workbenchState";
 import type { ViewTarget } from "./viewRegistry";
-import type { EnvironmentId, WorkspaceId } from "@t3tools/contracts";
+import type { EnvironmentId, WorkspaceId } from "@awen/contracts";
 
 const testTarget: ViewTarget = {
   kind: "workspace",
@@ -18,7 +18,9 @@ describe("layoutGeometry", () => {
         id: "tab-1",
         layoutMode: "scrolling",
         layout: leaf("p1"),
-        focusedPaneId: "p1", titleMode: "auto", titleOverride: "",
+        focusedPaneId: "p1",
+        titleMode: "auto",
+        titleOverride: "",
         panes: new Map([
           ["p1", { id: "v1", definitionId: "test", target: testTarget }],
           ["p2", { id: "v2", definitionId: "test", target: testTarget }],
@@ -60,7 +62,9 @@ describe("layoutGeometry", () => {
         id: "tab-1",
         layoutMode: "scrolling",
         layout: leaf("p1"),
-        focusedPaneId: "p1", titleMode: "auto", titleOverride: "",
+        focusedPaneId: "p1",
+        titleMode: "auto",
+        titleOverride: "",
         panes: new Map([
           ["p1", { id: "v1", definitionId: "test", target: testTarget }],
           ["p2", { id: "v2", definitionId: "test", target: testTarget }],
@@ -114,7 +118,9 @@ describe("layoutGeometry", () => {
         id: "tab-1",
         layoutMode: "bsp",
         layout: splitNode,
-        focusedPaneId: "p1", titleMode: "auto", titleOverride: "",
+        focusedPaneId: "p1",
+        titleMode: "auto",
+        titleOverride: "",
         panes: new Map([
           ["p1", { id: "v1", definitionId: "test", target: testTarget }],
           ["p2", { id: "v2", definitionId: "test", target: testTarget }],
@@ -142,7 +148,9 @@ describe("layoutGeometry", () => {
         id: "tab-1",
         layoutMode: "bsp",
         layout: splitNode,
-        focusedPaneId: "p1", titleMode: "auto", titleOverride: "",
+        focusedPaneId: "p1",
+        titleMode: "auto",
+        titleOverride: "",
         panes: new Map([
           ["p1", { id: "v1", definitionId: "test", target: testTarget }],
           ["p2", { id: "v2", definitionId: "test", target: testTarget }],
@@ -167,61 +175,63 @@ describe("layoutGeometry", () => {
   });
 });
 
-  describe("nested splits and sashes", () => {
-    it("handles complex BSP nested splits with uniform gaps", () => {
-      const gap = 10;
-      // Root split right: left is p1, right is split down (p2, p3)
-      const layout: LayoutNode = {
-        type: "split",
-        id: "root",
-        dir: "right",
-        children: [
-          leaf("p1"),
-          {
-            type: "split",
-            id: "right-split",
-            dir: "down",
-            children: [leaf("p2"), leaf("p3")],
-            sizes: [0.5, 0.5],
-          },
-        ],
-        sizes: [0.5, 0.5],
-      };
-      const tab: WorkbenchTab = {
-        id: "tab-nested",
-        layoutMode: "bsp",
-        layout,
-        focusedPaneId: "p1", titleMode: "auto", titleOverride: "",
-        panes: new Map([
-          ["p1", { id: "v1", definitionId: "test", target: testTarget }],
-          ["p2", { id: "v2", definitionId: "test", target: testTarget }],
-          ["p3", { id: "v3", definitionId: "test", target: testTarget }],
-        ]),
-      };
+describe("nested splits and sashes", () => {
+  it("handles complex BSP nested splits with uniform gaps", () => {
+    const gap = 10;
+    // Root split right: left is p1, right is split down (p2, p3)
+    const layout: LayoutNode = {
+      type: "split",
+      id: "root",
+      dir: "right",
+      children: [
+        leaf("p1"),
+        {
+          type: "split",
+          id: "right-split",
+          dir: "down",
+          children: [leaf("p2"), leaf("p3")],
+          sizes: [0.5, 0.5],
+        },
+      ],
+      sizes: [0.5, 0.5],
+    };
+    const tab: WorkbenchTab = {
+      id: "tab-nested",
+      layoutMode: "bsp",
+      layout,
+      focusedPaneId: "p1",
+      titleMode: "auto",
+      titleOverride: "",
+      panes: new Map([
+        ["p1", { id: "v1", definitionId: "test", target: testTarget }],
+        ["p2", { id: "v2", definitionId: "test", target: testTarget }],
+        ["p3", { id: "v3", definitionId: "test", target: testTarget }],
+      ]),
+    };
 
-      const result = computePaneLayoutRects(tab, { width: 1000, height: 800 }, gap);
-      const p1 = result.rects.get("p1")!;
-      const p2 = result.rects.get("p2")!;
-      const p3 = result.rects.get("p3")!;
+    const result = computePaneLayoutRects(tab, { width: 1000, height: 800 }, gap);
+    const p1 = result.rects.get("p1")!;
+    const p2 = result.rects.get("p2")!;
+    const p3 = result.rects.get("p3")!;
 
-      // Left margin p1
-      expect(p1.left).toBe(gap);
-      // Gap between p1 and right split
-      expect(p2.left - (p1.left + p1.width)).toBe(gap);
-      // Right margin p2
-      expect(p2.left + p2.width + gap).toBe(1000);
+    // Left margin p1
+    expect(p1.left).toBe(gap);
+    // Gap between p1 and right split
+    expect(p2.left - (p1.left + p1.width)).toBe(gap);
+    // Right margin p2
+    expect(p2.left + p2.width + gap).toBe(1000);
 
-      // Vertical gap between p2 and p3
-      expect(p3.top - (p2.top + p2.height)).toBe(gap);
-      // Top and bottom margins
-      expect(p2.top).toBe(gap);
-      expect(p3.top + p3.height + gap).toBe(800);
+    // Vertical gap between p2 and p3
+    expect(p3.top - (p2.top + p2.height)).toBe(gap);
+    // Top and bottom margins
+    expect(p2.top).toBe(gap);
+    expect(p3.top + p3.height + gap).toBe(800);
 
-      // Verify sashes are generated
-      expect(result.sashes.length).toBe(2);
-      const verticalSash = result.sashes.find((s) => s.dir === "right")!;
-      const horizontalSash = result.sashes.find((s) => s.dir === "down")!;
-      expect(verticalSash).toBeDefined();
-      expect(horizontalSash).toBeDefined();
-    });
+    // Verify sashes are generated
+    expect(result.sashes.length).toBe(2);
+    const verticalSash = result.sashes.find((s) => s.dir === "right")!;
+    const horizontalSash = result.sashes.find((s) => s.dir === "down")!;
+    expect(verticalSash).toBeDefined();
+    expect(horizontalSash).toBeDefined();
   });
+});

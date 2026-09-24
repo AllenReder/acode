@@ -1,5 +1,5 @@
 import {
-  AcodeProjectId,
+  AwenProjectId,
   ApprovalRequestId,
   CheckpointRef,
   CommandId,
@@ -13,7 +13,7 @@ import {
   ThreadLinkedPullRequest,
   TurnId,
   ProviderInstanceId,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import * as Option from "effect/Option";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
@@ -62,12 +62,12 @@ const exists = (filePath: string) =>
     return fileInfo._tag === "Success";
   });
 
-const BaseTestLayer = makeProjectionPipelinePrefixedTestLayer("t3-projection-pipeline-test-");
+const BaseTestLayer = makeProjectionPipelinePrefixedTestLayer("awen-projection-pipeline-test-");
 const encodeThreadLinkedPullRequest = Schema.encodeSync(
   Schema.fromJsonString(ThreadLinkedPullRequest),
 );
 
-it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-cursor-batch-")))(
+it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("awen-projection-cursor-batch-")))(
   "OrchestrationProjectionPipeline cursor batches",
   (it) => {
     it.effect("writes a project and all projector cursors in two statements", () =>
@@ -103,27 +103,27 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-curs
         assert.strictEqual(counter.count(), 4);
         assert.deepEqual(
           yield* sql<{
-            readonly acodeProjectId: string;
+            readonly awenProjectId: string;
             readonly workspaceId: string;
-            readonly t3ProjectId: string;
+            readonly projectId: string;
             readonly workspaceRoot: string;
             readonly role: string;
           }>`
             SELECT
-              projects.acode_project_id AS "acodeProjectId",
+              projects.awen_project_id AS "awenProjectId",
               workspaces.workspace_id AS "workspaceId",
-              workspaces.t3_project_id AS "t3ProjectId",
+              workspaces.project_id AS "projectId",
               workspaces.workspace_root AS "workspaceRoot",
               workspaces.role
-            FROM projection_acode_projects AS projects
-            INNER JOIN projection_acode_workspaces AS workspaces
-              ON workspaces.acode_project_id = projects.acode_project_id
+            FROM projection_awen_projects AS projects
+            INNER JOIN projection_awen_workspaces AS workspaces
+              ON workspaces.awen_project_id = projects.awen_project_id
           `,
           [
             {
-              acodeProjectId: "acode-project:project-cursor-batch",
+              awenProjectId: "awen-project:project-cursor-batch",
               workspaceId: "workspace:project-cursor-batch",
-              t3ProjectId: "project-cursor-batch",
+              projectId: "project-cursor-batch",
               workspaceRoot: "/tmp/project-cursor-batch",
               role: "main",
             },
@@ -144,7 +144,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-curs
   },
 );
 
-it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-import-shell-")))(
+it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("awen-import-shell-")))(
   "imported thread shell projection",
   (it) => {
     it.effect("does not mark imported user messages as queued work in thread shells", () =>
@@ -240,7 +240,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-import-shell-")
   },
 );
 
-it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-branch-pr-projection-")))(
+it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("awen-branch-pr-projection-")))(
   "branch pull request projection",
   (it) => {
     it.effect("persists branch pull request updates without changing manual links", () =>
@@ -280,14 +280,14 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-branch-pr-proje
         yield* projectionPipeline.projectEvent(created);
         const linkedPullRequest = {
           projectId,
-          repository: "pingdotgg/t3code",
+          repository: "allenreder/awen",
           number: 42,
-          url: "https://github.com/pingdotgg/t3code/pull/42",
+          url: "https://github.com/AllenReder/awen/pull/42",
         };
         const branchPullRequest = {
           ...linkedPullRequest,
           number: 43,
-          url: "https://github.com/pingdotgg/t3code/pull/43",
+          url: "https://github.com/AllenReder/awen/pull/43",
         };
         const updates = [
           { payload: { linkedPullRequest, branchPullRequest }, expected: branchPullRequest },
@@ -650,7 +650,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
   );
 });
 
-it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-base-")))(
+it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("awen-base-")))(
   "OrchestrationProjectionPipeline",
   (it) => {
     it.effect("stores message attachment references without mutating payloads", () =>
@@ -717,7 +717,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-base-")))(
   },
 );
 
-it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-pull-requests-")))(
+it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("awen-projection-pull-requests-")))(
   "OrchestrationProjectionPipeline pull request links",
   (it) => {
     it.effect("projects link, sync, unlink, legacy replay and delete into the link table", () =>
@@ -807,9 +807,9 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-pull
             threadId,
             link: {
               host: "github.com",
-              repository: "pingdotgg/t3code",
+              repository: "allenreder/awen",
               number: 42,
-              url: "https://github.com/pingdotgg/t3code/pull/42",
+              url: "https://github.com/AllenReder/awen/pull/42",
               source: "created",
               linkedAt: "2026-01-01T00:00:02.000Z",
               snapshot: null,
@@ -832,7 +832,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-pull
           },
           {
             host: "github.com",
-            repository: "pingdotgg/t3code",
+            repository: "allenreder/awen",
             number: 42,
             source: "created",
             linkedAt: "2026-01-01T00:00:02.000Z",
@@ -859,7 +859,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-pull
           payload: {
             threadId,
             host: "github.com",
-            repository: "pingdotgg/t3code",
+            repository: "allenreder/awen",
             number: 42,
             snapshot,
             stack: null,
@@ -872,7 +872,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-pull
           payload: {
             threadId,
             host: "github.com",
-            repository: "pingdotgg/t3code",
+            repository: "allenreder/awen",
             number: 99,
             snapshot,
             stack: null,
@@ -910,7 +910,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-pull
           payload: {
             threadId,
             host: "GitHub.COM",
-            repository: "PingDotGG/T3Code",
+            repository: "AllenReder/awen",
             number: 42,
             updatedAt: "2026-01-01T00:00:05.000Z",
           },
@@ -960,9 +960,9 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-pull
             threadId,
             link: {
               host: "github.com",
-              repository: "pingdotgg/t3code",
+              repository: "AllenReder/awen",
               number: 43,
-              url: "https://github.com/pingdotgg/t3code/pull/43",
+              url: "https://github.com/AllenReder/awen/pull/43",
               source: "agent",
               linkedAt: "2026-01-01T00:00:06.000Z",
               snapshot: null,
@@ -986,7 +986,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-pull
   },
 );
 
-it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-attachments-safe-")))(
+it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("awen-projection-attachments-safe-")))(
   "OrchestrationProjectionPipeline",
   (it) => {
     it.effect("preserves mixed image attachment metadata as-is", () =>
@@ -1197,7 +1197,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
 });
 
 it.layer(
-  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-attachments-overwrite-")),
+  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("awen-projection-attachments-overwrite-")),
 )("OrchestrationProjectionPipeline", (it) => {
   it.effect("overwrites stored attachment references when a message updates attachments", () =>
     Effect.gen(function* () {
@@ -1341,7 +1341,7 @@ it.layer(
 });
 
 it.layer(
-  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-attachments-rollback-")),
+  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("awen-projection-attachments-rollback-")),
 )("OrchestrationProjectionPipeline", (it) => {
   it.effect("does not persist attachment files when projector transaction rolls back", () =>
     Effect.gen(function* () {
@@ -1485,7 +1485,7 @@ it.layer(
 });
 
 it.layer(
-  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-attachments-overwrite-")),
+  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("awen-projection-attachments-overwrite-")),
 )("OrchestrationProjectionPipeline", (it) => {
   it.effect("prunes reverted attachments only after every projector commits", () =>
     Effect.gen(function* () {
@@ -1569,7 +1569,7 @@ it.layer(
           threadId,
           turnId: TurnId.make("turn-keep"),
           checkpointTurnCount: 1,
-          checkpointRef: CheckpointRef.make("refs/t3/checkpoints/thread-revert-files/turn/1"),
+          checkpointRef: CheckpointRef.make("refs/awen/checkpoints/thread-revert-files/turn/1"),
           status: "ready",
           files: [],
           assistantMessageId: MessageId.make("message-keep"),
@@ -1629,7 +1629,7 @@ it.layer(
           threadId,
           turnId: TurnId.make("turn-remove"),
           checkpointTurnCount: 2,
-          checkpointRef: CheckpointRef.make("refs/t3/checkpoints/thread-revert-files/turn/2"),
+          checkpointRef: CheckpointRef.make("refs/awen/checkpoints/thread-revert-files/turn/2"),
           status: "ready",
           files: [],
           assistantMessageId: MessageId.make("message-remove"),
@@ -1838,63 +1838,226 @@ it.layer(
   );
 });
 
-it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-attachments-revert-")))(
-  "OrchestrationProjectionPipeline",
-  (it) => {
-    it.effect("removes thread attachment directory when thread is deleted", () =>
-      Effect.gen(function* () {
-        const fileSystem = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const projectionPipeline = yield* OrchestrationProjectionPipeline;
-        const eventStore = yield* OrchestrationEventStore;
-        const { attachmentsDir } = yield* ServerConfig;
-        const now = "2026-01-01T00:00:00.000Z";
-        const threadId = ThreadId.make("Thread Delete.Files");
-        const attachmentId = "thread-delete-files-00000000-0000-4000-8000-000000000001";
-        const fileAttachmentId = "thread-delete-files-00000000-0000-4000-8000-000000000003-pdf";
-        const otherThreadAttachmentId =
-          "thread-delete-files-extra-00000000-0000-4000-8000-000000000002";
+it.layer(
+  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("awen-projection-attachments-revert-")),
+)("OrchestrationProjectionPipeline", (it) => {
+  it.effect("removes thread attachment directory when thread is deleted", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const projectionPipeline = yield* OrchestrationProjectionPipeline;
+      const eventStore = yield* OrchestrationEventStore;
+      const { attachmentsDir } = yield* ServerConfig;
+      const now = "2026-01-01T00:00:00.000Z";
+      const threadId = ThreadId.make("Thread Delete.Files");
+      const attachmentId = "thread-delete-files-00000000-0000-4000-8000-000000000001";
+      const fileAttachmentId = "thread-delete-files-00000000-0000-4000-8000-000000000003-pdf";
+      const otherThreadAttachmentId =
+        "thread-delete-files-extra-00000000-0000-4000-8000-000000000002";
 
-        const appendAndProject = (event: Parameters<typeof eventStore.append>[0]) =>
-          eventStore
-            .append(event)
-            .pipe(Effect.flatMap((savedEvent) => projectionPipeline.projectEvent(savedEvent)));
+      const appendAndProject = (event: Parameters<typeof eventStore.append>[0]) =>
+        eventStore
+          .append(event)
+          .pipe(Effect.flatMap((savedEvent) => projectionPipeline.projectEvent(savedEvent)));
 
-        yield* appendAndProject({
-          type: "project.created",
-          eventId: EventId.make("evt-delete-files-1"),
-          aggregateKind: "project",
-          aggregateId: ProjectId.make("project-delete-files"),
-          occurredAt: now,
-          commandId: CommandId.make("cmd-delete-files-1"),
-          causationEventId: null,
-          correlationId: CorrelationId.make("cmd-delete-files-1"),
-          metadata: {},
-          payload: {
-            projectId: ProjectId.make("project-delete-files"),
-            title: "Project Delete Files",
-            workspaceRoot: "/tmp/project-delete-files",
-            defaultModelSelection: null,
-            scripts: [],
-            createdAt: now,
-            updatedAt: now,
+      yield* appendAndProject({
+        type: "project.created",
+        eventId: EventId.make("evt-delete-files-1"),
+        aggregateKind: "project",
+        aggregateId: ProjectId.make("project-delete-files"),
+        occurredAt: now,
+        commandId: CommandId.make("cmd-delete-files-1"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-delete-files-1"),
+        metadata: {},
+        payload: {
+          projectId: ProjectId.make("project-delete-files"),
+          title: "Project Delete Files",
+          workspaceRoot: "/tmp/project-delete-files",
+          defaultModelSelection: null,
+          scripts: [],
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+
+      yield* appendAndProject({
+        type: "thread.created",
+        eventId: EventId.make("evt-delete-files-2"),
+        aggregateKind: "thread",
+        aggregateId: threadId,
+        occurredAt: now,
+        commandId: CommandId.make("cmd-delete-files-2"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-delete-files-2"),
+        metadata: {},
+        payload: {
+          threadId,
+          projectId: ProjectId.make("project-delete-files"),
+          title: "Thread Delete Files",
+          modelSelection: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: "gpt-5-codex",
           },
-        });
+          runtimeMode: "full-access",
+          branch: null,
+          worktreePath: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
 
-        yield* appendAndProject({
+      yield* appendAndProject({
+        type: "thread.message-sent",
+        eventId: EventId.make("evt-delete-files-3"),
+        aggregateKind: "thread",
+        aggregateId: threadId,
+        occurredAt: now,
+        commandId: CommandId.make("cmd-delete-files-3"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-delete-files-3"),
+        metadata: {},
+        payload: {
+          threadId,
+          messageId: MessageId.make("message-delete-files"),
+          role: "user",
+          text: "Delete",
+          attachments: [
+            {
+              type: "image",
+              id: attachmentId,
+              name: "delete.png",
+              mimeType: "image/png",
+              sizeBytes: 5,
+            },
+            {
+              type: "file",
+              id: fileAttachmentId,
+              name: "delete.pdf",
+              mimeType: "application/pdf",
+              sizeBytes: 6,
+            },
+          ],
+          turnId: null,
+          streaming: false,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+
+      const threadAttachmentPath = path.join(attachmentsDir, `${attachmentId}.png`);
+      const threadFileAttachmentPath = path.join(attachmentsDir, `${fileAttachmentId}.pdf`);
+      const otherThreadAttachmentPath = path.join(attachmentsDir, `${otherThreadAttachmentId}.png`);
+      yield* fileSystem.makeDirectory(attachmentsDir, { recursive: true });
+      yield* fileSystem.writeFileString(threadAttachmentPath, "delete");
+      yield* fileSystem.writeFileString(threadFileAttachmentPath, "delete");
+      yield* fileSystem.writeFileString(otherThreadAttachmentPath, "other-thread");
+      assert.isTrue(yield* exists(threadAttachmentPath));
+      assert.isTrue(yield* exists(threadFileAttachmentPath));
+      assert.isTrue(yield* exists(otherThreadAttachmentPath));
+
+      yield* appendAndProject({
+        type: "thread.deleted",
+        eventId: EventId.make("evt-delete-files-4"),
+        aggregateKind: "thread",
+        aggregateId: threadId,
+        occurredAt: now,
+        commandId: CommandId.make("cmd-delete-files-4"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-delete-files-4"),
+        metadata: {},
+        payload: {
+          threadId,
+          deletedAt: now,
+        },
+      });
+
+      assert.isFalse(yield* exists(threadAttachmentPath));
+      assert.isFalse(yield* exists(threadFileAttachmentPath));
+      assert.isTrue(yield* exists(otherThreadAttachmentPath));
+    }),
+  );
+});
+
+it.layer(
+  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("awen-projection-attachments-delete-")),
+)("OrchestrationProjectionPipeline", (it) => {
+  it.effect("ignores unsafe thread ids for attachment cleanup paths", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const projectionPipeline = yield* OrchestrationProjectionPipeline;
+      const eventStore = yield* OrchestrationEventStore;
+      const now = "2026-01-01T00:00:00.000Z";
+      const { attachmentsDir: attachmentsRootDir, stateDir } = yield* ServerConfig;
+      const attachmentsSentinelPath = path.join(attachmentsRootDir, "sentinel.txt");
+      const stateDirSentinelPath = path.join(stateDir, "state-sentinel.txt");
+      yield* fileSystem.makeDirectory(attachmentsRootDir, { recursive: true });
+      yield* fileSystem.writeFileString(attachmentsSentinelPath, "keep-attachments-root");
+      yield* fileSystem.writeFileString(stateDirSentinelPath, "keep-state-dir");
+
+      yield* eventStore.append({
+        type: "thread.deleted",
+        eventId: EventId.make("evt-unsafe-thread-delete"),
+        aggregateKind: "thread",
+        aggregateId: ThreadId.make(".."),
+        occurredAt: now,
+        commandId: CommandId.make("cmd-unsafe-thread-delete"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-unsafe-thread-delete"),
+        metadata: {},
+        payload: {
+          threadId: ThreadId.make(".."),
+          deletedAt: now,
+        },
+      });
+
+      yield* projectionPipeline.bootstrap;
+
+      assert.isTrue(yield* exists(attachmentsRootDir));
+      assert.isTrue(yield* exists(attachmentsSentinelPath));
+      assert.isTrue(yield* exists(stateDirSentinelPath));
+    }),
+  );
+});
+
+it.layer(
+  Layer.fresh(makeProjectionPipelinePrefixedTestLayer("awen-projection-attachments-replay-")),
+)("OrchestrationProjectionPipeline", (it) => {
+  it.effect("replaying a superseded thread.deleted keeps the re-created thread's files", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const projectionPipeline = yield* OrchestrationProjectionPipeline;
+      const eventStore = yield* OrchestrationEventStore;
+      const { attachmentsDir } = yield* ServerConfig;
+      const now = "2026-01-01T00:00:00.000Z";
+      const projectId = ProjectId.make("project-replay");
+      const retriedThreadId = ThreadId.make("thread-replay-retried");
+      const goneThreadId = ThreadId.make("thread-replay-gone");
+      const retriedAttachmentPath = path.join(
+        attachmentsDir,
+        "thread-replay-retried-00000000-0000-4000-8000-000000000001.png",
+      );
+      const goneAttachmentPath = path.join(
+        attachmentsDir,
+        "thread-replay-gone-00000000-0000-4000-8000-000000000002.png",
+      );
+      const threadCreated = (threadId: ThreadId, suffix: string) =>
+        eventStore.append({
           type: "thread.created",
-          eventId: EventId.make("evt-delete-files-2"),
+          eventId: EventId.make(`evt-replay-create-${suffix}`),
           aggregateKind: "thread",
           aggregateId: threadId,
           occurredAt: now,
-          commandId: CommandId.make("cmd-delete-files-2"),
+          commandId: CommandId.make(`cmd-replay-create-${suffix}`),
           causationEventId: null,
-          correlationId: CorrelationId.make("cmd-delete-files-2"),
+          correlationId: CorrelationId.make(`cmd-replay-create-${suffix}`),
           metadata: {},
           payload: {
             threadId,
-            projectId: ProjectId.make("project-delete-files"),
-            title: "Thread Delete Files",
+            projectId,
+            title: `Thread ${suffix}`,
             modelSelection: {
               instanceId: ProviderInstanceId.make("codex"),
               model: "gpt-5-codex",
@@ -1906,230 +2069,61 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-atta
             updatedAt: now,
           },
         });
-
-        yield* appendAndProject({
-          type: "thread.message-sent",
-          eventId: EventId.make("evt-delete-files-3"),
+      const threadDeleted = (threadId: ThreadId, suffix: string) =>
+        eventStore.append({
+          type: "thread.deleted",
+          eventId: EventId.make(`evt-replay-delete-${suffix}`),
           aggregateKind: "thread",
           aggregateId: threadId,
           occurredAt: now,
-          commandId: CommandId.make("cmd-delete-files-3"),
+          commandId: CommandId.make(`cmd-replay-delete-${suffix}`),
           causationEventId: null,
-          correlationId: CorrelationId.make("cmd-delete-files-3"),
+          correlationId: CorrelationId.make(`cmd-replay-delete-${suffix}`),
           metadata: {},
-          payload: {
-            threadId,
-            messageId: MessageId.make("message-delete-files"),
-            role: "user",
-            text: "Delete",
-            attachments: [
-              {
-                type: "image",
-                id: attachmentId,
-                name: "delete.png",
-                mimeType: "image/png",
-                sizeBytes: 5,
-              },
-              {
-                type: "file",
-                id: fileAttachmentId,
-                name: "delete.pdf",
-                mimeType: "application/pdf",
-                sizeBytes: 6,
-              },
-            ],
-            turnId: null,
-            streaming: false,
-            createdAt: now,
-            updatedAt: now,
-          },
+          payload: { threadId, deletedAt: now },
         });
 
-        const threadAttachmentPath = path.join(attachmentsDir, `${attachmentId}.png`);
-        const threadFileAttachmentPath = path.join(attachmentsDir, `${fileAttachmentId}.pdf`);
-        const otherThreadAttachmentPath = path.join(
-          attachmentsDir,
-          `${otherThreadAttachmentId}.png`,
-        );
-        yield* fileSystem.makeDirectory(attachmentsDir, { recursive: true });
-        yield* fileSystem.writeFileString(threadAttachmentPath, "delete");
-        yield* fileSystem.writeFileString(threadFileAttachmentPath, "delete");
-        yield* fileSystem.writeFileString(otherThreadAttachmentPath, "other-thread");
-        assert.isTrue(yield* exists(threadAttachmentPath));
-        assert.isTrue(yield* exists(threadFileAttachmentPath));
-        assert.isTrue(yield* exists(otherThreadAttachmentPath));
+      yield* eventStore.append({
+        type: "project.created",
+        eventId: EventId.make("evt-replay-project"),
+        aggregateKind: "project",
+        aggregateId: projectId,
+        occurredAt: now,
+        commandId: CommandId.make("cmd-replay-project"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-replay-project"),
+        metadata: {},
+        payload: {
+          projectId,
+          title: "Replay",
+          workspaceRoot: "/tmp/project-replay",
+          defaultModelSelection: null,
+          scripts: [],
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+      // A failed first send: create, roll back, then the draft retries the id.
+      yield* threadCreated(retriedThreadId, "retried-1");
+      yield* threadDeleted(retriedThreadId, "retried");
+      yield* threadCreated(retriedThreadId, "retried-2");
+      // A thread that was deleted for good.
+      yield* threadCreated(goneThreadId, "gone");
+      yield* threadDeleted(goneThreadId, "gone");
 
-        yield* appendAndProject({
-          type: "thread.deleted",
-          eventId: EventId.make("evt-delete-files-4"),
-          aggregateKind: "thread",
-          aggregateId: threadId,
-          occurredAt: now,
-          commandId: CommandId.make("cmd-delete-files-4"),
-          causationEventId: null,
-          correlationId: CorrelationId.make("cmd-delete-files-4"),
-          metadata: {},
-          payload: {
-            threadId,
-            deletedAt: now,
-          },
-        });
+      // Files on disk are not event-sourced: by the time anything replays,
+      // the retried thread's attachments already belong to its second life.
+      yield* fileSystem.makeDirectory(attachmentsDir, { recursive: true });
+      yield* fileSystem.writeFileString(retriedAttachmentPath, "second incarnation");
+      yield* fileSystem.writeFileString(goneAttachmentPath, "gone");
 
-        assert.isFalse(yield* exists(threadAttachmentPath));
-        assert.isFalse(yield* exists(threadFileAttachmentPath));
-        assert.isTrue(yield* exists(otherThreadAttachmentPath));
-      }),
-    );
-  },
-);
+      yield* projectionPipeline.bootstrap;
 
-it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-attachments-delete-")))(
-  "OrchestrationProjectionPipeline",
-  (it) => {
-    it.effect("ignores unsafe thread ids for attachment cleanup paths", () =>
-      Effect.gen(function* () {
-        const fileSystem = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const projectionPipeline = yield* OrchestrationProjectionPipeline;
-        const eventStore = yield* OrchestrationEventStore;
-        const now = "2026-01-01T00:00:00.000Z";
-        const { attachmentsDir: attachmentsRootDir, stateDir } = yield* ServerConfig;
-        const attachmentsSentinelPath = path.join(attachmentsRootDir, "sentinel.txt");
-        const stateDirSentinelPath = path.join(stateDir, "state-sentinel.txt");
-        yield* fileSystem.makeDirectory(attachmentsRootDir, { recursive: true });
-        yield* fileSystem.writeFileString(attachmentsSentinelPath, "keep-attachments-root");
-        yield* fileSystem.writeFileString(stateDirSentinelPath, "keep-state-dir");
-
-        yield* eventStore.append({
-          type: "thread.deleted",
-          eventId: EventId.make("evt-unsafe-thread-delete"),
-          aggregateKind: "thread",
-          aggregateId: ThreadId.make(".."),
-          occurredAt: now,
-          commandId: CommandId.make("cmd-unsafe-thread-delete"),
-          causationEventId: null,
-          correlationId: CorrelationId.make("cmd-unsafe-thread-delete"),
-          metadata: {},
-          payload: {
-            threadId: ThreadId.make(".."),
-            deletedAt: now,
-          },
-        });
-
-        yield* projectionPipeline.bootstrap;
-
-        assert.isTrue(yield* exists(attachmentsRootDir));
-        assert.isTrue(yield* exists(attachmentsSentinelPath));
-        assert.isTrue(yield* exists(stateDirSentinelPath));
-      }),
-    );
-  },
-);
-
-it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-attachments-replay-")))(
-  "OrchestrationProjectionPipeline",
-  (it) => {
-    it.effect("replaying a superseded thread.deleted keeps the re-created thread's files", () =>
-      Effect.gen(function* () {
-        const fileSystem = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const projectionPipeline = yield* OrchestrationProjectionPipeline;
-        const eventStore = yield* OrchestrationEventStore;
-        const { attachmentsDir } = yield* ServerConfig;
-        const now = "2026-01-01T00:00:00.000Z";
-        const projectId = ProjectId.make("project-replay");
-        const retriedThreadId = ThreadId.make("thread-replay-retried");
-        const goneThreadId = ThreadId.make("thread-replay-gone");
-        const retriedAttachmentPath = path.join(
-          attachmentsDir,
-          "thread-replay-retried-00000000-0000-4000-8000-000000000001.png",
-        );
-        const goneAttachmentPath = path.join(
-          attachmentsDir,
-          "thread-replay-gone-00000000-0000-4000-8000-000000000002.png",
-        );
-        const threadCreated = (threadId: ThreadId, suffix: string) =>
-          eventStore.append({
-            type: "thread.created",
-            eventId: EventId.make(`evt-replay-create-${suffix}`),
-            aggregateKind: "thread",
-            aggregateId: threadId,
-            occurredAt: now,
-            commandId: CommandId.make(`cmd-replay-create-${suffix}`),
-            causationEventId: null,
-            correlationId: CorrelationId.make(`cmd-replay-create-${suffix}`),
-            metadata: {},
-            payload: {
-              threadId,
-              projectId,
-              title: `Thread ${suffix}`,
-              modelSelection: {
-                instanceId: ProviderInstanceId.make("codex"),
-                model: "gpt-5-codex",
-              },
-              runtimeMode: "full-access",
-              branch: null,
-              worktreePath: null,
-              createdAt: now,
-              updatedAt: now,
-            },
-          });
-        const threadDeleted = (threadId: ThreadId, suffix: string) =>
-          eventStore.append({
-            type: "thread.deleted",
-            eventId: EventId.make(`evt-replay-delete-${suffix}`),
-            aggregateKind: "thread",
-            aggregateId: threadId,
-            occurredAt: now,
-            commandId: CommandId.make(`cmd-replay-delete-${suffix}`),
-            causationEventId: null,
-            correlationId: CorrelationId.make(`cmd-replay-delete-${suffix}`),
-            metadata: {},
-            payload: { threadId, deletedAt: now },
-          });
-
-        yield* eventStore.append({
-          type: "project.created",
-          eventId: EventId.make("evt-replay-project"),
-          aggregateKind: "project",
-          aggregateId: projectId,
-          occurredAt: now,
-          commandId: CommandId.make("cmd-replay-project"),
-          causationEventId: null,
-          correlationId: CorrelationId.make("cmd-replay-project"),
-          metadata: {},
-          payload: {
-            projectId,
-            title: "Replay",
-            workspaceRoot: "/tmp/project-replay",
-            defaultModelSelection: null,
-            scripts: [],
-            createdAt: now,
-            updatedAt: now,
-          },
-        });
-        // A failed first send: create, roll back, then the draft retries the id.
-        yield* threadCreated(retriedThreadId, "retried-1");
-        yield* threadDeleted(retriedThreadId, "retried");
-        yield* threadCreated(retriedThreadId, "retried-2");
-        // A thread that was deleted for good.
-        yield* threadCreated(goneThreadId, "gone");
-        yield* threadDeleted(goneThreadId, "gone");
-
-        // Files on disk are not event-sourced: by the time anything replays,
-        // the retried thread's attachments already belong to its second life.
-        yield* fileSystem.makeDirectory(attachmentsDir, { recursive: true });
-        yield* fileSystem.writeFileString(retriedAttachmentPath, "second incarnation");
-        yield* fileSystem.writeFileString(goneAttachmentPath, "gone");
-
-        yield* projectionPipeline.bootstrap;
-
-        assert.isTrue(yield* exists(retriedAttachmentPath));
-        assert.isFalse(yield* exists(goneAttachmentPath));
-      }),
-    );
-  },
-);
+      assert.isTrue(yield* exists(retriedAttachmentPath));
+      assert.isFalse(yield* exists(goneAttachmentPath));
+    }),
+  );
+});
 
 it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
   it.effect("replays a bootstrap backlog larger than the event store default limit", () =>
@@ -2859,7 +2853,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
             threadId: ThreadId.make("thread-conflict"),
             turnId: TurnId.make("turn-completed"),
             checkpointTurnCount: 1,
-            checkpointRef: CheckpointRef.make("refs/t3/checkpoints/thread-conflict/turn/1"),
+            checkpointRef: CheckpointRef.make("refs/awen/checkpoints/thread-conflict/turn/1"),
             status: "ready",
             files: [],
             assistantMessageId: MessageId.make("assistant-conflict"),
@@ -3496,7 +3490,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
             threadId: ThreadId.make("thread-shell-summary"),
             turnId: TurnId.make("turn-shell-summary-1"),
             checkpointTurnCount: 1,
-            checkpointRef: CheckpointRef.make("refs/t3/checkpoints/thread-shell-summary/1"),
+            checkpointRef: CheckpointRef.make("refs/awen/checkpoints/thread-shell-summary/1"),
             status: "ready",
             files: [],
             assistantMessageId: MessageId.make("message-shell-summary-assistant"),
@@ -3863,7 +3857,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
           threadId: ThreadId.make("thread-revert"),
           turnId: TurnId.make("turn-1"),
           checkpointTurnCount: 1,
-          checkpointRef: CheckpointRef.make("refs/t3/checkpoints/thread-revert/turn/1"),
+          checkpointRef: CheckpointRef.make("refs/awen/checkpoints/thread-revert/turn/1"),
           status: "ready",
           files: [],
           assistantMessageId: MessageId.make("assistant-keep"),
@@ -3907,7 +3901,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
           threadId: ThreadId.make("thread-revert"),
           turnId: TurnId.make("turn-2"),
           checkpointTurnCount: 2,
-          checkpointRef: CheckpointRef.make("refs/t3/checkpoints/thread-revert/turn/2"),
+          checkpointRef: CheckpointRef.make("refs/awen/checkpoints/thread-revert/turn/2"),
           status: "ready",
           files: [],
           assistantMessageId: MessageId.make("assistant-remove"),
@@ -3999,7 +3993,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
   );
 });
 
-it.layer(makeProjectionPipelinePrefixedTestLayer("t3-pending-turn-terminal-test-"))(
+it.layer(makeProjectionPipelinePrefixedTestLayer("awen-pending-turn-terminal-test-"))(
   "OrchestrationProjectionPipeline pending turn cleanup",
   (it) => {
     it.effect("clears pending turn starts when startup reaches a terminal session state", () =>
@@ -4251,7 +4245,7 @@ it.effect("restores pending turn-start metadata across projection pipeline resta
     Effect.provide(
       Layer.provideMerge(
         ServerConfig.layerTest(process.cwd(), {
-          prefix: "t3-projection-pipeline-restart-",
+          prefix: "awen-projection-pipeline-restart-",
         }),
         NodeServices.layer,
       ),
@@ -4271,7 +4265,7 @@ const engineLayer = it.layer(
     Layer.provideMerge(SqlitePersistenceMemory),
     Layer.provideMerge(
       ServerConfig.layerTest(process.cwd(), {
-        prefix: "t3-projection-pipeline-engine-dispatch-",
+        prefix: "awen-projection-pipeline-engine-dispatch-",
       }),
     ),
     Layer.provideMerge(NodeServices.layer),
@@ -4401,13 +4395,13 @@ engineLayer("OrchestrationProjectionPipeline via engine dispatch", (it) => {
         type: "project.meta.update",
         commandId: CommandId.make("cmd-monogram-save"),
         projectId,
-        projectIcon: { kind: "monogram", text: "T3", color: "violet" },
+        projectIcon: { kind: "monogram", text: "AW", color: "violet" },
       });
       const saved = yield* sql<{
         readonly icon: string | null;
       }>`SELECT project_icon_json AS icon FROM projection_projects WHERE project_id = ${projectId}`;
       assert.deepEqual(saved, [
-        { icon: '{"kind":"lucide","name":"folder-code","color":"violet","monogramText":"T3"}' },
+        { icon: '{"kind":"lucide","name":"folder-code","color":"violet","monogramText":"AW"}' },
       ]);
       const persisted = yield* sql<{ readonly icon: string }>`
         SELECT json_extract(payload_json, '$.projectIcon') AS icon FROM orchestration_events
@@ -4716,45 +4710,47 @@ engineLayer("OrchestrationProjectionPipeline via engine dispatch", (it) => {
   );
 });
 
-it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-acode-worktrees-")))(
-  "OrchestrationProjectionPipeline ACode workspace attachment",
+it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("awen-projection-awen-worktrees-")))(
+  "OrchestrationProjectionPipeline Awen workspace attachment",
   (it) => {
     const timestamp = "2026-09-18T00:00:00.000Z";
 
-    const readAcodeRows = (acodeProjectId: string) =>
-      Effect.flatMap(SqlClient.SqlClient, (sql) =>
-        sql<{
-          readonly acodeProjectId: string;
-          readonly workspaceId: string;
-          readonly t3ProjectId: string;
-          readonly workspaceRoot: string;
-          readonly role: string;
-          readonly origin: string | null;
-        }>`
+    const readAwenRows = (awenProjectId: string) =>
+      Effect.flatMap(
+        SqlClient.SqlClient,
+        (sql) =>
+          sql<{
+            readonly awenProjectId: string;
+            readonly workspaceId: string;
+            readonly projectId: string;
+            readonly workspaceRoot: string;
+            readonly role: string;
+            readonly origin: string | null;
+          }>`
         SELECT
-          projects.acode_project_id AS "acodeProjectId",
+          projects.awen_project_id AS "awenProjectId",
           workspaces.workspace_id AS "workspaceId",
-          workspaces.t3_project_id AS "t3ProjectId",
+          workspaces.project_id AS "projectId",
           workspaces.workspace_root AS "workspaceRoot",
           workspaces.role,
           workspaces.origin
-        FROM projection_acode_projects AS projects
-        INNER JOIN projection_acode_workspaces AS workspaces
-          ON workspaces.acode_project_id = projects.acode_project_id
-        WHERE projects.acode_project_id = ${acodeProjectId}
+        FROM projection_awen_projects AS projects
+        INNER JOIN projection_awen_workspaces AS workspaces
+          ON workspaces.awen_project_id = projects.awen_project_id
+        WHERE projects.awen_project_id = ${awenProjectId}
         ORDER BY workspaces.workspace_id ASC
       `,
-    );
+      );
 
     const appendProjectCreated = (input: {
       readonly eventId: string;
       readonly projectId: string;
       readonly title: string;
       readonly workspaceRoot: string;
-      readonly acodeWorkspace?: {
-        readonly acodeProjectId: string;
+      readonly awenWorkspace?: {
+        readonly awenProjectId: string;
         readonly role: "worktree";
-        readonly origin: "associated" | "acode-created";
+        readonly origin: "associated" | "awen-created";
       };
     }) =>
       Effect.gen(function* () {
@@ -4774,12 +4770,12 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-acod
             projectId: ProjectId.make(input.projectId),
             title: input.title,
             workspaceRoot: input.workspaceRoot,
-            ...(input.acodeWorkspace !== undefined
+            ...(input.awenWorkspace !== undefined
               ? {
-                  acodeWorkspace: {
-                    acodeProjectId: AcodeProjectId.make(input.acodeWorkspace.acodeProjectId),
-                    role: input.acodeWorkspace.role,
-                    origin: input.acodeWorkspace.origin,
+                  awenWorkspace: {
+                    awenProjectId: AwenProjectId.make(input.awenWorkspace.awenProjectId),
+                    role: input.awenWorkspace.role,
+                    origin: input.awenWorkspace.origin,
                   },
                 }
               : {}),
@@ -4844,7 +4840,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-acod
         yield* projectionPipeline.projectEvent(event);
       });
 
-    it.effect("attaches a created workspace to an existing ACode Project with role and origin", () =>
+    it.effect("attaches a created workspace to an existing Awen Project with role and origin", () =>
       Effect.gen(function* () {
         yield* appendProjectCreated({
           eventId: "evt-attach-main",
@@ -4857,29 +4853,29 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-acod
           projectId: "project-attach-wt",
           title: "Worktree",
           workspaceRoot: "/srv/attach-main-wt",
-          acodeWorkspace: {
-            acodeProjectId: "acode-project:project-attach-main",
+          awenWorkspace: {
+            awenProjectId: "awen-project:project-attach-main",
             role: "worktree",
-            origin: "acode-created",
+            origin: "awen-created",
           },
         });
 
-        assert.deepEqual(yield* readAcodeRows("acode-project:project-attach-main"), [
+        assert.deepEqual(yield* readAwenRows("awen-project:project-attach-main"), [
           {
-            acodeProjectId: "acode-project:project-attach-main",
+            awenProjectId: "awen-project:project-attach-main",
             workspaceId: "workspace:project-attach-main",
-            t3ProjectId: "project-attach-main",
+            projectId: "project-attach-main",
             workspaceRoot: "/srv/attach-main",
             role: "main",
             origin: null,
           },
           {
-            acodeProjectId: "acode-project:project-attach-main",
+            awenProjectId: "awen-project:project-attach-main",
             workspaceId: "workspace:project-attach-wt",
-            t3ProjectId: "project-attach-wt",
+            projectId: "project-attach-wt",
             workspaceRoot: "/srv/attach-main-wt",
             role: "worktree",
-            origin: "acode-created",
+            origin: "awen-created",
           },
         ]);
       }),
@@ -4898,8 +4894,8 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-acod
           projectId: "project-meta-wt",
           title: "Worktree",
           workspaceRoot: "/srv/meta-main-wt",
-          acodeWorkspace: {
-            acodeProjectId: "acode-project:project-meta-main",
+          awenWorkspace: {
+            awenProjectId: "awen-project:project-meta-main",
             role: "worktree",
             origin: "associated",
           },
@@ -4910,108 +4906,110 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-acod
           title: "Renamed worktree",
         });
 
-        const rows = yield* readAcodeRows("acode-project:project-meta-main");
+        const rows = yield* readAwenRows("awen-project:project-meta-main");
         assert.deepEqual(rows, [
           {
-            acodeProjectId: "acode-project:project-meta-main",
+            awenProjectId: "awen-project:project-meta-main",
             workspaceId: "workspace:project-meta-main",
-            t3ProjectId: "project-meta-main",
+            projectId: "project-meta-main",
             workspaceRoot: "/srv/meta-main",
             role: "main",
             origin: null,
           },
           {
-            acodeProjectId: "acode-project:project-meta-main",
+            awenProjectId: "awen-project:project-meta-main",
             workspaceId: "workspace:project-meta-wt",
-            t3ProjectId: "project-meta-wt",
+            projectId: "project-meta-wt",
             workspaceRoot: "/srv/meta-main-wt",
             role: "worktree",
             origin: "associated",
           },
         ]);
-        // The meta update must not derive a shadow ACode Project for the worktree.
+        // The meta update must not derive a shadow Awen Project for the worktree.
         const sql = yield* SqlClient.SqlClient;
-        const projectRows = yield* sql<{ readonly acodeProjectId: string }>`
-          SELECT acode_project_id AS "acodeProjectId" FROM projection_acode_projects
-          WHERE acode_project_id = 'acode-project:project-meta-wt'
+        const projectRows = yield* sql<{ readonly awenProjectId: string }>`
+          SELECT awen_project_id AS "awenProjectId" FROM projection_awen_projects
+          WHERE awen_project_id = 'awen-project:project-meta-wt'
         `;
         assert.deepEqual(projectRows, []);
       }),
     );
 
-    it.effect("removes only the deleted workspace and keeps the Project while siblings remain", () =>
-      Effect.gen(function* () {
-        yield* appendProjectCreated({
-          eventId: "evt-remove-main",
-          projectId: "project-remove-main",
-          title: "Main",
-          workspaceRoot: "/srv/remove-main",
-        });
-        yield* appendProjectCreated({
-          eventId: "evt-remove-worktree",
-          projectId: "project-remove-wt",
-          title: "Worktree",
-          workspaceRoot: "/srv/remove-main-wt",
-          acodeWorkspace: {
-            acodeProjectId: "acode-project:project-remove-main",
-            role: "worktree",
-            origin: "acode-created",
-          },
-        });
-        yield* appendProjectDeleted({
-          eventId: "evt-remove-delete",
-          projectId: "project-remove-wt",
-        });
-
-        assert.deepEqual(yield* readAcodeRows("acode-project:project-remove-main"), [
-          {
-            acodeProjectId: "acode-project:project-remove-main",
-            workspaceId: "workspace:project-remove-main",
-            t3ProjectId: "project-remove-main",
+    it.effect(
+      "removes only the deleted workspace and keeps the Project while siblings remain",
+      () =>
+        Effect.gen(function* () {
+          yield* appendProjectCreated({
+            eventId: "evt-remove-main",
+            projectId: "project-remove-main",
+            title: "Main",
             workspaceRoot: "/srv/remove-main",
-            role: "main",
-            origin: null,
-          },
-        ]);
+          });
+          yield* appendProjectCreated({
+            eventId: "evt-remove-worktree",
+            projectId: "project-remove-wt",
+            title: "Worktree",
+            workspaceRoot: "/srv/remove-main-wt",
+            awenWorkspace: {
+              awenProjectId: "awen-project:project-remove-main",
+              role: "worktree",
+              origin: "awen-created",
+            },
+          });
+          yield* appendProjectDeleted({
+            eventId: "evt-remove-delete",
+            projectId: "project-remove-wt",
+          });
 
-        // Deleting the last workspace still removes the now-empty Project.
-        yield* appendProjectDeleted({
-          eventId: "evt-remove-delete-main",
-          projectId: "project-remove-main",
-        });
-        assert.deepEqual(yield* readAcodeRows("acode-project:project-remove-main"), []);
-      }),
+          assert.deepEqual(yield* readAwenRows("awen-project:project-remove-main"), [
+            {
+              awenProjectId: "awen-project:project-remove-main",
+              workspaceId: "workspace:project-remove-main",
+              projectId: "project-remove-main",
+              workspaceRoot: "/srv/remove-main",
+              role: "main",
+              origin: null,
+            },
+          ]);
+
+          // Deleting the last workspace still removes the now-empty Project.
+          yield* appendProjectDeleted({
+            eventId: "evt-remove-delete-main",
+            projectId: "project-remove-main",
+          });
+          assert.deepEqual(yield* readAwenRows("awen-project:project-remove-main"), []);
+        }),
     );
 
-    it.effect("skips the ACode mapping when the attach target Project is gone", () =>
+    it.effect("skips the Awen mapping when the attach target Project is gone", () =>
       Effect.gen(function* () {
         yield* appendProjectCreated({
           eventId: "evt-orphan-worktree",
           projectId: "project-orphan-wt",
           title: "Worktree",
           workspaceRoot: "/srv/orphan-wt",
-          acodeWorkspace: {
-            acodeProjectId: "acode-project:missing",
+          awenWorkspace: {
+            awenProjectId: "awen-project:missing",
             role: "worktree",
             origin: "associated",
           },
         });
 
-        // The T3 projection still lands; no ACode rows are written for a
+        // The Awen projection still lands; no Awen rows are written for a
         // missing attach target, and no derived Project appears.
         const sql = yield* SqlClient.SqlClient;
         assert.deepEqual(
-          yield* sql<{ readonly acodeProjectId: string }>`
-            SELECT acode_project_id AS "acodeProjectId" FROM projection_acode_projects
-            WHERE acode_project_id IN ('acode-project:missing', 'acode-project:project-orphan-wt')
+          yield* sql<{ readonly awenProjectId: string }>`
+            SELECT awen_project_id AS "awenProjectId" FROM projection_awen_projects
+            WHERE awen_project_id IN ('awen-project:missing', 'awen-project:project-orphan-wt')
           `,
           [],
         );
-        const t3Rows = yield* sql<{ readonly projectId: string }>`
+        const awenRows = yield* sql<{ readonly projectId: string }>`
           SELECT project_id AS "projectId" FROM projection_projects
           WHERE project_id = 'project-orphan-wt'
         `;
-        assert.deepEqual(t3Rows, [{ projectId: "project-orphan-wt" }]);
+        assert.deepEqual(awenRows, [{ projectId: "project-orphan-wt" }]);
       }),
     );
   },

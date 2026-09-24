@@ -1,4 +1,4 @@
-import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
+import type { EnvironmentAwenProject } from "@awen/client-runtime/state/models";
 import { Columns3Icon, PanelsTopLeftIcon, PlusIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -15,7 +15,7 @@ import { resolveTargetContext, resolveTargetTitle } from "./workbenchTitles";
 
 interface WorkbenchWindowChromeProps {
   readonly snapshot: WorkbenchSnapshot;
-  readonly projects: ReadonlyArray<EnvironmentAcodeProject>;
+  readonly projects: ReadonlyArray<EnvironmentAwenProject>;
 }
 
 const TAB_ACCENTS = ["#38bdf8", "#a78bfa", "#34d399", "#fb7185", "#fbbf24"] as const;

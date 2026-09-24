@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type {
-  AcodeProjectId,
+  AwenProjectId,
   AgentSessionId,
   EnvironmentId,
   ProjectId,
   TerminalSessionId,
   ThreadId,
   WorkspaceId,
-} from "@t3tools/contracts";
-import type { EnvironmentAcodeProject } from "@t3tools/client-runtime/state/models";
+} from "@awen/contracts";
+import type { EnvironmentAwenProject } from "@awen/client-runtime/state/models";
 
 import {
   deepLinkInputFromParams,
@@ -27,7 +27,7 @@ const AGENT: AgentSessionId = "agent-x" as AgentSessionId;
 const TERMINAL: TerminalSessionId = "terminal-x" as TerminalSessionId;
 const THREAD: ThreadId = "thread-x" as ThreadId;
 const PROJECT_ID: ProjectId = "project-a" as ProjectId;
-const ACODE_PROJECT_ID: AcodeProjectId = "acode-project-a" as AcodeProjectId;
+const AWEN_PROJECT_ID: AwenProjectId = "awen-project-a" as AwenProjectId;
 
 const ENVIRONMENT_READY = {
   catalogReady: true,
@@ -39,18 +39,18 @@ const ENVIRONMENT_READY = {
 function project(
   workspaces: ReadonlyArray<{
     readonly id: WorkspaceId;
-    readonly sessions?: EnvironmentAcodeProject["workspaces"][number]["sessions"];
-    readonly historySessions?: EnvironmentAcodeProject["workspaces"][number]["historySessions"];
+    readonly sessions?: EnvironmentAwenProject["workspaces"][number]["sessions"];
+    readonly historySessions?: EnvironmentAwenProject["workspaces"][number]["historySessions"];
   }>,
-): EnvironmentAcodeProject {
+): EnvironmentAwenProject {
   return {
-    id: ACODE_PROJECT_ID,
+    id: AWEN_PROJECT_ID,
     environmentId: ENV,
     title: "Project A",
     workspaces: workspaces.map((workspace) => ({
       id: workspace.id,
-      projectId: ACODE_PROJECT_ID,
-      t3ProjectId: PROJECT_ID,
+      projectId: AWEN_PROJECT_ID,
+      awenProjectId: PROJECT_ID,
       title: "Workspace",
       workspaceRoot: "/tmp/a",
       role: "main" as const,
@@ -136,7 +136,7 @@ describe("canonical route helpers", () => {
 });
 
 describe("New Agent Session recovery", () => {
-  it("recovers a client-local draft target without treating it as an ACode Deep Link", () => {
+  it("recovers a client-local draft target without treating it as an Awen Deep Link", () => {
     expect(deepLinkInputFromParams({ draftId: "draft-one" })).toBeNull();
     expect(draftIdFromParams({ draftId: "draft-one" })).toBe("draft-one");
     expect(

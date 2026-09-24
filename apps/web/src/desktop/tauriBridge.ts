@@ -1,12 +1,12 @@
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { bootstrapRemoteBearerSession } from "@t3tools/client-runtime/authorization";
-import { remoteHttpClientLayer } from "@t3tools/client-runtime/rpc";
+import { bootstrapRemoteBearerSession } from "@awen/client-runtime/authorization";
+import { remoteHttpClientLayer } from "@awen/client-runtime/rpc";
 import {
   AuthStandardClientScopes,
   DesktopSshPasswordPromptCancelledType,
   type AdvertisedEndpoint,
-  type AuthAccessTokenResult,
+  type AuthBearerSessionResult,
   type AuthSessionState,
   type AuthWebSocketTicketResult,
   type ClientSettings,
@@ -24,13 +24,12 @@ import {
   type DesktopSshPasswordPromptRequest,
   type DesktopTheme,
   type DesktopUpdateActionResult,
-  type DesktopUpdateChannel,
   type DesktopUpdateCheckResult,
   type DesktopUpdateState,
   type DesktopWslState,
   type ExecutionEnvironmentDescriptor,
   type PickFolderOptions,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import * as Effect from "effect/Effect";
 
 import { readBrowserClientSettings, writeBrowserClientSettings } from "../clientPersistenceStorage";
@@ -119,7 +118,7 @@ export function createDesktopSshApiClient(options: DesktopSshApiClientOptions) {
 }
 
 function unsupported(capability: string): Promise<never> {
-  return Promise.reject(new Error(`ACode Tauri shell does not support ${capability} yet.`));
+  return Promise.reject(new Error(`Awen Tauri shell does not support ${capability} yet.`));
 }
 
 export { SshPasswordPromptCancelledError } from "./sshErrors";
@@ -149,7 +148,7 @@ function disabledUpdateState(): DesktopUpdateState {
   return {
     enabled: false,
     status: "disabled",
-    channel: "latest",
+    channel: "stable",
     currentVersion: import.meta.env.APP_VERSION || "0.0.0",
     hostArch: "other",
     appArch: "other",
@@ -181,7 +180,7 @@ async function exchangeBearerCredential(httpBaseUrl: string, credential: string)
       credential,
       scopes: AuthStandardClientScopes,
       clientMetadata: {
-        label: "ACode Desktop",
+        label: "Awen Desktop",
         deviceType: "desktop",
         surface: "desktop",
         ...(import.meta.env.APP_VERSION ? { appVersion: import.meta.env.APP_VERSION } : {}),
@@ -189,8 +188,8 @@ async function exchangeBearerCredential(httpBaseUrl: string, credential: string)
     }).pipe(Effect.provide(remoteHttpClientLayer(globalThis.fetch))),
   )
     .then((access) => {
-      localEnvironmentBearerToken = access.access_token;
-      return access.access_token;
+      localEnvironmentBearerToken = access.token;
+      return access.token;
     })
     .catch((error) => {
       localEnvironmentBearerExchange = null;
@@ -232,9 +231,9 @@ const createTauriDesktopBridge = (): DesktopBridge => {
     getAppBranding: (): DesktopAppBranding => {
       const stageLabel = import.meta.env.DEV ? "Dev" : "Alpha";
       return {
-        baseName: "ACode",
+        baseName: "Awen",
         stageLabel,
-        displayName: `ACode ${stageLabel}`,
+        displayName: `Awen ${stageLabel}`,
       };
     },
     getClientPlatform: () => nativeClientPlatform,
@@ -328,7 +327,7 @@ const createTauriDesktopBridge = (): DesktopBridge => {
     bootstrapSshBearerSession: async (
       httpBaseUrl: string,
       credential: string,
-    ): Promise<AuthAccessTokenResult> =>
+    ): Promise<AuthBearerSessionResult> =>
       desktopSshApi.request("/api/desktop/ssh/bearer/bootstrap", {
         method: "POST",
         body: { httpBaseUrl, credential },
@@ -450,10 +449,6 @@ const createTauriDesktopBridge = (): DesktopBridge => {
     getWindowFullscreenState: () => false,
     onWindowFullscreenStateChange: (_listener: (fullscreen: boolean) => void) => () => undefined,
     getUpdateState: async () => updateState,
-    setUpdateChannel: async (channel: DesktopUpdateChannel) => {
-      updateState = { ...updateState, channel };
-      return updateState;
-    },
     checkForUpdate: async (): Promise<DesktopUpdateCheckResult> => ({
       checked: false,
       state: updateState,
@@ -533,7 +528,7 @@ if (isTauri) {
       // primary target falling back to the window origin, where the proxy dials a
       // backend port nothing serves. The shell reports the launcher's own code.
       console.error(
-        `[acode] the local daemon runtime config failed: ${error instanceof Error ? error.message : String(error)}`,
+        `[awen] the local daemon runtime config failed: ${error instanceof Error ? error.message : String(error)}`,
         error,
       );
     });

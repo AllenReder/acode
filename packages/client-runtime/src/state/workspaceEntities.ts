@@ -1,23 +1,23 @@
-import { projectTerminalSessions } from "@t3tools/contracts";
+import { projectTerminalSessions } from "@awen/contracts";
 import type {
-  AcodeProjectId,
-  AcodeProjectShell,
+  AwenProjectId,
+  AwenProjectShell,
   EnvironmentId,
   OrchestrationShellSnapshot,
   WorkspaceId,
   TerminalSummary,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import { Atom } from "effect/unstable/reactivity";
 
-import type { EnvironmentAcodeProject } from "./models.ts";
+import type { EnvironmentAwenProject } from "./models.ts";
 import { enabledEnvironmentIds, type EnvironmentCatalogState } from "./connections.ts";
 
-const EMPTY_PROJECTS: ReadonlyArray<EnvironmentAcodeProject> = Object.freeze([]);
+const EMPTY_PROJECTS: ReadonlyArray<EnvironmentAwenProject> = Object.freeze([]);
 
 function snapshotProjects(
   snapshot: OrchestrationShellSnapshot | null,
-): ReadonlyArray<AcodeProjectShell> {
-  return snapshot?.acodeProjects ?? EMPTY_PROJECTS;
+): ReadonlyArray<AwenProjectShell> {
+  return snapshot?.awenProjects ?? EMPTY_PROJECTS;
 }
 
 export function createEnvironmentWorkspaceAtoms(input: {
@@ -29,8 +29,8 @@ export function createEnvironmentWorkspaceAtoms(input: {
     environmentId: EnvironmentId,
   ) => Atom.Atom<OrchestrationShellSnapshot | null>;
 }) {
-  const environmentAcodeProjectsAtom = Atom.family((environmentId: EnvironmentId) =>
-    Atom.make((get): ReadonlyArray<EnvironmentAcodeProject> =>
+  const environmentAwenProjectsAtom = Atom.family((environmentId: EnvironmentId) =>
+    Atom.make((get): ReadonlyArray<EnvironmentAwenProject> =>
       (() => {
         const projects = snapshotProjects(get(input.snapshotAtom(environmentId)));
         const terminals = input.terminalMetadataAtom
@@ -41,31 +41,31 @@ export function createEnvironmentWorkspaceAtoms(input: {
         ...project,
         environmentId,
       })),
-    ).pipe(Atom.withLabel(`environment-acode-projects:${environmentId}`)),
+    ).pipe(Atom.withLabel(`environment-awen-projects:${environmentId}`)),
   );
 
-  const acodeProjectsAtom = Atom.make((get): ReadonlyArray<EnvironmentAcodeProject> => {
-    const projects: EnvironmentAcodeProject[] = [];
+  const awenProjectsAtom = Atom.make((get): ReadonlyArray<EnvironmentAwenProject> => {
+    const projects: EnvironmentAwenProject[] = [];
     for (const environmentId of enabledEnvironmentIds(get(input.catalogValueAtom))) {
-      projects.push(...get(environmentAcodeProjectsAtom(environmentId)));
+      projects.push(...get(environmentAwenProjectsAtom(environmentId)));
     }
     return projects.length === 0 ? EMPTY_PROJECTS : projects;
-  }).pipe(Atom.withLabel("environment-acode-project-list"));
+  }).pipe(Atom.withLabel("environment-awen-project-list"));
 
-  const acodeProjectAtom = Atom.family((key: string) => {
-    const [environmentId, projectId] = JSON.parse(key) as [EnvironmentId, AcodeProjectId];
+  const awenProjectAtom = Atom.family((key: string) => {
+    const [environmentId, projectId] = JSON.parse(key) as [EnvironmentId, AwenProjectId];
     return Atom.make(
       (get) =>
-        get(environmentAcodeProjectsAtom(environmentId)).find(
+        get(environmentAwenProjectsAtom(environmentId)).find(
           (project) => project.id === projectId,
         ) ?? null,
-    ).pipe(Atom.withLabel(`environment-acode-project:${key}`));
+    ).pipe(Atom.withLabel(`environment-awen-project:${key}`));
   });
 
   const workspaceAtom = Atom.family((key: string) => {
     const [environmentId, workspaceId] = JSON.parse(key) as [EnvironmentId, WorkspaceId];
     return Atom.make((get) => {
-      for (const project of get(environmentAcodeProjectsAtom(environmentId))) {
+      for (const project of get(environmentAwenProjectsAtom(environmentId))) {
         const workspace = project.workspaces.find((candidate) => candidate.id === workspaceId);
         if (workspace !== undefined) return { ...workspace, environmentId };
       }
@@ -74,13 +74,13 @@ export function createEnvironmentWorkspaceAtoms(input: {
   });
 
   return {
-    environmentAcodeProjectsAtom,
-    acodeProjectsAtom,
-    acodeProjectAtom: (ref: {
+    environmentAwenProjectsAtom,
+    awenProjectsAtom,
+    awenProjectAtom: (ref: {
       readonly environmentId: EnvironmentId;
-      readonly projectId: AcodeProjectId;
+      readonly projectId: AwenProjectId;
     }) =>
-      acodeProjectAtom(
+      awenProjectAtom(
         JSON.stringify([ref.environmentId, ref.projectId] satisfies ReadonlyArray<string>),
       ),
     workspaceAtom: (ref: {

@@ -1,4 +1,4 @@
-import type { DesktopSshEnvironmentTarget, DesktopSshHostKeyTrust } from "@t3tools/contracts";
+import type { DesktopSshEnvironmentTarget, DesktopSshHostKeyTrust } from "@awen/contracts";
 import * as NodeCrypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -16,7 +16,7 @@ export type SshTrustError =
   | SshInvalidTargetError
   | PlatformError.PlatformError;
 
-export type { DesktopSshHostKeyTrust as SshHostKeyTrust } from "@t3tools/contracts";
+export type { DesktopSshHostKeyTrust as SshHostKeyTrust } from "@awen/contracts";
 
 export interface SshHostKeyTrustClassification {
   readonly status: DesktopSshHostKeyTrust["status"];
@@ -246,7 +246,7 @@ export const trustSshHostKey = Effect.fn("ssh/trust.trustSshHostKey")(function* 
   if (trust.status === "trusted") return;
   if (trust.status === "changed") {
     return yield* new SshHostDiscoveryError({
-      message: `SSH host key changed for ${hostSpec}. ACode never accepts a changed host key automatically.`,
+      message: `SSH host key changed for ${hostSpec}. Awen never accepts a changed host key automatically.`,
       cause: null,
     });
   }

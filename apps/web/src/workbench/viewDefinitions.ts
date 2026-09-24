@@ -34,7 +34,6 @@ export const workspaceFileViewDefinition: ViewDefinition<
   Component: WorkspaceFileView,
 };
 
-
 export const workspaceGitViewDefinition: ViewDefinition<
   Extract<ViewTarget, { kind: "workspace" }>
 > = {

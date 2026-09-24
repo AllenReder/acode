@@ -8,7 +8,7 @@ import {
   invalidateCustomThemes,
   isKnownThemePreference,
   resolveThemeAppearance,
-  ACODE_DEFAULT_THEME,
+  AWEN_DEFAULT_THEME,
   ZINC_THEME,
   SLATE_THEME,
   MIDNIGHT_THEME,
@@ -19,7 +19,7 @@ import {
   toCanonicalThemeColor,
 } from "./themePalette";
 
-const THEME_STORAGE_KEY = "acode:theme";
+const THEME_STORAGE_KEY = "awen:theme";
 // A custom theme that omits chrome falls back to the runtime default, so the
 // boot copy of that default stays derived from the real palette.
 const DEFAULT_DARK_CHROME = getDefaultThemeColors("dark").chrome;
@@ -157,14 +157,14 @@ describe("index.html boot script", () => {
   }> = [
     { name: "no stored preference on a dark OS", storage: {}, prefersDark: true },
     {
-      name: "ACode Default follows a dark OS",
-      storage: { [THEME_STORAGE_KEY]: "acode-default", [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "true" },
+      name: "Awen Default follows a dark OS",
+      storage: { [THEME_STORAGE_KEY]: "awen-default", [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "true" },
       prefersDark: true,
     },
     {
-      name: "an explicit global dark mode applies to ACode Default",
+      name: "an explicit global dark mode applies to Awen Default",
       storage: {
-        [THEME_STORAGE_KEY]: "acode-default",
+        [THEME_STORAGE_KEY]: "awen-default",
         [THEME_APPEARANCE_MODE_STORAGE_KEY]: "dark",
         [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "false",
       },
@@ -255,10 +255,10 @@ describe("index.html boot script", () => {
 
   it("marks built-in and custom themes on the document element", () => {
     const chat = runBootScript({
-      storage: { [THEME_STORAGE_KEY]: "acode-default", [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "true" },
+      storage: { [THEME_STORAGE_KEY]: "awen-default", [THEME_FOLLOW_SYSTEM_STORAGE_KEY]: "true" },
       prefersDark: true,
     });
-    expect(chat.themeId).toBe("acode-default");
+    expect(chat.themeId).toBe("awen-default");
     expect(chat.themeSelected).toBe("true");
     expect(chat.isDark).toBe(true);
 
@@ -338,7 +338,14 @@ describe("index.html boot script", () => {
   // boot script's hand-maintained copy into a CI-enforced contract: any
   // palette change breaks this test until the copy in index.html is updated.
   it("keeps every built-in boot splash in sync with the real palettes", () => {
-    for (const theme of [ACODE_DEFAULT_THEME, ZINC_THEME, SLATE_THEME, MIDNIGHT_THEME, FOREST_THEME, OCEAN_THEME]) {
+    for (const theme of [
+      AWEN_DEFAULT_THEME,
+      ZINC_THEME,
+      SLATE_THEME,
+      MIDNIGHT_THEME,
+      FOREST_THEME,
+      OCEAN_THEME,
+    ]) {
       expect(theme.appearance).toBe("dark");
       for (const mode of ["light", "dark"] as const) {
         const colors = getThemeColorsForMode(theme, mode);
@@ -363,9 +370,9 @@ describe("index.html boot script", () => {
 
   it("applies the matching half of an automatic mix to the splash", () => {
     const storage = {
-      [THEME_STORAGE_KEY]: "acode-default",
+      [THEME_STORAGE_KEY]: "awen-default",
       [THEME_APPEARANCE_MODE_STORAGE_KEY]: "system",
-      "acode:theme-halves:v1": JSON.stringify({ dark: FOREST_THEME.id }),
+      "awen:theme-halves:v1": JSON.stringify({ dark: FOREST_THEME.id }),
     };
 
     const dark = runBootScript({ storage, prefersDark: true });
@@ -377,9 +384,9 @@ describe("index.html boot script", () => {
 
     const light = runBootScript({ storage, prefersDark: false });
     expect(light.isDark).toBe(false);
-    expect(light.themeId).toBe("acode-default");
+    expect(light.themeId).toBe("awen-default");
     expect(light.bootVariables["--boot-background"]).toBe(
-      getThemeColorsForMode(ACODE_DEFAULT_THEME, "light")!.canvas,
+      getThemeColorsForMode(AWEN_DEFAULT_THEME, "light")!.canvas,
     );
   });
 
@@ -396,7 +403,7 @@ describe("index.html boot script", () => {
             colors: { canvas: "#f8fbff", text: "#10243d", accent: "#5b6cff" },
           },
         ]),
-        "acode:theme-halves:v1": JSON.stringify({ dark: FOREST_THEME.id }),
+        "awen:theme-halves:v1": JSON.stringify({ dark: FOREST_THEME.id }),
       },
       prefersDark: true,
     });
@@ -409,7 +416,7 @@ describe("index.html boot script", () => {
       storage: {
         [THEME_STORAGE_KEY]: "gone-theme",
         [THEME_APPEARANCE_MODE_STORAGE_KEY]: "system",
-        "acode:theme-halves:v1": JSON.stringify({ dark: FOREST_THEME.id }),
+        "awen:theme-halves:v1": JSON.stringify({ dark: FOREST_THEME.id }),
       },
       prefersDark: true,
     });
@@ -424,13 +431,13 @@ describe("index.html boot script", () => {
   it("ignores a mix half that names an unknown theme", () => {
     const boot = runBootScript({
       storage: {
-        [THEME_STORAGE_KEY]: "acode-default",
+        [THEME_STORAGE_KEY]: "awen-default",
         [THEME_APPEARANCE_MODE_STORAGE_KEY]: "system",
-        "acode:theme-halves:v1": JSON.stringify({ dark: "gone-theme" }),
+        "awen:theme-halves:v1": JSON.stringify({ dark: "gone-theme" }),
       },
       prefersDark: true,
     });
-    expect(boot.themeId).toBe("acode-default");
+    expect(boot.themeId).toBe("awen-default");
     expect(boot.isDark).toBe(true);
   });
 

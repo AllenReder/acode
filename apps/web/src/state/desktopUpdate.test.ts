@@ -1,4 +1,4 @@
-import type { DesktopUpdateState } from "@t3tools/contracts";
+import type { DesktopUpdateState } from "@awen/contracts";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { AtomRegistry } from "effect/unstable/reactivity";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
@@ -8,7 +8,7 @@ import { createDesktopUpdateStateAtom, DesktopUpdateStateReadError } from "./des
 const baseState: DesktopUpdateState = {
   enabled: true,
   status: "idle",
-  channel: "latest",
+  channel: "stable",
   currentVersion: "1.0.0",
   hostArch: "x64",
   appArch: "x64",

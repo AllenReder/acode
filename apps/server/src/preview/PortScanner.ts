@@ -21,10 +21,10 @@ import {
   PREVIEW_URL_MAX_LENGTH,
   ThreadId,
   type DiscoveredLocalServer,
-} from "@t3tools/contracts";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
-import * as Net from "@t3tools/shared/Net";
-import { isLoopbackHost, LSOF_LOCAL_HOST_TOKENS } from "@t3tools/shared/preview";
+} from "@awen/contracts";
+import { HostProcessPlatform } from "@awen/shared/hostProcess";
+import * as Net from "@awen/shared/Net";
+import { isLoopbackHost, LSOF_LOCAL_HOST_TOKENS } from "@awen/shared/preview";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -66,7 +66,7 @@ export class PortDiscovery extends Context.Service<
       readonly terminalId: string;
     }) => Effect.Effect<void>;
   }
->()("t3/preview/PortScanner/PortDiscovery") {}
+>()("@awen/server/preview/PortScanner/PortDiscovery") {}
 
 export const COMMON_DEV_PORTS: ReadonlyArray<number> = Object.freeze([
   3000, 3001, 3333, 4173, 4200, 4321, 5000, 5173, 5174, 5175, 5500, 8000, 8080, 8081, 8888, 9000,

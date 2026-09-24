@@ -5,8 +5,12 @@ import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
 const REPO_ROOT = NodePath.resolve(import.meta.dirname, "..");
-const EXACT_VERSION =
-  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
+const SEMVER_CORE = "(?:0|[1-9]\\d*)";
+const SEMVER_PRERELEASE_IDENTIFIER = "(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)";
+const EXACT_VERSION = new RegExp(
+  `^${SEMVER_CORE}\\.${SEMVER_CORE}\\.${SEMVER_CORE}(?:-${SEMVER_PRERELEASE_IDENTIFIER}(?:\\.${SEMVER_PRERELEASE_IDENTIFIER})*)?$`,
+  "u",
+);
 const PACKAGE_FILES = [
   "package.json",
   "apps/server/package.json",
@@ -15,6 +19,7 @@ const PACKAGE_FILES = [
   "packages/contracts/package.json",
 ] as const;
 const TAURI_CONFIG = "apps/desktop/src-tauri/tauri.conf.json";
+const TAURI_MACOS_CONFIG = "apps/desktop/src-tauri/tauri.macos.conf.json";
 const TAURI_VERSION_SOURCE = "../../../package.json";
 const CARGO_MANIFEST = "apps/desktop/src-tauri/Cargo.toml";
 const CARGO_LOCK = "apps/desktop/src-tauri/Cargo.lock";
@@ -29,6 +34,29 @@ function readJson(filePath: string): Record<string, unknown> {
 
 function formatJson(value: Record<string, unknown>): string {
   return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+export function macOSNativeVersion(version: string): string {
+  if (!EXACT_VERSION.test(version)) {
+    throw new Error(`Version must be an exact semver-like value, received '${version}'.`);
+  }
+  return version.split("-", 1)[0]!;
+}
+
+function isNumericBundleVersion(version: unknown): boolean {
+  if (typeof version !== "string" || !/^\d+$/u.test(version)) return false;
+  return Number.isSafeInteger(Number(version));
+}
+
+function incrementMacOSBundleVersion(version: unknown): string {
+  if (typeof version !== "string" || !/^\d+$/u.test(version)) {
+    throw new Error("macOS bundleVersion must be a numeric build number.");
+  }
+  const buildNumber = Number(version);
+  if (!Number.isSafeInteger(buildNumber)) {
+    throw new Error("macOS bundleVersion must be a safe integer.");
+  }
+  return String(buildNumber + 1);
 }
 
 function cargoVersion(contents: string, heading: string): string {
@@ -62,9 +90,24 @@ export function checkVersion(rootDir = REPO_ROOT): string[] {
   if (tauriVersion !== TAURI_VERSION_SOURCE) {
     problems.push(`${TAURI_CONFIG}: expected ${TAURI_VERSION_SOURCE}.`);
   }
+  const macosConfig = readJson(NodePath.join(rootDir, TAURI_MACOS_CONFIG));
+  const expectedMacOSVersion = macOSNativeVersion(rootVersion);
+  if (macosConfig.version !== expectedMacOSVersion) {
+    problems.push(
+      `${TAURI_MACOS_CONFIG}: expected ${expectedMacOSVersion}, found ${String(macosConfig.version)}.`,
+    );
+  }
+  const macOSBundleVersion = (
+    (macosConfig.bundle as Record<string, unknown> | undefined)?.macOS as
+      | Record<string, unknown>
+      | undefined
+  )?.bundleVersion;
+  if (!isNumericBundleVersion(macOSBundleVersion)) {
+    problems.push(`${TAURI_MACOS_CONFIG}: bundle.macOS.bundleVersion must be numeric.`);
+  }
   for (const [relativePath, heading] of [
-    [CARGO_MANIFEST, '[package]\nname = "acode-desktop"'],
-    [CARGO_LOCK, '[[package]]\nname = "acode-desktop"'],
+    [CARGO_MANIFEST, '[package]\nname = "awen-desktop"'],
+    [CARGO_LOCK, '[[package]]\nname = "awen-desktop"'],
   ] as const) {
     const version = cargoVersion(
       NodeFS.readFileSync(NodePath.join(rootDir, relativePath), "utf8"),
@@ -94,9 +137,19 @@ export function setVersion(version: string, rootDir = REPO_ROOT): void {
   const tauriConfig = readJson(NodePath.join(rootDir, TAURI_CONFIG));
   tauriConfig.version = TAURI_VERSION_SOURCE;
   updates.set(TAURI_CONFIG, formatJson(tauriConfig));
+  const currentProductVersion = readJson(NodePath.join(rootDir, "package.json")).version;
+  const macosConfig = readJson(NodePath.join(rootDir, TAURI_MACOS_CONFIG));
+  macosConfig.version = macOSNativeVersion(version);
+  const macOSBundle = macosConfig.bundle as Record<string, unknown> | undefined;
+  const macOSConfigBundle = (macOSBundle?.macOS as Record<string, unknown> | undefined) ?? {};
+  if (version !== currentProductVersion) {
+    macOSConfigBundle.bundleVersion = incrementMacOSBundleVersion(macOSConfigBundle.bundleVersion);
+  }
+  macosConfig.bundle = { ...macOSBundle, macOS: macOSConfigBundle };
+  updates.set(TAURI_MACOS_CONFIG, formatJson(macosConfig));
   for (const [relativePath, heading] of [
-    [CARGO_MANIFEST, '[package]\nname = "acode-desktop"'],
-    [CARGO_LOCK, '[[package]]\nname = "acode-desktop"'],
+    [CARGO_MANIFEST, '[package]\nname = "awen-desktop"'],
+    [CARGO_LOCK, '[[package]]\nname = "awen-desktop"'],
   ] as const) {
     updates.set(
       relativePath,

@@ -11,8 +11,8 @@ import {
   bootstrapRemoteBearerSession,
   fetchRemoteSessionState,
   issueRemoteWebSocketTicket,
-} from "@t3tools/client-runtime/authorization";
-import { fetchRemoteEnvironmentDescriptor } from "@t3tools/client-runtime/environment";
+} from "@awen/client-runtime/authorization";
+import { fetchRemoteEnvironmentDescriptor } from "@awen/client-runtime/environment";
 import {
   BearerConnectionProfile,
   BearerConnectionTarget,
@@ -25,15 +25,15 @@ import {
   type PreparedConnection,
   type SupervisorConnectionState,
   Wakeups,
-} from "@t3tools/client-runtime/connection";
+} from "@awen/client-runtime/connection";
 import {
   remoteHttpClientLayer,
   RpcSessionFactory,
   rpcSessionLayer,
-} from "@t3tools/client-runtime/rpc";
-import { AuthSessionState, AuthStandardClientScopes, WS_METHODS } from "@t3tools/contracts";
+} from "@awen/client-runtime/rpc";
+import { AuthSessionState, AuthStandardClientScopes, WS_METHODS } from "@awen/contracts";
 import * as Effect from "effect/Effect";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { HostProcessPlatform } from "@awen/shared/hostProcess";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Option from "effect/Option";
@@ -53,7 +53,7 @@ export interface ServerReadyInfo {
   readonly token: string;
 }
 
-/** Extracts the stable access details printed by `t3 serve`. */
+/** Extracts the stable access details printed by `awen serve`. */
 export function parseServerReadyOutput(output: string): ServerReadyInfo | undefined {
   const connectionString = /Connection string:\s+(\S+)/u.exec(output)?.[1];
   const token = /Token:\s+(\S+)/u.exec(output)?.[1];
@@ -67,14 +67,14 @@ interface ServerHandle {
 
 function smokeEnvironment(): NodeJS.ProcessEnv {
   const environment = { ...process.env };
-  // The smoke must never inherit a user's running T3 service or its data home.
-  delete environment.T3CODE_HOME;
-  delete environment.T3_SERVICE_LAUNCHER_CONTEXT;
-  delete environment.T3_BOOT_SERVICE_UNIT;
-  delete environment.T3CODE_DEV_AUTH_TOKEN;
-  environment.T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD = "0";
-  environment.T3CODE_LOG_LEVEL = "Error";
-  environment.T3CODE_NO_BROWSER = "1";
+  // The smoke must never inherit a user's running Awen service or its data home.
+  delete environment.AWEN_HOME;
+  delete environment.AWEN_SERVICE_LAUNCHER_CONTEXT;
+  delete environment.AWEN_BOOT_SERVICE_UNIT;
+  delete environment.AWEN_DEV_AUTH_TOKEN;
+  environment.AWEN_AUTO_BOOTSTRAP_PROJECT_FROM_CWD = "0";
+  environment.AWEN_LOG_LEVEL = "Error";
+  environment.AWEN_NO_BROWSER = "1";
   return environment;
 }
 
@@ -221,7 +221,7 @@ async function main(): Promise<void> {
     );
   }
 
-  const baseDir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "acode-c01-connection-"));
+  const baseDir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "awen-c01-connection-"));
   const port = await findFreePort();
   let firstServer: ServerHandle | undefined;
   let secondServer: ServerHandle | undefined;
@@ -252,11 +252,11 @@ async function main(): Promise<void> {
         httpBaseUrl,
         credential: firstReady.token,
         scopes: AuthStandardClientScopes,
-        clientMetadata: { label: "ACode C01 connection smoke", deviceType: "bot" },
+        clientMetadata: { label: "Awen C01 connection smoke", deviceType: "bot" },
       }),
     );
     const authenticated = await httpRuntime.runPromise(
-      fetchRemoteSessionState({ httpBaseUrl, bearerToken: access.access_token }),
+      fetchRemoteSessionState({ httpBaseUrl, bearerToken: access.token }),
     );
     if (
       authenticated.authenticated !== true ||
@@ -268,7 +268,7 @@ async function main(): Promise<void> {
     const target = new BearerConnectionTarget({
       environmentId: descriptor.environmentId,
       label: descriptor.label,
-      connectionId: "acode-c01-smoke",
+      connectionId: "awen-c01-smoke",
     });
     const profile = new BearerConnectionProfile({
       connectionId: target.connectionId,
@@ -287,7 +287,7 @@ async function main(): Promise<void> {
       httpRuntime.runPromise(
         issueRemoteWebSocketTicket({
           httpBaseUrl,
-          bearerToken: access.access_token,
+          bearerToken: access.token,
         }),
       );
     const driverLayer = Layer.effect(
@@ -315,7 +315,7 @@ async function main(): Promise<void> {
                 label: catalogEntry.target.label,
                 httpBaseUrl,
                 socketUrl: socketUrl.toString(),
-                httpAuthorization: { _tag: "Bearer", token: access.access_token },
+                httpAuthorization: { _tag: "Bearer", token: access.token },
                 target: catalogEntry.target,
               } satisfies PreparedConnection;
               yield* reportProgress({ stage: "opening", prepared });

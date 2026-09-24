@@ -8,15 +8,13 @@ const desktopRoot = NodePath.resolve(
   "..",
 );
 const repositoryRoot = NodePath.resolve(desktopRoot, "../..");
-const developmentHome =
-  process.env.ACODE_HOME?.trim() || NodePath.resolve(repositoryRoot, ".acode");
+const developmentHome = process.env.AWEN_HOME?.trim() || NodePath.resolve(repositoryRoot, ".awen");
 const devConfig = NodePath.resolve(desktopRoot, "src-tauri/tauri.dev.conf.json");
 
 const environment = {
   ...process.env,
-  ACODE_HOME: developmentHome,
-  T3CODE_HOME: process.env.T3CODE_HOME?.trim() || developmentHome,
-  T3CODE_PORT_OFFSET: process.env.T3CODE_PORT_OFFSET?.trim() || "0",
+  AWEN_HOME: process.env.AWEN_HOME?.trim() || developmentHome,
+  AWEN_PORT_OFFSET: process.env.AWEN_PORT_OFFSET?.trim() || "0",
 };
 
 const build = NodeChildProcess.spawnSync(
@@ -30,21 +28,21 @@ const build = NodeChildProcess.spawnSync(
 );
 
 if (build.error) {
-  console.error(`Unable to build the ACode Dev app: ${build.error.message}`);
+  console.error(`Unable to build the Awen Dev app: ${build.error.message}`);
   process.exitCode = 1;
 } else if (build.status !== 0) {
   process.exitCode = build.status ?? 1;
 } else {
   const bundleRoot = NodePath.resolve(desktopRoot, "src-tauri/target/debug/bundle/macos");
-  const preferredAppPath = NodePath.join(bundleRoot, "ACode Dev.app");
+  const preferredAppPath = NodePath.join(bundleRoot, "Awen Dev.app");
   if (!NodeFS.existsSync(preferredAppPath)) {
-    console.error(`The ACode Dev app bundle was not found under ${bundleRoot}.`);
+    console.error(`The Awen Dev app bundle was not found under ${bundleRoot}.`);
     process.exitCode = 1;
   } else {
     const appPath = preferredAppPath;
-    const executable = NodePath.join(appPath, "Contents/MacOS/acode-desktop");
+    const executable = NodePath.join(appPath, "Contents/MacOS/awen-desktop");
     if (!NodeFS.existsSync(executable)) {
-      console.error(`The ACode Dev executable was not found at ${executable}.`);
+      console.error(`The Awen Dev executable was not found at ${executable}.`);
       process.exitCode = 1;
     } else {
       const child = NodeChildProcess.spawn(executable, [], {
@@ -54,7 +52,7 @@ if (build.error) {
         stdio: "inherit",
       });
       child.unref();
-      console.log(`Started ACode Dev: ${appPath}`);
+      console.log(`Started Awen Dev: ${appPath}`);
     }
   }
 }

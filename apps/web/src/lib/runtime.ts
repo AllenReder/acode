@@ -1,36 +1,32 @@
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import type * as Effect from "effect/Effect";
+import * as Crypto from "effect/Crypto";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Socket from "effect/unstable/socket/Socket";
 
-import { remoteHttpClientLayer } from "@t3tools/client-runtime/rpc";
-import { makeRelayClientTracingLayer } from "@t3tools/shared/relayTracing";
+import { remoteHttpClientLayer } from "@awen/client-runtime/rpc";
 import * as PrimaryEnvironmentHttpClient from "../environments/primary/httpClient";
 import { primaryEnvironmentHttpLayer } from "../environments/primary/httpLayer";
 
-import { browserCryptoLayer } from "../cloud/dpop";
-import { managedRelayClientLayer } from "../cloud/managedRelayLayer";
-import { resolveCloudPublicConfig, resolveRelayTracingConfig } from "../cloud/publicConfig";
-import { isDesktop } from "../env";
-
-function configuredRelayUrl(): string {
-  return resolveCloudPublicConfig().relayUrl ?? "http://relay.invalid";
-}
-
 const httpClientLayer = remoteHttpClientLayer((input, init) => globalThis.fetch(input, init));
-const relayTracingLayer = makeRelayClientTracingLayer(resolveRelayTracingConfig(), {
-  serviceName: "t3-web-relay-client",
-  serviceVersion: import.meta.env.APP_VERSION,
-  runtime: "browser",
-  client: isDesktop ? "desktop" : "web",
-}).pipe(Layer.provide(httpClientLayer));
+
+const browserCryptoLayer = Layer.succeed(
+  Crypto.Crypto,
+  Crypto.make({
+    randomBytes: (size) => globalThis.crypto.getRandomValues(new Uint8Array(size)),
+    digest: (algorithm, data) =>
+      Effect.promise(async () => {
+        const input = new Uint8Array(data.length);
+        input.set(data);
+        return new Uint8Array(await globalThis.crypto.subtle.digest(algorithm, input.buffer));
+      }),
+  }),
+);
 
 type RuntimeLayerSource =
   | typeof httpClientLayer
   | typeof browserCryptoLayer
-  | typeof Socket.layerWebSocketConstructorGlobal
-  | typeof relayTracingLayer
-  | ReturnType<typeof managedRelayClientLayer>;
+  | typeof Socket.layerWebSocketConstructorGlobal;
 
 const primaryHttpRuntime = ManagedRuntime.make(
   PrimaryEnvironmentHttpClient.layer.pipe(Layer.provide(primaryEnvironmentHttpLayer)),
@@ -57,10 +53,6 @@ const runtimeLayer = Layer.mergeAll(
   httpClientLayer,
   browserCryptoLayer,
   Socket.layerWebSocketConstructorGlobal,
-  relayTracingLayer,
-  managedRelayClientLayer(configuredRelayUrl()).pipe(
-    Layer.provide(Layer.mergeAll(httpClientLayer, browserCryptoLayer)),
-  ),
 );
 
 export const runtime: ManagedRuntime.ManagedRuntime<
@@ -70,5 +62,6 @@ export const runtime: ManagedRuntime.ManagedRuntime<
 
 export const runtimeContextLayer: Layer.Layer<
   Layer.Success<RuntimeLayerSource>,
-  Layer.Error<RuntimeLayerSource>
+  Layer.Error<RuntimeLayerSource>,
+  Layer.Services<RuntimeLayerSource>
 > = Layer.effectContext(runtime.contextEffect);

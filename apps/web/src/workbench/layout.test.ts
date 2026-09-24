@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  AcodeTab,
+  AwenTab,
   closeLeaf,
   firstLeafId,
   leaf,
@@ -173,7 +173,7 @@ describe("closeLeaf", () => {
   });
 
   it("moves focus to the closed leaf's sibling when focused", () => {
-    let tab: AcodeTab = newTab("a");
+    let tab: AwenTab = newTab("a");
     tab = { ...tab, layout: splitPane(tab.layout, "a", "right", "b"), focusedPaneId: "a" };
     const after = closeLeaf(tab, "a");
     expect(after?.focusedPaneId).toBe("b");
@@ -181,7 +181,7 @@ describe("closeLeaf", () => {
   });
 
   it("keeps focus on the existing focused leaf when a sibling closes", () => {
-    let tab: AcodeTab = newTab("a");
+    let tab: AwenTab = newTab("a");
     tab = { ...tab, layout: splitPane(tab.layout, "a", "right", "b"), focusedPaneId: "b" };
     const after = closeLeaf(tab, "a");
     expect(after?.focusedPaneId).toBe("b");

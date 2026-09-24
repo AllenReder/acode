@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
-import { SpawnExecutableResolution } from "@t3tools/shared/shell";
+import { HostProcessPlatform } from "@awen/shared/hostProcess";
+import { SpawnExecutableResolution } from "@awen/shared/shell";
 import * as Effect from "effect/Effect";
 
 import { ClaudeExecutableFileCheck, resolveClaudeSdkExecutablePath } from "./ClaudeExecutable.ts";

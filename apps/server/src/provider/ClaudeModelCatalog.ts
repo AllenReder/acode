@@ -5,7 +5,7 @@ import {
   type ProviderOptionDescriptor,
   ProviderDriverKind,
   type ServerProviderModel,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import type { ModelInfo as ClaudeModelInfo } from "@anthropic-ai/claude-agent-sdk";
 import * as Option from "effect/Option";
 import {
@@ -13,8 +13,8 @@ import {
   getProviderOptionCurrentValue,
   getProviderOptionDescriptors,
   readCustomModelEntries,
-} from "@t3tools/shared/model";
-import { compareSemverVersions } from "@t3tools/shared/semver";
+} from "@awen/shared/model";
+import { compareSemverVersions } from "@awen/shared/semver";
 
 import {
   type ClaudeCodeCompatibility,
@@ -87,7 +87,10 @@ const REASONING_EFFORT_LABELS: Readonly<Record<string, string>> = {
 };
 
 function formatReasoningEffortLabel(level: string): string {
-  return REASONING_EFFORT_LABELS[level] ?? (level.length > 0 ? level[0]!.toUpperCase() + level.slice(1) : level);
+  return (
+    REASONING_EFFORT_LABELS[level] ??
+    (level.length > 0 ? level[0]!.toUpperCase() + level.slice(1) : level)
+  );
 }
 
 function makeBooleanDescriptor(id: string, label: string): ProviderOptionDescriptor {
@@ -343,8 +346,8 @@ export function normalizeClaudeCatalogEffort(
   return effortMap[effort] ?? undefined;
 }
 
-export function isClaudeCatalogUltracodeEffort(effort: string | null | undefined): boolean {
-  return effort === "ultracode";
+export function isClaudeCatalogUltrawenEffort(effort: string | null | undefined): boolean {
+  return effort === "ultrawen";
 }
 
 function resolveClaudeCatalogContextWindow(

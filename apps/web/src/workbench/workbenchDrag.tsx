@@ -874,54 +874,57 @@ export function WorkbenchDropOverlay() {
       </div>
       {typeof document !== "undefined" && document.body
         ? createPortal(
-        <>
-          {tabMarker === null ? null : (
-            <div
-              data-workbench-tab-drop-marker
-              className="pointer-events-none fixed z-[99] rounded-full bg-primary shadow-[0_0_8px_var(--color-primary)]"
-              style={{
-                left: tabMarker.left,
-                top: tabMarker.top,
-                width: tabMarker.width,
-                height: tabMarker.height,
-              }}
-            />
-          )}
-          <div
-            data-workbench-drag-ghost
-            data-phase={state.phase}
-            data-valid={invalid ? "false" : "true"}
-            className={
-              "pointer-events-none fixed z-[100] flex flex-col items-center justify-center overflow-hidden rounded-xl border p-2.5 shadow-2xl backdrop-blur-md will-change-transform " +
-              "transition-[opacity,border-color] ease-out motion-reduce:transition-none " +
-              (invalid
-                ? "border-destructive/80 bg-destructive/15 text-destructive "
-                : "border-border/80 bg-background/85 text-foreground ") +
-              (state.phase === "canceling" ? "opacity-0 duration-180" : "opacity-100 duration-75")
-            }
-            style={{
-              left: 0,
-              top: 0,
-              width: `${ghostRect.width}px`,
-              height: `${ghostRect.height}px`,
-              transform: `translate3d(${ghostRect.left}px, ${ghostRect.top}px, 0)`,
-            }}
-          >
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              {ghostInfo.icon}
-            </div>
-            <div className="flex flex-col items-center min-w-0 max-w-full mt-1.5">
-              <span className="truncate max-w-[136px] text-xs font-semibold text-foreground leading-tight text-center">
-                {state.label}
-              </span>
-              <span className="text-[10px] text-muted-foreground font-medium leading-tight mt-0.5 text-center">
-                {ghostInfo.typeLabel}
-              </span>
-            </div>
-          </div>
-        </>,
-        document.body,
-      ) : null}
+            <>
+              {tabMarker === null ? null : (
+                <div
+                  data-workbench-tab-drop-marker
+                  className="pointer-events-none fixed z-[99] rounded-full bg-primary shadow-[0_0_8px_var(--color-primary)]"
+                  style={{
+                    left: tabMarker.left,
+                    top: tabMarker.top,
+                    width: tabMarker.width,
+                    height: tabMarker.height,
+                  }}
+                />
+              )}
+              <div
+                data-workbench-drag-ghost
+                data-phase={state.phase}
+                data-valid={invalid ? "false" : "true"}
+                className={
+                  "pointer-events-none fixed z-[100] flex flex-col items-center justify-center overflow-hidden rounded-xl border p-2.5 shadow-2xl backdrop-blur-md will-change-transform " +
+                  "transition-[opacity,border-color] ease-out motion-reduce:transition-none " +
+                  (invalid
+                    ? "border-destructive/80 bg-destructive/15 text-destructive "
+                    : "border-border/80 bg-background/85 text-foreground ") +
+                  (state.phase === "canceling"
+                    ? "opacity-0 duration-180"
+                    : "opacity-100 duration-75")
+                }
+                style={{
+                  left: 0,
+                  top: 0,
+                  width: `${ghostRect.width}px`,
+                  height: `${ghostRect.height}px`,
+                  transform: `translate3d(${ghostRect.left}px, ${ghostRect.top}px, 0)`,
+                }}
+              >
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  {ghostInfo.icon}
+                </div>
+                <div className="flex flex-col items-center min-w-0 max-w-full mt-1.5">
+                  <span className="truncate max-w-[136px] text-xs font-semibold text-foreground leading-tight text-center">
+                    {state.label}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground font-medium leading-tight mt-0.5 text-center">
+                    {ghostInfo.typeLabel}
+                  </span>
+                </div>
+              </div>
+            </>,
+            document.body,
+          )
+        : null}
     </>
   );
 }

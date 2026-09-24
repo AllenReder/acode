@@ -1,5 +1,5 @@
 {
-  "name": "@t3tools/scripts",
+  "name": "@awen/scripts",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,11 +9,11 @@
     "smoke:desktop-terminal": "node desktop-terminal-smoke.mjs"
   },
   "dependencies": {
+    "@awen/client-runtime": "workspace:*",
+    "@awen/contracts": "workspace:*",
+    "@awen/shared": "workspace:*",
+    "@awen/tailscale": "workspace:*",
     "@effect/platform-node": "catalog:",
-    "@t3tools/client-runtime": "workspace:*",
-    "@t3tools/contracts": "workspace:*",
-    "@t3tools/shared": "workspace:*",
-    "@t3tools/tailscale": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

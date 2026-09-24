@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  AcodeProjectId,
+  AwenProjectId,
   agentSessionsIn,
   AgentSessionId,
   ProjectId,
   ProviderInstanceId,
   ThreadId,
   WorkspaceId,
-} from "@t3tools/contracts";
-import type { OrchestrationShellSnapshot, OrchestrationShellStreamEvent } from "@t3tools/contracts";
+} from "@awen/contracts";
+import type { OrchestrationShellSnapshot, OrchestrationShellStreamEvent } from "@awen/contracts";
 
 import { applyShellStreamEvent } from "./shellReducer.ts";
 
@@ -110,15 +110,15 @@ describe("applyShellStreamEvent", () => {
       expect(next.snapshotSequence).toBe(2);
     });
 
-    it("updates the ACode Project tree together with its T3 mapping", () => {
-      const acodeProject = {
-        id: AcodeProjectId.make("acode-project:project-1"),
+    it("updates the Awen Project tree together with its Awen mapping", () => {
+      const awenProject = {
+        id: AwenProjectId.make("awen-project:project-1"),
         title: "Test Project",
         workspaces: [
           {
             id: WorkspaceId.make("workspace:project-1"),
-            projectId: AcodeProjectId.make("acode-project:project-1"),
-            t3ProjectId: ProjectId.make("project-1"),
+            projectId: AwenProjectId.make("awen-project:project-1"),
+            awenProjectId: ProjectId.make("project-1"),
             title: "Test Project",
             workspaceRoot: "/workspace/test",
             role: "main" as const,
@@ -133,10 +133,10 @@ describe("applyShellStreamEvent", () => {
         kind: "project-upserted",
         sequence: 2,
         project: stubProject,
-        acodeProject,
+        awenProject,
       });
 
-      expect(next.acodeProjects).toEqual([acodeProject]);
+      expect(next.awenProjects).toEqual([awenProject]);
       expect(next.snapshotSequence).toBe(2);
     });
   });
@@ -146,9 +146,9 @@ describe("applyShellStreamEvent", () => {
       const snapshotWithProject: OrchestrationShellSnapshot = {
         ...baseSnapshot,
         projects: [stubProject],
-        acodeProjects: [
+        awenProjects: [
           {
-            id: AcodeProjectId.make("acode-project:project-1"),
+            id: AwenProjectId.make("awen-project:project-1"),
             title: "Test Project",
             workspaces: [],
             createdAt: "2026-04-01T00:00:00.000Z",
@@ -161,25 +161,25 @@ describe("applyShellStreamEvent", () => {
         kind: "project-removed",
         sequence: 3,
         projectId: ProjectId.make("project-1"),
-        acodeProjectId: AcodeProjectId.make("acode-project:project-1"),
+        awenProjectId: AwenProjectId.make("awen-project:project-1"),
       };
 
       const next = applyShellStreamEvent(snapshotWithProject, event);
 
       expect(next.projects).toHaveLength(0);
-      expect(next.acodeProjects).toHaveLength(0);
+      expect(next.awenProjects).toHaveLength(0);
       expect(next.snapshotSequence).toBe(3);
     });
 
-    it("keeps a shared ACode Project when one sibling Workspace is removed", () => {
-      const acodeProject = {
-        id: AcodeProjectId.make("acode-project:project-1"),
+    it("keeps a shared Awen Project when one sibling Workspace is removed", () => {
+      const awenProject = {
+        id: AwenProjectId.make("awen-project:project-1"),
         title: "Repository",
         workspaces: [
           {
             id: WorkspaceId.make("workspace:project-1"),
-            projectId: AcodeProjectId.make("acode-project:project-1"),
-            t3ProjectId: ProjectId.make("project-1"),
+            projectId: AwenProjectId.make("awen-project:project-1"),
+            awenProjectId: ProjectId.make("project-1"),
             title: "Main",
             workspaceRoot: "/workspace/main",
             role: "main" as const,
@@ -188,8 +188,8 @@ describe("applyShellStreamEvent", () => {
           },
           {
             id: WorkspaceId.make("workspace:project-2"),
-            projectId: AcodeProjectId.make("acode-project:project-1"),
-            t3ProjectId: ProjectId.make("project-2"),
+            projectId: AwenProjectId.make("awen-project:project-1"),
+            awenProjectId: ProjectId.make("project-2"),
             title: "Feature",
             workspaceRoot: "/workspace/feature",
             role: "worktree" as const,
@@ -205,22 +205,22 @@ describe("applyShellStreamEvent", () => {
         {
           ...baseSnapshot,
           projects: [stubProject, { ...stubProject, id: ProjectId.make("project-2") }],
-          acodeProjects: [acodeProject],
+          awenProjects: [awenProject],
         },
         {
           kind: "project-removed",
           sequence: 7,
           projectId: ProjectId.make("project-2"),
-          acodeProject: {
-            ...acodeProject,
-            workspaces: [acodeProject.workspaces[0]!],
+          awenProject: {
+            ...awenProject,
+            workspaces: [awenProject.workspaces[0]!],
           },
         },
       );
 
       expect(next.projects).toHaveLength(1);
-      expect(next.acodeProjects).toEqual([
-        { ...acodeProject, workspaces: [acodeProject.workspaces[0]!] },
+      expect(next.awenProjects).toEqual([
+        { ...awenProject, workspaces: [awenProject.workspaces[0]!] },
       ]);
       expect(next.snapshotSequence).toBe(7);
     });
@@ -260,15 +260,15 @@ describe("applyShellStreamEvent", () => {
       expect(next.threads[0]?.title).toBe("Updated Thread");
     });
 
-    it("updates the owning ACode workspace session with the thread", () => {
-      const acodeProject = {
-        id: AcodeProjectId.make("acode-project:project-1"),
+    it("updates the owning Awen workspace session with the thread", () => {
+      const awenProject = {
+        id: AwenProjectId.make("awen-project:project-1"),
         title: "Test Project",
         workspaces: [
           {
             id: WorkspaceId.make("workspace:project-1"),
-            projectId: AcodeProjectId.make("acode-project:project-1"),
-            t3ProjectId: ProjectId.make("project-1"),
+            projectId: AwenProjectId.make("awen-project:project-1"),
+            awenProjectId: ProjectId.make("project-1"),
             title: "Test Project",
             workspaceRoot: "/workspace/test",
             role: "main" as const,
@@ -280,11 +280,11 @@ describe("applyShellStreamEvent", () => {
         createdAt: "2026-04-01T00:00:00.000Z",
         updatedAt: "2026-04-01T00:00:00.000Z",
       };
-      const updatedAcodeProject = {
-        ...acodeProject,
+      const updatedAwenProject = {
+        ...awenProject,
         workspaces: [
           {
-            ...acodeProject.workspaces[0]!,
+            ...awenProject.workspaces[0]!,
             sessions: [
               {
                 kind: "agent" as const,
@@ -300,17 +300,17 @@ describe("applyShellStreamEvent", () => {
         ],
       };
       const next = applyShellStreamEvent(
-        { ...baseSnapshot, acodeProjects: [acodeProject] },
+        { ...baseSnapshot, awenProjects: [awenProject] },
         {
           kind: "thread-upserted",
           sequence: 5,
           thread: stubThread,
-          acodeProject: updatedAcodeProject,
+          awenProject: updatedAwenProject,
         },
       );
 
-      expect(next.acodeProjects?.[0]?.workspaces[0]?.sessions).toHaveLength(1);
-      expect(agentSessionsIn(next.acodeProjects![0]!.workspaces[0]!)[0]?.threadId).toBe("thread-1");
+      expect(next.awenProjects?.[0]?.workspaces[0]?.sessions).toHaveLength(1);
+      expect(agentSessionsIn(next.awenProjects![0]!.workspaces[0]!)[0]?.threadId).toBe("thread-1");
     });
   });
 

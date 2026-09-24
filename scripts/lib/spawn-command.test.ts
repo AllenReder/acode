@@ -16,7 +16,7 @@ import {
 const tempDirectories: string[] = [];
 
 async function createTemporaryDirectory(): Promise<string> {
-  const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3code-spawn-"));
+  const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "awen-spawn-"));
   tempDirectories.push(directory);
   return directory;
 }

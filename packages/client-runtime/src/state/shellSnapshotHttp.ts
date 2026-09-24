@@ -1,4 +1,4 @@
-import type { OrchestrationShellSnapshot } from "@t3tools/contracts";
+import type { OrchestrationShellSnapshot } from "@awen/contracts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -6,10 +6,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { HttpClient } from "effect/unstable/http";
 
-import { RemoteEnvironmentAuthorization } from "../authorization/service.ts";
 import type { PreparedConnection } from "../connection/model.ts";
 import { environmentEndpointUrl } from "../environment/endpoint.ts";
-import { ManagedRelayDpopSigner } from "../relay/managedRelay.ts";
 import { executeAuthenticatedEnvironmentHttpRequest } from "./environmentHttpAuth.ts";
 
 // Bounded so a pathologically slow endpoint cannot block the (cheaper) socket
@@ -24,12 +22,7 @@ const DEFAULT_SHELL_SNAPSHOT_TIMEOUT_MS = 6_000;
  */
 export const fetchEnvironmentShellSnapshot = Effect.fn(
   "clientRuntime.state.fetchEnvironmentShellSnapshot",
-)(function* (input: {
-  readonly prepared: PreparedConnection;
-  readonly signer: Option.Option<ManagedRelayDpopSigner["Service"]>;
-  readonly remoteAuthorization?: Option.Option<RemoteEnvironmentAuthorization["Service"]>;
-  readonly timeoutMs?: number;
-}) {
+)(function* (input: { readonly prepared: PreparedConnection; readonly timeoutMs?: number }) {
   return yield* executeAuthenticatedEnvironmentHttpRequest({
     ...input,
     group: "orchestration",
@@ -43,8 +36,8 @@ export const fetchEnvironmentShellSnapshot = Effect.fn(
 /**
  * Loads the environment shell snapshot over HTTP, returning `Option.none()` when
  * it cannot be loaded (so the caller falls back to the socket-embedded snapshot).
- * Decouples the shell state machine from the underlying HTTP + DPoP details and
- * keeps them out of test contexts.
+ * Decouples the shell state machine from its HTTP fallback and keeps it out of
+ * test contexts.
  */
 export class ShellSnapshotLoader extends Context.Service<
   ShellSnapshotLoader,
@@ -53,7 +46,7 @@ export class ShellSnapshotLoader extends Context.Service<
       prepared: PreparedConnection,
     ) => Effect.Effect<Option.Option<OrchestrationShellSnapshot>>;
   }
->()("@t3tools/client-runtime/state/shellSnapshotHttp/ShellSnapshotLoader") {}
+>()("@awen/client-runtime/state/shellSnapshotHttp/ShellSnapshotLoader") {}
 
 export const shellSnapshotLoaderLayer: Layer.Layer<
   ShellSnapshotLoader,
@@ -63,13 +56,9 @@ export const shellSnapshotLoaderLayer: Layer.Layer<
   ShellSnapshotLoader,
   Effect.gen(function* () {
     const httpClient = yield* HttpClient.HttpClient;
-    // Resolve the DPoP signer optionally: it is only needed for relay/DPoP
-    // connections, so the loader must not hard-require it.
-    const signer = yield* Effect.serviceOption(ManagedRelayDpopSigner);
-    const remoteAuthorization = yield* Effect.serviceOption(RemoteEnvironmentAuthorization);
     return ShellSnapshotLoader.of({
       load: (prepared: PreparedConnection) =>
-        fetchEnvironmentShellSnapshot({ prepared, signer, remoteAuthorization }).pipe(
+        fetchEnvironmentShellSnapshot({ prepared }).pipe(
           Effect.map(Option.some<OrchestrationShellSnapshot>),
           Effect.provideService(HttpClient.HttpClient, httpClient),
           Effect.catchCause((cause) =>

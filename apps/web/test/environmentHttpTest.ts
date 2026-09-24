@@ -6,13 +6,15 @@ import {
   EnvironmentHttpApi,
   type AuthBrowserSessionRequest,
   type AuthBrowserSessionResult,
+  type AuthBearerSessionRequest,
+  type AuthBearerSessionResult,
   type AuthCreatePairingCredentialInput,
   type AuthEnvironmentScope,
   type AuthPairingCredentialResult,
   type AuthSessionState,
   type ExecutionEnvironmentDescriptor,
   type EnvironmentAuthInvalidError,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import * as DateTime from "effect/DateTime";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -32,6 +34,9 @@ interface EnvironmentHttpTestScenario {
   readonly descriptor?: () => Effect.Effect<ExecutionEnvironmentDescriptor>;
   readonly session?: () => Effect.Effect<AuthSessionState>;
   readonly browserSession?: BrowserSessionHandler;
+  readonly bearerSession?: (
+    payload: AuthBearerSessionRequest,
+  ) => Effect.Effect<AuthBearerSessionResult, EnvironmentAuthInvalidError>;
   readonly pairingCredential?: (
     payload: AuthCreatePairingCredentialInput,
   ) => Effect.Effect<AuthPairingCredentialResult>;
@@ -41,6 +46,7 @@ export interface EnvironmentHttpTestCalls {
   descriptor: number;
   session: number;
   browserSession: Array<AuthBrowserSessionRequest>;
+  bearerSession: Array<AuthBearerSessionRequest>;
   pairingCredential: Array<AuthCreatePairingCredentialInput>;
 }
 
@@ -65,6 +71,7 @@ export async function installEnvironmentHttpTest(scenario: EnvironmentHttpTestSc
     descriptor: 0,
     session: 0,
     browserSession: [],
+    bearerSession: [],
     pairingCredential: [],
   };
 
@@ -99,7 +106,15 @@ export async function installEnvironmentHttpTest(scenario: EnvironmentHttpTestSc
                 );
               }),
             )
-            .handle("token", () => unexpectedEndpoint("auth.token"))
+            .handle(
+              "bearerSession",
+              Effect.fn("test.environment.auth.bearerSession")(function* ({ payload }) {
+                calls.bearerSession.push(payload);
+                return yield* (
+                  scenario.bearerSession?.(payload) ?? unexpectedEndpoint("auth.bearerSession")
+                );
+              }),
+            )
             .handle("webSocketTicket", () => unexpectedEndpoint("auth.webSocketTicket"))
             .handle(
               "pairingCredential",

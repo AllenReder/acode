@@ -51,6 +51,9 @@ export class GhosttyRuntime {
     let instance: WebAssembly.Instance | undefined;
     const imports = {
       env: {
+        // This upstream WASM import remains part of the vendored artifact ABI.
+        // Awen terminal writes use the table-backed trampoline installed below.
+        t3_write_pty: () => {},
         log: (pointer: number, length: number) => {
           if (!instance) return;
           const memory = instance.exports.memory;

@@ -1,13 +1,13 @@
 # Material Surface Glass Architecture
 
 Accepted; supersedes the web visual-layer parts of ADR-0009 while retaining its
-native macOS and Windows glass foundation. ACode separates Theme's opaque
+native macOS and Windows glass foundation. Awen separates Theme's opaque
 semantic colors from a Material system: a native Glass Stage supplies the
 window-wide desktop blur, explicit Sidebar, Topbar, Workbench, and Overlay
 Material Surfaces own tint, blur, saturation, and edge treatment, and View or
 Pane content layers render transparent base backgrounds. Overlay surfaces use
 web backdrop filtering because the native stage cannot blur content beneath a
-dialog or menu inside the web view. This replaces the t3code-derived practice
+dialog or menu inside the web view. This replaces the awen-derived practice
 of opaque component backgrounds and selector-specific transparency overrides;
 custom and imported themes continue to provide colors only, not Material
 parameters. The legacy glass settings migrate once into a Material settings
@@ -25,10 +25,10 @@ Workbench state, including Settings, and stops at the Sidebar material edge.
 
 ## Visual redesign boundary
 
-The material and control appearance redesign preserves ACode's navigation and
+The material and control appearance redesign preserves Awen's navigation and
 layout. Monocode is the reference for native blur, material continuity, edge
 treatment, and control finish; adopting those qualities does not replace
-ACode's Sidebar, Tab, Pane, or View organization with Monocode's layout.
+Awen's Sidebar, Tab, Pane, or View organization with Monocode's layout.
 
 Sidebar, Topbar, and Workbench share one continuous Glass Stage while retaining
 independently adjustable tint opacity. Each region paints its material once;
@@ -51,7 +51,7 @@ the currently focused Session alone receives a soft accent background.
 Code blocks and ordinary inputs may use a subtle translucent local backing for
 readability. The Agent composer and its attached model, permission, and
 workspace controls instead share one continuous local frosted backdrop,
-following the earlier t3code composer treatment. This backdrop blurs content
+following the earlier awen composer treatment. This backdrop blurs content
 behind the composer; native desktop blur alone cannot replace it. Attached
 parts must not stack independent blur layers. Floating menus and dialogs use
 their own denser frosted Overlay material to separate their content from the

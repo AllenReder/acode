@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { ProviderInstanceId } from "@t3tools/contracts";
+import { ProviderInstanceId } from "@awen/contracts";
 
 import { hasValidClaudeManifestAdapters } from "./ClaudeModelManifest.ts";
 import type { ModelManifestData } from "./ModelManifest.ts";
@@ -227,7 +227,10 @@ describe("Claude model catalog", () => {
     const effortDesc = custom?.capabilities?.optionDescriptors?.find((d) => d.id === "effort");
     assert.isDefined(effortDesc);
     if (effortDesc && effortDesc.type === "select") {
-      assert.deepStrictEqual(effortDesc.options.map((o) => o.id), ["low", "high"]);
+      assert.deepStrictEqual(
+        effortDesc.options.map((o) => o.id),
+        ["low", "high"],
+      );
     }
     const fastModeDesc = custom?.capabilities?.optionDescriptors?.find((d) => d.id === "fastMode");
     assert.isDefined(fastModeDesc);

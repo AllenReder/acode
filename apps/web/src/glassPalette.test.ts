@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { converter, parse } from "culori";
-import { BUILT_IN_THEMES } from "@t3tools/shared/themePalettes";
+import { BUILT_IN_THEMES } from "@awen/shared/themePalettes";
 import { getThemeColorsForMode } from "./themePalette";
 
 const rgb = converter("rgb");

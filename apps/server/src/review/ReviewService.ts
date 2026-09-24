@@ -13,7 +13,7 @@ import {
   type ReviewDiffPreviewError,
   type ReviewDiffPreviewInput,
   type ReviewDiffPreviewResult,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 
 import * as ServerConfig from "../config.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
@@ -31,7 +31,7 @@ export class ReviewService extends Context.Service<
       input: ReviewDiffFileContentsInput,
     ) => Effect.Effect<ReviewDiffFileContentsResult, ReviewDiffPreviewError>;
   }
->()("t3/review/ReviewService") {}
+>()("@awen/server/review/ReviewService") {}
 
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {
@@ -102,12 +102,12 @@ export const make = Effect.gen(function* () {
         }
       }
 
-      if (projectionQuery.value.listAcodeProjects) {
-        const acodeTrees = yield* projectionQuery.value
-          .listAcodeProjects()
+      if (projectionQuery.value.listAwenProjects) {
+        const awenTrees = yield* projectionQuery.value
+          .listAwenProjects()
           .pipe(Effect.orElseSucceed(() => []));
-        for (const acodeProject of acodeTrees) {
-          for (const ws of acodeProject.workspaces) {
+        for (const awenProject of awenTrees) {
+          for (const ws of awenProject.workspaces) {
             const root = yield* canonicalizePath(ws.workspaceRoot).pipe(
               Effect.orElseSucceed(() => null),
             );

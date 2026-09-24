@@ -10,8 +10,8 @@ import {
   terminalSessionRefForRuntime,
   type TerminalSessionRef,
 } from "./session.ts";
-import { AcodeProjectShell, AcodeSessionShell, agentSessionsIn } from "./workspace.ts";
-import type { AcodeAgentSessionShell } from "./workspace.ts";
+import { AwenProjectShell, AwenSessionShell, agentSessionsIn } from "./workspace.ts";
+import type { AwenAgentSessionShell } from "./workspace.ts";
 
 const WS_A = WorkspaceId.make("workspace:project-a");
 const WS_B = WorkspaceId.make("workspace:project-b");
@@ -31,7 +31,7 @@ function decodes<S extends Schema.Top>(schema: S, input: unknown): boolean {
   }
 }
 
-function agentShell(overrides: Partial<AcodeAgentSessionShell> = {}): AcodeAgentSessionShell {
+function agentShell(overrides: Partial<AwenAgentSessionShell> = {}): AwenAgentSessionShell {
   return {
     kind: "agent",
     id: AGENT,
@@ -45,7 +45,7 @@ function agentShell(overrides: Partial<AcodeAgentSessionShell> = {}): AcodeAgent
 }
 
 describe("Terminal Session references", () => {
-  it("gives the same runtime terminal one stable ACode identity", () => {
+  it("gives the same runtime terminal one stable Awen identity", () => {
     const first = terminalSessionRefForRuntime({ workspaceId: WS_A, terminalId: "term-1" });
     const second = terminalSessionRefForRuntime({ workspaceId: WS_A, terminalId: "term-1" });
 
@@ -73,7 +73,7 @@ describe("Terminal Session references", () => {
     expect(runtimeTerminalIdForSession(ref)).toBe("term-7");
   });
 
-  it("round-trips a runtime id that contains the ACode identity separator", () => {
+  it("round-trips a runtime id that contains the Awen identity separator", () => {
     const ref = terminalSessionRefForRuntime({ workspaceId: WS_A, terminalId: "shell:zsh:1" });
 
     expect(runtimeTerminalIdForSession(ref)).toBe("shell:zsh:1");
@@ -106,7 +106,7 @@ describe("Terminal Session references", () => {
 });
 
 describe("Agent Session references", () => {
-  it("binds the ACode Agent Session to its Workspace without exposing the T3 thread", () => {
+  it("binds the Awen Agent Session to its Workspace without exposing the Awen thread", () => {
     const ref = agentSessionRefForShell(agentShell());
 
     expect(ref).toEqual({
@@ -116,7 +116,7 @@ describe("Agent Session references", () => {
     });
   });
 
-  it("keeps the same ACode identity when only the Thread binding differs", () => {
+  it("keeps the same Awen identity when only the Thread binding differs", () => {
     const before = agentSessionRefForShell(agentShell());
     const rebound = agentSessionRefForShell(agentShell({ threadId: ThreadId.make("thread-2") }));
 
@@ -160,9 +160,9 @@ describe("SessionRef", () => {
   });
 });
 
-describe("AcodeSessionShell", () => {
+describe("AwenSessionShell", () => {
   it("carries the same Workspace-scoped Session fields for both Session kinds", () => {
-    const agent = decodeSync(AcodeSessionShell, {
+    const agent = decodeSync(AwenSessionShell, {
       kind: "agent",
       id: AGENT,
       workspaceId: WS_A,
@@ -171,7 +171,7 @@ describe("AcodeSessionShell", () => {
       createdAt: "2026-09-19T00:00:00.000Z",
       updatedAt: "2026-09-19T00:00:00.000Z",
     });
-    const terminal = decodeSync(AcodeSessionShell, {
+    const terminal = decodeSync(AwenSessionShell, {
       kind: "terminal",
       id: "terminal-session:workspace:project-a:term-1",
       workspaceId: WS_A,
@@ -184,9 +184,9 @@ describe("AcodeSessionShell", () => {
     expect(agent.workspaceId).toBe(terminal.workspaceId);
   });
 
-  it("keeps the T3 thread binding on the Agent shell only", () => {
-    const agent = decodeSync(AcodeSessionShell, { ...agentShell(), kind: "agent" });
-    const terminal = decodeSync(AcodeSessionShell, {
+  it("keeps the Awen thread binding on the Agent shell only", () => {
+    const agent = decodeSync(AwenSessionShell, { ...agentShell(), kind: "agent" });
+    const terminal = decodeSync(AwenSessionShell, {
       kind: "terminal",
       id: "terminal-session:workspace:project-a:term-1",
       workspaceId: WS_A,
@@ -216,7 +216,7 @@ describe("AcodeSessionShell", () => {
   });
 
   it("still decodes an Agent shell from a server that predates the kind discriminant", () => {
-    const legacy = decodeSync(AcodeSessionShell, {
+    const legacy = decodeSync(AwenSessionShell, {
       id: AGENT,
       workspaceId: WS_A,
       threadId: THREAD,
@@ -275,15 +275,15 @@ describe("agentSessionsIn", () => {
 });
 
 describe("Workspace Session projection compatibility", () => {
-  it("keeps decoding the ACode Project tree when a newer server sends an unknown Session kind", () => {
-    const project = decodeSync(AcodeProjectShell, {
-      id: "acode-project:p",
+  it("keeps decoding the Awen Project tree when a newer server sends an unknown Session kind", () => {
+    const project = decodeSync(AwenProjectShell, {
+      id: "awen-project:p",
       title: "Project",
       workspaces: [
         {
           id: WS_A,
-          projectId: "acode-project:p",
-          t3ProjectId: "project-p",
+          projectId: "awen-project:p",
+          awenProjectId: "project-p",
           title: "Workspace",
           workspaceRoot: "/tmp/p",
           role: "main",
@@ -312,14 +312,14 @@ describe("Workspace Session projection compatibility", () => {
   });
 
   it("keeps a pre-discriminant Agent Session visible to the Agent-only projection", () => {
-    const project = decodeSync(AcodeProjectShell, {
-      id: "acode-project:p",
+    const project = decodeSync(AwenProjectShell, {
+      id: "awen-project:p",
       title: "Project",
       workspaces: [
         {
           id: WS_A,
-          projectId: "acode-project:p",
-          t3ProjectId: "project-p",
+          projectId: "awen-project:p",
+          awenProjectId: "project-p",
           title: "Workspace",
           workspaceRoot: "/tmp/p",
           role: "main",

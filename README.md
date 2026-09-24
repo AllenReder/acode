@@ -1,19 +1,17 @@
-# ACode v1 runtime baseline
+# Awen
 
-ACode currently packages the T3 Code Web client and daemon as its first
-runtime baseline. The Web client talks to a real local daemon through T3's
-typed contracts and client-runtime; there is no mock server in this checkout.
+Awen ships a Windows and macOS desktop app, a web client, and a Linux x64
+daemon. The web client talks to the daemon through typed contracts and the
+shared client runtime.
 
 ## Scope
 
-This ticket imports the Web, server, client-runtime, contracts, shared modules,
-SSH helpers, provider helpers, and build configuration. Only the Web and server
-applications are part of the workspace build. The terminal renders with
-xterm.js; the vendored libghostty-vt WebAssembly adapter is retained in the tree
-but is no longer loaded by the shipped client. Marketing, mobile, and desktop
-product entrypoints are deferred to later ACode tickets.
+The workspace contains the desktop shell, web client, daemon, client runtime,
+contracts, shared modules, SSH helpers, provider integrations, and build tools.
+`pnpm build` builds the web and daemon; `pnpm build:desktop` builds the native
+desktop app. The web terminal uses xterm.js.
 
-The ACode guidance files (`AGENTS.md`, `CONTEXT.md`, and `docs/agents/`) remain
+The Awen guidance files (`AGENTS.md`, `CONTEXT.md`, and `docs/agents/`) remain
 authoritative and were not replaced by upstream guidance.
 
 ## Requirements
@@ -27,8 +25,8 @@ The checked-in package manager installs the local `vite-plus` tool, so no
 global `vp` installation is required.
 
 The root `package.json` is the product version source. Use
-`pnpm version:set <version>` to update the desktop, Web, daemon, and contracts copies, then
-`pnpm version:check` to verify them. See
+`pnpm version:set <version>` to update the desktop, web, daemon, and contracts
+versions, then `pnpm version:check` to verify them. See
 [`docs/agents/releases.md`](./docs/agents/releases.md) for the prerelease process.
 
 ## Install and run
@@ -50,7 +48,7 @@ pnpm dev:web      # Web only
 ```
 
 The development runner keeps runtime state in this checkout's ignored
-`.acode/` directory by default. An explicit `--home-dir` may be passed to the
+`.awen/` directory by default. An explicit `--home-dir` may be passed to the
 dev runner when a different test directory is required. Port selection is
 stable per checkout, and the runner advances to an available pair when needed.
 
@@ -78,12 +76,12 @@ The command reports the host OS and shell used for the validation. See
 [`docs/agents/terminal-runtime.md`](./docs/agents/terminal-runtime.md) for the
 terminal ownership boundary and related regression commands.
 
-Cloud/relay configuration is not needed for local development. `.env.example`
-contains the optional public configuration used when testing those features.
+The local desktop and daemon connect directly; no external service configuration
+is required for local development.
 
 ## Desktop shell
 
-ACode's desktop target is a small Tauri host around the same T3 Web client.
+Awen's desktop target is a small Tauri host around the same Awen Web client.
 The host owns the native window, resource loading, constrained external-link
 opening, and desktop connection bootstrap; agent execution, PTY state,
 provider credentials, and persistence remain in the existing daemon. The
@@ -92,7 +90,7 @@ Monocode React application is not copied into this checkout.
 The desktop shell asks the local daemon launcher to attach to or start the
 daemon for this checkout. The daemon is detached from the window lifecycle, so
 closing the desktop shell leaves work running. The wrapper uses port offset `0`
-and this checkout's `.acode` directory by default:
+and this checkout's `.awen` directory by default:
 
 ```bash
 # Tauri window, Web development server on 5733, and the local daemon launcher
@@ -107,10 +105,10 @@ it answers terminal color and status queries, and ensures packaged JavaScript
 `eval` stays blocked:
 
 ```bash
-pnpm --filter @t3tools/scripts exec playwright install chromium
+pnpm --filter @awen/scripts exec playwright install chromium
 pnpm smoke:desktop-terminal
 # Optional WebKit coverage (install its system dependencies on Linux):
-pnpm --filter @t3tools/scripts exec playwright install webkit
+pnpm --filter @awen/scripts exec playwright install webkit
 pnpm smoke:desktop-terminal --webkit
 ```
 
@@ -127,40 +125,40 @@ pnpm test:e2e:workbench
 # Reuse the installed Chrome instead of Playwright's browser download.
 PLAYWRIGHT_USE_SYSTEM_CHROME=1 pnpm test:e2e:workbench
 
-# Keep the temporary ACODE_HOME and failure screenshot for inspection.
+# Keep the temporary AWEN_HOME and failure screenshot for inspection.
 WORKBENCH_E2E_KEEP_TEMP=1 pnpm test:e2e:workbench
 ```
 
 The explicit CLI stop is separate from closing the window:
 
 ```bash
-pnpm --dir apps/server exec node src/bin.ts daemon stop --base-dir "$PWD/.acode" --confirm
+pnpm --dir apps/server exec node src/bin.ts daemon stop --base-dir "$PWD/.awen" --confirm
 ```
 
 The desktop reads the live daemon endpoint from
-`<ACODE_HOME>/userdata/server-runtime.json` (or `dev/server-runtime.json`).
+`<AWEN_HOME>/userdata/server-runtime.json` (or `dev/server-runtime.json`).
 For a daemon that requires authentication, provide a short-lived bootstrap
 credential or an already-issued bearer token to the desktop process:
 
 ```bash
-ACODE_DESKTOP_BOOTSTRAP_TOKEN=<pairing-token> pnpm dev:desktop
+AWEN_DESKTOP_BOOTSTRAP_TOKEN=<pairing-token> pnpm dev:desktop
 # or
-ACODE_DESKTOP_BEARER_TOKEN=<bearer-token> pnpm dev:desktop
+AWEN_DESKTOP_BEARER_TOKEN=<bearer-token> pnpm dev:desktop
 ```
 
-`ACODE_DESKTOP_HTTP_URL` and `ACODE_DESKTOP_WS_URL` may explicitly override
+`AWEN_DESKTOP_HTTP_URL` and `AWEN_DESKTOP_WS_URL` may explicitly override
 runtime-marker discovery; the C02 shell accepts loopback endpoints only. The
 desktop build embeds `apps/web/dist`, so it does not require a Web development
 server at runtime:
 
 ```bash
 pnpm build:desktop
-ACODE_HOME="$PWD/.acode" ACODE_DESKTOP_BEARER_TOKEN=<bearer-token> \
-  apps/desktop/src-tauri/target/release/bundle/macos/ACode.app/Contents/MacOS/acode-desktop
+AWEN_HOME="$PWD/.awen" AWEN_DESKTOP_BEARER_TOKEN=<bearer-token> \
+  apps/desktop/src-tauri/target/release/bundle/macos/Awen.app/Contents/MacOS/awen-desktop
 ```
 
-The generated release application identifier is `com.allenreder.acode`; the
-development shell uses the separate `com.allenreder.acode.dev` identity. Native
+The generated release application identifier is `com.allenreder.awen`; the
+development shell uses the separate `com.allenreder.awen.dev` identity. Native
 desktop integration currently covers local daemon discovery and supervision;
 workspaces, sessions, and the Monocode-derived workbench are follow-up tickets.
 
@@ -180,7 +178,7 @@ the shipped client no longer loads.
 
 Codex can run the checked-in scripts when it creates and removes a worktree.
 The setup script installs the locked dependency graph in the new checkout. The
-cleanup script removes only checkout-local ACode state, generated files, and
+cleanup script removes only checkout-local Awen state, generated files, and
 build output; it does not remove shared package caches or user-home data.
 
 For the default, macOS, or Linux command fields, use:
@@ -202,11 +200,7 @@ checkout root.
 
 ## Source and license provenance
 
-The imported runtime source is from
-[`pingdotgg/t3code@ccf220be205f0e509021dbc8cbda90daa638e20d`](https://github.com/pingdotgg/t3code/commit/ccf220be205f0e509021dbc8cbda90daa638e20d).
-See [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md) and
+See [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md) for upstream source
+revisions and license notices, and
 [`third-party-licenses.config.json`](./third-party-licenses.config.json) for
-the consolidated license and notice inventory.
-
-Workspace, Session, ACode layout, SSH/Tauri shell integration, and packaging
-are intentionally outside this baseline.
+the dependency license inventory.

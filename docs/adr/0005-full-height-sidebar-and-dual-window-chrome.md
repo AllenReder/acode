@@ -11,6 +11,7 @@ Accepted.
 Previously, the Workbench owned a single frameless title strip (`WorkbenchWindowChrome`) spanning the entire window width (`fixed inset-x-0 top-0`), which pushed the Sidebar down by 36px. Because the Tab list started shortly after the macOS traffic lights, tabs spilled over the top of the Sidebar. Moreover, the Settings button was relegated to the bottom of the Sidebar.
 
 The new layout treats the Sidebar as a full-height navigation pillar on the left. The window top is horizontally partitioned into two coordinated headers (both 36px in height):
+
 1. **Sidebar Header (left)**: When expanded, it houses the macOS traffic lights, a left-aligned Sidebar hide button, a middle draggable drag region, and a right-aligned Settings button (or Back button when in `/settings`).
 2. **Workbench Header (right)**: When the Sidebar is expanded, tabs begin immediately at the left border of the Workbench without overlapping the Sidebar. When the Sidebar is collapsed, the Workbench expands to full width and seamlessly takes over the traffic lights, placing the Sidebar open trigger and Settings button immediately next to the traffic lights, followed by a hairline separator and the Tab list.
 

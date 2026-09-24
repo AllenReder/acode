@@ -51,7 +51,7 @@ describe("theme failure handling", () => {
       expect(error).toBeInstanceOf(ThemeStorageError);
       expect(error).toMatchObject({
         operation: "read",
-        storageKey: "acode:theme",
+        storageKey: "awen:theme",
         cause: readCause,
       });
     }
@@ -63,23 +63,23 @@ describe("theme failure handling", () => {
       expect(error).toBeInstanceOf(ThemeStorageError);
       expect(error).toMatchObject({
         operation: "write",
-        storageKey: "acode:theme",
+        storageKey: "awen:theme",
         theme: "dark",
         cause: writeCause,
       });
     }
   });
 
-  it("reads the persisted T3 Chat theme preference", async () => {
+  it("reads the persisted Awen Chat theme preference", async () => {
     vi.stubGlobal("window", {
       localStorage: createStorage({
-        getItem: () => "acode-default",
+        getItem: () => "awen-default",
       }),
     });
 
     const { readThemePreference } = await import("./useTheme");
 
-    expect(readThemePreference()).toBe("acode-default");
+    expect(readThemePreference()).toBe("awen-default");
   });
 
   it("falls back during initial theme application and logs only safe attributes", async () => {
@@ -102,10 +102,10 @@ describe("theme failure handling", () => {
     await expect(import("./useTheme")).resolves.toBeDefined();
 
     expect(errorLog).toHaveBeenCalledWith(
-      "Failed to read theme preference for acode:theme.",
+      "Failed to read theme preference for awen:theme.",
       expect.objectContaining({
         operation: "read",
-        storageKey: "acode:theme",
+        storageKey: "awen:theme",
         errorTag: "ThemeStorageError",
       }),
     );
@@ -119,7 +119,7 @@ describe("theme failure handling", () => {
     const themeGetItem = vi.fn((): string | null => {
       throw cause;
     });
-    const getItem = vi.fn((key: string) => (key === "acode:theme" ? themeGetItem() : null));
+    const getItem = vi.fn((key: string) => (key === "awen:theme" ? themeGetItem() : null));
     const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
     let readSnapshot: (() => unknown) | undefined;
     let subscribeToTheme: ((listener: () => void) => () => void) | undefined;
@@ -158,7 +158,7 @@ describe("theme failure handling", () => {
     expect(errorLog).toHaveBeenCalledTimes(1);
 
     const unsubscribe = subscribeToTheme?.(() => undefined);
-    storageHandler?.({ key: "acode:theme" } as StorageEvent);
+    storageHandler?.({ key: "awen:theme" } as StorageEvent);
     readSnapshot?.();
 
     expect(themeGetItem).toHaveBeenCalledTimes(2);

@@ -10,8 +10,8 @@ import {
   ProviderInstanceId,
   ThreadId,
   TurnId,
-} from "@t3tools/contracts";
-import type { OrchestrationThread } from "@t3tools/contracts";
+} from "@awen/contracts";
+import type { OrchestrationThread } from "@awen/contracts";
 
 import { applyThreadDetailEvent } from "./threadReducer.ts";
 
@@ -59,7 +59,7 @@ describe("applyThreadDetailEvent", () => {
         type: "project.created",
         payload: {
           projectId: ProjectId.make("project-1"),
-          title: "T3 Code",
+          title: "Awen",
           workspaceRoot: "/repo",
           repositoryIdentity: null,
           defaultModelSelection: null,
@@ -352,16 +352,16 @@ describe("applyThreadDetailEvent", () => {
       (field) => {
         const linkedPullRequest = {
           projectId: ProjectId.make("project-1"),
-          repository: "pingdotgg/t3code",
+          repository: "AllenReder/awen",
           number: 42,
-          url: "https://github.com/pingdotgg/t3code/pull/42",
+          url: "https://github.com/AllenReder/awen/pull/42",
         };
         const otherField =
           field === "linkedPullRequest" ? "branchPullRequest" : "linkedPullRequest";
         const otherPullRequest = {
           ...linkedPullRequest,
           number: 43,
-          url: "https://github.com/pingdotgg/t3code/pull/43",
+          url: "https://github.com/AllenReder/awen/pull/43",
         };
         const linked = applyThreadDetailEvent(
           { ...baseThread, [otherField]: otherPullRequest },
@@ -411,15 +411,15 @@ describe("applyThreadDetailEvent", () => {
   describe("thread pull request links", () => {
     const link = {
       host: "github.com",
-      repository: "pingdotgg/t3code",
+      repository: "AllenReder/awen",
       number: 42,
-      url: "https://github.com/pingdotgg/t3code/pull/42",
+      url: "https://github.com/AllenReder/awen/pull/42",
       source: "manual" as const,
       linkedAt: "2026-04-01T05:00:00.000Z",
       snapshot: null,
       stack: null,
     };
-    const key = { host: "github.com", repository: "pingdotgg/t3code", number: 42 };
+    const key = { host: "github.com", repository: "AllenReder/awen", number: 42 };
     const linkEvent = (sequence: number) =>
       ({
         ...baseEventFields,
@@ -663,7 +663,7 @@ describe("applyThreadDetailEvent", () => {
           threadId: ThreadId.make("thread-1"),
           messageId: MessageId.make("msg-with-context"),
           role: "user",
-          text: "Watch [demo.mp4](t3-context://v1/file/video-1).",
+          text: "Watch [demo.mp4](awen-context://v1/file/video-1).",
           context,
           turnId: null,
           streaming: false,

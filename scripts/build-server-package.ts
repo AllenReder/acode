@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 // @effect-diagnostics nodeBuiltinImport:off globalConsole:off
 /**
- * Assembles a standalone headless server distribution package for ACode daemon.
+ * Assembles a standalone headless server distribution package for Awen daemon.
  * Layout:
- *   bin/acode (executable launcher with Node.js version verification)
- *   bin/t3 (symlink to acode)
+ *   bin/awen (executable launcher with Node.js version verification)
  *   dist/bin.mjs
  *   package.json
  *   node_modules/ (production dependencies)
@@ -14,7 +13,7 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
-import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { HostProcessArchitecture, HostProcessPlatform } from "@awen/shared/hostProcess";
 import * as Effect from "effect/Effect";
 import packageJson from "../apps/server/package.json" with { type: "json" };
 import productPackageJson from "../package.json" with { type: "json" };
@@ -28,7 +27,7 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 SERVER_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 
 if ! command -v node >/dev/null 2>&1; then
-  echo "Error: Node.js ^22.16, ^23.11, or >=24.10 is required to run ACode daemon." >&2
+  echo "Error: Node.js ^22.16, ^23.11, or >=24.10 is required to run Awen daemon." >&2
   echo "Please install Node.js (https://nodejs.org) on this system." >&2
   exit 1
 fi
@@ -38,8 +37,7 @@ if ! node -e 'const [major, minor] = process.versions.node.split(".").map(Number
   exit 1
 fi
 
-export ACODE_HOME="\${ACODE_HOME:-$HOME/.acode}"
-export T3CODE_HOME="\${T3CODE_HOME:-$ACODE_HOME}"
+export AWEN_HOME="\${AWEN_HOME:-$HOME/.awen}"
 
 exec node "$SERVER_DIR/dist/bin.mjs" "$@"
 `;
@@ -53,9 +51,12 @@ export interface BuildServerPackageOptions {
 }
 
 export function isExactServerPackageVersion(version: string): boolean {
-  return /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u.test(
-    version,
-  );
+  const core = "(?:0|[1-9]\\d*)";
+  const prerelease = "(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)";
+  return new RegExp(
+    `^${core}\\.${core}\\.${core}(?:-${prerelease}(?:\\.${prerelease})*)?$`,
+    "u",
+  ).test(version);
 }
 
 export function buildServerPackage(options: BuildServerPackageOptions = {}) {
@@ -80,7 +81,7 @@ export function buildServerPackage(options: BuildServerPackageOptions = {}) {
       `Server package version ${version} does not match the bundled daemon version ${packageJson.version}.`,
     );
   }
-  const stem = `acode-server-${version}-${platform}-${arch}`;
+  const stem = `awen-server-${version}-${platform}-${arch}`;
 
   if (!options.skipBuild) {
     console.log("[build-server-package] Building server bundle in apps/server...");
@@ -90,13 +91,13 @@ export function buildServerPackage(options: BuildServerPackageOptions = {}) {
     });
   }
 
-  const stageRoot = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "acode-server-pkg-"));
+  const stageRoot = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "awen-server-pkg-"));
   const stageDir = NodePath.join(stageRoot, stem);
 
   try {
     console.log(`[build-server-package] Staging production deployment into ${stageDir}...`);
     NodeChildProcess.execSync(
-      `pnpm --config.confirmModulesPurge=false --filter=t3 deploy --legacy --prod "${stageDir}"`,
+      `pnpm --config.confirmModulesPurge=false --filter=@awen/server deploy --legacy --prod "${stageDir}"`,
       {
         cwd: REPO_ROOT,
         stdio: "inherit",
@@ -106,19 +107,12 @@ export function buildServerPackage(options: BuildServerPackageOptions = {}) {
     const binDir = NodePath.join(stageDir, "bin");
     NodeFS.mkdirSync(binDir, { recursive: true });
 
-    const acodeWrapperPath = NodePath.join(binDir, "acode");
-    NodeFS.writeFileSync(acodeWrapperPath, WRAPPER_SCRIPT, { mode: 0o755 });
+    const awenWrapperPath = NodePath.join(binDir, "awen");
+    NodeFS.writeFileSync(awenWrapperPath, WRAPPER_SCRIPT, { mode: 0o755 });
 
-    const t3WrapperPath = NodePath.join(binDir, "t3");
-    try {
-      NodeFS.symlinkSync("acode", t3WrapperPath);
-    } catch {
-      NodeFS.writeFileSync(t3WrapperPath, WRAPPER_SCRIPT, { mode: 0o755 });
-    }
+    const readmeContent = `# Awen Daemon Package
 
-    const readmeContent = `# ACode Daemon Package
-
-Standalone headless server package for ACode daemon.
+Standalone headless server package for Awen daemon.
 
 ## Requirements
 - Linux x64 (or supported POSIX environment)
@@ -129,19 +123,19 @@ Standalone headless server package for ACode daemon.
 
 \`\`\`bash
 # Start daemon in background (survives SSH disconnect)
-./bin/acode daemon start
+./bin/awen daemon start
 
 # Check status
-./bin/acode daemon status
+./bin/awen daemon status
 
-# Generate client pairing token for ACode desktop
-./bin/acode auth pairing create --json
+# Generate client pairing token for Awen desktop
+./bin/awen auth pairing create --json
 
 # Read bootstrap token
-./bin/acode daemon token
+./bin/awen daemon token
 
 # Stop daemon safely
-./bin/acode daemon stop --confirm
+./bin/awen daemon stop --confirm
 \`\`\`
 `;
     NodeFS.writeFileSync(NodePath.join(stageDir, "README.md"), readmeContent);

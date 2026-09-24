@@ -7,7 +7,7 @@ import {
   type OrchestrationEvent,
   type OrchestrationThread,
   type OrchestrationThreadActivity,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { deriveLatestContextWindowSnapshot } from "../../web/src/lib/contextWindow.ts";

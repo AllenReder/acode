@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type {
-  AcodeProjectId,
-  AgentSessionId,
-  EnvironmentId,
-  WorkspaceId,
-} from "@t3tools/contracts";
+import type { AwenProjectId, AgentSessionId, EnvironmentId, WorkspaceId } from "@awen/contracts";
 import type { DraftId } from "../composerDraftStore";
 
 import {
@@ -553,7 +548,7 @@ it("opens Project and Workspace independently even with the same definition and 
     kind: "project",
     definitionId: "overview",
     environmentId: ENV_A,
-    projectId: "shared" as AcodeProjectId,
+    projectId: "shared" as AwenProjectId,
   };
   const workspace: ViewTarget = {
     kind: "workspace",

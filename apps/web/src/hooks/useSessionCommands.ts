@@ -1,9 +1,9 @@
 import { useCallback } from "react";
-import type { EnvironmentId, ThreadId, WorkspaceId } from "@t3tools/contracts";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import type { EnvironmentId, ThreadId, WorkspaceId } from "@awen/contracts";
+import { scopeThreadRef } from "@awen/client-runtime/environment";
+import { settlePromise, squashAtomCommandFailure } from "@awen/client-runtime/state/runtime";
 import { readLocalApi } from "../localApi";
-import { readThreadShell, useAcodeAgentSessionShell } from "../state/entities";
+import { readThreadShell, useAwenAgentSessionShell } from "../state/entities";
 import { terminalEnvironment } from "../state/terminal";
 import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
@@ -32,7 +32,7 @@ export function useSessionCommands(target: SessionTarget) {
   const deleteThread = useAtomCommand(threadEnvironment.delete, { reportFailure: false });
   const closeTerminal = useAtomCommand(terminalEnvironment.close, { reportFailure: false });
 
-  const agentSession = useAcodeAgentSessionShell(
+  const agentSession = useAwenAgentSessionShell(
     target.kind === "agentSession" ? target.environmentId : null,
     target.kind === "agentSession" ? target.workspaceId : null,
     target.kind === "agentSession" ? target.agentSessionId : null,

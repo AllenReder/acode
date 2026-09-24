@@ -2,7 +2,7 @@ import type {
   DesktopSshEnvironmentTarget,
   DesktopSshHostKeyTrust,
   DesktopSshEnvironmentPlan,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 
 import { formatDesktopSshTarget } from "./EnvironmentRow";
 
@@ -66,7 +66,7 @@ export async function gateSshEnvironmentConnection(input: {
     return {
       status: "blocked",
       message:
-        `The SSH host key for ${host} changed. ACode will not connect or accept the new key automatically. ` +
+        `The SSH host key for ${host} changed. Awen will not connect or accept the new key automatically. ` +
         "Verify the key with the host's administrator, remove the old known_hosts entry, then try again.",
     };
   }
@@ -78,7 +78,7 @@ export async function gateSshEnvironmentConnection(input: {
       };
     }
     const confirmed = await deps.confirm(
-      `Trust this SSH host?\n\nHost: ${host}\n${formatFingerprintLine(trust)}\n\nOnly continue if you expected this key. ACode stores it in known_hosts.`,
+      `Trust this SSH host?\n\nHost: ${host}\n${formatFingerprintLine(trust)}\n\nOnly continue if you expected this key. Awen stores it in known_hosts.`,
     );
     if (confirmed === undefined) {
       return {
@@ -113,16 +113,16 @@ export async function gateSshEnvironmentConnection(input: {
   ) {
     return {
       status: "blocked",
-      message: `The SSH host does not meet ACode's prerequisites.\n\n${prerequisites}`,
+      message: `The SSH host does not meet Awen's prerequisites.\n\n${prerequisites}`,
     };
   }
   const installConfirmed = await deps.confirm(
-    `${plan.daemon === "reuse" ? "Connect to the existing ACode daemon" : "Set up the ACode daemon"} on ${host}?\n\n` +
+    `${plan.daemon === "reuse" ? "Connect to the existing Awen daemon" : "Set up the Awen daemon"} on ${host}?\n\n` +
       `Version: ${version}\n` +
-      `Install path: ~/.acode/runtime/versions/${version}/\n` +
+      `Install path: ~/.awen/runtime/versions/${version}/\n` +
       `Plan: ${plan.daemon === "reuse" ? "Reuse the responding daemon; install if it becomes unavailable." : "Install or repair the daemon."}\n` +
-      `Package: acode-server-${version}-linux-x64.tar.gz from GitHub Releases, verified against SHA256SUMS. If the remote download fails, this device uploads its cached copy instead.\n\n` +
-      `${prerequisites}\n\nACode does not install system packages.`,
+      `Package: awen-server-${version}-linux-x64.tar.gz from GitHub Releases, verified against SHA256SUMS. If the remote download fails, this device uploads its cached copy instead.\n\n` +
+      `${prerequisites}\n\nAwen does not install system packages.`,
   );
   if (installConfirmed === undefined) {
     return {

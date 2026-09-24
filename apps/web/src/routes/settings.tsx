@@ -171,7 +171,9 @@ function SettingsContentLayout() {
             <SettingsBreadcrumb
               pathname={location.pathname}
               scope={
-                showScope ? { value: search, groups, environments, onChange: selectScope } : undefined
+                showScope
+                  ? { value: search, groups, environments, onChange: selectScope }
+                  : undefined
               }
             />
           </div>

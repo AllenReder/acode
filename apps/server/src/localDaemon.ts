@@ -6,7 +6,7 @@
 // desktop shell. Keep its process and filesystem boundary on Node built-ins so
 // it can start the server before the rest of the server runtime is loadable.
 // Its one non-built-in import is the dependency-free port contract in
-// `@t3tools/shared/daemonPort`: the desktop dev wrapper resolves the same daemon
+// `@awen/shared/daemonPort`: the desktop dev wrapper resolves the same daemon
 // port for the web dev proxy, so a second copy here silently disagreed with it
 // (issue #87). Keep that import free of transitive runtime dependencies.
 import * as NodeChildProcess from "node:child_process";
@@ -20,7 +20,7 @@ import {
   describeInvalidDaemonPort,
   resolveDaemonPortRequest,
   type DaemonPortRequest,
-} from "@t3tools/shared/daemonPort";
+} from "@awen/shared/daemonPort";
 
 import {
   LOCAL_DAEMON_HANDSHAKE_PATH,
@@ -413,7 +413,7 @@ export async function inspectLocalDaemon(
     return {
       status: "foreign",
       state,
-      detail: "The process at the recorded endpoint did not provide the ACode daemon handshake.",
+      detail: "The process at the recorded endpoint did not provide the Awen daemon handshake.",
     };
   }
   const handshake = handshakeResponse.body;
@@ -421,7 +421,7 @@ export async function inspectLocalDaemon(
     return {
       status: "foreign",
       state,
-      detail: "The recorded process identity does not match the ACode daemon handshake.",
+      detail: "The recorded process identity does not match the Awen daemon handshake.",
     };
   }
 
@@ -526,7 +526,7 @@ const canListenOnLoopback = async (port: number): Promise<boolean> => {
 /**
  * The daemon port a caller asked for, and whether that request is a contract.
  *
- * The key list and its precedence live in `@t3tools/shared/daemonPort`, because
+ * The key list and its precedence live in `@awen/shared/daemonPort`, because
  * the desktop dev wrapper must resolve the very same port for the web dev proxy;
  * two copies silently disagreed and left the proxy dialing a port nothing served
  * while a healthy daemon listened elsewhere. This is the launcher's validated
@@ -653,17 +653,16 @@ async function spawnManagedServer(input: {
   const invocation = input.options.serverInvocation ?? defaultServerInvocation();
   const environment: NodeJS.ProcessEnv = {
     ...process.env,
-    ACODE_HOME: input.baseDir,
-    T3CODE_HOME: input.baseDir,
-    T3CODE_MODE: "desktop",
-    T3CODE_HOST: "127.0.0.1",
-    T3CODE_PORT: String(input.port),
-    T3CODE_NO_BROWSER: "1",
-    T3CODE_DAEMON_ID: input.daemonId,
-    T3CODE_DAEMON_OWNER: LOCAL_DAEMON_OWNER,
-    T3CODE_DAEMON_WORKING_DIR: input.options.currentDirectory ?? process.cwd(),
-    T3CODE_DAEMON_MANAGED: "1",
-    T3CODE_DESKTOP_BOOTSTRAP_TOKEN: input.credential,
+    AWEN_HOME: input.baseDir,
+    AWEN_MODE: "desktop",
+    AWEN_HOST: "127.0.0.1",
+    AWEN_PORT: String(input.port),
+    AWEN_NO_BROWSER: "1",
+    AWEN_DAEMON_ID: input.daemonId,
+    AWEN_DAEMON_OWNER: LOCAL_DAEMON_OWNER,
+    AWEN_DAEMON_WORKING_DIR: input.options.currentDirectory ?? process.cwd(),
+    AWEN_DAEMON_MANAGED: "1",
+    AWEN_DESKTOP_BOOTSTRAP_TOKEN: input.credential,
   };
   const child = NodeChildProcess.spawn(
     invocation.command,

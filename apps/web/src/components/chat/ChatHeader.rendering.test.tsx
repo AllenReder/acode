@@ -1,7 +1,12 @@
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { EnvironmentId, ProjectId, ThreadId, type ResolvedKeybindingsConfig } from "@t3tools/contracts";
-import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
+import {
+  EnvironmentId,
+  ProjectId,
+  ThreadId,
+  type ResolvedKeybindingsConfig,
+} from "@awen/contracts";
+import type { EnvironmentProject } from "@awen/client-runtime/state/shell";
 import type { ReactNode } from "react";
 import { ChatHeader } from "./ChatHeader";
 
@@ -27,8 +32,8 @@ vi.mock("../../panelAnimations", () => ({
 vi.mock("../../state/environments", () => ({
   usePrimaryEnvironmentId: () => "primary-env",
 }));
-vi.mock("~/hooks/useT3ProjectFileScripts", () => ({
-  useT3ProjectFileScripts: () => undefined,
+vi.mock("~/hooks/useAwenProjectFileScripts", () => ({
+  useAwenProjectFileScripts: () => undefined,
 }));
 vi.mock("../../remoteOpen", () => ({
   useRemoteOpenState: () => ({ mode: "local-exec" }),
@@ -53,15 +58,35 @@ vi.mock("../ProjectFavicon", () => ({
 }));
 vi.mock("../ui/tooltip", () => ({
   Tooltip: ({ children }: { readonly children?: ReactNode }) => <>{children}</>,
-  TooltipTrigger: ({ render, children }: { readonly render?: ReactNode; readonly children?: ReactNode }) => render ?? <>{children}</>,
+  TooltipTrigger: ({
+    render,
+    children,
+  }: {
+    readonly render?: ReactNode;
+    readonly children?: ReactNode;
+  }) => render ?? <>{children}</>,
   TooltipPopup: ({ children }: { readonly children?: ReactNode }) => <>{children}</>,
 }));
 vi.mock("../ui/menu", () => ({
   Menu: ({ children }: { readonly children?: ReactNode }) => <>{children}</>,
-  MenuTrigger: ({ render, children }: { readonly render?: ReactNode; readonly children?: ReactNode }) => render ?? <>{children}</>,
+  MenuTrigger: ({
+    render,
+    children,
+  }: {
+    readonly render?: ReactNode;
+    readonly children?: ReactNode;
+  }) => render ?? <>{children}</>,
   MenuPopup: ({ children }: { readonly children?: ReactNode }) => <>{children}</>,
-  MenuItem: ({ onClick, children }: { readonly onClick?: () => void; readonly children?: ReactNode }) => (
-    <button type="button" onClick={onClick}>{children}</button>
+  MenuItem: ({
+    onClick,
+    children,
+  }: {
+    readonly onClick?: () => void;
+    readonly children?: ReactNode;
+  }) => (
+    <button type="button" onClick={onClick}>
+      {children}
+    </button>
   ),
 }));
 

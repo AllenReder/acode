@@ -1,9 +1,8 @@
-import { httpHeaderRedactionLayer } from "@t3tools/shared/httpObservability";
 import {
   makeLocalFileTracer,
   makeTraceSink,
   otlpSerializationLayer,
-} from "@t3tools/shared/observability";
+} from "@awen/shared/observability";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as References from "effect/References";
@@ -26,7 +25,6 @@ export const ObservabilityLive = Layer.unwrap(
     const traceReferencesLayer = Layer.mergeAll(
       Layer.succeed(Tracer.MinimumTraceLevel, config.traceMinLevel),
       Layer.succeed(References.TracerTimingEnabled, config.traceTimingEnabled),
-      httpHeaderRedactionLayer,
     );
 
     const tracerLayer = Layer.unwrap(
@@ -55,7 +53,7 @@ export const ObservabilityLive = Layer.unwrap(
                 resource: {
                   serviceName: config.otlpServiceName,
                   attributes: {
-                    "service.runtime": "t3-server",
+                    "service.runtime": "awen-server",
                     "service.mode": config.mode,
                   },
                 },
@@ -87,7 +85,7 @@ export const ObservabilityLive = Layer.unwrap(
             resource: {
               serviceName: config.otlpServiceName,
               attributes: {
-                "service.runtime": "t3-server",
+                "service.runtime": "awen-server",
                 "service.mode": config.mode,
               },
             },

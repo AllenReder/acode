@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // @effect-diagnostics nodeBuiltinImport:off globalTimers:off globalFetch:off globalConsole:off globalConsoleInEffect:off globalDateInEffect:off
 /**
- * Automated acceptance smoke test for headless Linux ACode daemon (Ticket C20).
+ * Automated acceptance smoke test for headless Linux Awen daemon (Ticket C20).
  * Tests:
  *   1. Background detached daemon start (`daemon start`)
  *   2. Status query (`daemon status`)
@@ -22,8 +22,8 @@ import {
   bootstrapRemoteBearerSession,
   fetchRemoteSessionState,
   issueRemoteWebSocketTicket,
-} from "@t3tools/client-runtime/authorization";
-import { fetchRemoteEnvironmentDescriptor } from "@t3tools/client-runtime/environment";
+} from "@awen/client-runtime/authorization";
+import { fetchRemoteEnvironmentDescriptor } from "@awen/client-runtime/environment";
 import {
   BearerConnectionProfile,
   BearerConnectionTarget,
@@ -35,19 +35,19 @@ import {
   type PreparedConnection,
   type SupervisorConnectionState,
   Wakeups,
-} from "@t3tools/client-runtime/connection";
+} from "@awen/client-runtime/connection";
 import {
   remoteHttpClientLayer,
   RpcSessionFactory,
   rpcSessionLayer,
-} from "@t3tools/client-runtime/rpc";
+} from "@awen/client-runtime/rpc";
 import {
   AuthStandardClientScopes,
   CommandId,
   ORCHESTRATION_WS_METHODS,
   ProjectId,
   WS_METHODS,
-} from "@t3tools/contracts";
+} from "@awen/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -89,10 +89,10 @@ async function waitForSupervisorState(
 }
 
 async function main(): Promise<void> {
-  console.log("=== ACode Headless Daemon Smoke Test (C20) ===");
+  console.log("=== Awen Headless Daemon Smoke Test (C20) ===");
 
-  const scratchDir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "acode-c20-smoke-"));
-  const acodeHome = NodePath.join(scratchDir, ".acode");
+  const scratchDir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "awen-c20-smoke-"));
+  const awenHome = NodePath.join(scratchDir, ".awen");
   const testRepoDir = NodePath.join(scratchDir, "test-repo");
 
   // Create a test git repository for Workspace association
@@ -102,7 +102,7 @@ async function main(): Promise<void> {
     cwd: testRepoDir,
     stdio: "ignore",
   });
-  NodeChildProcess.execSync('git config user.email "smoke@acode.test"', {
+  NodeChildProcess.execSync('git config user.email "smoke@awen.test"', {
     cwd: testRepoDir,
     stdio: "ignore",
   });
@@ -114,18 +114,17 @@ async function main(): Promise<void> {
 
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    ACODE_HOME: acodeHome,
-    T3CODE_HOME: acodeHome,
-    T3CODE_LOG_LEVEL: "Error",
-    T3CODE_NO_BROWSER: "1",
-    T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "0",
+    AWEN_HOME: awenHome,
+    AWEN_LOG_LEVEL: "Error",
+    AWEN_NO_BROWSER: "1",
+    AWEN_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "0",
   };
 
   try {
     // 1. Start daemon in background via `daemon start`
-    console.log("1. Starting ACode daemon in background (detached)...");
+    console.log("1. Starting Awen daemon in background (detached)...");
     const startOutput = runCliJson(
-      ["daemon", "start", "--base-dir", acodeHome],
+      ["daemon", "start", "--base-dir", awenHome],
       REPOSITORY_ROOT,
       env,
     );
@@ -139,7 +138,7 @@ async function main(): Promise<void> {
     // 2. Query status
     console.log("2. Querying daemon status...");
     const statusOutput = runCliJson(
-      ["daemon", "status", "--base-dir", acodeHome],
+      ["daemon", "status", "--base-dir", awenHome],
       REPOSITORY_ROOT,
       env,
     );
@@ -168,7 +167,7 @@ async function main(): Promise<void> {
     // 4. Generate pairing token and verify bootstrap token
     console.log("4. Testing token generation via CLI...");
     const pairingOutput = runCliJson(
-      ["auth", "pairing", "create", "--base-dir", acodeHome],
+      ["auth", "pairing", "create", "--base-dir", awenHome],
       REPOSITORY_ROOT,
       env,
     );
@@ -178,7 +177,7 @@ async function main(): Promise<void> {
     }
 
     const tokenOutput = runCliJson(
-      ["daemon", "token", "--base-dir", acodeHome],
+      ["daemon", "token", "--base-dir", awenHome],
       REPOSITORY_ROOT,
       env,
     );
@@ -194,11 +193,11 @@ async function main(): Promise<void> {
         httpBaseUrl: origin,
         credential: pairingOutput.credential,
         scopes: AuthStandardClientScopes,
-        clientMetadata: { label: "ACode C20 Headless Smoke", deviceType: "bot" },
+        clientMetadata: { label: "Awen C20 Headless Smoke", deviceType: "bot" },
       }),
     );
     const sessionState = await httpRuntime.runPromise(
-      fetchRemoteSessionState({ httpBaseUrl: origin, bearerToken: access.access_token }),
+      fetchRemoteSessionState({ httpBaseUrl: origin, bearerToken: access.token }),
     );
     if (!sessionState.authenticated || sessionState.sessionMethod !== "bearer-access-token") {
       throw new Error("Authenticated session validation failed.");
@@ -214,7 +213,7 @@ async function main(): Promise<void> {
     const target = new BearerConnectionTarget({
       environmentId: descriptor.environmentId,
       label: descriptor.label,
-      connectionId: "acode-c20-smoke-connection",
+      connectionId: "awen-c20-smoke-connection",
     });
     const profile = new BearerConnectionProfile({
       connectionId: target.connectionId,
@@ -237,7 +236,7 @@ async function main(): Promise<void> {
       httpRuntime.runPromise(
         issueRemoteWebSocketTicket({
           httpBaseUrl: origin,
-          bearerToken: access.access_token,
+          bearerToken: access.token,
         }),
       );
 
@@ -264,7 +263,7 @@ async function main(): Promise<void> {
                 label: entry.target.label,
                 httpBaseUrl: origin,
                 socketUrl: socketUrl.toString(),
-                httpAuthorization: { _tag: "Bearer", token: access.access_token },
+                httpAuthorization: { _tag: "Bearer", token: access.token },
                 target: entry.target,
               };
               yield* reportProgress({ stage: "opening", prepared });
@@ -323,7 +322,7 @@ async function main(): Promise<void> {
     // 8. Confirm daemon is still running independently
     console.log("8. Verifying daemon survived client disconnection...");
     const postStatus = runCliJson(
-      ["daemon", "status", "--base-dir", acodeHome],
+      ["daemon", "status", "--base-dir", awenHome],
       REPOSITORY_ROOT,
       env,
     );
@@ -335,7 +334,7 @@ async function main(): Promise<void> {
     // 9. Stop daemon with confirmation
     console.log("9. Stopping daemon with confirmation...");
     const stopResult = runCliJson(
-      ["daemon", "stop", "--confirm", "--base-dir", acodeHome],
+      ["daemon", "stop", "--confirm", "--base-dir", awenHome],
       REPOSITORY_ROOT,
       env,
     );
@@ -346,7 +345,7 @@ async function main(): Promise<void> {
 
     // 10. Confirm status is absent
     const finalStatus = runCliJson(
-      ["daemon", "status", "--base-dir", acodeHome],
+      ["daemon", "status", "--base-dir", awenHome],
       REPOSITORY_ROOT,
       env,
     );
