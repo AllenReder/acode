@@ -161,7 +161,11 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal --target x86_64-pc-windows-msvc
           rustup default stable
-      - name: Build desktop installers
+      - name: Build prerelease NSIS installer
+        if: contains(needs.validate.outputs.version, '-')
+        run: pnpm --filter @awen/desktop build --bundles nsis
+      - name: Build stable desktop installers
+        if: ${{ !contains(needs.validate.outputs.version, '-') }}
         run: pnpm --filter @awen/desktop build
       - name: Collect unsigned Windows installers
         shell: pwsh
