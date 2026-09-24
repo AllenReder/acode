@@ -1,6 +1,8 @@
 import { PRIMARY_LOCAL_ENVIRONMENT_ID, type DesktopEnvironmentBootstrap } from "@awen/contracts";
 import * as Schema from "effect/Schema";
 
+import { readTauriDesktopConfigError } from "../../desktop/tauriBridge";
+import { isTauri } from "../../env";
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
 
 const PrimaryEnvironmentTargetSource = Schema.Literals([
@@ -308,6 +310,12 @@ export function resolvePrimaryEnvironmentHttpUrl(
 export function readPrimaryEnvironmentTarget(): PrimaryEnvironmentTarget | null {
   if (isLocalEnvironmentDisabled()) {
     return null;
+  }
+  if (isTauri) {
+    const runtimeError = readTauriDesktopConfigError();
+    if (runtimeError !== null) {
+      throw runtimeError;
+    }
   }
   return (
     resolveDesktopPrimaryTarget() ??

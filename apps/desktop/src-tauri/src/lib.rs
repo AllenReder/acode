@@ -181,17 +181,18 @@ fn local_daemon_base_dir() -> PathBuf {
 fn daemon_entry_candidates() -> Vec<PathBuf> {
     let manifest_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let repository_root = manifest_root.join("../../..");
-    let mut candidates = vec![
-        repository_root.join("apps/server/src/bin.ts"),
-        repository_root.join("apps/server/dist/bin.mjs"),
-    ];
+    let mut candidates = Vec::new();
 
     if let Ok(executable) = env::current_exe() {
         if let Some(parent) = executable.parent() {
+            candidates.push(parent.join("runtime/dist/bin.mjs"));
+            candidates.push(parent.join("../Resources/runtime/dist/bin.mjs"));
             candidates.push(parent.join("resources/awen"));
             candidates.push(parent.join("resources/server/bin.mjs"));
         }
     }
+    candidates.push(repository_root.join("apps/server/src/bin.ts"));
+    candidates.push(repository_root.join("apps/server/dist/bin.mjs"));
     candidates
 }
 
@@ -227,8 +228,17 @@ fn resolve_daemon_invocation() -> Result<DaemonInvocation, String> {
             .and_then(|extension| extension.to_str())
             == Some("mjs")
         {
+            let bundled_node = candidate
+                .parent()
+                .and_then(Path::parent)
+                .map(|runtime| runtime.join(if cfg!(windows) { "node.exe" } else { "node" }));
             return Ok(DaemonInvocation {
                 command: read_non_empty_env(&["AWEN_NODE_COMMAND"])
+                    .or_else(|| {
+                        bundled_node
+                            .filter(|path| path.is_file())
+                            .map(|path| path.to_string_lossy().into_owned())
+                    })
                     .unwrap_or_else(|| "node".into()),
                 entry_args: vec![candidate.to_string_lossy().into_owned()],
                 current_dir: candidate.parent().map(Path::to_path_buf),
