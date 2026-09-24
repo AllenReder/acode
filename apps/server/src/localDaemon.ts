@@ -694,6 +694,7 @@ async function spawnManagedServer(input: {
 
 async function waitForManagedDaemon(input: {
   readonly child: NodeChildProcess.ChildProcess;
+  readonly paths: LocalDaemonPaths;
   readonly daemonId: string;
   readonly port: number;
   readonly timeoutMs: number;
@@ -721,12 +722,22 @@ async function waitForManagedDaemon(input: {
           handshake.daemonId === input.daemonId &&
           handshake.pid === input.child.pid
         ) {
-          return;
+          // The handshake route is live before server activation persists the
+          // runtime descriptor. Returning on the handshake alone lets the very
+          // next inspection read `daemon-absent` while startup is still finishing.
+          const discovery = await readDiscovery(input.paths);
+          if (
+            discovery.state?.daemonId === input.daemonId &&
+            discovery.state.pid === input.child.pid
+          ) {
+            return;
+          }
+        } else {
+          throw new LocalDaemonError(
+            "daemon-ownership-mismatch",
+            "A process answered on the selected port, but it is not the daemon this launcher started.",
+          );
         }
-        throw new LocalDaemonError(
-          "daemon-ownership-mismatch",
-          "A process answered on the selected port, but it is not the daemon this launcher started.",
-        );
       }
     } catch (cause) {
       if (cause instanceof LocalDaemonError) throw cause;
@@ -810,6 +821,7 @@ export async function startLocalDaemon(
     try {
       await waitForManagedDaemon({
         child,
+        paths,
         daemonId,
         port,
         timeoutMs: options.timeoutMs ?? DEFAULT_START_TIMEOUT_MS,
