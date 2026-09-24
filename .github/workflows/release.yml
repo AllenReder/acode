@@ -113,15 +113,21 @@ jobs:
           node-version-file: package.json
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Import Developer ID certificate
+      - name: Configure macOS signing
+        id: signing
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           set -euo pipefail
+          if [[ -z "$APPLE_CERTIFICATE" && -z "$APPLE_CERTIFICATE_PASSWORD" && -z "$KEYCHAIN_PASSWORD" && -z "$APPLE_ID" && -z "$APPLE_PASSWORD" && -z "$APPLE_TEAM_ID" ]]; then
+            echo "mode=adhoc" >> "$GITHUB_OUTPUT"
+            echo "Building an ad-hoc signed DMG; users must approve it in Privacy & Security."
+            exit 0
+          fi
           if [[ -z "$APPLE_CERTIFICATE" || -z "$APPLE_CERTIFICATE_PASSWORD" || -z "$KEYCHAIN_PASSWORD" || -z "$APPLE_ID" || -z "$APPLE_PASSWORD" || -z "$APPLE_TEAM_ID" ]]; then
-            echo "macOS release requires Developer ID and notarization secrets." >&2
+            echo "Provide all macOS signing and notarization secrets, or none for ad-hoc signing." >&2
             exit 1
           fi
           certificate="$RUNNER_TEMP/awen-developer-id.p12"
@@ -139,6 +145,7 @@ jobs:
             exit 1
           fi
           echo "APPLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+          echo "mode=developer-id" >> "$GITHUB_OUTPUT"
       - name: Stage desktop daemon and Node runtime
         run: node scripts/stage-desktop-runtime.ts
       - name: Install Rust target
@@ -147,11 +154,12 @@ jobs:
           rustup default stable
       - name: Build desktop installer
         run: pnpm --filter @awen/desktop build --config src-tauri/tauri.macos.conf.json --config src-tauri/tauri.release.conf.json --target "${{ matrix.target }}"
-      - name: Collect notarized macOS installer
+      - name: Collect macOS installer
         env:
           VERSION: ${{ needs.validate.outputs.version }}
           TARGET: ${{ matrix.target }}
           ARCH: ${{ matrix.arch }}
+          SIGNING_MODE: ${{ steps.signing.outputs.mode }}
         run: |
           set -euo pipefail
           mkdir -p release-assets
@@ -163,7 +171,9 @@ jobs:
             exit 1
           fi
           for file in "${files[@]}"; do
-            xcrun stapler validate "$file"
+            if [[ "$SIGNING_MODE" == "developer-id" ]]; then
+              xcrun stapler validate "$file"
+            fi
             cp "$file" "release-assets/Awen-$VERSION-macos-$ARCH.dmg"
           done
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

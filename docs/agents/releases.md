@@ -55,9 +55,10 @@ Assets use `Awen-<version>-windows-x64.*`,
 `SHA256SUMS`; the release also includes checksums covering every installer and
 archive.
 
-Windows installers are unsigned. The macOS build requires a Developer ID
-Application certificate and Apple notarization credentials in GitHub Actions;
-without them, the release workflow stops rather than publishing a DMG that
-Gatekeeper rejects. Set `APPLE_CERTIFICATE` (base64 `.p12`),
+Windows installers are unsigned. With no Apple credentials, macOS DMGs are
+ad-hoc signed; users must explicitly allow the app in macOS Privacy & Security.
+This does not guarantee that an app reporting “damaged” is safe or intact:
+verify the release checksum and code signature first. To publish a Developer ID
+signed and notarized DMG, set `APPLE_CERTIFICATE` (base64 `.p12`),
 `APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD` (app-specific),
 `APPLE_TEAM_ID`, and `KEYCHAIN_PASSWORD` as repository secrets.
