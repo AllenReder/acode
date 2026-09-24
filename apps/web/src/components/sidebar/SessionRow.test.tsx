@@ -2,15 +2,17 @@ const showContextMenuMock = vi
   .fn<(items: unknown, position?: { x: number; y: number }) => Promise<unknown>>()
   .mockResolvedValue(null);
 
+const confirmMock = vi.fn().mockResolvedValue(true);
+
 vi.mock("../../localApi", () => ({
   readLocalApi: () => ({
-    dialogs: { confirm: vi.fn().mockResolvedValue(true) },
+    dialogs: { confirm: confirmMock },
     contextMenu: { show: showContextMenuMock, close: vi.fn() },
     shell: { openExternal: vi.fn() },
     persistence: { getClientSettings: vi.fn(), setClientSettings: vi.fn() },
   }),
   ensureLocalApi: () => ({
-    dialogs: { confirm: vi.fn().mockResolvedValue(true) },
+    dialogs: { confirm: confirmMock },
     contextMenu: { show: showContextMenuMock, close: vi.fn() },
     shell: { openExternal: vi.fn() },
     persistence: { getClientSettings: vi.fn(), setClientSettings: vi.fn() },
@@ -442,4 +444,200 @@ it("clears inline style during closing to prevent overriding CSS collapse transi
 
   const row = renderer!.root.findByType("button");
   expect(row.props.style).toBeUndefined();
+});
+
+it("prevents default on pointerdown and mousedown for middle-click (button 1)", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const target = {
+    kind: "agentSession",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    agentSessionId: "s1" as AgentSessionId,
+  } as const;
+
+  const onPointerDown = vi.fn();
+  const onMouseDown = vi.fn();
+  await act(() => {
+    renderer = create(
+      <SessionRow
+        target={target}
+        onPointerDown={onPointerDown}
+        onMouseDown={onMouseDown}
+      >
+        Session
+      </SessionRow>,
+    );
+  });
+
+  const row = renderer!.root.findByType("button");
+  const preventDefaultPointer = vi.fn();
+  const preventDefaultMouse = vi.fn();
+
+  await act(() => {
+    row.props.onPointerDown({
+      button: 1,
+      preventDefault: preventDefaultPointer,
+    });
+    row.props.onMouseDown({
+      button: 1,
+      preventDefault: preventDefaultMouse,
+    });
+  });
+
+  expect(preventDefaultPointer).toHaveBeenCalledTimes(1);
+  expect(preventDefaultMouse).toHaveBeenCalledTimes(1);
+  expect(onPointerDown).toHaveBeenCalledTimes(1);
+  expect(onMouseDown).toHaveBeenCalledTimes(1);
+});
+
+it("invokes close on active session when middle-clicked with button 1", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const { terminalTargetForRuntime } = await import("../../workbench/sessionTarget");
+  const target = terminalTargetForRuntime({
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    terminalId: "shell",
+  });
+
+  const onWillClose = vi.fn();
+  await act(() => {
+    renderer = create(
+      <SessionRow target={target} onWillClose={onWillClose}>
+        Active Terminal
+      </SessionRow>,
+    );
+  });
+
+  const row = renderer!.root.findByType("button");
+  const preventDefault = vi.fn();
+  const stopPropagation = vi.fn();
+
+  await act(async () => {
+    row.props.onAuxClick({
+      button: 1,
+      preventDefault,
+      stopPropagation,
+    });
+  });
+
+  expect(preventDefault).toHaveBeenCalledTimes(1);
+  expect(stopPropagation).toHaveBeenCalledTimes(1);
+
+  await act(async () => {
+    vi.advanceTimersByTime(220);
+  });
+
+  expect(onWillClose).toHaveBeenCalled();
+  vi.useRealTimers();
+});
+
+it("invokes delete with confirmation dialog on History session when middle-clicked", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const { terminalTargetForRuntime } = await import("../../workbench/sessionTarget");
+  const target = terminalTargetForRuntime({
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    terminalId: "shell",
+  });
+
+  confirmMock.mockClear();
+  confirmMock.mockResolvedValueOnce(false); // User cancels confirmation
+
+  const onWillClose = vi.fn();
+  await act(() => {
+    renderer = create(
+      <SessionRow
+        target={target}
+        isClosed
+        sessionTitle="Archived Session"
+        onWillClose={onWillClose}
+      >
+        Archived Session
+      </SessionRow>,
+    );
+  });
+
+  const row = renderer!.root.findByType("button");
+  const preventDefault = vi.fn();
+  const stopPropagation = vi.fn();
+
+  await act(async () => {
+    row.props.onAuxClick({
+      button: 1,
+      preventDefault,
+      stopPropagation,
+    });
+  });
+
+  expect(confirmMock).toHaveBeenCalledWith(
+    expect.stringContaining('Delete session "Archived Session"?'),
+    { variant: "destructive" },
+  );
+  // User cancelled, so onWillClose should NOT have been called even after time advances
+  await act(async () => {
+    vi.advanceTimersByTime(220);
+  });
+  expect(onWillClose).not.toHaveBeenCalled();
+
+  // Now user confirms
+  confirmMock.mockResolvedValueOnce(true);
+  await act(async () => {
+    row.props.onAuxClick({
+      button: 1,
+      preventDefault,
+      stopPropagation,
+    });
+  });
+
+  expect(confirmMock).toHaveBeenCalledTimes(2);
+
+  await act(async () => {
+    vi.advanceTimersByTime(220);
+  });
+
+  expect(onWillClose).toHaveBeenCalled();
+  vi.useRealTimers();
+});
+
+it("ignores middle-click when isClosing is true or button is not 1", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const target = {
+    kind: "agentSession",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    agentSessionId: "s1" as AgentSessionId,
+  } as const;
+
+  const onWillClose = vi.fn();
+  await act(() => {
+    renderer = create(
+      <SessionRow target={target} isClosing onWillClose={onWillClose}>
+        Closing
+      </SessionRow>,
+    );
+  });
+
+  const row = renderer!.root.findByType("button");
+
+  // Middle click while already closing
+  await act(async () => {
+    row.props.onAuxClick({
+      button: 1,
+      preventDefault: () => {},
+      stopPropagation: () => {},
+    });
+  });
+  expect(onWillClose).not.toHaveBeenCalled();
+
+  // Right click (button 2)
+  await act(async () => {
+    row.props.onAuxClick({
+      button: 2,
+      preventDefault: () => {},
+      stopPropagation: () => {},
+    });
+  });
+  expect(onWillClose).not.toHaveBeenCalled();
 });

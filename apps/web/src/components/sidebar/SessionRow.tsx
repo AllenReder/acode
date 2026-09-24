@@ -42,6 +42,8 @@ export function SessionRow({
   onContextMenu,
   onKeyDown,
   onPointerDown,
+  onMouseDown,
+  onAuxClick,
   className,
   ...props
 }: SessionRowProps) {
@@ -92,7 +94,7 @@ export function SessionRow({
   const closing = isClosing || selfClosing;
   const buttonStyle = closing ? undefined : props.style;
 
-  const { openMenu } = useSessionActionMenu({
+  const { openMenu, commands } = useSessionActionMenu({
     target,
     isClosed,
     sessionTitle,
@@ -179,10 +181,32 @@ export function SessionRow({
         onKeyDown?.(event);
       }}
       onPointerDown={(event) => {
-        if (!isClosed && !closing) {
+        if (event.button === 1) {
+          event.preventDefault();
+        } else if (!isClosed && !closing) {
           drag.onPointerDown(event);
         }
         onPointerDown?.(event);
+      }}
+      onMouseDown={(event) => {
+        if (event.button === 1) {
+          event.preventDefault();
+        }
+        onMouseDown?.(event);
+      }}
+      onAuxClick={(event) => {
+        if (event.button === 1) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (!closing && !isBeingDragged) {
+            if (isClosed) {
+              void commands.deleteSession(sessionTitle);
+            } else {
+              void commands.closeSession();
+            }
+          }
+        }
+        onAuxClick?.(event);
       }}
     >
       {isOpenInActiveTab && !isFocused ? (

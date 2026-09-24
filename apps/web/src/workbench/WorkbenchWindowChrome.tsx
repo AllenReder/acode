@@ -420,9 +420,29 @@ function WorkbenchTabItem({
         if (drag.consumeSuppressedClick()) return;
         if (!active) activateTab(tab.id);
       }}
+      onAuxClick={(event) => {
+        if (event.button === 1) {
+          event.preventDefault();
+          event.stopPropagation();
+          const targetElement = event.target as HTMLElement;
+          if (targetElement.closest("input") !== null) {
+            return;
+          }
+          if (editingTabId === tab.id) {
+            return;
+          }
+          if (remainingTabsCount > 1 && !isClosing) {
+            onClose();
+          }
+        }
+      }}
       onPointerDown={(event) => {
         const targetElement = event.target as HTMLElement;
         if (targetElement.closest("button, input") !== null) {
+          return;
+        }
+        if (event.button === 1) {
+          event.preventDefault();
           return;
         }
         if (event.button === 0) {
@@ -430,6 +450,11 @@ function WorkbenchTabItem({
           if (!isAnyTabClosing) {
             drag.onPointerDown(event);
           }
+        }
+      }}
+      onMouseDown={(event) => {
+        if (event.button === 1) {
+          event.preventDefault();
         }
       }}
       onDoubleClick={() => {

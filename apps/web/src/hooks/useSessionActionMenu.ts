@@ -92,7 +92,7 @@ export function useSessionActionMenu(input: {
     [commands, isClosed, navigateTo, onStartRename, sessionTitle, store, target],
   );
 
-  return { openMenu };
+  return { openMenu, commands };
 }
 
 export default useSessionActionMenu;

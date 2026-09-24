@@ -438,3 +438,147 @@ it("omits the close button on the sole remaining tab", async () => {
   const closeBtns = tabElements[0].findAllByProps({ "aria-label": "Close Implement tabs" });
   expect(closeBtns).toHaveLength(0);
 });
+
+it("closes a tab when middle-clicked with button 1", async () => {
+  vi.useFakeTimers();
+  const snapshot = createTestSnapshot();
+
+  // In createTestSnapshot(), tabs[1] is active, tabs[0] is inactive
+  expect(snapshot.activeTabId).toBe(snapshot.tabs[1]!.id);
+
+  const activateTab = vi.fn();
+  const closeTab = vi.fn();
+  useWorkbenchStore.setState({ activateTab, closeTab });
+
+  const { create, act } = await import("react-test-renderer");
+  let renderer: any;
+  await act(async () => {
+    renderer = create(
+      <SidebarProvider defaultOpen>
+        <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+      </SidebarProvider>,
+    );
+  });
+
+  const tabElements = renderer.root.findAllByProps({ role: "tab" });
+  expect(tabElements).toHaveLength(2);
+
+  const preventDefault = vi.fn();
+  const stopPropagation = vi.fn();
+
+  // Test pointerdown / mousedown autoscroll suppression
+  await act(async () => {
+    tabElements[0].props.onPointerDown({
+      button: 1,
+      preventDefault,
+      target: { closest: () => null },
+    });
+    tabElements[0].props.onMouseDown({
+      button: 1,
+      preventDefault,
+    });
+  });
+  expect(preventDefault).toHaveBeenCalledTimes(2);
+
+  // Middle-clicking the INACTIVE tab (tab 0)
+  await act(async () => {
+    tabElements[0].props.onAuxClick({
+      button: 1,
+      preventDefault,
+      stopPropagation,
+      target: { closest: () => null },
+    });
+  });
+
+  expect(tabElements[0].props["data-tab-closing"]).toBe("true");
+  // Middle clicking an inactive tab should not switch active tab
+  expect(activateTab).not.toHaveBeenCalled();
+
+  await act(async () => {
+    vi.advanceTimersByTime(220);
+  });
+
+  expect(closeTab).toHaveBeenCalledWith(snapshot.tabs[0]!.id);
+  vi.useRealTimers();
+});
+
+it("ignores middle-click when only one tab remains", async () => {
+  const ids = () => "id-single";
+  const snapshot = applyOpenTarget(emptyWorkbenchSnapshot(ids), agentTarget, ids);
+
+  const closeTab = vi.fn();
+  useWorkbenchStore.setState({ closeTab });
+
+  const { create, act } = await import("react-test-renderer");
+  let renderer: any;
+  await act(async () => {
+    renderer = create(
+      <SidebarProvider defaultOpen>
+        <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+      </SidebarProvider>,
+    );
+  });
+
+  const tabElements = renderer.root.findAllByProps({ role: "tab" });
+  expect(tabElements).toHaveLength(1);
+
+  await act(async () => {
+    tabElements[0].props.onAuxClick({
+      button: 1,
+      preventDefault: () => {},
+      stopPropagation: () => {},
+      target: { closest: () => null },
+    });
+  });
+
+  expect(tabElements[0].props["data-tab-closing"]).toBeUndefined();
+  expect(closeTab).not.toHaveBeenCalled();
+});
+
+it("ignores non-middle-click on auxClick and ignores middle-click during rename", async () => {
+  const snapshot = createTestSnapshot();
+
+  const closeTab = vi.fn();
+  useWorkbenchStore.setState({ closeTab });
+
+  const { create, act } = await import("react-test-renderer");
+  let renderer: any;
+  await act(async () => {
+    renderer = create(
+      <SidebarProvider defaultOpen>
+        <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+      </SidebarProvider>,
+    );
+  });
+
+  const tabElements = renderer.root.findAllByProps({ role: "tab" });
+
+  // AuxClick with button 2 (right click) should be ignored
+  await act(async () => {
+    tabElements[1].props.onAuxClick({
+      button: 2,
+      preventDefault: () => {},
+      stopPropagation: () => {},
+      target: { closest: () => null },
+    });
+  });
+  expect(tabElements[1].props["data-tab-closing"]).toBeUndefined();
+
+  // Double click active tab to start editing
+  await act(async () => {
+    tabElements[0].props.onDoubleClick();
+  });
+
+  // Re-query tab elements now that editing state is active
+  const updatedTabElements = renderer.root.findAllByProps({ role: "tab" });
+  await act(async () => {
+    updatedTabElements[0].props.onAuxClick({
+      button: 1,
+      preventDefault: () => {},
+      stopPropagation: () => {},
+      target: { closest: (sel: string) => (sel === "input" ? {} : null) },
+    });
+  });
+  expect(updatedTabElements[0].props["data-tab-closing"]).toBeUndefined();
+  expect(closeTab).not.toHaveBeenCalled();
+});
