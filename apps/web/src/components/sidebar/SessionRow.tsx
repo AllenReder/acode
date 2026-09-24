@@ -67,15 +67,6 @@ export function SessionRow({
         ? draggedTarget.terminalSessionId === target.terminalSessionId
         : false);
 
-  const isReorderTarget =
-    dragState !== null &&
-    dragState.isOverSidebar &&
-    dragState.sidebarDropTarget !== null &&
-    dragState.sidebarDropTarget.workspaceKey === workspaceKey &&
-    dragState.sidebarDropTarget.sessionId === sessionId;
-
-  const dropPosition = isReorderTarget ? dragState.sidebarDropTarget?.position : null;
-
   const { openMenu } = useSessionActionMenu({
     target,
     isClosed,

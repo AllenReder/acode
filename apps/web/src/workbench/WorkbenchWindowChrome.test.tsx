@@ -88,7 +88,7 @@ function createTestSnapshot() {
   return applyOpenTarget(snapshot, terminalTarget, ids);
 }
 
-it("renders the selected compact tab strip with real titles and a new-tab action", () => {
+it("renders the selected compact Topbar Surface with real titles and a new-tab action", () => {
   const snapshot = createTestSnapshot();
 
   const html = renderToStaticMarkup(

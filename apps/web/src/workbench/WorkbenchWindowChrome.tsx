@@ -76,7 +76,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
         const currentCenter = dragState.pointer.x - stripRect.left + scrollLeft;
         targetIndex = Math.max(
           0,
-          Math.min(Math.floor(currentCenter / tabWidth), snapshot.tabs.length - 1),
+          Math.min(Math.round((currentCenter - tabWidth / 2) / tabWidth), snapshot.tabs.length - 1),
         );
       }
     }
@@ -107,8 +107,11 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
   } else if (lastDragInfoRef.current) {
     const prev = lastDragInfoRef.current;
     lastDragInfoRef.current = null;
-    const initialOffset = (prev.fromIndex - prev.toIndex) * prev.tabWidth + prev.deltaX;
-    if (prev.fromIndex !== prev.toIndex || Math.abs(prev.deltaX) > 2) {
+    const isCancelled = dragState?.phase === "canceling" || dragState?.phase === "rejected";
+    const initialOffset = isCancelled
+      ? prev.deltaX
+      : (prev.fromIndex - prev.toIndex) * prev.tabWidth + prev.deltaX;
+    if (Math.abs(initialOffset) > 2) {
       setSettlingTab({ tabId: prev.tabId, offset: initialOffset });
     }
   }
@@ -303,7 +306,7 @@ function WorkbenchTabItem({
   const isDragged = isAnyTabDragged && draggedTabId === tab.id;
 
   let tabStyle: CSSProperties | undefined;
-  if (isAnyTabDragged && !isSlidOut && draggedSourceIndex >= 0) {
+  if (isAnyTabDragged && draggedSourceIndex >= 0) {
     if (isDragged) {
       tabStyle = {
         transform: `translate3d(${deltaX}px, 0, 0)`,
@@ -313,7 +316,7 @@ function WorkbenchTabItem({
         boxShadow: "0 4px 16px rgba(0, 0, 0, 0.25)",
         transition: "none",
       };
-    } else {
+    } else if (!isSlidOut) {
       let shift = 0;
       if (targetIndex > draggedSourceIndex) {
         if (index > draggedSourceIndex && index <= targetIndex) {

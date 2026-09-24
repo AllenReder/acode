@@ -595,8 +595,9 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           const stripEl = document.querySelector<HTMLElement>("[data-workbench-tab-strip-drop]");
           if (stripEl) {
             const stripRect = stripEl.getBoundingClientRect();
-            const isSlidOut = lastY > stripRect.bottom + 12;
-            if (!isSlidOut) {
+            const isOutsideY = lastY > stripRect.bottom + 12 || lastY < stripRect.top - 12;
+            const isOutsideX = lastX < stripRect.left - 20 || lastX > stripRect.right + 20;
+            if (!isOutsideY && !isOutsideX) {
               const currentStore = useWorkbenchStore.getState();
               const fromIndex = currentStore.tabs.findIndex((t) => t.id === source.tabId);
               if (fromIndex >= 0) {
@@ -606,7 +607,10 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
                 const currentCenter = lastX - stripRect.left + scrollLeft;
                 const toIndex = Math.max(
                   0,
-                  Math.min(Math.floor(currentCenter / tabWidth), currentStore.tabs.length - 1),
+                  Math.min(
+                    Math.round((currentCenter - tabWidth / 2) / tabWidth),
+                    currentStore.tabs.length - 1,
+                  ),
                 );
                 if (fromIndex !== toIndex) {
                   currentStore.moveTab(fromIndex, toIndex);
