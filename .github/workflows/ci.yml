@@ -33,6 +33,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - run: node scripts/version.ts check
+      - run: pnpm fmt:check
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm build

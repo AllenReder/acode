@@ -32,6 +32,7 @@ export default defineConfig({
   fmt: {
     ignorePatterns: [
       ".agents/**",
+      ".claude/**",
       "_refs/**",
       ".repos/**",
       ".alchemy",
