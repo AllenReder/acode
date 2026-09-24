@@ -245,6 +245,50 @@ jobs:
             xcrun stapler validate "$file"
           fi
           cp "$file" "release-assets/Awen-$VERSION-macos-$ARCH.dmg"
+      - name: Smoke-test the packaged daemon
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          # The DMG is what users install, so the daemon inside it has to answer
+          # /api/auth/session before the artifact leaves the runner. A runtime
+          # whose dependency layout did not survive packaging fails here.
+          file="release-assets/Awen-$VERSION-macos-$ARCH.dmg"
+          mount="$(mktemp -d)"
+          home="$(mktemp -d)"
+          runtime=""
+          cleanup() {
+            if [[ -n "$runtime" ]]; then
+              "$runtime/node" "$runtime/dist/bin.mjs" daemon stop --json --confirm --base-dir "$home" >/dev/null 2>&1 || true
+            fi
+            hdiutil detach -quiet "$mount" 2>/dev/null || true
+            rmdir "$mount" 2>/dev/null || true
+            rm -rf "$home"
+          }
+          trap cleanup EXIT
+          hdiutil attach -quiet -readonly -nobrowse -mountpoint "$mount" "$file"
+          runtime="$mount/Awen.app/Contents/Resources/runtime"
+          export AWEN_NO_BROWSER=1
+          if ! started="$("$runtime/node" "$runtime/dist/bin.mjs" daemon start --json --base-dir "$home" 2>"$home/daemon-start.stderr")"; then
+            echo "The packaged daemon failed to start:" >&2
+            cat "$home/daemon-start.stderr" >&2
+            exit 1
+          fi
+          cat "$home/daemon-start.stderr" || true
+          echo "$started"
+          origin="$(printf '%s\n' "$started" | sed -n 's/.*"origin":"\([^"]*\)".*/\1/p' | tail -n 1)"
+          test -n "$origin"
+          session="$(curl -fsS "${origin}api/auth/session")"
+          echo "$session"
+          case "$session" in
+            *'"policy":"desktop-managed-local"'*) ;;
+            *)
+              echo "Unexpected /api/auth/session payload." >&2
+              exit 1
+              ;;
+          esac
+          echo "The packaged daemon answered /api/auth/session from $origin."
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: desktop-macos-${{ matrix.arch }}
@@ -305,6 +349,59 @@ jobs:
           if ($files.Count -eq 0) { throw "No Windows installer was produced in $bundleRoot" }
           foreach ($file in $files) {
             Copy-Item $file.FullName (Join-Path $assets "Awen-$env:VERSION-windows-x64$($file.Extension)")
+          }
+      - name: Smoke-test the packaged daemon
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          # The NSIS installer is what users install, and installing it is the
+          # step that drops symlinks and junctions from the bundled runtime.
+          # Start the daemon it carries and read /api/auth/session here, before
+          # the artifact is uploaded.
+          $installer = Get-ChildItem "apps/desktop/src-tauri/target/release/bundle/nsis" -Filter "*.exe" |
+            Select-Object -First 1
+          if (-not $installer) { throw "No NSIS installer was produced." }
+          Write-Host "Installing $($installer.FullName)"
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList "/S" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "The installer exited with $($install.ExitCode)." }
+          $runtime = Join-Path $env:LOCALAPPDATA "Awen\runtime"
+          $node = Join-Path $runtime "node.exe"
+          $entry = Join-Path $runtime "dist\bin.mjs"
+          for ($attempt = 0; $attempt -lt 30 -and -not (Test-Path $entry); $attempt++) { Start-Sleep -Seconds 1 }
+          if (-not (Test-Path $entry)) { throw "The installer did not lay down $runtime." }
+          # A silent install may still launch the app; this check only needs the
+          # runtime, and the app must not hold the daemon host port.
+          Get-Process awen-desktop -ErrorAction SilentlyContinue | Stop-Process -Force
+          $baseDir = Join-Path $env:RUNNER_TEMP "awen-desktop-smoke-home"
+          $env:AWEN_NO_BROWSER = "1"
+          try {
+            $output = & $node $entry daemon start --json --base-dir $baseDir 2>&1
+            $exitCode = $LASTEXITCODE
+            $text = $output | Out-String
+            if ($exitCode -ne 0) { throw "The packaged daemon failed to start ($exitCode): $text" }
+            $started = $text -split "\r?\n" | Where-Object { $_.TrimStart().StartsWith("{") } | Select-Object -Last 1
+            if (-not $started) { throw "The packaged daemon printed no JSON: $text" }
+            $origin = ($started | ConvertFrom-Json).origin
+            if (-not $origin) { throw "The packaged daemon reported no origin: $started" }
+            $session = Invoke-RestMethod "$($origin)api/auth/session" -TimeoutSec 30
+            if ($session.auth.policy -ne "desktop-managed-local") {
+              throw "Unexpected /api/auth/session payload: $($session | ConvertTo-Json -Compress)"
+            }
+            Write-Host "The packaged daemon answered /api/auth/session from $origin."
+          } finally {
+            & $node $entry daemon stop --json --confirm --base-dir $baseDir 2>$null | Out-Null
+            Get-Process awen-desktop -ErrorAction SilentlyContinue | Stop-Process -Force
+            $uninstaller = Join-Path $env:LOCALAPPDATA "Awen\uninstall.exe"
+            if (Test-Path $uninstaller) {
+              Start-Process -FilePath $uninstaller -ArgumentList "/S" -Wait | Out-Null
+            }
+            $log = Join-Path $baseDir "userdata\logs\daemon.log"
+            if (Test-Path $log) {
+              Write-Host "--- daemon.log (tail) ---"
+              Get-Content $log -Tail 50
+            }
           }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

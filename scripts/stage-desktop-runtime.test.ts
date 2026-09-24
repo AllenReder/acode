@@ -5,9 +5,11 @@ import * as NodePath from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  assertLinkFreeRuntime,
   nodeRuntimeCachePath,
   readNodeShasum,
   readStageArguments,
+  removeNodeModulesBinShims,
   resolveDesktopRuntimeTarget,
   resolveNodeRuntimeCache,
   resolveRuntimeNodeVersion,
@@ -151,6 +153,56 @@ describe("runtime download cache", () => {
       );
     } finally {
       NodeFS.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("staged desktop runtime layout", () => {
+  const makeRuntimeDir = (): string =>
+    NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "awen-runtime-layout-"));
+
+  it("accepts a runtime built from real files", () => {
+    const runtimeDir = makeRuntimeDir();
+    try {
+      const packageDir = NodePath.join(runtimeDir, "node_modules", "effect");
+      NodeFS.mkdirSync(packageDir, { recursive: true });
+      NodeFS.writeFileSync(NodePath.join(packageDir, "package.json"), "{}");
+      expect(() => assertLinkFreeRuntime(runtimeDir)).not.toThrow();
+    } finally {
+      NodeFS.rmSync(runtimeDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a runtime that resolves a dependency through a link", () => {
+    const runtimeDir = makeRuntimeDir();
+    const linkedTarget = NodeFS.mkdtempSync(
+      NodePath.join(NodeOS.tmpdir(), "awen-runtime-link-target-"),
+    );
+    try {
+      NodeFS.mkdirSync(NodePath.join(runtimeDir, "node_modules"), { recursive: true });
+      NodeFS.symlinkSync(
+        linkedTarget,
+        NodePath.join(runtimeDir, "node_modules", "effect"),
+        "junction",
+      );
+      expect(() => assertLinkFreeRuntime(runtimeDir)).toThrow(/symlinks or junctions/u);
+    } finally {
+      NodeFS.rmSync(runtimeDir, { recursive: true, force: true });
+      NodeFS.rmSync(linkedTarget, { recursive: true, force: true });
+    }
+  });
+
+  it("drops the executable shims, whose entries are links on POSIX", () => {
+    const runtimeDir = makeRuntimeDir();
+    try {
+      const binDir = NodePath.join(runtimeDir, "node_modules", ".bin");
+      NodeFS.mkdirSync(binDir, { recursive: true });
+      NodeFS.writeFileSync(NodePath.join(binDir, "yaml"), "shim");
+      removeNodeModulesBinShims(runtimeDir);
+      expect(NodeFS.existsSync(binDir)).toBe(false);
+      expect(() => assertLinkFreeRuntime(runtimeDir)).not.toThrow();
+    } finally {
+      NodeFS.rmSync(runtimeDir, { recursive: true, force: true });
     }
   });
 });
