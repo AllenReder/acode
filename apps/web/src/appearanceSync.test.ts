@@ -55,6 +55,26 @@ describe("appearanceSync", () => {
       });
       expect(isNativeGlassPlatform()).toBe(true);
     });
+
+    it("returns true on Windows desktop", () => {
+      vi.stubGlobal("window", {
+        desktopBridge: {
+          getClientPlatform: () => "win32",
+        },
+      });
+      vi.stubGlobal("navigator", { platform: "Win32", userAgent: "Windows" });
+      expect(isNativeGlassPlatform()).toBe(true);
+    });
+
+    it("returns false on Linux desktop so the opaque fallback stays active", () => {
+      vi.stubGlobal("window", {
+        desktopBridge: {
+          getClientPlatform: () => "linux",
+        },
+      });
+      vi.stubGlobal("navigator", { platform: "Linux x86_64", userAgent: "Linux" });
+      expect(isNativeGlassPlatform()).toBe(false);
+    });
   });
 
   describe("applyMaterialSettings", () => {
@@ -152,7 +172,10 @@ describe("appearanceSync", () => {
       expect(properties.get("--material-background-mask-dark-opacity")).toBe("0");
       expect(classes.has("material-stage-native")).toBe(false);
       expect(classes.has("material-stage-opaque")).toBe(true);
+      expect(properties.get("--material-sidebar-opacity")).toBe("1");
+      expect(properties.get("--material-topbar-opacity")).toBe("1");
       expect(properties.get("--material-workbench-opacity")).toBe("1");
+      expect(properties.get("--material-overlay-opacity")).toBe("1");
     });
   });
 

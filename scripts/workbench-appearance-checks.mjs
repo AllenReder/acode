@@ -57,7 +57,14 @@ export async function verifyWorkbenchAppearance(page) {
   await page.goto(new URL("/settings/appearance", page.url()).toString(), {
     waitUntil: "domcontentloaded",
   });
-  await page.getByRole("slider", { name: "Sidebar opacity", exact: true }).waitFor();
+  const sidebarOpacity = page.getByRole("slider", { name: "Sidebar opacity", exact: true });
+  const nativeGlassSupported = (await sidebarOpacity.count()) > 0;
+  if (!nativeGlassSupported) {
+    await page.getByText("Unsupported on this platform", { exact: true }).waitFor();
+    await verifyOpaqueMaterialHierarchy(page);
+  } else {
+    await sidebarOpacity.waitFor();
+  }
   const scroll = page.locator("[data-settings-page-scroll]");
   await scroll.waitFor();
   console.log("appearance: settings opened");
@@ -95,9 +102,12 @@ export async function verifyWorkbenchAppearance(page) {
     return el && el.scrollTop > 0 && Math.abs(el.scrollHeight - el.clientHeight - el.scrollTop) < 2;
   });
   console.log("appearance: scrolled to the last setting");
-  const description = page.getByText("Translucency of the full-height navigation sidebar.", {
-    exact: true,
-  });
+  const description = page.getByText(
+    nativeGlassSupported
+      ? "Translucency of the full-height navigation sidebar."
+      : "Adjust the contrast of colors and borders across the interface.",
+    { exact: true },
+  );
   NodeAssert.equal(
     await dragSelect(page, description),
     "",
@@ -113,6 +123,12 @@ export async function verifyWorkbenchAppearance(page) {
   await search.fill("");
 
   console.log("appearance: selection boundaries passed");
+  if (!nativeGlassSupported) {
+    console.log(
+      "appearance: opaque material hierarchy verified; native glass controls unavailable",
+    );
+    return;
+  }
   const mask = page.getByRole("slider", { name: "Background mask strength", exact: true });
   for (const [mode, defaultMask] of [
     ["light", "10"],
@@ -158,6 +174,46 @@ export async function verifyWorkbenchAppearance(page) {
   console.log(
     "settings scrolling and selection checks passed; native glass and dragging require macOS",
   );
+}
+
+/** The opaque fallback must not collapse all four regions into one solid plane. */
+async function verifyOpaqueMaterialHierarchy(page) {
+  for (const mode of ["light", "dark"]) {
+    await page.getByRole("button", { name: `Use ${mode} mode`, exact: true }).click();
+    await page.waitForFunction(
+      (mode) => document.documentElement.classList.contains("dark") === (mode === "dark"),
+      mode,
+    );
+    const colors = await page.evaluate(() => {
+      const root = document.documentElement;
+      const probes = ["sidebar", "topbar", "workbench", "overlay"].map((kind) => {
+        const probe = document.createElement("div");
+        probe.className = `material-surface-${kind}`;
+        probe.style.position = "fixed";
+        probe.style.inset = "-100px auto auto -100px";
+        probe.style.width = "1px";
+        probe.style.height = "1px";
+        document.body.append(probe);
+        const backgroundColor = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return { backgroundColor, kind };
+      });
+      return {
+        opaque: root.classList.contains("material-stage-opaque"),
+        stage: getComputedStyle(document.body).backgroundColor,
+        surfaces: probes,
+      };
+    });
+
+    NodeAssert.equal(colors.opaque, true, "The web fallback must use the opaque material stage");
+    NodeAssert.notEqual(colors.stage, "", "The opaque stage must paint a background");
+    const uniqueColors = new Set(colors.surfaces.map((surface) => surface.backgroundColor));
+    NodeAssert.equal(
+      uniqueColors.size,
+      4,
+      `The four ${mode} opaque material regions must stay distinct: ${JSON.stringify(colors)}`,
+    );
+  }
 }
 
 /** A bright backing exposes gaps that the opaque Linux fallback conceals. */

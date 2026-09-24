@@ -55,12 +55,20 @@ describe("searchSettings", () => {
 
   it("matches normalized title substrings", () => {
     expect(searchSettings("  WORD   WRAP  ", ITEMS).map((item) => item.id)).toEqual(["word-wrap"]);
-    expect(searchSettings("glass").map((item) => item.id)).toEqual([
-      "setting-workbench-glass",
-      "setting-background-mask",
-      "setting-sidebar-blur",
-      "setting-sidebar-opacity",
-    ]);
+    vi.stubGlobal("window", {
+      desktopBridge: { getClientPlatform: () => "darwin" },
+    });
+    vi.stubGlobal("navigator", { platform: "MacIntel", userAgent: "Macintosh" });
+    try {
+      expect(searchSettings("glass").map((item) => item.id)).toEqual([
+        "setting-workbench-glass",
+        "setting-background-mask",
+        "setting-sidebar-blur",
+        "setting-sidebar-opacity",
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
     expect(searchSettings("pane gap").map((item) => item.id)).toEqual(["setting-pane-gap"]);
     expect(searchSettings("pane corner radius").map((item) => item.id)).toEqual([
       "setting-pane-radius",
@@ -133,6 +141,32 @@ describe("searchSettings", () => {
     expect(SETTINGS_SEARCH_ITEMS.some((item) => item.id === "quit-confirmation")).toBe(true);
     expect(searchSettings("hold to quit")).toEqual([]);
     expect(searchSettings("wsl")).toEqual([]);
+  });
+
+  it("hides native glass controls when the host uses opaque material fallback", () => {
+    vi.stubGlobal("window", {
+      desktopBridge: { getClientPlatform: () => "linux" },
+    });
+    vi.stubGlobal("navigator", { platform: "Linux x86_64", userAgent: "Linux" });
+    try {
+      expect(searchSettings("glass")).toEqual([]);
+      expect(searchSettings("sidebar opacity")).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps every native window material control behind the native-glass gate", () => {
+    const items: ReadonlyArray<SettingsSearchItem> = SETTINGS_SEARCH_ITEMS;
+    expect(items.filter((item) => item.nativeGlassOnly).map((item) => item.id)).toEqual([
+      "setting-background-mask",
+      "setting-sidebar-blur",
+      "setting-sidebar-opacity",
+      "setting-topbar-opacity",
+      "setting-overlay-opacity",
+      "setting-workbench-glass",
+      "setting-workbench-opacity",
+    ]);
   });
 
   it("hides macOS-only settings on other platforms", () => {
