@@ -33,10 +33,10 @@ import {
   type ViewDropResult,
   type ViewDuplicateSource,
   type WorkbenchSnapshot,
-} from "./workbenchState.ts";
-import type { SplitDir } from "./layout.ts";
-import type { ViewTarget } from "./viewRegistry.ts";
-import { readWorkbenchSnapshot, writeWorkbenchSnapshot } from "./workbenchPersistence.ts";
+} from "./workbenchState";
+import type { SplitDir } from "./layout";
+import type { ViewTarget } from "./viewRegistry";
+import { readWorkbenchSnapshot, writeWorkbenchSnapshot } from "./workbenchPersistence";
 
 /** Public presentation commands; none owns Session runtime lifecycle. */
 export interface WorkbenchStore extends WorkbenchSnapshot {

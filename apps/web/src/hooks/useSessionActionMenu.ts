@@ -88,3 +88,6 @@ export function useSessionActionMenu(input: {
 
   return { openMenu };
 }
+
+export default useSessionActionMenu;
+

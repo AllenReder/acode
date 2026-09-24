@@ -28,9 +28,9 @@ import {
   type PaneEdge,
   type PaneDropZone,
   type SplitDir,
-} from "./layout.ts";
-import { definitionIdForTarget, targetKey, type ViewTarget } from "./viewRegistry.ts";
-import { fallbackTargetTitle } from "./workbenchTitles.ts";
+} from "./layout";
+import { definitionIdForTarget, targetKey, type ViewTarget } from "./viewRegistry";
+import { fallbackTargetTitle } from "./workbenchTitles";
 
 /** One presentation occurrence, independent of the Session it displays. */
 export interface ViewInstance {
