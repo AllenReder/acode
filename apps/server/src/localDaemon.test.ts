@@ -319,6 +319,124 @@ const listenOnLoopback = async (): Promise<{ port: number; close: () => Promise<
   };
 };
 
+const writeFakeDaemon = async (root: string, markerDelayMs: number | null) => {
+  const scriptPath = NodePath.join(root, "fake-daemon.mjs");
+  const pidPath = NodePath.join(root, "fake-daemon.pid");
+  await NodeFSP.writeFile(
+    scriptPath,
+    `
+import * as NodeFS from "node:fs/promises";
+import * as NodeHttp from "node:http";
+import * as NodePath from "node:path";
+
+const port = Number(process.env.AWEN_PORT);
+const origin = \`http://127.0.0.1:\${port}/\`;
+await NodeFS.writeFile(${JSON.stringify(pidPath)}, String(process.pid), "utf8");
+
+const server = NodeHttp.createServer((request, response) => {
+  response.setHeader("content-type", "application/json");
+  if (request.url === "/.well-known/awen/daemon") {
+    response.writeHead(200);
+    response.end(JSON.stringify({
+      protocolVersion: 1,
+      owner: process.env.AWEN_DAEMON_OWNER,
+      daemonId: process.env.AWEN_DAEMON_ID,
+      pid: process.pid,
+      managed: true,
+    }));
+    return;
+  }
+  if (request.url === "/api/auth/browser-session") {
+    response.writeHead(200);
+    response.end("{}");
+    return;
+  }
+  response.writeHead(404);
+  response.end("{}");
+});
+
+server.listen(port, "127.0.0.1", () => {
+  ${
+    markerDelayMs === null
+      ? ""
+      : `setTimeout(async () => {
+    const statePath = NodePath.join(process.env.AWEN_HOME, "userdata", "server-runtime.json");
+    await NodeFS.mkdir(NodePath.dirname(statePath), { recursive: true });
+    await NodeFS.writeFile(statePath, JSON.stringify({
+      version: 1,
+      daemonProtocolVersion: 1,
+      daemonId: process.env.AWEN_DAEMON_ID,
+      daemonOwner: process.env.AWEN_DAEMON_OWNER,
+      daemonWorkingDirectory: process.env.AWEN_DAEMON_WORKING_DIR,
+      daemonManaged: true,
+      pid: process.pid,
+      origin,
+      startedAt: new Date().toISOString(),
+    }) + "\\n", "utf8");
+  }, ${markerDelayMs}).unref();`
+  }
+});
+`,
+    "utf8",
+  );
+  return { scriptPath, pidPath };
+};
+
+const reserveLoopbackPort = async (): Promise<number> => {
+  const holder = await listenOnLoopback();
+  await holder.close();
+  return holder.port;
+};
+
+describe("local daemon startup readiness", () => {
+  it("waits for the runtime marker after the ownership handshake", async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "awen-daemon-delayed-marker-"));
+    const fake = await writeFakeDaemon(root, 200);
+    let pid: number | undefined;
+    try {
+      const descriptor = await startLocalDaemon({
+        baseDir: root,
+        timeoutMs: 5_000,
+        requestTimeoutMs: 250,
+        reservePort: reserveLoopbackPort,
+        serverInvocation: { command: process.execPath, args: [fake.scriptPath] },
+      });
+      pid = descriptor.pid;
+
+      expect(descriptor.daemonId).toBeTruthy();
+      expect(processIsAlive(descriptor.pid)).toBe(true);
+      await expect(
+        NodeFSP.readFile(deriveLocalDaemonPaths(root).runtimeStatePath, "utf8"),
+      ).resolves.toContain(descriptor.daemonId);
+    } finally {
+      if (pid !== undefined) process.kill(pid, "SIGKILL");
+    }
+  });
+
+  it("fails within the startup deadline and cleans up when the runtime marker never appears", async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "awen-daemon-missing-marker-"));
+    const fake = await writeFakeDaemon(root, null);
+    try {
+      await expect(
+        startLocalDaemon({
+          baseDir: root,
+          timeoutMs: 2_000,
+          requestTimeoutMs: 100,
+          reservePort: reserveLoopbackPort,
+          serverInvocation: { command: process.execPath, args: [fake.scriptPath] },
+        }),
+      ).rejects.toMatchObject({ code: "daemon-start-timeout" });
+
+      const pid = Number(await NodeFSP.readFile(fake.pidPath, "utf8"));
+      expect(pid).toBeGreaterThan(0);
+      expect(processIsAlive(pid)).toBe(false);
+    } finally {
+      const pid = Number(await NodeFSP.readFile(fake.pidPath, "utf8").catch(() => "0"));
+      if (pid > 0 && processIsAlive(pid)) process.kill(pid, "SIGKILL");
+    }
+  });
+});
+
 describe("local daemon port contract", () => {
   it("refuses to drift to a free port when an explicit daemon port is taken", async () => {
     const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "awen-daemon-strict-port-"));
