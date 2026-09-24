@@ -1,3 +1,7 @@
+# Pull request and `main` gate. The installer jobs live in
+# `build-installers.yml`, the same workflow `release.yml` calls, so a pull
+# request exercises the macOS and Windows packaging steps a release runs; the
+# `ci gate` job is the single status check branch protection needs.
 name: CI
 
 on:
@@ -14,15 +18,15 @@ concurrency:
 
 jobs:
   quality:
-    name: Typecheck, lint, test, and build
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+    name: Typecheck, lint, and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: package.json
           cache: pnpm
@@ -31,19 +35,53 @@ jobs:
       - run: node scripts/version.ts check
       - run: pnpm typecheck
       - run: pnpm lint
-      - run: pnpm test
       - run: pnpm build
+
+  tests:
+    # `apps/server` and `apps/web` hold most of the suite and used to run one
+    # after the other; `--shard` splits each of them across two runners and
+    # `test:packages` covers every other workspace package. A shard with no
+    # test file fails, so a package that silently loses its tests cannot pass.
+    name: Tests (${{ matrix.name }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: server 1/2
+            command: pnpm test:server --shard=1/2
+          - name: server 2/2
+            command: pnpm test:server --shard=2/2
+          - name: web 1/2
+            command: pnpm test:web --shard=1/2
+          - name: web 2/2
+            command: pnpm test:web --shard=2/2
+          - name: workspace packages
+            command: pnpm test:packages
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - run: ${{ matrix.command }}
 
   desktop-shell:
     name: Compile desktop shell
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: package.json
           cache: pnpm
@@ -64,79 +102,41 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Rust toolchain
         run: |
-          rustup toolchain install stable --profile minimal
+          rustup toolchain install stable --profile minimal --component rustfmt
           rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+          key: linux-x64
       - name: Compile the desktop shell without bundling
         run: pnpm --filter @awen/desktop build --no-bundle
 
-  desktop-windows-installer:
-    name: Build Windows NSIS installer
-    runs-on: windows-latest
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version-file: package.json
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Stage desktop daemon and Node runtime
-        run: node scripts/stage-desktop-runtime.ts
-      - name: Install Rust target
-        shell: pwsh
-        run: |
-          rustup toolchain install stable --profile minimal --target x86_64-pc-windows-msvc
-          rustup default stable
-      - name: Build NSIS installer
-        run: pnpm --filter @awen/desktop build --config src-tauri/tauri.release.conf.json --bundles nsis
+  installers:
+    name: Release installers
+    uses: ./.github/workflows/build-installers.yml
+    with:
+      artifact-retention-days: 3
+    secrets: inherit
 
-  desktop-macos-installer:
-    name: Build macOS ${{ matrix.arch }} DMG
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            target: aarch64-apple-darwin
-            arch: arm64
-          - runner: macos-15-intel
-            target: x86_64-apple-darwin
-            arch: x64
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+  gate:
+    name: CI gate
+    if: always()
+    needs: [quality, tests, desktop-shell, installers]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version-file: package.json
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Stage desktop daemon and Node runtime
-        run: node scripts/stage-desktop-runtime.ts
-      - name: Install Rust target
-        run: |
-          rustup toolchain install stable --profile minimal --target "${{ matrix.target }}"
-          rustup default stable
-      - name: Build ad-hoc signed DMG
-        run: pnpm --filter @awen/desktop build --config src-tauri/tauri.macos.conf.json --config src-tauri/tauri.release.conf.json --target "${{ matrix.target }}"
-      - name: Verify app resource seal inside DMG
+      - name: Require every upstream job to succeed
         env:
-          TARGET: ${{ matrix.target }}
+          RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
           set -euo pipefail
-          shopt -s nullglob
-          files=(apps/desktop/src-tauri/target/$TARGET/release/bundle/dmg/*.dmg)
-          if [[ ${#files[@]} -ne 1 ]]; then
-            echo "Expected exactly one macOS DMG for $TARGET." >&2
-            exit 1
-          fi
-          mount="$(mktemp -d)"
-          trap 'hdiutil detach -quiet "$mount" 2>/dev/null || true; rmdir "$mount" 2>/dev/null || true' EXIT
-          hdiutil attach -quiet -readonly -nobrowse -mountpoint "$mount" "${files[0]}"
-          codesign --verify --deep --strict --verbose=2 "$mount/Awen.app"
+          echo "Upstream job results: $RESULTS"
+          for result in $RESULTS; do
+            case "$result" in
+              success|skipped) ;;
+              *)
+                echo "An upstream job did not succeed: $result" >&2
+                exit 1
+                ;;
+            esac
+          done
