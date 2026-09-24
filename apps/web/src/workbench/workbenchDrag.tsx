@@ -569,7 +569,13 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
 
       const stepAutoScroll = () => {
         autoScrollRaf = null;
-        if (!activeRef.current || !viewportEl || !viewportRect || baseTab?.layoutMode !== "scrolling") {
+        if (
+          !activeRef.current ||
+          !viewportEl ||
+          !viewportRect ||
+          lastIsOverSidebar ||
+          baseTab?.layoutMode !== "scrolling"
+        ) {
           return;
         }
         const velocity = computeEdgeAutoScrollVelocity(lastX, viewportRect);
@@ -592,7 +598,13 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
       };
 
       const updateAutoScroll = () => {
-        if (!activeRef.current || !viewportEl || !viewportRect || baseTab?.layoutMode !== "scrolling") {
+        if (
+          !activeRef.current ||
+          !viewportEl ||
+          !viewportRect ||
+          lastIsOverSidebar ||
+          baseTab?.layoutMode !== "scrolling"
+        ) {
           stopAutoScroll();
           return;
         }
@@ -953,16 +965,27 @@ export function WorkbenchDropOverlay() {
   const paneGap = usePrimarySettings((s) => s.paneGap);
   const paneRadius = usePrimarySettings((s) => s.paneRadius);
   const isDragging = state !== null;
-  const surfaceRef = useRef<HTMLDivElement>(null);
+  const nodeRef = useRef<HTMLDivElement | null>(null);
   const [surfaceRect, setSurfaceRect] = useState<WorkbenchRect | null>(null);
 
+  const surfaceRef = useCallback((node: HTMLDivElement | null) => {
+    nodeRef.current = node;
+    if (node !== null) {
+      setSurfaceRect(rectFromElement(node));
+    } else {
+      setSurfaceRect(null);
+    }
+  }, []);
+
   useLayoutEffect(() => {
-    if (!isDragging || surfaceRef.current === null) {
+    if (!isDragging || state?.isOverSidebar) {
       setSurfaceRect(null);
       return;
     }
-    setSurfaceRect(rectFromElement(surfaceRef.current));
-  }, [isDragging]);
+    if (nodeRef.current !== null) {
+      setSurfaceRect(rectFromElement(nodeRef.current));
+    }
+  }, [isDragging, state?.isOverSidebar]);
 
   const preview = state === null || state.phase === "canceling" ? null : state.result;
   const previewTabId =
