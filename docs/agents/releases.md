@@ -57,8 +57,9 @@ archive.
 
 Windows installers are unsigned. With no Apple credentials, macOS DMGs are
 ad-hoc signed; users must explicitly allow the app in macOS Privacy & Security.
-This does not guarantee that an app reporting “damaged” is safe or intact:
-verify the release checksum and code signature first. To publish a Developer ID
+The release job mounts each DMG and verifies the bundled `.app` code signature
+and resource seal before publishing, preventing the “damaged” failure caused
+by an incomplete bundle signature. To publish a Developer ID
 signed and notarized DMG, set `APPLE_CERTIFICATE` (base64 `.p12`),
 `APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD` (app-specific),
 `APPLE_TEAM_ID`, and `KEYCHAIN_PASSWORD` as repository secrets.

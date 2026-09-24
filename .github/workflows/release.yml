@@ -171,6 +171,16 @@ jobs:
             exit 1
           fi
           for file in "${files[@]}"; do
+            mount="$(mktemp -d)"
+            hdiutil attach -quiet -readonly -nobrowse -mountpoint "$mount" "$file"
+            if ! codesign --verify --deep --strict --verbose=2 "$mount/Awen.app"; then
+              hdiutil detach -quiet "$mount"
+              rmdir "$mount"
+              echo "The app inside $file has an invalid resource seal." >&2
+              exit 1
+            fi
+            hdiutil detach -quiet "$mount"
+            rmdir "$mount"
             if [[ "$SIGNING_MODE" == "developer-id" ]]; then
               xcrun stapler validate "$file"
             fi
