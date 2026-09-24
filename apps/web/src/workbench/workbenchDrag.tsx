@@ -88,6 +88,14 @@ function escapeCss(value: string): string {
     : value.replace(/["\\]/g, "\\$&");
 }
 
+function getActiveViewportElement(): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  return (
+    document.querySelector<HTMLElement>(".workbench-viewport[data-tab-active='true']") ??
+    document.querySelector<HTMLElement>(".workbench-viewport")
+  );
+}
+
 function rectFromElement(element: Element | null): WorkbenchRect | null {
   if (element === null) return null;
   const rect = element.getBoundingClientRect();
@@ -401,9 +409,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
       const currentStore = useWorkbenchStore.getState();
       const activeTab =
         currentStore.tabs.find((t) => t.id === currentStore.activeTabId) ?? currentStore.tabs[0];
-      const viewportEl =
-        document.querySelector<HTMLElement>(".workbench-viewport[data-tab-active='true']") ??
-        document.querySelector<HTMLElement>(".workbench-viewport");
+      const viewportEl = getActiveViewportElement();
       const viewportRect = rectFromElement(viewportEl);
 
       let baseTab: WorkbenchTab | null = null;
@@ -876,11 +882,7 @@ export function WorkbenchDropOverlay() {
 
   if (state === null || state.isOverSidebar || state.source.kind === "tab") return null;
 
-  const viewport =
-    typeof document !== "undefined"
-      ? (document.querySelector<HTMLElement>(".workbench-viewport[data-tab-active='true']") ??
-        document.querySelector<HTMLElement>(".workbench-viewport"))
-      : null;
+  const viewport = getActiveViewportElement();
   const scrollLeft = previewTab?.layoutMode === "scrolling" ? (viewport?.scrollLeft ?? 0) : 0;
   const scrollTop = viewport?.scrollTop ?? 0;
 

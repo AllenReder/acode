@@ -348,7 +348,6 @@ const TabPaneTree = memo(
                   }}
                 >
                   <Pane
-                    snapshot={snapshot}
                     tab={tab}
                     projects={projects}
                     paneId={paneId}
@@ -441,14 +440,13 @@ const TabPaneTree = memo(
 );
 
 interface PaneProps {
-  readonly snapshot: WorkbenchSnapshot;
   readonly tab: WorkbenchTab;
   readonly projects: ReadonlyArray<EnvironmentAwenProject>;
   readonly paneId: string;
   readonly focused: boolean;
 }
 
-function Pane({ snapshot, tab, projects, paneId, focused }: PaneProps) {
+function Pane({ tab, projects, paneId, focused }: PaneProps) {
   const setFocused = useWorkbenchStore((s) => s.setFocused);
   const focusRequestId = useWorkbenchStore((s) => s.focusRequestId);
   const closeView = useWorkbenchStore((s) => s.closeView);
