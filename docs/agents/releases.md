@@ -25,8 +25,8 @@ pnpm version:check
 
 Review and commit those manifest changes with the release candidate. The CI
 workflow checks version consistency, typechecks, lints, tests, and builds the
-web/server workspace and compiles the desktop shell on pull requests and pushes
-to `main`.
+web/server workspace, compiles the desktop shell, and builds a Windows NSIS
+installer on pull requests and pushes to `main`.
 
 ## Publish
 
@@ -44,6 +44,10 @@ and publishes all assets with GitHub-generated release notes. A SemVer version
 containing a prerelease suffix becomes a GitHub prerelease; a version without a
 suffix becomes a stable release. The workflow never moves a shared channel or
 publishes an npm package.
+
+Prereleases use the Windows NSIS `.exe` installer. WiX `.msi` requires a
+numeric-only prerelease identifier, so it cannot bundle versions such as
+`0.1.0-alpha.2`. Stable releases build both installer formats.
 
 Assets use `Awen-<version>-windows-x64.*`,
 `Awen-<version>-macos-{arm64,x64}.dmg`, and

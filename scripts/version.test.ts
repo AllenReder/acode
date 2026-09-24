@@ -40,6 +40,14 @@ describe("product version", () => {
 
   it("updates every product manifest from one version", () => {
     withVersionFixture((rootDir) => {
+      const macosConfigPath = NodePath.join(
+        rootDir,
+        "apps/desktop/src-tauri/tauri.macos.conf.json",
+      );
+      const initialMacosConfig = JSON.parse(NodeFS.readFileSync(macosConfigPath, "utf8")) as {
+        bundle: { macOS: { bundleVersion: string } };
+      };
+      const nextBundleVersion = String(Number(initialMacosConfig.bundle.macOS.bundleVersion) + 1);
       setVersion("1.2.3-rc.1", rootDir);
 
       expect(checkVersion(rootDir)).toEqual([]);
@@ -55,23 +63,18 @@ describe("product version", () => {
           "utf8",
         ),
       ).toContain('"version": "../../../package.json"');
-      const macosConfig = JSON.parse(
-        NodeFS.readFileSync(
-          NodePath.join(rootDir, "apps/desktop/src-tauri/tauri.macos.conf.json"),
-          "utf8",
-        ),
-      ) as { version: string; bundle: { macOS: { bundleVersion: string } } };
+      const macosConfig = JSON.parse(NodeFS.readFileSync(macosConfigPath, "utf8")) as {
+        version: string;
+        bundle: { macOS: { bundleVersion: string } };
+      };
       expect(macosConfig.version).toBe("1.2.3");
-      expect(macosConfig.bundle.macOS.bundleVersion).toBe("45");
+      expect(macosConfig.bundle.macOS.bundleVersion).toBe(nextBundleVersion);
 
       setVersion("1.2.3-rc.1", rootDir);
-      const repeatedMacosConfig = JSON.parse(
-        NodeFS.readFileSync(
-          NodePath.join(rootDir, "apps/desktop/src-tauri/tauri.macos.conf.json"),
-          "utf8",
-        ),
-      ) as { bundle: { macOS: { bundleVersion: string } } };
-      expect(repeatedMacosConfig.bundle.macOS.bundleVersion).toBe("45");
+      const repeatedMacosConfig = JSON.parse(NodeFS.readFileSync(macosConfigPath, "utf8")) as {
+        bundle: { macOS: { bundleVersion: string } };
+      };
+      expect(repeatedMacosConfig.bundle.macOS.bundleVersion).toBe(nextBundleVersion);
     });
   });
 
