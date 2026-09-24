@@ -197,10 +197,14 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal --target "${{ matrix.target }}"
           rustup default stable
+      # Only `main` writes the Rust cache: GitHub storage is capped at 10GB per
+      # repository, and a cache per pull request, branch, and tag filled it.
+      # Every other ref restores main's entry instead.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: apps/desktop/src-tauri -> target
           key: macos-${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Build desktop installer
         run: pnpm --filter @awen/desktop build --config src-tauri/tauri.macos.conf.json --config src-tauri/tauri.release.conf.json --target "${{ matrix.target }}"
       - name: Collect macOS installer
@@ -281,6 +285,7 @@ jobs:
         with:
           workspaces: apps/desktop/src-tauri -> target
           key: windows-x64
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Build prerelease NSIS installer
         if: needs.prepare.outputs.prerelease == 'true'
         run: pnpm --filter @awen/desktop build --config src-tauri/tauri.release.conf.json --bundles nsis

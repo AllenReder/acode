@@ -109,6 +109,7 @@ jobs:
         with:
           workspaces: apps/desktop/src-tauri -> target
           key: linux-x64
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Check Rust formatting
         run: cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
       - name: Lint the desktop shell
