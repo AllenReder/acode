@@ -83,10 +83,12 @@ jobs:
           node-version-file: package.json
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Stage desktop daemon and Node runtime
+        run: node scripts/stage-desktop-runtime.ts
       - name: Install Rust target
         shell: pwsh
         run: |
           rustup toolchain install stable --profile minimal --target x86_64-pc-windows-msvc
           rustup default stable
       - name: Build NSIS installer
-        run: pnpm --filter @awen/desktop build --bundles nsis
+        run: pnpm --filter @awen/desktop build --config src-tauri/tauri.release.conf.json --bundles nsis

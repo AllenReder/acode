@@ -38,8 +38,8 @@ git push origin v0.1.0-alpha.1
 ```
 
 The tag starts the release workflow. It verifies that the tag exactly matches
-all product versions, builds the unsigned desktop installers on Windows and
-both macOS architectures, builds and smoke-tests the Linux x64 daemon package,
+all product versions, bundles the daemon and Node runtime with the desktop
+installers on Windows and both macOS architectures, builds and smoke-tests the Linux x64 daemon package,
 and publishes all assets with GitHub-generated release notes. A SemVer version
 containing a prerelease suffix becomes a GitHub prerelease; a version without a
 suffix becomes a stable release. The workflow never moves a shared channel or
@@ -55,6 +55,11 @@ Assets use `Awen-<version>-windows-x64.*`,
 `SHA256SUMS`; the release also includes checksums covering every installer and
 archive.
 
-The installers are unsigned. Signing can be added after developer accounts
-and signing credentials are available, without changing the version or tag
-flow.
+Windows installers are unsigned. With no Apple credentials, macOS DMGs are
+ad-hoc signed; users must explicitly allow the app in macOS Privacy & Security.
+The release job mounts each DMG and verifies the bundled `.app` code signature
+and resource seal before publishing, preventing the “damaged” failure caused
+by an incomplete bundle signature. To publish a Developer ID
+signed and notarized DMG, set `APPLE_CERTIFICATE` (base64 `.p12`),
+`APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD` (app-specific),
+`APPLE_TEAM_ID`, and `KEYCHAIN_PASSWORD` as repository secrets.

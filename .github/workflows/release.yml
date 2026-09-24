@@ -98,6 +98,10 @@ jobs:
             arch: x64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
+    env:
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
@@ -109,17 +113,53 @@ jobs:
           node-version-file: package.json
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Configure macOS signing
+        id: signing
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$APPLE_CERTIFICATE" && -z "$APPLE_CERTIFICATE_PASSWORD" && -z "$KEYCHAIN_PASSWORD" && -z "$APPLE_ID" && -z "$APPLE_PASSWORD" && -z "$APPLE_TEAM_ID" ]]; then
+            echo "mode=adhoc" >> "$GITHUB_OUTPUT"
+            echo "Building an ad-hoc signed DMG; users must approve it in Privacy & Security."
+            exit 0
+          fi
+          if [[ -z "$APPLE_CERTIFICATE" || -z "$APPLE_CERTIFICATE_PASSWORD" || -z "$KEYCHAIN_PASSWORD" || -z "$APPLE_ID" || -z "$APPLE_PASSWORD" || -z "$APPLE_TEAM_ID" ]]; then
+            echo "Provide all macOS signing and notarization secrets, or none for ad-hoc signing." >&2
+            exit 1
+          fi
+          certificate="$RUNNER_TEMP/awen-developer-id.p12"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$certificate"
+          keychain="$RUNNER_TEMP/awen-build.keychain-db"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security default-keychain -s "$keychain"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security set-keychain-settings -t 3600 -u "$keychain"
+          security import "$certificate" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$keychain"
+          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -n 1)"
+          if [[ -z "$identity" ]]; then
+            echo "The imported certificate is not a Developer ID Application identity." >&2
+            exit 1
+          fi
+          echo "APPLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+          echo "mode=developer-id" >> "$GITHUB_OUTPUT"
+      - name: Stage desktop daemon and Node runtime
+        run: node scripts/stage-desktop-runtime.ts
       - name: Install Rust target
         run: |
           rustup toolchain install stable --profile minimal --target "${{ matrix.target }}"
           rustup default stable
       - name: Build desktop installer
-        run: pnpm --filter @awen/desktop build --config src-tauri/tauri.macos.conf.json --target "${{ matrix.target }}"
-      - name: Collect unsigned macOS installer
+        run: pnpm --filter @awen/desktop build --config src-tauri/tauri.macos.conf.json --config src-tauri/tauri.release.conf.json --target "${{ matrix.target }}"
+      - name: Collect macOS installer
         env:
           VERSION: ${{ needs.validate.outputs.version }}
           TARGET: ${{ matrix.target }}
           ARCH: ${{ matrix.arch }}
+          SIGNING_MODE: ${{ steps.signing.outputs.mode }}
         run: |
           set -euo pipefail
           mkdir -p release-assets
@@ -131,6 +171,19 @@ jobs:
             exit 1
           fi
           for file in "${files[@]}"; do
+            mount="$(mktemp -d)"
+            hdiutil attach -quiet -readonly -nobrowse -mountpoint "$mount" "$file"
+            if ! codesign --verify --deep --strict --verbose=2 "$mount/Awen.app"; then
+              hdiutil detach -quiet "$mount"
+              rmdir "$mount"
+              echo "The app inside $file has an invalid resource seal." >&2
+              exit 1
+            fi
+            hdiutil detach -quiet "$mount"
+            rmdir "$mount"
+            if [[ "$SIGNING_MODE" == "developer-id" ]]; then
+              xcrun stapler validate "$file"
+            fi
             cp "$file" "release-assets/Awen-$VERSION-macos-$ARCH.dmg"
           done
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -156,6 +209,8 @@ jobs:
           node-version-file: package.json
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Stage desktop daemon and Node runtime
+        run: node scripts/stage-desktop-runtime.ts
       - name: Install Rust target
         shell: pwsh
         run: |
@@ -163,10 +218,10 @@ jobs:
           rustup default stable
       - name: Build prerelease NSIS installer
         if: contains(needs.validate.outputs.version, '-')
-        run: pnpm --filter @awen/desktop build --bundles nsis
+        run: pnpm --filter @awen/desktop build --config src-tauri/tauri.release.conf.json --bundles nsis
       - name: Build stable desktop installers
         if: ${{ !contains(needs.validate.outputs.version, '-') }}
-        run: pnpm --filter @awen/desktop build
+        run: pnpm --filter @awen/desktop build --config src-tauri/tauri.release.conf.json
       - name: Collect unsigned Windows installers
         shell: pwsh
         env:
