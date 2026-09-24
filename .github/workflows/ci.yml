@@ -67,4 +67,4 @@ jobs:
           rustup toolchain install stable --profile minimal
           rustup default stable
       - name: Compile the desktop shell without bundling
-        run: pnpm --filter @awen/desktop build -- --no-bundle
+        run: pnpm --filter @awen/desktop build --no-bundle
