@@ -580,7 +580,9 @@ pub fn run() {
                     macos::install(&window);
                 }
             }
-            #[cfg(target_os = "windows")]
+            // Wayland otherwise falls back to GTK client-side decorations, which duplicate the
+            // Awen topbar while XWayland uses KWin's server-side titlebar.
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
             {
                 use tauri::Manager;
                 if let Some(window) = app.get_webview_window("main") {

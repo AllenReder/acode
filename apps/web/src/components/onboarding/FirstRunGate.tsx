@@ -29,6 +29,7 @@ import { environmentProjects } from "../../state/projects";
 import { primaryServerConfigAtom, primaryServerWelcomeAtom } from "../../state/server";
 import { environmentShell } from "../../state/shell";
 import { environmentThreadShells } from "../../state/threads";
+import { DesktopAuthWindowChrome } from "../auth/DesktopAuthWindowChrome";
 import { Button } from "../ui/button";
 
 /**
@@ -206,33 +207,35 @@ function FirstRunRecovery({
 }) {
   const settingsReadFailed = reason === "settings";
   return (
-    <main className="flex h-dvh min-h-0 items-center justify-center bg-background px-6 text-foreground">
-      <div className="flex max-w-sm flex-col items-center text-center">
-        <h1 className="text-lg font-semibold">
-          {settingsReadFailed ? "Could not read settings" : "Still connecting"}
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {settingsReadFailed
-            ? "Your saved settings could not be loaded."
-            : "Awen could not confirm this workspace."}
-        </p>
-        <Button
-          className="mt-5"
-          size="sm"
-          variant="outline"
-          disabled={retrying}
-          onClick={() => {
-            if (settingsReadFailed) {
-              void ensureClientSettingsHydrated().catch(() => undefined);
-            } else {
-              window.location.reload();
-            }
-          }}
-        >
-          <RefreshIcon refreshing={retrying} />
-          {settingsReadFailed ? "Retry" : "Reload"}
-        </Button>
-      </div>
-    </main>
+    <DesktopAuthWindowChrome>
+      <main className="flex h-dvh min-h-0 items-center justify-center bg-background px-6 text-foreground">
+        <div className="flex max-w-sm flex-col items-center text-center">
+          <h1 className="text-lg font-semibold">
+            {settingsReadFailed ? "Could not read settings" : "Still connecting"}
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {settingsReadFailed
+              ? "Your saved settings could not be loaded."
+              : "Awen could not confirm this workspace."}
+          </p>
+          <Button
+            className="mt-5"
+            size="sm"
+            variant="outline"
+            disabled={retrying}
+            onClick={() => {
+              if (settingsReadFailed) {
+                void ensureClientSettingsHydrated().catch(() => undefined);
+              } else {
+                window.location.reload();
+              }
+            }}
+          >
+            <RefreshIcon refreshing={retrying} />
+            {settingsReadFailed ? "Retry" : "Reload"}
+          </Button>
+        </div>
+      </main>
+    </DesktopAuthWindowChrome>
   );
 }

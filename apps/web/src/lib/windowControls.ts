@@ -4,7 +4,7 @@
  */
 
 import { isDesktop } from "../env";
-import { isWindowsPlatform } from "./utils";
+import { usesCustomWindowChrome } from "./utils";
 
 export function isDesktopEnvironment(): boolean {
   if (typeof window === "undefined") return false;
@@ -92,10 +92,13 @@ export const defaultWindowOperations: WindowBridgeOperations = {
   },
 };
 
-export function handleTopbarDoubleClick(event: React.MouseEvent): void {
+export function handleTopbarDoubleClick(
+  event: React.MouseEvent,
+  operations: WindowBridgeOperations = defaultWindowOperations,
+): void {
   if (
     typeof navigator === "undefined" ||
-    !isWindowsPlatform(navigator.platform) ||
+    !usesCustomWindowChrome(navigator.platform) ||
     !isDesktopEnvironment()
   ) {
     return;
@@ -108,5 +111,5 @@ export function handleTopbarDoubleClick(event: React.MouseEvent): void {
   ) {
     return;
   }
-  void defaultWindowOperations.toggleMaximize();
+  void operations.toggleMaximize();
 }

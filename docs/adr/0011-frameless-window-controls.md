@@ -1,6 +1,6 @@
-# Windows Frameless Window Controls and Topbar Integration
+# Frameless Window Controls and Topbar Integration
 
-Awen adopts a frameless window configuration on Windows (`decorations: false`) paired with React-rendered native-style caption buttons integrated into the Topbar Surface. This eliminates the duplicate native titlebar while preserving macOS native traffic light overlay behavior, aligning Windows topbar controls with the dual-chrome architecture established in ADR 0005.
+Awen adopts a frameless window configuration on Windows and Linux (`decorations: false`) paired with React-rendered native-style caption buttons integrated into the Topbar Surface. This eliminates the duplicate native titlebar while preserving macOS native traffic light overlay behavior, aligning Windows and Linux topbar controls with the dual-chrome architecture established in ADR 0005.
 
 ## Status
 
@@ -15,12 +15,13 @@ Furthermore, WebView2's native Window Controls Overlay (WCO) API is unsupported 
 ## Decision
 
 1. **Platform-Specific Window Decoration**:
-   - In Rust startup (`setup`), disable window decorations dynamically on Windows (`#[cfg(target_os = "windows")] window.set_decorations(false)`).
+   - In Rust startup (`setup`), disable window decorations dynamically on Windows and Linux (`window.set_decorations(false)`). Linux uses the same path for native Wayland and XWayland, avoiding GTK client-side decorations on one backend and KWin server-side decorations on the other.
    - Retain `titleBarStyle: "Overlay"` and `decorations: true` for macOS in `tauri.conf.json`.
 
 2. **Topbar Surface Window Controls**:
    - Introduce a dedicated `<WindowControls />` component embedded as the trailing flex child of `MaterialSurface kind="topbar"` (in `WorkbenchWindowChrome` and `settings.tsx`).
-   - The controls render on Windows desktop hosts (omitted on macOS, Linux which retains native decorations, and browser environments).
+   - Wrap pairing, authentication, recovery, error, and not-found surfaces in a shared `DesktopAuthWindowChrome` so the frameless window always has a 36px drag region and window controls before the Workbench mounts.
+   - The controls render on Windows and Linux desktop hosts (omitted on macOS, which retains native traffic lights, and in browser environments).
    - Sized to match the 36px topbar height with ~46px button widths, adhering to Windows Fitts's Law (closing from the extreme corner) and theme token hover styles (red close button).
    - Ensure the controls container and buttons are strictly marked with `-webkit-app-region: no-drag` so mouse interactions do not conflict with Tauri drag regions.
 
@@ -39,4 +40,6 @@ Furthermore, WebView2's native Window Controls Overlay (WCO) API is unsupported 
 ## Consequences
 
 - Windows users get an integrated topbar where the tab strip and settings breadcrumbs naturally yield to top-right caption controls.
+- Linux users get the same single-titlebar model under Wayland and XWayland.
+- Auth and pre-shell routes keep window controls and titlebar dragging even when the Workbench or Settings shell is not rendered.
 - The sidebar toggle button on Windows gains proper breathing room matching the 12px baseline spacing grid.

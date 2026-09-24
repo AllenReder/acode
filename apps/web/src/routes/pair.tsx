@@ -31,7 +31,7 @@ function PairRouteView() {
   const navigate = useNavigate();
 
   if (!authGateState) {
-    return null;
+    return <PairingPendingSurface />;
   }
 
   if (authGateState.status === "hosted-pairing") {
