@@ -15,6 +15,7 @@ import { createPortal } from "react-dom";
 
 import { paneDropZoneFromPoint, paneDirectionalZoneFromPoint } from "./layout";
 import { computePaneLayoutRects } from "./layoutGeometry";
+import type { LayoutMode } from "./scrollingLayout";
 import { usePrimarySettings } from "../hooks/useSettings";
 import { useUiStateStore } from "../uiStateStore";
 import {
@@ -311,6 +312,7 @@ export function resolveVirtualPaneDropTargetAtPoint(
   regions: ReadonlyArray<VirtualPaneRegion>,
   paneGap = 0,
   directionalOnly = false,
+  layoutMode?: LayoutMode,
 ): ViewDropTarget | null {
   if (
     x < viewportRect.left ||
@@ -328,7 +330,28 @@ export function resolveVirtualPaneDropTargetAtPoint(
       y >= rect.top - halfGap &&
       y <= rect.top + rect.height + halfGap,
   );
-  if (!hit) return null;
+  if (!hit) {
+    if (layoutMode === "scrolling" && regions.length > 0) {
+      let rightmostRegion: VirtualPaneRegion | null = null;
+      let maxRight = -Infinity;
+      for (const region of regions) {
+        const right = region.rect.left + region.rect.width;
+        if (right > maxRight) {
+          maxRight = right;
+          rightmostRegion = region;
+        }
+      }
+      if (rightmostRegion !== null && x > maxRight + halfGap) {
+        return {
+          kind: "pane",
+          tabId: rightmostRegion.tabId,
+          paneId: rightmostRegion.paneId,
+          zone: "right",
+        };
+      }
+    }
+    return null;
+  }
   const zone = directionalOnly
     ? paneDirectionalZoneFromPoint(x, y, hit.rect)
     : paneDropZoneFromPoint(x, y, hit.rect);
@@ -338,6 +361,34 @@ export function resolveVirtualPaneDropTargetAtPoint(
     paneId: hit.paneId,
     zone,
   };
+}
+
+export const AUTO_SCROLL_EDGE_THRESHOLD = 56;
+export const AUTO_SCROLL_MIN_SPEED = 3;
+export const AUTO_SCROLL_MAX_SPEED = 20;
+
+/** Compute horizontal auto-scroll velocity when dragging near viewport edges (ADR 0015). */
+export function computeEdgeAutoScrollVelocity(
+  x: number,
+  viewportRect: WorkbenchRect,
+  threshold = AUTO_SCROLL_EDGE_THRESHOLD,
+  minSpeed = AUTO_SCROLL_MIN_SPEED,
+  maxSpeed = AUTO_SCROLL_MAX_SPEED,
+): number {
+  if (x < viewportRect.left || x > viewportRect.left + viewportRect.width) {
+    return 0;
+  }
+  const leftZone = viewportRect.left + threshold;
+  if (x < leftZone) {
+    const depth = Math.max(0, Math.min(1, (leftZone - x) / threshold));
+    return -(minSpeed + depth * (maxSpeed - minSpeed));
+  }
+  const rightZone = viewportRect.left + viewportRect.width - threshold;
+  if (x > rightZone) {
+    const depth = Math.max(0, Math.min(1, (x - rightZone) / threshold));
+    return minSpeed + depth * (maxSpeed - minSpeed);
+  }
+  return 0;
 }
 
 export function WorkbenchDragProvider({ children }: { readonly children: ReactNode }) {
@@ -461,6 +512,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           regions,
           paneGapRef.current,
           source.kind === "pane",
+          baseTab?.layoutMode,
         );
         lastTarget = hit ?? initialTarget;
         return lastTarget;
@@ -506,7 +558,54 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         });
       };
 
+      let autoScrollRaf: number | null = null;
+
+      const stopAutoScroll = () => {
+        if (autoScrollRaf !== null) {
+          cancelAnimationFrame(autoScrollRaf);
+          autoScrollRaf = null;
+        }
+      };
+
+      const stepAutoScroll = () => {
+        autoScrollRaf = null;
+        if (!activeRef.current || !viewportEl || !viewportRect || baseTab?.layoutMode !== "scrolling") {
+          return;
+        }
+        const velocity = computeEdgeAutoScrollVelocity(lastX, viewportRect);
+        if (velocity === 0) return;
+
+        const maxScroll = Math.max(0, viewportEl.scrollWidth - viewportEl.clientWidth);
+        const prevScrollLeft = viewportEl.scrollLeft;
+        viewportEl.scrollLeft = Math.max(0, Math.min(maxScroll, prevScrollLeft + velocity));
+
+        if (viewportEl.scrollLeft !== prevScrollLeft) {
+          resolveTarget(lastX, lastY);
+          if (frameRef.current === null) {
+            frameRef.current = requestAnimationFrame(publishPointer);
+          }
+        }
+
+        if (computeEdgeAutoScrollVelocity(lastX, viewportRect) !== 0) {
+          autoScrollRaf = requestAnimationFrame(stepAutoScroll);
+        }
+      };
+
+      const updateAutoScroll = () => {
+        if (!activeRef.current || !viewportEl || !viewportRect || baseTab?.layoutMode !== "scrolling") {
+          stopAutoScroll();
+          return;
+        }
+        const velocity = computeEdgeAutoScrollVelocity(lastX, viewportRect);
+        if (velocity !== 0 && autoScrollRaf === null) {
+          autoScrollRaf = requestAnimationFrame(stepAutoScroll);
+        } else if (velocity === 0) {
+          stopAutoScroll();
+        }
+      };
+
       const cleanup = () => {
+        stopAutoScroll();
         clearFrame();
         if (stabilizeTimerRef.current !== null) {
           clearTimeout(stabilizeTimerRef.current);
@@ -703,11 +802,13 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
             isOverSidebar,
             sidebarDropTarget,
           });
+          updateAutoScroll();
           return;
         }
 
         const target = isOverSidebar ? null : resolveTarget(lastX, lastY);
         if (!sameTarget(publishedTarget, target)) publishedTarget = target;
+        updateAutoScroll();
         if (frameRef.current === null) frameRef.current = requestAnimationFrame(publishPointer);
         if (stabilizeTimerRef.current !== null) clearTimeout(stabilizeTimerRef.current);
         stabilizeTimerRef.current = setTimeout(() => {

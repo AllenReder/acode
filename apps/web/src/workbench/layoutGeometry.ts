@@ -1,6 +1,8 @@
 import type { SplitDir, LayoutNode } from "./layout";
-import { MIN_PANE_HEIGHT } from "./scrollingLayout";
 import type { WorkbenchTab } from "./workbenchState";
+
+/** Trailing empty buffer in scrolling layout to provide visual landing room and drop targets (ADR 0015). */
+export const SCROLLING_TRAILING_PADDING = 200;
 
 export interface ComputedPaneRect {
   readonly left: number;
@@ -56,18 +58,8 @@ export function computePaneLayoutRects(
       };
     }
 
-    // Determine required height for scrolling columns:
-    // For each column with M panes, total vertical padding is (M + 1) * gap.
-    const requiredHeights = columns.map((col) => {
-      const m = col.paneIds.length;
-      if (m === 0) return viewportSize.height;
-      const minUsable = Math.max(
-        ...col.shares.map((share) => (share > 0 ? MIN_PANE_HEIGHT / share : MIN_PANE_HEIGHT)),
-      );
-      return minUsable + (m + 1) * gap;
-    });
-
-    const canvasHeight = Math.max(viewportSize.height, ...requiredHeights);
+    // Viewport never scrolls vertically; height strictly matches viewport (ADR 0015)
+    const canvasHeight = viewportSize.height;
 
     let currentLeft = gap;
     for (const column of columns) {
@@ -129,7 +121,7 @@ export function computePaneLayoutRects(
       currentLeft += column.width + gap;
     }
 
-    const canvasWidth = Math.max(viewportSize.width, currentLeft);
+    const canvasWidth = Math.max(viewportSize.width, currentLeft + SCROLLING_TRAILING_PADDING);
     return {
       canvasWidth,
       canvasHeight,

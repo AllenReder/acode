@@ -198,6 +198,12 @@ A first-class unit inside a Scrolling layout. It owns one width policy and a
 vertically ordered set of Panes whose shares fill the Column's height.
 _Avoid_: Split (when referring to a Scrolling layout Column)
 
+**Trailing Canvas Area**:
+The unoccupied horizontal space in a Scrolling layout extending from the right
+edge of the rightmost Column to the viewport boundary or the canvas trailing
+edge. It acts as an open drop target that appends a new Column at the far right.
+_Avoid_: Blank area, Dead zone, Margin
+
 **Agent session**:
 A Session representing one agent conversation: one provider, one model
 selection, one Workspace, and one transcript. Its Awen identity is distinct
@@ -337,6 +343,8 @@ _Avoid_: Chat wallpaper, Session background, View background
 - Opening an unopened Session or draft from the Sidebar opens it as the sole View in a new Tab (or replaces an active Welcome Tab), rather than adding a Pane to the current Tab.
 - Activating a Session that already has an opened Session View focuses that existing View and activates its Tab.
 - Splitting within an active Tab is explicit through keyboard modifiers or drag-and-drop.
+- The Workbench Viewport never scrolls vertically; vertical scrolling belongs strictly to the Content Layer of individual Panes.
+- In a Scrolling layout, the Viewport scrolls purely horizontally, and the Trailing Canvas Area beyond the rightmost Column is a valid drop target that appends a new Column at the far right.
 - Runtime and provider implementation details must not define Awen domain
   identity.
 - Provider-native lifecycle commands may implement Awen Session operations,

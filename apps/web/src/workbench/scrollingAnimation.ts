@@ -101,10 +101,8 @@ export function computeScrollingRevealTarget(input: ScrollRevealInput): ScrollRe
   } = input;
 
   const maxScrollLeft = Math.max(0, canvasWidth - viewportWidth);
-  const maxScrollTop = Math.max(0, canvasHeight - viewportHeight);
 
   let targetLeft = currentScrollLeft;
-  let targetTop = currentScrollTop;
 
   // Horizontal reveal
   if (isSingleColumn) {
@@ -126,22 +124,9 @@ export function computeScrollingRevealTarget(input: ScrollRevealInput): ScrollRe
     );
   }
 
-  // Vertical reveal (for stacked panes)
-  if (maxScrollTop > 0) {
-    targetTop = computeEdgeRevealTarget(
-      rect.top,
-      rect.height,
-      paneGap,
-      currentScrollTop,
-      viewportHeight,
-      maxScrollTop,
-    );
-  } else {
-    targetTop = 0;
-  }
-
-  const needsScroll =
-    Math.abs(targetLeft - currentScrollLeft) >= 1 || Math.abs(targetTop - currentScrollTop) >= 1;
+  // Viewport never scrolls vertically (ADR 0015)
+  const targetTop = 0;
+  const needsScroll = Math.abs(targetLeft - currentScrollLeft) >= 1;
 
   return {
     targetLeft,

@@ -114,7 +114,7 @@ describe("computeScrollingRevealTarget", () => {
     expect(result.targetLeft).toBe(284);
   });
 
-  it("reveals stacked panes vertically when vertical overflow exists", () => {
+  it("keeps targetTop at 0 because Workbench Viewport never scrolls vertically (ADR 0015)", () => {
     const input: ScrollRevealInput = {
       isSingleColumn: false,
       rect: { left: 16, top: 500, width: 560, height: 400 },
@@ -126,11 +126,8 @@ describe("computeScrollingRevealTarget", () => {
       currentScrollLeft: 0,
       currentScrollTop: 0,
     };
-    // Safe bottom is 500 + 400 + 16 = 916. Viewport height 600.
-    // targetTop = 916 - 600 = 316
     const result = computeScrollingRevealTarget(input);
-    expect(result.needsScroll).toBe(true);
-    expect(result.targetTop).toBe(316);
+    expect(result.targetTop).toBe(0);
   });
 });
 
