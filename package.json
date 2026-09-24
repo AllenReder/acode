@@ -1,6 +1,6 @@
 {
   "name": "@awen/monorepo",
-  "version": "0.1.0-alpha.3",
+  "version": "0.1.0-alpha.4",
   "private": true,
   "type": "module",
   "scripts": {
@@ -22,6 +22,9 @@
     "tc": "vp run -r --concurrency-limit 2 typecheck",
     "lint": "vp lint --report-unused-disable-directives",
     "test": "vp run -r test",
+    "test:server": "vp run --filter @awen/server --fail-if-no-match test",
+    "test:web": "vp run --filter @awen/web --fail-if-no-match test",
+    "test:packages": "pnpm -r --fail-if-no-match --filter \"!@awen/server\" --filter \"!@awen/web\" test",
     "fmt": "vp fmt",
     "fmt:check": "vp fmt --check",
     "smoke:connection": "node scripts/connection-smoke.ts",

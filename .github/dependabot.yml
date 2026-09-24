@@ -1,0 +1,19 @@
+# Keep the SHA-pinned GitHub Actions current; `scripts/ci-workflows.test.ts`
+# requires each `uses:` to carry its release version, so a Dependabot bump that
+# only moves the SHA fails the pull request it raises.
+#
+# The npm ecosystem stays out for now: workspace versions come from pnpm
+# catalogs, which Dependabot cannot rewrite reliably.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: ci
+    groups:
+      github-actions:
+        patterns:
+          - "*"

@@ -24,9 +24,12 @@ pnpm version:check
 ```
 
 Review and commit those manifest changes with the release candidate. The CI
-workflow checks version consistency, typechecks, lints, tests, and builds the
-web/server workspace, compiles the desktop shell, and builds a Windows NSIS
-installer on pull requests and pushes to `main`.
+workflow checks version consistency, typechecks, lints, and builds the
+web/server workspace, runs the test suite in shards, and compiles the desktop
+shell on Linux. On pull requests and pushes to `main` it then runs
+`build-installers.yml` - the same workflow a release calls - which packages the
+Linux x64 daemon, the Windows installer, and both macOS DMGs, and verifies the
+resource seal and the architecture of each macOS app before upload.
 
 ## Publish
 
@@ -49,6 +52,11 @@ Prereleases use the Windows NSIS `.exe` installer. WiX `.msi` requires a
 numeric-only prerelease identifier, so it cannot bundle versions such as
 `0.1.0-alpha.2`. Stable releases build both installer formats.
 
+Rehearse a release without publishing by running the `Release` workflow
+manually against the release commit: it validates the version, builds and
+uploads every installer as a workflow artifact, and stops before the publish
+job. Set the `publish` input on a tag ref when the dry run is meant to publish.
+
 Assets use `Awen-<version>-windows-x64.*`,
 `Awen-<version>-macos-{arm64,x64}.dmg`, and
 `awen-server-<version>-linux-x64.tar.gz`. The daemon archive includes its own
@@ -57,6 +65,10 @@ archive.
 
 Windows installers are unsigned. With no Apple credentials, macOS DMGs are
 ad-hoc signed; users must explicitly allow the app in macOS Privacy & Security.
+Apple credentials are all-or-nothing: `APPLE_CERTIFICATE`,
+`APPLE_CERTIFICATE_PASSWORD`, `KEYCHAIN_PASSWORD`, `APPLE_ID`,
+`APPLE_PASSWORD`, and `APPLE_TEAM_ID` either are all configured, which signs
+with Developer ID and notarizes, or none are, which builds an ad-hoc DMG.
 The release job mounts each DMG and verifies the bundled `.app` code signature
 and resource seal before publishing, preventing the “damaged” failure caused
 by an incomplete bundle signature. To publish a Developer ID

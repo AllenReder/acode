@@ -1,0 +1,314 @@
+# One definition for every artifact the release publishes. `ci.yml` and
+# `release.yml` both call this workflow, so a pull request exercises exactly the
+# steps a tagged release runs. The Apple credential check lives here instead of
+# in the callers: pull requests from forks have no secrets and build ad-hoc
+# DMGs, while a release that has Developer ID secrets notarizes.
+name: Build release installers
+
+on:
+  workflow_call:
+    inputs:
+      artifact-retention-days:
+        description: Days to keep the uploaded installers.
+        type: number
+        default: 7
+    secrets:
+      APPLE_CERTIFICATE:
+        description: Base64-encoded Developer ID Application certificate.
+        required: false
+      APPLE_CERTIFICATE_PASSWORD:
+        description: Password for the Developer ID certificate.
+        required: false
+      KEYCHAIN_PASSWORD:
+        description: Password for the temporary build keychain.
+        required: false
+      APPLE_ID:
+        description: Apple ID used for notarization.
+        required: false
+      APPLE_PASSWORD:
+        description: App-specific password for the Apple ID.
+        required: false
+      APPLE_TEAM_ID:
+        description: Apple Developer team ID used for notarization.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Resolve the product version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+      - name: Read the product version
+        id: version
+        run: |
+          set -euo pipefail
+          node scripts/version.ts check
+          version="$(node -e 'process.stdout.write(JSON.parse(require("node:fs").readFileSync("package.json", "utf8")).version)')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          case "$version" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+  daemon-linux-x64:
+    name: Linux x64 daemon
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build Linux x64 daemon package
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: node scripts/build-server-package.ts --platform linux --arch x64 --version "$VERSION"
+      - name: Verify checksum and smoke-test the daemon
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd release-server
+          archive="awen-server-$VERSION-linux-x64.tar.gz"
+          sha256sum -c SHA256SUMS
+          scratch="$(mktemp -d)"
+          trap 'rm -rf "$scratch"' EXIT
+          stem="awen-server-$VERSION-linux-x64"
+          tar -xzf "$archive" -C "$scratch"
+          awen="$scratch/$stem/bin/awen"
+          test "$("$awen" --version)" = "awen v$VERSION"
+          export AWEN_HOME="$scratch/awen-home"
+          export AWEN_NO_BROWSER=1
+          "$awen" daemon start --json
+          "$awen" daemon status --json
+          "$awen" daemon stop --confirm --json
+          mkdir -p "$GITHUB_WORKSPACE/release-assets"
+          cp "$archive" SHA256SUMS "$GITHUB_WORKSPACE/release-assets/"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: daemon-linux-x64
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: ${{ inputs.artifact-retention-days }}
+
+  desktop-macos:
+    name: macOS ${{ matrix.arch }} desktop
+    needs: prepare
+    # Both architectures build on Apple Silicon: the Rust target is set per
+    # matrix entry and `stage-desktop-runtime.ts --target` embeds a Node runtime
+    # for that target, so no Intel runner is needed. The collect step fails if a
+    # bundled Mach-O does not match the expected architecture.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            arch: arm64
+            macho: arm64
+          - target: x86_64-apple-darwin
+            arch: x64
+            macho: x86_64
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The secrets stay on this step: exporting them to every later step (a job
+      # level `env:` block) once made Tauri notarize an ad-hoc build with an
+      # empty team ID and fail the release.
+      - name: Configure macOS signing
+        id: signing
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$APPLE_CERTIFICATE" && -z "$APPLE_CERTIFICATE_PASSWORD" && -z "$KEYCHAIN_PASSWORD" && -z "$APPLE_ID" && -z "$APPLE_PASSWORD" && -z "$APPLE_TEAM_ID" ]]; then
+            echo "mode=adhoc" >> "$GITHUB_OUTPUT"
+            echo "Building an ad-hoc signed DMG; users must approve it in Privacy & Security."
+            exit 0
+          fi
+          if [[ -z "$APPLE_CERTIFICATE" || -z "$APPLE_CERTIFICATE_PASSWORD" || -z "$KEYCHAIN_PASSWORD" || -z "$APPLE_ID" || -z "$APPLE_PASSWORD" || -z "$APPLE_TEAM_ID" ]]; then
+            echo "Provide all macOS signing and notarization secrets, or none for ad-hoc signing." >&2
+            exit 1
+          fi
+          certificate="$RUNNER_TEMP/awen-developer-id.p12"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$certificate"
+          keychain="$RUNNER_TEMP/awen-build.keychain-db"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security default-keychain -s "$keychain"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security set-keychain-settings -t 3600 -u "$keychain"
+          security import "$certificate" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$keychain"
+          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -n 1)"
+          if [[ -z "$identity" ]]; then
+            echo "The imported certificate is not a Developer ID Application identity." >&2
+            exit 1
+          fi
+          echo "APPLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+          echo "APPLE_ID=$APPLE_ID" >> "$GITHUB_ENV"
+          echo "APPLE_PASSWORD=$APPLE_PASSWORD" >> "$GITHUB_ENV"
+          echo "APPLE_TEAM_ID=$APPLE_TEAM_ID" >> "$GITHUB_ENV"
+          echo "mode=developer-id" >> "$GITHUB_OUTPUT"
+      # A warm cache turns the Node download into a checksum check. The primary
+      # key follows `package.json` (so an `engines.node` bump misses it) and the
+      # restore key still hands over the previous archive, which the script
+      # re-verifies before reusing.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/awen-node-runtime
+          key: node-runtime-macos-${{ matrix.arch }}-${{ hashFiles('package.json') }}
+          restore-keys: node-runtime-macos-${{ matrix.arch }}-
+      - name: Stage desktop daemon and Node runtime
+        env:
+          AWEN_NODE_RUNTIME_CACHE: ${{ runner.temp }}/awen-node-runtime
+        run: node scripts/stage-desktop-runtime.ts --target "${{ matrix.target }}"
+      - name: Install Rust target
+        run: |
+          rustup toolchain install stable --profile minimal --target "${{ matrix.target }}"
+          rustup default stable
+      # Only `main` writes the Rust cache: GitHub storage is capped at 10GB per
+      # repository, and a cache per pull request, branch, and tag filled it.
+      # Every other ref restores main's entry instead.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+          key: macos-${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Build desktop installer
+        run: pnpm --filter @awen/desktop build --config src-tauri/tauri.macos.conf.json --config src-tauri/tauri.release.conf.json --target "${{ matrix.target }}"
+      - name: Collect macOS installer
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          TARGET: ${{ matrix.target }}
+          ARCH: ${{ matrix.arch }}
+          MACHO_ARCH: ${{ matrix.macho }}
+          SIGNING_MODE: ${{ steps.signing.outputs.mode }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          bundles="apps/desktop/src-tauri/target/$TARGET/release/bundle/dmg"
+          shopt -s nullglob
+          files=("$bundles"/*.dmg)
+          if [[ ${#files[@]} -ne 1 ]]; then
+            echo "Expected exactly one macOS DMG in $bundles, found ${#files[@]}." >&2
+            exit 1
+          fi
+          file="${files[0]}"
+          mount="$(mktemp -d)"
+          trap 'hdiutil detach -quiet "$mount" 2>/dev/null || true; rmdir "$mount" 2>/dev/null || true' EXIT
+          hdiutil attach -quiet -readonly -nobrowse -mountpoint "$mount" "$file"
+          app="$mount/Awen.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          for binary in "$app/Contents/MacOS/awen-desktop" "$app/Contents/Resources/runtime/node"; do
+            if [[ ! -f "$binary" ]]; then
+              echo "Missing $binary in the bundle." >&2
+              exit 1
+            fi
+            archs="$(lipo -archs "$binary")"
+            if [[ "$archs" != "$MACHO_ARCH" ]]; then
+              echo "Expected $binary to be $MACHO_ARCH, found $archs." >&2
+              exit 1
+            fi
+          done
+          if [[ "$SIGNING_MODE" == "developer-id" ]]; then
+            xcrun stapler validate "$file"
+          fi
+          cp "$file" "release-assets/Awen-$VERSION-macos-$ARCH.dmg"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-macos-${{ matrix.arch }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: ${{ inputs.artifact-retention-days }}
+
+  desktop-windows-x64:
+    name: Windows x64 desktop
+    needs: prepare
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/awen-node-runtime
+          key: node-runtime-windows-x64-${{ hashFiles('package.json') }}
+          restore-keys: node-runtime-windows-x64-
+      - name: Stage desktop daemon and Node runtime
+        env:
+          AWEN_NODE_RUNTIME_CACHE: ${{ runner.temp }}/awen-node-runtime
+        run: node scripts/stage-desktop-runtime.ts --target x86_64-pc-windows-msvc
+      - name: Install Rust target
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal --target x86_64-pc-windows-msvc
+          rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+          key: windows-x64
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Build prerelease NSIS installer
+        if: needs.prepare.outputs.prerelease == 'true'
+        run: pnpm --filter @awen/desktop build --config src-tauri/tauri.release.conf.json --bundles nsis
+      - name: Build stable desktop installers
+        if: needs.prepare.outputs.prerelease != 'true'
+        run: pnpm --filter @awen/desktop build --config src-tauri/tauri.release.conf.json
+      - name: Collect unsigned Windows installers
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $assets = "release-assets"
+          New-Item -ItemType Directory -Force $assets | Out-Null
+          $bundleRoot = "apps/desktop/src-tauri/target/release/bundle"
+          $files = @(Get-ChildItem $bundleRoot -Recurse -File | Where-Object { $_.Extension -in ".exe", ".msi" })
+          if ($files.Count -eq 0) { throw "No Windows installer was produced in $bundleRoot" }
+          foreach ($file in $files) {
+            Copy-Item $file.FullName (Join-Path $assets "Awen-$env:VERSION-windows-x64$($file.Extension)")
+          }
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-windows-x64
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: ${{ inputs.artifact-retention-days }}
