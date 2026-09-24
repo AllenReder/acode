@@ -154,6 +154,35 @@ it("intercepts pane closure with registered close guard when dirty", async () =>
   expect(getActiveTab(store.getState()).panes.has(paneId)).toBe(false);
 });
 
+it("canCloseTab checks close guards for all panes in the tab", async () => {
+  const ids = makeIds();
+  const initial = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids);
+  const tab = getActiveTab(initial);
+  const paneId = tab.focusedPaneId;
+  const store = createWorkbenchStore({ initialSnapshot: initial, generateId: ids });
+
+  let isDirty = true;
+  let confirmResult = false;
+  store.getState().registerCloseGuard(paneId, {
+    isDirty: () => isDirty,
+    confirmClose: async () => confirmResult,
+  });
+
+  // When dirty and user cancels confirmation -> canCloseTab returns false
+  const canClose1 = await store.getState().canCloseTab(tab.id);
+  expect(canClose1).toBe(false);
+
+  // When dirty and user confirms -> canCloseTab returns true
+  confirmResult = true;
+  const canClose2 = await store.getState().canCloseTab(tab.id);
+  expect(canClose2).toBe(true);
+
+  // When clean -> canCloseTab returns true without confirmation
+  isDirty = false;
+  const canClose3 = await store.getState().canCloseTab(tab.id);
+  expect(canClose3).toBe(true);
+});
+
 it("splits relative to a specific pane and focuses existing targets if already present", () => {
   const ids = makeIds();
   const initial = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids);

@@ -70,6 +70,7 @@ export interface WorkbenchStore extends WorkbenchSnapshot {
   setSplitRatio: (splitId: string, index: number, ratio: number) => void;
   registerCloseGuard: (paneId: string, guard: PaneCloseGuard) => () => void;
   requestClosePane: (paneId: string) => Promise<boolean>;
+  canCloseTab: (tabId: string) => Promise<boolean>;
 }
 
 const defaultGenerateId = (): string => {
@@ -123,6 +124,18 @@ export function createWorkbenchStore(options: WorkbenchStoreOptions = {}) {
         if (!allowed) return false;
       }
       get().closeView(paneId);
+      return true;
+    },
+    canCloseTab: async (tabId) => {
+      const tab = get().tabs.find((t) => t.id === tabId);
+      if (!tab) return true;
+      for (const paneId of tab.panes.keys()) {
+        const guard = closeGuards.get(paneId);
+        if (guard && guard.isDirty()) {
+          const allowed = await guard.confirmClose();
+          if (!allowed) return false;
+        }
+      }
       return true;
     },
     closeView: (paneId) =>

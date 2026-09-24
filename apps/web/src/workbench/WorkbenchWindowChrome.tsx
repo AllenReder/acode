@@ -22,6 +22,7 @@ import { targetKey, type ViewTarget } from "./viewRegistry";
 import { tabDisplayTitle, type WorkbenchSnapshot, type WorkbenchTab } from "./workbenchState";
 import { useWorkbenchDragSource, useWorkbenchDragState } from "./workbenchDrag";
 import { useWorkbenchStore } from "./workbenchStore";
+import { FLUID_MOTION_DURATION_MS, getPrefersReducedMotion } from "./workbenchMotion";
 import { resolveTargetContext, resolveTargetTitle } from "./workbenchTitles";
 
 interface WorkbenchWindowChromeProps {
@@ -47,6 +48,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
   const createTab = useWorkbenchStore((state) => state.createTab);
   const activateTab = useWorkbenchStore((state) => state.activateTab);
   const closeTab = useWorkbenchStore((state) => state.closeTab);
+  const canCloseTab = useWorkbenchStore((state) => state.canCloseTab);
   const renameTab = useWorkbenchStore((state) => state.renameTab);
   const dragState = useWorkbenchDragState();
   const stripRef = useRef<HTMLDivElement>(null);
@@ -56,9 +58,12 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
   const remainingTabsCount = snapshot.tabs.length - closingTabIds.size;
 
   const handleCloseTab = useCallback(
-    (tabId: string) => {
+    async (tabId: string) => {
       if (snapshot.tabs.length - closingTabIds.size <= 1) return;
       if (closingTabIds.has(tabId)) return;
+
+      const canClose = canCloseTab ? await canCloseTab(tabId) : true;
+      if (!canClose) return;
 
       if (tabId === snapshot.activeTabId) {
         const closingIndex = snapshot.tabs.findIndex((tab) => tab.id === tabId);
@@ -74,10 +79,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
       }
 
       setClosingTabIds((prev) => new Set([...prev, tabId]));
-      const prefersReducedMotion =
-        typeof window !== "undefined" &&
-        window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-      const delay = prefersReducedMotion ? 0 : 220;
+      const delay = getPrefersReducedMotion() ? 0 : FLUID_MOTION_DURATION_MS;
       setTimeout(() => {
         closeTab(tabId);
         setClosingTabIds((prev) => {
@@ -87,7 +89,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
         });
       }, delay);
     },
-    [activateTab, closeTab, closingTabIds, snapshot.activeTabId, snapshot.tabs],
+    [activateTab, canCloseTab, closeTab, closingTabIds, snapshot.activeTabId, snapshot.tabs],
   );
 
   const isAnyTabDragged = dragState?.phase === "dragging" && dragState.source.kind === "tab";

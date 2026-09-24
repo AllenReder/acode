@@ -9,14 +9,20 @@ import {
   type SessionActionMenuId,
   type SessionActionMenuState,
 } from "../components/sidebar/sessionActionMenu.logic";
-import { useSessionCommands, type SessionTarget } from "./useSessionCommands";
+import {
+  useSessionCommands,
+  type SessionTarget,
+  type WillCloseRevert,
+} from "./useSessionCommands";
 
 export function useSessionActionMenu(input: {
   readonly target: SessionTarget;
   readonly isClosed?: boolean | undefined;
   readonly sessionTitle?: string | undefined;
   readonly onStartRename?: (() => void) | undefined;
-  readonly onWillClose?: (() => Promise<void> | void) | undefined;
+  readonly onWillClose?:
+    | (() => Promise<WillCloseRevert | void> | WillCloseRevert | void)
+    | undefined;
   readonly navigateTo?:
     | ((input: {
         readonly to: string;

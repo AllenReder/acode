@@ -12,7 +12,7 @@ import type { EnvironmentAwenProject } from "@awen/client-runtime/state/models";
 import { SidebarProvider } from "../components/ui/sidebar";
 import { WorkbenchWindowChrome } from "./WorkbenchWindowChrome";
 import { applyCreateTab, applyOpenTarget, emptyWorkbenchSnapshot } from "./workbenchState";
-import { useWorkbenchStore } from "./workbenchStore";
+import { resetWorkbenchStore, useWorkbenchStore } from "./workbenchStore";
 import type { ViewTarget } from "./viewRegistry";
 
 const environmentId = "env-a" as EnvironmentId;
@@ -79,6 +79,12 @@ const projects: ReadonlyArray<EnvironmentAwenProject> = [
 ];
 
 beforeEach(() => {
+  resetWorkbenchStore();
+  useWorkbenchStore.setState({
+    activateTab: () => {},
+    closeTab: () => {},
+    canCloseTab: () => Promise.resolve(true),
+  });
   if (typeof window !== "undefined") {
     window.matchMedia = vi.fn().mockImplementation((query) => ({
       matches: false,
@@ -336,6 +342,37 @@ it("initiates fluid collapse animation on close, switching active tab immediatel
   expect(closeTab).toHaveBeenCalledWith(snapshot.tabs[1]!.id);
 
   vi.useRealTimers();
+});
+
+it("aborts tab collapse if canCloseTab rejects closure", async () => {
+  const snapshot = createTestSnapshot();
+  const activateTab = vi.fn();
+  const closeTab = vi.fn();
+  const canCloseTab = vi.fn().mockResolvedValue(false);
+  useWorkbenchStore.setState({ activateTab, closeTab, canCloseTab });
+
+  const { create, act } = await import("react-test-renderer");
+  let renderer: any;
+  await act(async () => {
+    renderer = create(
+      <SidebarProvider defaultOpen>
+        <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+      </SidebarProvider>,
+    );
+  });
+
+  const tabElements = renderer.root.findAllByProps({ role: "tab" });
+  const activeTabElement = tabElements[1];
+  const closeButton = activeTabElement.findByProps({ "aria-label": "Close Dev server" });
+
+  await act(async () => {
+    await closeButton.props.onClick({ stopPropagation: () => {} });
+  });
+
+  expect(canCloseTab).toHaveBeenCalledWith(snapshot.tabs[1]!.id);
+  expect(activateTab).not.toHaveBeenCalled();
+  expect(activeTabElement.props["data-tab-closing"]).toBeUndefined();
+  expect(closeTab).not.toHaveBeenCalled();
 });
 
 it("supports concurrent closing animations without blocking", async () => {

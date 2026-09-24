@@ -418,5 +418,28 @@ it("renders data-session-closing and suppresses drag initiation when isClosing i
   expect(onPointerDown).toHaveBeenCalledTimes(1);
 });
 
+it("clears inline style during closing to prevent overriding CSS collapse transitions", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const target = {
+    kind: "agentSession",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    agentSessionId: "s1" as AgentSessionId,
+  } as const;
 
+  const inlineStyle = {
+    transform: "translate3d(0, 40px, 0)",
+    transition: "transform 220ms ease",
+  };
 
+  await act(() => {
+    renderer = create(
+      <SessionRow target={target} isClosing style={inlineStyle}>
+        Closing Session
+      </SessionRow>,
+    );
+  });
+
+  const row = renderer!.root.findByType("button");
+  expect(row.props.style).toBeUndefined();
+});

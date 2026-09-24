@@ -6,6 +6,11 @@ import { targetsEqual, type ViewTarget } from "../../workbench/viewRegistry";
 import { sessionRouteForTarget } from "../../workbench/deepLinks";
 import { useSessionActionMenu } from "../../hooks/useSessionActionMenu";
 import { useWorkbenchDragSource, useWorkbenchDragState } from "../../workbench/workbenchDrag";
+import {
+  FLUID_MOTION_DURATION_MS,
+  getPrefersReducedMotion,
+} from "../../workbench/workbenchMotion";
+import type { WillCloseRevert } from "../../hooks/useSessionCommands";
 
 export type SessionTarget = Extract<ViewTarget, { kind: "agentSession" | "workspaceTerminal" }>;
 
@@ -13,7 +18,7 @@ export interface SessionRowProps extends ComponentProps<"button"> {
   readonly target: SessionTarget;
   readonly isClosed?: boolean;
   readonly isClosing?: boolean;
-  readonly onWillClose?: () => Promise<void> | void;
+  readonly onWillClose?: () => Promise<WillCloseRevert | void> | WillCloseRevert | void;
   readonly sessionTitle?: string;
   readonly onStartRename?: () => void;
   readonly navigateTo?: (input: {
@@ -74,16 +79,18 @@ export function SessionRow({
   const [selfClosing, setSelfClosing] = useState(false);
   const handleWillClose = useCallback(async () => {
     setSelfClosing(true);
-    const prefersReducedMotion =
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (!prefersReducedMotion) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 220));
+    if (!getPrefersReducedMotion()) {
+      await new Promise<void>((resolve) => setTimeout(resolve, FLUID_MOTION_DURATION_MS));
     }
-    await onWillClose?.();
+    const outerRevert = await onWillClose?.();
+    return () => {
+      setSelfClosing(false);
+      outerRevert?.();
+    };
   }, [onWillClose]);
 
   const closing = isClosing || selfClosing;
+  const buttonStyle = closing ? undefined : props.style;
 
   const { openMenu } = useSessionActionMenu({
     target,
@@ -113,6 +120,7 @@ export function SessionRow({
   return (
     <button
       {...props}
+      style={buttonStyle}
       type="button"
       role="treeitem"
       aria-level={3}

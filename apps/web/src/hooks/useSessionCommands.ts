@@ -25,9 +25,13 @@ function failureToast(title: string, error: unknown) {
   );
 }
 
+export type WillCloseRevert = () => void;
+
 export function useSessionCommands(
   target: SessionTarget,
-  options?: { readonly onWillClose?: () => Promise<void> | void },
+  options?: {
+    readonly onWillClose?: () => Promise<WillCloseRevert | void> | WillCloseRevert | void;
+  },
 ) {
   const store = useWorkbenchStore();
   const stopThreadSession = useAtomCommand(threadEnvironment.stopSession, { reportFailure: false });
@@ -83,12 +87,16 @@ export function useSessionCommands(
           return;
         }
       }
-      if (options?.onWillClose) await options.onWillClose();
+      let revert: WillCloseRevert | void = undefined;
+      if (options?.onWillClose) {
+        revert = await options.onWillClose();
+      }
       const archiveResult = await archiveThread({
         environmentId: target.environmentId,
         input: { threadId },
       });
       if (archiveResult._tag === "Failure") {
+        revert?.();
         failureToast("Failed to close agent session", squashAtomCommandFailure(archiveResult));
         return;
       }
@@ -103,12 +111,16 @@ export function useSessionCommands(
         );
         return;
       }
-      if (options?.onWillClose) await options.onWillClose();
+      let revert: WillCloseRevert | void = undefined;
+      if (options?.onWillClose) {
+        revert = await options.onWillClose();
+      }
       const result = await closeTerminal({
         environmentId: target.environmentId,
         input: { workspaceId: target.workspaceId, terminalId, deleteHistory: false },
       });
       if (result._tag === "Failure") {
+        revert?.();
         failureToast("Failed to close terminal session", squashAtomCommandFailure(result));
         return;
       }
@@ -140,11 +152,15 @@ export function useSessionCommands(
         onFailure: (error) => failureToast("Failed to confirm session deletion", error),
       });
       if (!confirmed) return;
-      if (options?.onWillClose) await options.onWillClose();
+      let revert: WillCloseRevert | void = undefined;
+      if (options?.onWillClose) {
+        revert = await options.onWillClose();
+      }
 
       if (target.kind === "agentSession") {
         const threadId = agentSession?.threadId;
         if (!threadId) {
+          revert?.();
           failureToast(
             "Failed to delete agent session",
             new Error("Agent session thread is not loaded."),
@@ -163,6 +179,7 @@ export function useSessionCommands(
           input: { threadId },
         });
         if (deleteResult._tag === "Failure") {
+          revert?.();
           failureToast("Failed to delete agent session", squashAtomCommandFailure(deleteResult));
           return;
         }
@@ -171,6 +188,7 @@ export function useSessionCommands(
       } else {
         const terminalId = runtimeTerminalIdForTarget(target);
         if (!terminalId) {
+          revert?.();
           failureToast(
             "Failed to delete terminal session",
             new Error("Terminal id could not be resolved."),
@@ -182,6 +200,7 @@ export function useSessionCommands(
           input: { workspaceId: target.workspaceId, terminalId, deleteHistory: true },
         });
         if (result._tag === "Failure") {
+          revert?.();
           failureToast("Failed to delete terminal session", squashAtomCommandFailure(result));
           return;
         }
