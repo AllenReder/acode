@@ -42,6 +42,7 @@ import { SessionRow } from "./sidebar/SessionRow";
 import { AddWorkspaceDialog, NewWorkspaceDialog } from "./sidebar/WorkspaceDialogs";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { nextWorkspaceTerminalId } from "./Sidebar.logic";
+import { requestDestructiveConfirmation } from "../lib/destructiveConfirmation";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { SidebarContent, SidebarGroup } from "./ui/sidebar";
 import { sessionRouteForTarget } from "../workbench/deepLinks";
@@ -326,17 +327,20 @@ export function AwenSidebar() {
   );
 
   const removeAwenProject = useCallback(
-    (project: EnvironmentAwenProject) => {
-      if (!window.confirm(`Remove project "${project.title}" and its Sessions?`)) return;
-      void (async () => {
-        for (const command of projectDeleteInputs(project)) {
-          const result = await deleteProject(command);
-          if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-            commandFailureToast("Could not remove project", squashAtomCommandFailure(result));
-            return;
-          }
+    async (project: EnvironmentAwenProject) => {
+      const confirmed = await requestDestructiveConfirmation({
+        message: `Remove project "${project.title}" and its Sessions?`,
+        onFailure: (error) => commandFailureToast("Could not confirm project removal", error),
+      });
+      if (!confirmed) return;
+
+      for (const command of projectDeleteInputs(project)) {
+        const result = await deleteProject(command);
+        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+          commandFailureToast("Could not remove project", squashAtomCommandFailure(result));
+          return;
         }
-      })();
+      }
     },
     [deleteProject],
   );
@@ -373,7 +377,7 @@ export function AwenSidebar() {
             }
           });
         }
-        if (clicked === "remove-project") removeAwenProject(project);
+        if (clicked === "remove-project") await removeAwenProject(project);
       })();
     },
     [removeAwenProject, renameProject, serverConfigs],
@@ -424,28 +428,35 @@ export function AwenSidebar() {
           });
         }
         if (clicked === "remove-workspace" || (clicked as string) === "remove-registration") {
-          if (!window.confirm(`Remove Workspace "${workspace.title}" from this project?`)) return;
-          void removeWorkspace({
+          const confirmed = await requestDestructiveConfirmation({
+            message: `Remove Workspace "${workspace.title}" from this project?`,
+            onFailure: (error) => commandFailureToast("Could not confirm Workspace removal", error),
+          });
+          if (!confirmed) return;
+
+          const result = await removeWorkspace({
             environmentId: project.environmentId,
             input: { workspaceId: workspace.id },
-          }).then((result) => {
-            if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-              commandFailureToast("Could not remove Workspace", squashAtomCommandFailure(result));
-            }
           });
+          if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+            commandFailureToast("Could not remove Workspace", squashAtomCommandFailure(result));
+          }
         }
         if (clicked === "delete-directory") {
-          if (!window.confirm(`Remove Workspace "${workspace.title}" and delete its directory?`)) {
-            return;
-          }
-          void removeWorkspace({
+          const confirmed = await requestDestructiveConfirmation({
+            message: `Remove Workspace "${workspace.title}" and delete its directory?`,
+            onFailure: (error) =>
+              commandFailureToast("Could not confirm Workspace deletion", error),
+          });
+          if (!confirmed) return;
+
+          const result = await removeWorkspace({
             environmentId: project.environmentId,
             input: { workspaceId: workspace.id, deleteDirectory: true },
-          }).then((result) => {
-            if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-              commandFailureToast("Could not delete Workspace", squashAtomCommandFailure(result));
-            }
           });
+          if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+            commandFailureToast("Could not delete Workspace", squashAtomCommandFailure(result));
+          }
         }
       })();
     },

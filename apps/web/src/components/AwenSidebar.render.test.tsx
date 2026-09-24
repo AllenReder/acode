@@ -1,6 +1,29 @@
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+
+const sidebarMocks = vi.hoisted(() => {
+  const success = { _tag: "Success" as const };
+  return {
+    confirm: vi.fn(),
+    showContextMenu: vi.fn(),
+    removeWorkspace: vi.fn().mockResolvedValue(success),
+    defaultCommand: vi.fn().mockResolvedValue(success),
+  };
+});
+
+vi.mock("../localApi", () => {
+  const api = {
+    dialogs: { confirm: sidebarMocks.confirm },
+    contextMenu: { show: sidebarMocks.showContextMenu, close: vi.fn() },
+    shell: { openExternal: vi.fn(), openSystemSettings: vi.fn() },
+    persistence: { getClientSettings: vi.fn(), setClientSettings: vi.fn() },
+  };
+  return {
+    readLocalApi: () => api,
+    ensureLocalApi: () => api,
+  };
+});
 
 const mockState = {
   projects: [] as any[],
@@ -31,7 +54,10 @@ vi.mock("../state/environments", () => ({
 }));
 
 vi.mock("../state/use-atom-command", () => ({
-  useAtomCommand: () => vi.fn().mockResolvedValue({ _tag: "Success" }),
+  useAtomCommand: (command: { readonly label?: string }) =>
+    command.label === "environment-data:workspace:remove"
+      ? sidebarMocks.removeWorkspace
+      : sidebarMocks.defaultCommand,
 }));
 
 vi.mock("./ui/sidebar", () => ({
@@ -85,13 +111,42 @@ vi.mock("../hooks/useSettings", () => ({
 }));
 
 import { AwenSidebar, workspaceMenuItems } from "./AwenSidebar";
+import { toastManager } from "./ui/toast";
+
+function removableWorkspaceProject() {
+  return [
+    {
+      id: "p1",
+      environmentId: "local",
+      title: "Test Project",
+      workspaces: [
+        {
+          id: "w1",
+          title: "Main Workspace",
+          role: "main",
+          origin: "awen-created",
+          sessions: [],
+          historySessions: [],
+        },
+      ],
+    },
+  ];
+}
 
 describe("AwenSidebar", () => {
   let renderer: ReactTestRenderer;
 
+  beforeEach(() => {
+    sidebarMocks.confirm.mockReset();
+    sidebarMocks.showContextMenu.mockReset().mockResolvedValue(null);
+    sidebarMocks.removeWorkspace.mockReset().mockResolvedValue({ _tag: "Success" });
+    sidebarMocks.defaultCommand.mockReset().mockResolvedValue({ _tag: "Success" });
+  });
+
   afterEach(async () => {
     await act(() => renderer?.unmount());
     vi.clearAllMocks();
+    vi.restoreAllMocks();
     mockState.projects = [];
   });
 
@@ -193,5 +248,101 @@ describe("AwenSidebar", () => {
     expect(reviewChangesItem).toBeDefined();
     expect(reviewChangesItem?.label).toBe("Review Changes");
     expect(reviewChangesItem?.icon).toBe("git-branch");
+  });
+
+  it.each([
+    {
+      action: "remove-workspace",
+      message: 'Remove Workspace "Main Workspace" from this project?',
+      input: { workspaceId: "w1" },
+    },
+    {
+      action: "delete-directory",
+      message: 'Remove Workspace "Main Workspace" and delete its directory?',
+      input: { workspaceId: "w1", deleteDirectory: true },
+    },
+  ])(
+    "confirms $action through the shared destructive dialog",
+    async ({ action, message, input }) => {
+      vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+      mockState.projects = removableWorkspaceProject();
+      sidebarMocks.confirm.mockResolvedValue(true);
+      sidebarMocks.showContextMenu.mockResolvedValue(action);
+
+      await act(() => {
+        renderer = create(<AwenSidebar />);
+      });
+      const workspaceRow = renderer.root.findByProps({ "data-testid": "sidebar-workspace-row" });
+      await act(async () => {
+        workspaceRow.props.onContextMenu({
+          preventDefault: vi.fn(),
+          stopPropagation: vi.fn(),
+          clientX: 10,
+          clientY: 20,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(sidebarMocks.confirm).toHaveBeenCalledWith(message, { variant: "destructive" });
+      expect(sidebarMocks.removeWorkspace).toHaveBeenCalledWith({
+        environmentId: "local",
+        input,
+      });
+    },
+  );
+
+  it("does not remove a Workspace when the shared dialog is cancelled", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    mockState.projects = removableWorkspaceProject();
+    sidebarMocks.confirm.mockResolvedValue(false);
+    sidebarMocks.showContextMenu.mockResolvedValue("remove-workspace");
+
+    await act(() => {
+      renderer = create(<AwenSidebar />);
+    });
+    const workspaceRow = renderer.root.findByProps({ "data-testid": "sidebar-workspace-row" });
+    await act(async () => {
+      workspaceRow.props.onContextMenu({
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+        clientX: 10,
+        clientY: 20,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(sidebarMocks.removeWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("reports a confirmation failure and does not remove the Workspace", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    mockState.projects = removableWorkspaceProject();
+    const failure = new Error("dialog unavailable");
+    const addToast = vi.spyOn(toastManager, "add").mockReturnValue("confirmation-failure");
+    sidebarMocks.confirm.mockRejectedValue(failure);
+    sidebarMocks.showContextMenu.mockResolvedValue("remove-workspace");
+
+    await act(() => {
+      renderer = create(<AwenSidebar />);
+    });
+    const workspaceRow = renderer.root.findByProps({ "data-testid": "sidebar-workspace-row" });
+    await act(async () => {
+      workspaceRow.props.onContextMenu({
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+        clientX: 10,
+        clientY: 20,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(addToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "error",
+        title: "Could not confirm Workspace removal",
+        description: "dialog unavailable",
+      }),
+    );
+    expect(sidebarMocks.removeWorkspace).not.toHaveBeenCalled();
   });
 });
