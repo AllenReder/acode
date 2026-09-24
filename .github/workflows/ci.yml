@@ -102,12 +102,18 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Rust toolchain
         run: |
-          rustup toolchain install stable --profile minimal --component rustfmt
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
           rustup default stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: apps/desktop/src-tauri -> target
           key: linux-x64
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
+      - name: Lint the desktop shell
+        run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+      - name: Test the desktop shell
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
       - name: Compile the desktop shell without bundling
         run: pnpm --filter @awen/desktop build --no-bundle
 
