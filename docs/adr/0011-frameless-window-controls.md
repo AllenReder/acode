@@ -20,6 +20,7 @@ Furthermore, WebView2's native Window Controls Overlay (WCO) API is unsupported 
 
 2. **Topbar Surface Window Controls**:
    - Introduce a dedicated `<WindowControls />` component embedded as the trailing flex child of `MaterialSurface kind="topbar"` (in `WorkbenchWindowChrome` and `settings.tsx`).
+   - Wrap pairing, authentication, recovery, error, and not-found surfaces in a shared `DesktopAuthWindowChrome` so the frameless window always has a 36px drag region and window controls before the Workbench mounts.
    - The controls render on Windows and Linux desktop hosts (omitted on macOS, which retains native traffic lights, and in browser environments).
    - Sized to match the 36px topbar height with ~46px button widths, adhering to Windows Fitts's Law (closing from the extreme corner) and theme token hover styles (red close button).
    - Ensure the controls container and buttons are strictly marked with `-webkit-app-region: no-drag` so mouse interactions do not conflict with Tauri drag regions.
@@ -40,4 +41,5 @@ Furthermore, WebView2's native Window Controls Overlay (WCO) API is unsupported 
 
 - Windows users get an integrated topbar where the tab strip and settings breadcrumbs naturally yield to top-right caption controls.
 - Linux users get the same single-titlebar model under Wayland and XWayland.
+- Auth and pre-shell routes keep window controls and titlebar dragging even when the Workbench or Settings shell is not rendered.
 - The sidebar toggle button on Windows gains proper breathing room matching the 12px baseline spacing grid.

@@ -92,7 +92,10 @@ export const defaultWindowOperations: WindowBridgeOperations = {
   },
 };
 
-export function handleTopbarDoubleClick(event: React.MouseEvent): void {
+export function handleTopbarDoubleClick(
+  event: React.MouseEvent,
+  operations: WindowBridgeOperations = defaultWindowOperations,
+): void {
   if (
     typeof navigator === "undefined" ||
     !usesCustomWindowChrome(navigator.platform) ||
@@ -108,5 +111,5 @@ export function handleTopbarDoubleClick(event: React.MouseEvent): void {
   ) {
     return;
   }
-  void defaultWindowOperations.toggleMaximize();
+  void operations.toggleMaximize();
 }
