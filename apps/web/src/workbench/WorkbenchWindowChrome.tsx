@@ -1,7 +1,6 @@
 import type { EnvironmentAwenProject } from "@awen/client-runtime/state/models";
 import { Columns3Icon, PanelsTopLeftIcon, PlusIcon, XIcon } from "lucide-react";
 import {
-  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -72,9 +71,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
         );
         const nextActive = survivingTabs[Math.min(closingIndex, survivingTabs.length - 1)];
         if (nextActive) {
-          startTransition(() => {
-            activateTab(nextActive.id);
-          });
+          activateTab(nextActive.id);
         }
       }
 

@@ -440,3 +440,68 @@ it("renders pane headers with integrated seamless design without a bottom border
   const header = renderer!.root.findByProps({ "aria-label": "Pane header" });
   expect(header.props.className).not.toContain("border-b");
 });
+
+it("preserves inactive tab DOM in Keep-Alive state with display: none instead of unmounting", async () => {
+  resetWorkbenchStore();
+  registerViewDefinition({
+    id: "workspace",
+    label: "Workspace",
+    accepts: (target): target is Extract<ViewTarget, { kind: "workspace" }> =>
+      target.kind === "workspace",
+    bind: emptyViewBinding,
+    Component: ({ paneId }) => <output data-pane-output={paneId}>{paneId}</output>,
+  });
+
+  const first = {
+    kind: "workspace",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "w1" as WorkspaceId,
+  } as const;
+  const second = {
+    kind: "workspace",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "w2" as WorkspaceId,
+  } as const;
+
+  useWorkbenchStore.getState().openTarget(first);
+  const tab1Id = getActiveTab(useWorkbenchStore.getState()).id;
+  const pane1Id = getActiveTab(useWorkbenchStore.getState()).focusedPaneId;
+
+  // Create a second tab and open target
+  useWorkbenchStore.getState().createTab();
+  useWorkbenchStore.getState().openTarget(second);
+  const tab2Id = getActiveTab(useWorkbenchStore.getState()).id;
+  const pane2Id = getActiveTab(useWorkbenchStore.getState()).focusedPaneId;
+
+  await act(() => {
+    renderer = create(<Harness />);
+  });
+
+  // Both tab viewports exist simultaneously in the DOM tree
+  const viewports = renderer!.root.findAllByProps({ className: "workbench-viewport" });
+  expect(viewports).toHaveLength(2);
+
+  const vp1 = viewports.find((v) => v.props["data-tab-id"] === tab1Id)!;
+  const vp2 = viewports.find((v) => v.props["data-tab-id"] === tab2Id)!;
+
+  // Tab 2 is active, Tab 1 is hidden via display: none
+  expect(vp2.props["data-tab-active"]).toBe("true");
+  expect(vp2.props.style?.display).toBeUndefined();
+  expect(vp1.props["data-tab-active"]).toBe("false");
+  expect(vp1.props.style?.display).toBe("none");
+
+  // Pane 1's DOM is still alive in the tree
+  const pane1Output = vp1.findByProps({ "data-pane-output": pane1Id });
+  expect(pane1Output).toBeDefined();
+
+  // Switch back to Tab 1
+  await act(() => {
+    useWorkbenchStore.getState().activateTab(tab1Id);
+  });
+
+  // Now Tab 1 is visible and Tab 2 is hidden
+  expect(vp1.props["data-tab-active"]).toBe("true");
+  expect(vp1.props.style?.display).toBeUndefined();
+  expect(vp2.props["data-tab-active"]).toBe("false");
+  expect(vp2.props.style?.display).toBe("none");
+});
