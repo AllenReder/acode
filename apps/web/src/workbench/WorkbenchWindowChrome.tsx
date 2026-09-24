@@ -71,16 +71,16 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
       if (firstTabEl) {
         tabWidth = firstTabEl.getBoundingClientRect().width || 176;
       }
+      deltaX = dragState.pointer.x - dragState.startPointer.x;
       if (!isSlidOut) {
         const scrollLeft = stripEl.scrollLeft;
-        const currentCenter = dragState.pointer.x - stripRect.left + scrollLeft;
+        const currentCenter = dragState.startRect.left + deltaX + tabWidth / 2 - stripRect.left + scrollLeft;
         targetIndex = Math.max(
           0,
-          Math.min(Math.round((currentCenter - tabWidth / 2) / tabWidth), snapshot.tabs.length - 1),
+          Math.min(Math.floor(currentCenter / tabWidth), snapshot.tabs.length - 1),
         );
       }
     }
-    deltaX = dragState.pointer.x - (dragState.startRect.left + dragState.startRect.width / 2);
   }
 
   const lastDragInfoRef = useRef<{

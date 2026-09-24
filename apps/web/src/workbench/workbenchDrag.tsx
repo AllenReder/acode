@@ -52,6 +52,7 @@ export interface WorkbenchDragState {
   readonly label: string;
   readonly source: ViewDragSource;
   readonly pointer: { readonly x: number; readonly y: number };
+  readonly startPointer: { readonly x: number; readonly y: number };
   readonly startRect: WorkbenchRect;
   readonly target: ViewDropTarget | null;
   readonly result: ViewDropResult | null;
@@ -388,6 +389,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
       clearFrame();
       activeRef.current = false;
       suppressClickRef.current = false;
+      const startPointer = { x: event.clientX, y: event.clientY };
       let lastX = event.clientX;
       let lastY = event.clientY;
       let lastTarget: ViewDropTarget | null = null;
@@ -553,11 +555,12 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
             );
             if (containerEl) {
               const containerRect = containerEl.getBoundingClientRect();
-              const currentY = lastY - containerRect.top;
               const rowHeight = 25;
+              const deltaY = lastY - startPointer.y;
+              const currentCenterY = startRect.top + deltaY + rowHeight / 2 - containerRect.top;
               const targetIndex = Math.max(
                 0,
-                Math.min(Math.floor(currentY / rowHeight), allSessionRows.length - 1),
+                Math.min(Math.floor(currentCenterY / rowHeight), allSessionRows.length - 1),
               );
               const fromIndex = allSessionRows.indexOf(sourceSessionId);
               if (fromIndex >= 0 && fromIndex !== targetIndex) {
@@ -603,14 +606,12 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
               if (fromIndex >= 0) {
                 const firstTabEl = stripEl.querySelector<HTMLElement>("[data-tab-id]");
                 const tabWidth = firstTabEl?.getBoundingClientRect().width || 176;
+                const deltaX = lastX - startPointer.x;
                 const scrollLeft = stripEl.scrollLeft;
-                const currentCenter = lastX - stripRect.left + scrollLeft;
+                const currentCenter = startRect.left + deltaX + tabWidth / 2 - stripRect.left + scrollLeft;
                 const toIndex = Math.max(
                   0,
-                  Math.min(
-                    Math.round((currentCenter - tabWidth / 2) / tabWidth),
-                    currentStore.tabs.length - 1,
-                  ),
+                  Math.min(Math.floor(currentCenter / tabWidth), currentStore.tabs.length - 1),
                 );
                 if (fromIndex !== toIndex) {
                   currentStore.moveTab(fromIndex, toIndex);
@@ -686,6 +687,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
             label,
             source,
             pointer: { x: lastX, y: lastY },
+            startPointer,
             startRect,
             target,
             result,

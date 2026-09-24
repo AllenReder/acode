@@ -856,21 +856,21 @@ function WorkspaceActiveSessions({
     : -1;
 
   const rowHeight = 25; // 24px button height + 1px gap
+  const deltaY =
+    isCurrentWorkspaceDrag && dragState
+      ? dragState.pointer.y - dragState.startPointer.y
+      : 0;
+
   let targetIndex = draggedSourceIndex;
   if (isCurrentWorkspaceDrag && draggedSourceIndex >= 0 && dragState) {
     const containerEl = containerRef.current;
     if (containerEl) {
       const containerRect = containerEl.getBoundingClientRect();
-      const currentY = dragState.pointer.y - containerRect.top;
-      const rawSlot = Math.floor(currentY / rowHeight);
+      const currentCenterY = dragState.startRect.top + deltaY + rowHeight / 2 - containerRect.top;
+      const rawSlot = Math.floor(currentCenterY / rowHeight);
       targetIndex = Math.max(0, Math.min(rawSlot, activeSessions.length - 1));
     }
   }
-
-  const deltaY =
-    isCurrentWorkspaceDrag && dragState
-      ? dragState.pointer.y - (dragState.startRect.top + dragState.startRect.height / 2)
-      : 0;
 
   if (isCurrentWorkspaceDrag && draggedSessionId && draggedSourceIndex >= 0) {
     lastSessionDragInfoRef.current = {
@@ -882,8 +882,11 @@ function WorkspaceActiveSessions({
   } else if (lastSessionDragInfoRef.current) {
     const prev = lastSessionDragInfoRef.current;
     lastSessionDragInfoRef.current = null;
-    const initialOffset = (prev.fromIndex - prev.toIndex) * rowHeight + prev.deltaY;
-    if (prev.fromIndex !== prev.toIndex || Math.abs(prev.deltaY) > 2) {
+    const isCancelled = dragState?.phase === "canceling" || dragState?.phase === "rejected";
+    const initialOffset = isCancelled
+      ? prev.deltaY
+      : (prev.fromIndex - prev.toIndex) * rowHeight + prev.deltaY;
+    if (Math.abs(initialOffset) > 2) {
       setSettlingSession({ sessionId: prev.sessionId, offset: initialOffset });
     }
   }
