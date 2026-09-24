@@ -238,7 +238,7 @@ it("renders tabs as draggable tab sources with data-workbench-drag-source", () =
   expect(html).toContain('data-workbench-drag-source="tab"');
 });
 
-it("activates an inactive tab immediately on pointerdown unless clicking close button", async () => {
+it("defers inactive tab activation on pointerdown and activates on click unless clicking close button", async () => {
   const snapshot = createTestSnapshot();
   const activateTab = vi.fn();
   const closeTab = vi.fn();
@@ -260,12 +260,18 @@ it("activates an inactive tab immediately on pointerdown unless clicking close b
   const inactiveTab = tabElements[0];
   expect(inactiveTab.props["data-active-tab"]).toBe("false");
 
-  // Pointer down on inactive tab activates it
+  // Pointer down on inactive tab arms drag without activating immediately (ADR-0017)
   await act(async () => {
     inactiveTab.props.onPointerDown({
       button: 0,
       target: { closest: () => null },
     });
+  });
+  expect(activateTab).not.toHaveBeenCalled();
+
+  // Click on inactive tab activates it
+  await act(async () => {
+    inactiveTab.props.onClick();
   });
   expect(activateTab).toHaveBeenCalledWith(snapshot.tabs[0]!.id);
 

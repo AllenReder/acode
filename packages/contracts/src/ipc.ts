@@ -131,6 +131,12 @@ export interface ContextMenuItem<T extends string = string> {
   onPointerDown?: (event: PointerEvent) => void;
 }
 
+// Fallback interface declaration for Node/non-DOM environments
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+  interface PointerEvent {}
+}
+
 export type QuitShortcutHintEvent =
   | { readonly state: "down"; readonly mode: Exclude<QuitConfirmationMode, "direct"> }
   | { readonly state: "up" };

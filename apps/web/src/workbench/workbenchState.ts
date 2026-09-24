@@ -14,6 +14,7 @@ import {
 import {
   closeLeaf,
   firstLeafId,
+  leaf,
   leafParent,
   neighborLeafId,
   leafIds,
@@ -568,6 +569,67 @@ export function applyViewDrop(
         snapshot: applyMoveTab(snapshot, fromIndex, targetIndex),
         tabId: tab.id,
         paneId,
+      };
+    }
+
+    if (target.kind === "pane") {
+      if (source.tabId === snapshot.activeTabId || target.tabId !== snapshot.activeTabId) {
+        return null;
+      }
+      if (tab.panes.size !== 1) {
+        return null;
+      }
+      const sourcePaneId = firstLeafId(tab.layout);
+      const sourceView = tab.panes.get(sourcePaneId);
+      if (!sourceView) return null;
+
+      const targetTab = snapshot.tabs.find((candidate) => candidate.id === target.tabId);
+      if (!targetTab || !targetTab.panes.has(target.paneId)) {
+        return null;
+      }
+
+      if (findPaneByTarget(targetTab, sourceView.target) !== null) {
+        return null;
+      }
+
+      const targetPane = targetTab.panes.get(target.paneId);
+      let targetAfter: WorkbenchTab;
+      if (targetTab.panes.size === 1 && targetPane?.target.kind === "welcome") {
+        const panes = new Map<string, ViewInstance>();
+        panes.set(sourcePaneId, sourceView);
+        targetAfter = reconcileTab({
+          ...targetTab,
+          layout: leaf(sourcePaneId),
+          panes,
+          focusedPaneId: sourcePaneId,
+        });
+      } else {
+        if (target.zone === "replace") {
+          return null;
+        }
+        const panes = new Map(targetTab.panes);
+        panes.set(sourcePaneId, sourceView);
+        targetAfter = reconcileTab({
+          ...targetTab,
+          ...placedLayout(targetTab, sourcePaneId, target.paneId, target.zone),
+          panes,
+          focusedPaneId: sourcePaneId,
+        });
+      }
+
+      const remainingTabs = snapshot.tabs.filter((candidate) => candidate.id !== source.tabId);
+      const tabs = remainingTabs.map((candidate) =>
+        candidate.id === targetTab.id ? targetAfter : candidate,
+      );
+
+      return {
+        snapshot: {
+          ...snapshot,
+          tabs,
+          activeTabId: targetTab.id,
+        },
+        tabId: targetTab.id,
+        paneId: sourcePaneId,
       };
     }
 

@@ -104,7 +104,9 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
     const stripEl = stripRef.current;
     if (stripEl) {
       const stripRect = stripEl.getBoundingClientRect();
-      isSlidOut = dragState.pointer.y > stripRect.bottom + 12;
+      isSlidOut =
+        dragState.pointer.y > stripRect.bottom + 12 ||
+        dragState.pointer.y < stripRect.top - 12;
       const firstTabEl = stripEl.querySelector<HTMLElement>("[data-tab-id]");
       if (firstTabEl) {
         tabWidth = firstTabEl.getBoundingClientRect().width || 176;
@@ -358,14 +360,22 @@ function WorkbenchTabItem({
     tabStyle = undefined;
   } else if (isAnyTabDragged && draggedSourceIndex >= 0) {
     if (isDragged) {
-      tabStyle = {
-        transform: `translate3d(${deltaX}px, 0, 0)`,
-        zIndex: 40,
-        opacity: 0.95,
-        pointerEvents: "none",
-        boxShadow: "0 4px 16px rgba(0, 0, 0, 0.25)",
-        transition: "none",
-      };
+      if (isSlidOut) {
+        tabStyle = {
+          opacity: 0.4,
+          pointerEvents: "none",
+          transition: "opacity 150ms ease",
+        };
+      } else {
+        tabStyle = {
+          transform: `translate3d(${deltaX}px, 0, 0)`,
+          zIndex: 40,
+          opacity: 0.95,
+          pointerEvents: "none",
+          boxShadow: "0 4px 16px rgba(0, 0, 0, 0.25)",
+          transition: "none",
+        };
+      }
     } else if (!isSlidOut) {
       let shift = 0;
       if (targetIndex > draggedSourceIndex) {
@@ -447,7 +457,6 @@ function WorkbenchTabItem({
           return;
         }
         if (event.button === 0) {
-          if (!active) activateTab(tab.id);
           if (!isAnyTabClosing) {
             drag.onPointerDown(event);
           }

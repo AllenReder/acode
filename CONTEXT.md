@@ -149,6 +149,12 @@ may display Views from any Workspace of any Project.
 _Avoid_: Workspace, Group, Deck, Page. A Tab is not paseo's Tab, which is a
 view inside one Workspace.
 
+**Tab Canvas Docking**:
+The gesture and layout transaction of dragging an inactive single-pane Tab from
+the Topbar Surface downward into the active Tab's Workbench canvas to merge its
+View into the active layout and close the source Tab.
+_Avoid_: Tab merging, Pane detachment, Window docking
+
 **Pane**:
 The smallest functional window in a Tab, holding exactly one View instance.
 Panes and Tabs are layout concepts; a Pane is never an empty or standalone

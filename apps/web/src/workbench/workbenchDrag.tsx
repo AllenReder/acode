@@ -19,7 +19,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import { paneDropZoneFromPoint, paneDirectionalZoneFromPoint } from "./layout";
+import { paneDropZoneFromPoint, paneDirectionalZoneFromPoint, firstLeafId } from "./layout";
 import { computePaneLayoutRects } from "./layoutGeometry";
 import type { LayoutMode } from "./scrollingLayout";
 import { usePrimarySettings } from "../hooks/useSettings";
@@ -488,6 +488,11 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         baseTab = sourceTab ? computeBaseTab(sourceTab, source.paneId) : null;
       } else if (source.kind === "sidebar" && activeTab) {
         baseTab = activeTab;
+      } else if (source.kind === "tab" && activeTab && source.tabId !== activeTab.id) {
+        sourceTab = currentStore.tabs.find((t) => t.id === source.tabId);
+        if (sourceTab && sourceTab.panes.size === 1) {
+          baseTab = activeTab;
+        }
       }
 
       const initialTarget =
@@ -529,7 +534,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           viewportRect,
           regions,
           paneGapRef.current,
-          source.kind === "pane",
+          source.kind === "pane" || source.kind === "tab",
           baseTab?.layoutMode,
         );
         lastTarget = hit ?? initialTarget;
@@ -763,11 +768,12 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
                 if (fromIndex !== toIndex) {
                   currentStore.moveTab(fromIndex, toIndex);
                 }
+                currentStore.activateTab(source.tabId);
               }
+              setState(null);
+              return;
             }
           }
-          setState(null);
-          return;
         }
 
         const liveTarget = cancelled || currentIsOverSidebar ? null : resolveTarget(lastX, lastY);
@@ -954,57 +960,69 @@ function tabInsertionMarker(target: ViewDropTarget): WorkbenchRect | null {
   };
 }
 
+function ghostInfoForView(
+  target: ViewTarget,
+  definitionId?: string,
+): { readonly icon: ReactNode; readonly typeLabel: string } {
+  if (target.kind === "agentSession") {
+    return {
+      icon: <MessageSquarePlusIcon className="size-5 text-primary" />,
+      typeLabel: "Agent Session",
+    };
+  }
+  if (target.kind === "workspaceTerminal") {
+    return {
+      icon: <TerminalIcon className="size-5 text-primary" />,
+      typeLabel: "Terminal Session",
+    };
+  }
+  if (target.kind === "workspace") {
+    const isGit = (target.definitionId ?? definitionId) === "gitView";
+    if (isGit) {
+      return {
+        icon: <GitBranchIcon className="size-5 text-primary" />,
+        typeLabel: "Review Changes",
+      };
+    }
+    return {
+      icon: <FolderIcon className="size-5 text-primary" />,
+      typeLabel: "Browse Files",
+    };
+  }
+  if (target.kind === "newAgentSession") {
+    return {
+      icon: <MessageSquarePlusIcon className="size-5 text-primary" />,
+      typeLabel: "New Agent Session",
+    };
+  }
+  return {
+    icon: <CopyPlusIcon className="size-5 text-primary" />,
+    typeLabel: "View",
+  };
+}
+
 function dragGhostInfo(source: ViewDragSource): {
   readonly icon: ReactNode;
   readonly typeLabel: string;
 } {
   if (source.kind === "sidebar") {
-    if (source.target.kind === "agentSession") {
-      return {
-        icon: <MessageSquarePlusIcon className="size-5 text-primary" />,
-        typeLabel: "Agent Session",
-      };
-    }
-    if (source.target.kind === "workspaceTerminal") {
-      return {
-        icon: <TerminalIcon className="size-5 text-primary" />,
-        typeLabel: "Terminal Session",
-      };
-    }
-    if (source.target.kind === "workspace") {
-      if (source.target.definitionId === "gitView") {
-        return {
-          icon: <GitBranchIcon className="size-5 text-primary" />,
-          typeLabel: "Review Changes",
-        };
-      }
-      return {
-        icon: <FolderIcon className="size-5 text-primary" />,
-        typeLabel: "Browse Files",
-      };
-    }
-    if (source.target.kind === "newAgentSession") {
-      return {
-        icon: <MessageSquarePlusIcon className="size-5 text-primary" />,
-        typeLabel: "New Agent Session",
-      };
-    }
-  } else if (source.kind === "pane") {
+    return ghostInfoForView(source.target);
+  }
+  if (source.kind === "pane") {
     const tab = useWorkbenchStore.getState().tabs.find((t) => t.id === source.tabId);
     const pane = tab?.panes.get(source.paneId);
-    if (pane?.target.kind === "agentSession") {
-      return {
-        icon: <MessageSquarePlusIcon className="size-5 text-primary" />,
-        typeLabel: "Agent Session",
-      };
-    }
-    if (pane?.target.kind === "workspaceTerminal") {
-      return {
-        icon: <TerminalIcon className="size-5 text-primary" />,
-        typeLabel: "Terminal Session",
-      };
+    if (pane) {
+      return ghostInfoForView(pane.target, pane.definitionId);
     }
   } else if (source.kind === "tab") {
+    const tab = useWorkbenchStore.getState().tabs.find((t) => t.id === source.tabId);
+    if (tab && tab.panes.size === 1) {
+      const paneId = firstLeafId(tab.layout);
+      const pane = tab.panes.get(paneId);
+      if (pane) {
+        return ghostInfoForView(pane.target, pane.definitionId);
+      }
+    }
     return {
       icon: <CopyPlusIcon className="size-5 text-primary" />,
       typeLabel: "Tab",
@@ -1051,7 +1069,17 @@ export function WorkbenchDropOverlay() {
     return computePaneLayoutRects(previewTab, surfaceRect, paneGap);
   }, [previewTab, surfaceRect, paneGap]);
 
-  if (state === null || state.isOverSidebar || state.source.kind === "tab") return null;
+  const isTabInTopbar =
+    state?.source.kind === "tab" &&
+    (() => {
+      if (typeof document === "undefined") return false;
+      const stripEl = document.querySelector<HTMLElement>("[data-workbench-tab-strip-drop]");
+      if (!stripEl) return false;
+      const stripRect = stripEl.getBoundingClientRect();
+      return state.pointer.y <= stripRect.bottom + 12 && state.pointer.y >= stripRect.top - 12;
+    })();
+
+  if (state === null || state.isOverSidebar || isTabInTopbar) return null;
 
   const viewport = getActiveViewportElement();
   const scrollLeft = previewTab?.layoutMode === "scrolling" ? (viewport?.scrollLeft ?? 0) : 0;

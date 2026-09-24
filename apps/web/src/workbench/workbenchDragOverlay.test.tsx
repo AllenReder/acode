@@ -627,4 +627,186 @@ describe("WorkbenchDrag lifecycle and overlay animations", () => {
     expect(onCommit).toHaveBeenCalledTimes(1);
     expect(useWorkbenchStore.getState().tabs[0]?.panes.size).toBe(3);
   });
+
+  it("renders destination indicator and commits drop when dragging an inactive single-pane Tab into the workbench canvas (ADR-0017)", async () => {
+    const listeners = stubDragWindow();
+    vi.useFakeTimers();
+
+    const terminalTarget = {
+      kind: "workspaceTerminal" as const,
+      environmentId: "env-1" as EnvironmentId,
+      workspaceId: "ws-1" as WorkspaceId,
+      terminalSessionId: "term-1" as any,
+    };
+
+    const agentTarget = {
+      kind: "agentSession" as const,
+      environmentId: "env-1" as EnvironmentId,
+      workspaceId: "ws-1" as WorkspaceId,
+      agentSessionId: "agent-1" as AgentSessionId,
+    };
+
+    const initialTabs: WorkbenchTab[] = [
+      {
+        id: "tab-active",
+        layout: leaf("pane-active"),
+        panes: new Map([
+          [
+            "pane-active",
+            {
+              id: "v-active",
+              definitionId: "agent",
+              target: agentTarget,
+            },
+          ],
+        ]),
+        focusedPaneId: "pane-active",
+        titleMode: "auto",
+        titleOverride: null,
+      },
+      {
+        id: "tab-inactive",
+        layout: leaf("pane-inactive"),
+        panes: new Map([
+          [
+            "pane-inactive",
+            {
+              id: "v-inactive",
+              definitionId: "terminal",
+              target: terminalTarget,
+            },
+          ],
+        ]),
+        focusedPaneId: "pane-inactive",
+        titleMode: "auto",
+        titleOverride: null,
+      },
+    ];
+
+    useWorkbenchStore.setState({
+      tabs: initialTabs,
+      activeTabId: "tab-active",
+      focusRequestId: 0,
+    });
+
+    const activeViewportEl = {
+      getBoundingClientRect: () => ({ left: 0, top: 40, width: 800, height: 560 }),
+      dataset: { tabActive: "true" },
+      scrollLeft: 0,
+      scrollTop: 0,
+    };
+
+    const tabStripEl = {
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 36, bottom: 36 }),
+      querySelectorAll: () => [],
+      scrollLeft: 0,
+    };
+
+    const paneEl = {
+      dataset: { workbenchPaneDrop: "", paneId: "pane-active", workbenchTabId: "tab-active" },
+      getBoundingClientRect: () => ({ left: 0, top: 40, width: 800, height: 560 }),
+      closest: (sel: string) => {
+        if (sel === "[data-workbench-pane-drop]") return paneEl;
+        return null;
+      },
+    };
+
+    const fakeDoc = {
+      documentElement: { dataset: fakeDataset },
+      querySelector: (sel: string) => {
+        if (sel.includes(".workbench-viewport")) return activeViewportEl;
+        if (sel.includes("[data-workbench-tab-strip-drop]")) return tabStripEl;
+        if (sel.includes("[data-tab-id]")) {
+          return { getBoundingClientRect: () => ({ width: 176 }) };
+        }
+        return null;
+      },
+      querySelectorAll: () => [],
+      elementFromPoint: () => paneEl,
+    };
+    vi.stubGlobal("document", fakeDoc);
+
+    let handleBeginDrag: ((e: unknown) => void) | undefined;
+    function TabDragHandle() {
+      const { beginDrag } = useWorkbenchDragController();
+      handleBeginDrag = (e: unknown) => {
+        beginDrag(
+          { kind: "tab", tabId: "tab-inactive" },
+          "Terminal Tab",
+          e as ReactPointerEvent<HTMLElement>,
+        );
+      };
+      return null;
+    }
+
+    await act(async () => {
+      renderer = create(
+        <WorkbenchDragProvider>
+          <TabDragHandle />
+          <WorkbenchDropOverlay />
+        </WorkbenchDragProvider>,
+        {
+          createNodeMock: (el) => {
+            if ((el.props as Record<string, unknown>)["data-workbench-drop-preview"]) {
+              return {
+                getBoundingClientRect: () => ({
+                  left: 0,
+                  top: 40,
+                  width: 800,
+                  height: 560,
+                  right: 800,
+                  bottom: 600,
+                }),
+              };
+            }
+            return null;
+          },
+        },
+      );
+    });
+
+    // 1. Pointerdown on the inactive tab
+    act(() => {
+      handleBeginDrag?.({
+        button: 0,
+        clientX: 200,
+        clientY: 18,
+        currentTarget: {
+          getBoundingClientRect: () => ({ left: 176, top: 0, width: 176, height: 36 }),
+        },
+      });
+    });
+
+    expect(fakeDataset.workbenchDragging).toBe("pending");
+
+    // 2. Drag downward into canvas (> 12px below Topbar, e.g. clientY = 200)
+    await act(async () => {
+      listeners["pointermove"]?.forEach((fn) =>
+        fn({
+          clientX: 700,
+          clientY: 200,
+        }),
+      );
+    });
+
+    expect(fakeDataset.workbenchDragging).toBe("active");
+    const destinationPane = renderer!.root.findByProps({
+      "data-workbench-preview-pane": true,
+      "data-destination": "true",
+    });
+    expect(destinationPane.props.className).toContain("workbench-drop-destination-indicator");
+
+    // 3. Pointerup: commits the drop to active tab
+    act(() => {
+      listeners["pointerup"]?.forEach((fn) => fn({}));
+    });
+
+    // Inactive tab should be closed and removed from tabs
+    const storeAfter = useWorkbenchStore.getState();
+    expect(storeAfter.tabs).toHaveLength(1);
+    expect(storeAfter.tabs[0]?.id).toBe("tab-active");
+    expect(storeAfter.tabs[0]?.panes.size).toBe(2);
+    expect(storeAfter.tabs[0]?.panes.has("pane-inactive")).toBe(true);
+    expect(storeAfter.tabs[0]?.focusedPaneId).toBe("pane-inactive");
+  });
 });
