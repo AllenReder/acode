@@ -1,8 +1,8 @@
 import { useCallback } from "react";
 import type { EnvironmentId, ThreadId, WorkspaceId } from "@awen/contracts";
 import { scopeThreadRef } from "@awen/client-runtime/environment";
-import { settlePromise, squashAtomCommandFailure } from "@awen/client-runtime/state/runtime";
-import { readLocalApi } from "../localApi";
+import { squashAtomCommandFailure } from "@awen/client-runtime/state/runtime";
+import { requestDestructiveConfirmation } from "../lib/destructiveConfirmation";
 import { readThreadShell, useAwenAgentSessionShell } from "../state/entities";
 import { terminalEnvironment } from "../state/terminal";
 import { threadEnvironment } from "../state/threads";
@@ -119,28 +119,13 @@ export function useSessionCommands(target: SessionTarget) {
         (target.kind === "agentSession"
           ? (agentSession?.title ?? "Agent Session")
           : "Terminal Session");
-      const localApi = readLocalApi();
-      let confirmed = false;
-      if (localApi) {
-        const confirmationResult = await settlePromise(() =>
-          localApi.dialogs.confirm(
-            [
-              `Delete session "${title}"?`,
-              "This permanently clears all conversation and output history for this session.",
-            ].join("\n"),
-            { variant: "destructive" },
-          ),
-        );
-        confirmed = confirmationResult._tag === "Success" && Boolean(confirmationResult.value);
-      } else if (typeof window !== "undefined" && typeof window.confirm === "function") {
-        confirmed = window.confirm(
-          `Delete session "${title}"?\nThis permanently clears all conversation and output history for this session.`,
-        );
-      } else {
-        // Safe default: require explicit UI or reject if no confirmation host exists
-        confirmed = false;
-      }
-
+      const confirmed = await requestDestructiveConfirmation({
+        message: [
+          `Delete session "${title}"?`,
+          "This permanently clears all conversation and output history for this session.",
+        ].join("\n"),
+        onFailure: (error) => failureToast("Failed to confirm session deletion", error),
+      });
       if (!confirmed) return;
 
       if (target.kind === "agentSession") {
