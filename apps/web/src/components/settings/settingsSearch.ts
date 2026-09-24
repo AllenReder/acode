@@ -1,4 +1,5 @@
 import { isElectron } from "~/env";
+import { isNativeGlassPlatform } from "../../appearanceSync";
 import { isMacPlatform, isWindowsPlatform, normalizeSearchText } from "~/lib/utils";
 import type { EnvironmentId } from "@awen/contracts";
 import type { EnvironmentConnectionPhase } from "@awen/client-runtime/connection";
@@ -44,6 +45,8 @@ export interface SettingsSearchItem {
   // Its row only renders in the desktop app, so a browser result would land on
   // an anchor that isn't there.
   readonly desktopOnly?: boolean;
+  /** Its row is only mounted when the host can apply native window glass. */
+  readonly nativeGlassOnly?: boolean;
   readonly macOnly?: boolean;
   // Its row only renders on Windows desktop, so other desktop platforms must
   // not expose a result that points to a missing anchor.
@@ -146,42 +149,49 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Background mask strength",
     to: "/settings/appearance",
     searchTerms: ["glass white black brighten darken backdrop mask transparency"],
+    nativeGlassOnly: true,
   },
   {
     id: "setting-sidebar-blur",
     title: "Window blur radius",
     to: "/settings/appearance",
     searchTerms: ["blur frosted glass window background radius vibrancy acrylic"],
+    nativeGlassOnly: true,
   },
   {
     id: "setting-sidebar-opacity",
     title: "Sidebar opacity",
     to: "/settings/appearance",
     searchTerms: ["sidebar opacity translucent transparency glass"],
+    nativeGlassOnly: true,
   },
   {
     id: "setting-topbar-opacity",
     title: "Topbar opacity",
     to: "/settings/appearance",
     searchTerms: ["topbar tabbar title tabs opacity transparency"],
+    nativeGlassOnly: true,
   },
   {
     id: "setting-overlay-opacity",
     title: "Overlay opacity",
     to: "/settings/appearance",
     searchTerms: ["menus dialogs frosted opacity transparency"],
+    nativeGlassOnly: true,
   },
   {
     id: "setting-workbench-glass",
     title: "Workbench glass",
     to: "/settings/appearance",
     searchTerms: ["workbench glass editor translucency translucent background"],
+    nativeGlassOnly: true,
   },
   {
     id: "setting-workbench-opacity",
     title: "Workbench opacity",
     to: "/settings/appearance",
     searchTerms: ["workbench opacity editor transparency solid"],
+    nativeGlassOnly: true,
   },
   {
     id: "setting-chat-wallpaper",
@@ -919,6 +929,7 @@ export function searchSettings(
   return items
     .flatMap((item, index) => {
       if (!isElectron && item.desktopOnly === true) return [];
+      if (item.nativeGlassOnly && !isNativeGlassPlatform()) return [];
       if (item.macOnly && !isMacPlatform(platform)) return [];
       if (item.windowsOnly && !isWindowsPlatform(platform)) return [];
 

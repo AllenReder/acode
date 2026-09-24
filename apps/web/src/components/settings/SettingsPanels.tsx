@@ -78,6 +78,7 @@ import {
   useEnvironmentStageLabel,
 } from "../SidebarStageBackdrop";
 import { isElectron } from "../../env";
+import { isNativeGlassPlatform } from "../../appearanceSync";
 import { useCustomThemes } from "../../hooks/useCustomThemes";
 import {
   readAppearanceModePreference,
@@ -1097,6 +1098,7 @@ const PANE_SHADOW_LABELS: Record<PaneShadow, string> = {
 };
 
 export function AppearanceSettingsPanel() {
+  const nativeGlassSupported = isNativeGlassPlatform();
   const {
     appearanceMode,
     refreshTheme,
@@ -1257,7 +1259,18 @@ export function AppearanceSettingsPanel() {
 
       <SettingsSection id="appearance-window-glass" title="Window & Glass">
         <SettingsRow
+          hidden={nativeGlassSupported}
+          title="Native window effects"
+          description="Window transparency and desktop background blur are unavailable on this platform. Awen uses its opaque Material hierarchy instead."
+          status={
+            <span className="inline-flex items-center rounded-full border border-border/70 bg-muted/50 px-2 py-0.5 text-[11px] font-medium">
+              Unsupported on this platform
+            </span>
+          }
+        />
+        <SettingsRow
           {...searchableSetting("setting-background-mask")}
+          hidden={!nativeGlassSupported}
           description={
             resolvedTheme === "dark"
               ? "Darken the blurred desktop behind all regions with a black mask. Saved separately for dark mode."
@@ -1302,6 +1315,7 @@ export function AppearanceSettingsPanel() {
         />
         <SettingsRow
           {...searchableSetting("setting-sidebar-blur")}
+          hidden={!nativeGlassSupported}
           description="Adjust the intensity of the native desktop background blur."
           resetAction={
             settings.sidebarBlur !== DEFAULT_UNIFIED_SETTINGS.sidebarBlur ? (
@@ -1348,6 +1362,7 @@ export function AppearanceSettingsPanel() {
 
         <SettingsRow
           {...searchableSetting("setting-sidebar-opacity")}
+          hidden={!nativeGlassSupported}
           description="Translucency of the full-height navigation sidebar."
           resetAction={
             settings.sidebarOpacity !== DEFAULT_UNIFIED_SETTINGS.sidebarOpacity ? (
@@ -1394,6 +1409,7 @@ export function AppearanceSettingsPanel() {
 
         <SettingsRow
           {...searchableSetting("setting-topbar-opacity")}
+          hidden={!nativeGlassSupported}
           description="Translucency of the title and tab bar, independent of the Workbench."
           resetAction={
             settings.topbarOpacity !== DEFAULT_UNIFIED_SETTINGS.topbarOpacity ? (
@@ -1440,6 +1456,7 @@ export function AppearanceSettingsPanel() {
 
         <SettingsRow
           {...searchableSetting("setting-workbench-glass")}
+          hidden={!nativeGlassSupported}
           description="Apply native frosted glass to the main workspace, editor, and session timeline."
           resetAction={
             settings.workbenchGlass !== DEFAULT_UNIFIED_SETTINGS.workbenchGlass ? (
@@ -1463,6 +1480,7 @@ export function AppearanceSettingsPanel() {
 
         <SettingsRow
           {...searchableSetting("setting-workbench-opacity")}
+          hidden={!nativeGlassSupported}
           description={
             settings.workbenchGlass
               ? "Translucency of the workspace when Workbench Glass is enabled."
@@ -1513,6 +1531,7 @@ export function AppearanceSettingsPanel() {
         />
         <SettingsRow
           {...searchableSetting("setting-overlay-opacity")}
+          hidden={!nativeGlassSupported}
           description="Density of the frosted material behind menus and dialogs."
           resetAction={
             settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity ? (

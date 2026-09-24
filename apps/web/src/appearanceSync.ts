@@ -72,6 +72,8 @@ export function applyMaterialSettings(
     workbench: options.workbenchGlass ? options.workbenchOpacity : 100,
     overlay: options.overlayOpacity,
   };
+  // The opaque stage stays fully solid; index.css gives each region its own
+  // calibrated surface token instead of reusing the native glass background.
   for (const [surface, opacity] of Object.entries(opacities)) {
     root.style.setProperty(`--material-${surface}-opacity`, `${nativeStage ? opacity / 100 : 1}`);
   }

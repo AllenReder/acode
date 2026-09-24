@@ -328,7 +328,7 @@ html.material-stage-native body {
 html.material-stage-opaque,
 html.material-stage-opaque body,
 html.material-stage-opaque #root {
-  background: var(--background);
+  background: var(--material-opaque-stage, var(--background));
 }
 
 .material-surface-sidebar {
@@ -383,6 +383,61 @@ html.material-stage-opaque #root {
   );
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+}
+
+/* Native compositor blur is unavailable on Linux and in the browser. Keep those
+   regions fully opaque, but derive their solids from the semantic palette so
+   Sidebar, Topbar, Workbench, and Overlay do not collapse into one flat plane. */
+html.material-stage-opaque {
+  --material-opaque-stage: color-mix(in srgb, var(--background) 96%, var(--foreground));
+  --material-opaque-sidebar: color-mix(in srgb, var(--sidebar) 95%, var(--foreground));
+  --material-opaque-topbar: color-mix(in srgb, var(--app-chrome-background) 91%, var(--foreground));
+  --material-opaque-workbench: var(--canvas);
+  --material-opaque-overlay: color-mix(
+    in srgb,
+    var(--material-overlay-tint) 98%,
+    var(--foreground)
+  );
+  --material-opaque-edge: color-mix(in srgb, var(--foreground) 16%, transparent);
+
+  @variant dark {
+    --material-opaque-sidebar: color-mix(in srgb, var(--sidebar) 94%, var(--foreground));
+    --material-opaque-topbar: color-mix(
+      in srgb,
+      var(--app-chrome-background) 88%,
+      var(--foreground)
+    );
+    --material-opaque-overlay: color-mix(
+      in srgb,
+      var(--material-overlay-tint) 92%,
+      var(--foreground)
+    );
+  }
+}
+
+html.material-stage-opaque .material-surface-sidebar {
+  background: var(--material-opaque-sidebar);
+  background-color: var(--material-opaque-sidebar);
+  border-color: var(--material-opaque-edge);
+}
+
+html.material-stage-opaque .material-surface-topbar {
+  background: var(--material-opaque-topbar);
+  background-color: var(--material-opaque-topbar);
+  border-color: var(--material-opaque-edge);
+}
+
+html.material-stage-opaque .material-surface-workbench {
+  background: var(--material-opaque-workbench);
+  background-color: var(--material-opaque-workbench);
+}
+
+html.material-stage-opaque .material-surface-overlay {
+  background: var(--material-opaque-overlay);
+  background-color: var(--material-opaque-overlay);
+  border-color: var(--material-opaque-edge);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 .workbench-artwork {
