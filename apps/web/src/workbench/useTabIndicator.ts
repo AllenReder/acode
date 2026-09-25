@@ -80,6 +80,7 @@ export function useTabIndicator(
   const { stripRef, activeTabId, revision, dragging } = options;
   const indicatorRef = useRef<HTMLSpanElement | null>(null);
   const lastGeometryRef = useRef<TabIndicatorGeometry | null>(null);
+  const animationRef = useRef<Animation | null>(null);
   const cacheRef = useRef<{ key: string | null; map: Map<string, TabIndicatorGeometry> }>({
     key: null,
     map: new Map(),
@@ -94,6 +95,12 @@ export function useTabIndicator(
     if (typeof strip.getBoundingClientRect !== "function") return;
     if (revision === "") return;
 
+    // `getAnimations()` forces a style flush; track the one animation we start.
+    const cancelIndicatorAnimation = () => {
+      animationRef.current?.cancel();
+      animationRef.current = null;
+    };
+
     const write = (geometry: TabIndicatorGeometry) => {
       writeTransform(indicatorStyle, geometry.left);
       writeWidth(indicatorStyle, geometry.width);
@@ -107,13 +114,12 @@ export function useTabIndicator(
         dragging ||
         getPrefersReducedMotion() ||
         previous === null ||
-        typeof indicator.animate !== "function" ||
-        typeof indicator.getAnimations !== "function"
+        typeof indicator.animate !== "function"
       ) {
         return;
       }
-      indicator.getAnimations().forEach((animation) => animation.cancel());
-      indicator.animate(
+      cancelIndicatorAnimation();
+      animationRef.current = indicator.animate(
         [
           { transform: `translateX(${previous.left}px)`, width: `${previous.width}px` },
           { transform: `translateX(${geometry.left}px)`, width: `${geometry.width}px` },
@@ -145,9 +151,7 @@ export function useTabIndicator(
     }
 
     // Gesture progress drives the underbar directly; drop any in-flight ease.
-    if (typeof indicator.getAnimations === "function") {
-      indicator.getAnimations().forEach((animation) => animation.cancel());
-    }
+    cancelIndicatorAnimation();
     const from = geometryFor(transition.fromTabId);
     const to = geometryFor(transition.toTabId);
     if (from === null || to === null) return;
@@ -161,6 +165,14 @@ export function useTabIndicator(
     applyFrame();
     return subscribeTabTransitionFrame(applyFrame);
   }, [stripRef, activeTabId, revision, dragging, transition]);
+
+  useEffect(
+    () => () => {
+      animationRef.current?.cancel();
+      animationRef.current = null;
+    },
+    [],
+  );
 
   useEffect(() => {
     const strip = stripRef.current;
