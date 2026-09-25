@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { useLayoutEffect, useSyncExternalStore } from "react";
 
 import {
   animateTabTransitionTo,
@@ -6,72 +6,75 @@ import {
   deriveTabDirection,
   endTabTransition,
   getTabTransition,
+  nextTabIndex,
   subscribeTabTransition,
   tabIdsKey,
-  type TabTransitionState,
 } from "./tabTransition";
 import { getPrefersReducedMotion } from "./workbenchMotion";
 import { useWorkbenchStore } from "./workbenchStore";
 
-/** Subscribe to the low-frequency shape of the in-flight Sliding Tab switch. */
-export function useTabTransition(): TabTransitionState | null {
+export function useTabTransition() {
   return useSyncExternalStore(subscribeTabTransition, getTabTransition, getTabTransition);
 }
 
+/** Direction is intent, including when navigation wraps past the last Tab. */
+export function switchAdjacentTab(dir: -1 | 1): void {
+  const store = useWorkbenchStore.getState();
+  if (store.tabs.length <= 1) return;
+  const fromIndex = store.tabs.findIndex((tab) => tab.id === store.activeTabId);
+  const toIndex = nextTabIndex(store.tabs.length, fromIndex, dir);
+  const target = store.tabs[toIndex];
+  if (fromIndex < 0 || target === undefined) return;
+  beginTabTransition({ fromTabId: store.activeTabId, toTabId: target.id, fromIndex, toIndex, dir });
+  finishTabSwitch(true);
+}
+
+/** All input paths settle through the same animation owner. */
+export function finishTabSwitch(commit: boolean): void {
+  const transition = getTabTransition();
+  if (transition === null) return;
+  if (commit) useWorkbenchStore.getState().activateTab(transition.toTabId);
+  animateTabTransitionTo(commit ? 1 : 0);
+}
+
 /**
- * Watches `activeTabId` and drives the Sliding Tab switch for every user-navigated
- * Tab change. Structural changes (creating or closing a Tab) and reduced motion land
- * instantly, per ADR-0019.
+ * Observe navigation synchronously, before consumers render the new active Tab.
+ * Structural changes land instantly; a gesture/wheel already carries its direction.
  */
 export function TabTransitionController() {
-  const activeTabId = useWorkbenchStore((state) => state.activeTabId);
-  const tabIds = useWorkbenchStore((state) => tabIdsKey(state.tabs));
-  const previousRef = useRef({ activeTabId, tabIds });
-  const settleCancelRef = useRef<(() => void) | null>(null);
-
   useLayoutEffect(() => {
-    const previous = previousRef.current;
-    previousRef.current = { activeTabId, tabIds };
-    if (previous.activeTabId === activeTabId) return;
-
-    const inFlight = getTabTransition();
-    // A right-drag or wheel commit already owns this transition.
-    if (inFlight !== null && inFlight.toTabId === activeTabId) return;
-
-    settleCancelRef.current?.();
-    settleCancelRef.current = null;
-
-    const tabs = useWorkbenchStore.getState().tabs;
-    const structural = previous.tabIds !== tabIds;
-    if (structural || tabs.length <= 1 || getPrefersReducedMotion()) {
-      endTabTransition();
-      return;
-    }
-
-    const fromIndex = tabs.findIndex((tab) => tab.id === previous.activeTabId);
-    const toIndex = tabs.findIndex((tab) => tab.id === activeTabId);
-    const dir = deriveTabDirection(fromIndex, toIndex);
-    if (fromIndex < 0 || toIndex < 0 || dir === 0) {
-      endTabTransition();
-      return;
-    }
-
-    beginTabTransition({
-      fromTabId: previous.activeTabId,
-      toTabId: activeTabId,
-      fromIndex,
-      toIndex,
-      dir,
+    const unsubscribe = useWorkbenchStore.subscribe((state, previous) => {
+      if (tabIdsKey(state.tabs) !== tabIdsKey(previous.tabs)) {
+        endTabTransition();
+        return;
+      }
+      if (state.activeTabId === previous.activeTabId) return;
+      const inFlight = getTabTransition();
+      if (inFlight?.toTabId === state.activeTabId) return;
+      if (state.tabs.length <= 1 || getPrefersReducedMotion()) {
+        endTabTransition();
+        return;
+      }
+      const fromIndex = state.tabs.findIndex((tab) => tab.id === previous.activeTabId);
+      const toIndex = state.tabs.findIndex((tab) => tab.id === state.activeTabId);
+      const dir = deriveTabDirection(fromIndex, toIndex);
+      if (fromIndex < 0 || toIndex < 0 || dir === 0) {
+        endTabTransition();
+        return;
+      }
+      beginTabTransition({
+        fromTabId: previous.activeTabId,
+        toTabId: state.activeTabId,
+        fromIndex,
+        toIndex,
+        dir,
+      });
+      animateTabTransitionTo(1);
     });
-    settleCancelRef.current = animateTabTransitionTo(1);
-  }, [activeTabId, tabIds]);
-
-  useEffect(
-    () => () => {
-      settleCancelRef.current?.();
-    },
-    [],
-  );
-
+    return () => {
+      unsubscribe();
+      endTabTransition();
+    };
+  }, []);
   return null;
 }

@@ -31,3 +31,19 @@ Furthermore, ADR-0004 previously restricted agent session drafts to a single cli
 - Users can create, stage, and arrange multiple agent sessions in parallel directly from the Sidebar and context menus.
 - Zero-turn sessions do not pollute History when closed.
 - Multi-pane workspace organization is fluid, consistent with existing session and pane drag-and-drop invariants.
+
+## Close policy clarification
+
+The same lifecycle policy handles explicit Sidebar Session closes and cleanup
+following an explicit Pane or Tab close. A Session with draft text, attachments,
+other composer payload, transcript content, or pending submission is touched:
+closing its View only detaches the View; explicitly closing the Session archives
+it. Only an untouched zero-turn Session may be permanently deleted automatically.
+Remaining Views are counted across Tabs using the canonical environment/thread
+identity, including an eager draft View that has not yet been promoted.
+
+The Workbench reports completed View closes to the lifecycle adapter; it does not
+perform runtime commands itself. Reordering, docking, target promotion, and
+workspace reconciliation do not emit explicit View-close events. Close decisions
+are refreshed after asynchronous stop/animation work so typing or submitting
+while a row collapses cannot reuse an earlier empty-session decision.

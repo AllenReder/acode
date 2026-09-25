@@ -112,3 +112,22 @@ more cleanly anyway.
 - The transition keeps every Tab's viewport mounted (ADR "keep-alive"), showing exactly
   two of them during a switch. The strip translate is a compositor transform, so terminal
   and editor content is not re-laid-out mid-transition.
+
+## Navigation coordination
+
+The transition module owns the sole settle animation. Starting another gesture
+or transition cancels that animation before publishing the new state; input
+adapters never have to retain independent cancellation handles. Ordinary Tab
+activation is observed synchronously, and wheel navigation carries its signed
+direction explicitly so cyclic wraparound keeps the user's direction.
+
+Layout pan is independent of Tab count. Release velocity is measured at release,
+including any pause since the last movement. Pointer cancellation, Escape, and
+window blur cancel a gesture. Finishing a transition lands the indicator at the
+active Tab without starting a second animation from stale geometry.
+
+A single capture listener on the Workbench stage dispatches horizontal wheel
+intent: it scrolls the innermost eligible scroller, then the layout viewport,
+then queues a Tab switch. It also translates Shift+vertical wheel explicitly.
+There is no competing viewport capture listener, and the queue advances on
+transition completion rather than a timeout (including reduced motion).

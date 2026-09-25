@@ -274,8 +274,9 @@ _Avoid_: Agent, Task, Job, Run
 **Zero-turn Agent session**:
 An Agent session whose transcript contains no turns yet. It presents an initial
 composer and model selection without requiring a provider runtime process.
-Closing an untouched zero-turn Agent session permanently deletes it instead of
-archiving it to History.
+Closing an untouched zero-turn Agent session, or its last remaining View,
+permanently deletes it instead of archiving it to History. Unsent content makes
+the Session touched and preserves it.
 _Avoid_: Draft Session, Provisional Session
 
 **Terminal session**:
@@ -382,8 +383,8 @@ _Avoid_: Chat wallpaper, Session background, View background
   main-area content is a View, not a Session.
 - Session identity is independent of its runtime process and provider-native
   session identity.
-- Closing a View, Pane, or Tab does not by itself stop or delete a Session;
-  Session lifecycle actions are explicit.
+- Closing a View, Pane, or Tab preserves its Sessions, except that closing the
+  final View of an untouched zero-turn Agent session deletes that empty Session.
 - A Workbench may contain multiple Tabs, and each Tab owns its own Pane and
   Session View uniqueness rules.
 - A Workbench with no opened Session shows a Welcome View rather than an empty
@@ -397,8 +398,9 @@ _Avoid_: Chat wallpaper, Session background, View background
 - A Pane displays exactly one View instance and is never empty.
 - A Session may have multiple Session View instances across Tabs, but its
   Session View may appear at most once in any one Tab.
-- Closing one Session View only detaches that View; closing a Session removes
-  every Session View for it from every Tab while preserving its History entry.
+- Closing one Session View detaches that View, with the untouched zero-turn
+  exception above. Closing a touched Session removes every Session View for it
+  from every Tab while preserving its History entry and unsent content.
 - Terminal Sessions are presented only by Terminal Session Views; an Agent
   Session View does not own or embed a Terminal Session.
 - A View may present a Session or Workspace without owning its work lifecycle.

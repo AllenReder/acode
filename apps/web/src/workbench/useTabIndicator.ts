@@ -80,6 +80,7 @@ export function useTabIndicator(
   const { stripRef, activeTabId, revision, dragging } = options;
   const indicatorRef = useRef<HTMLSpanElement | null>(null);
   const lastGeometryRef = useRef<TabIndicatorGeometry | null>(null);
+  const wasTransitioningRef = useRef(false);
   const animationRef = useRef<Animation | null>(null);
   const cacheRef = useRef<{ key: string | null; map: Map<string, TabIndicatorGeometry> }>({
     key: null,
@@ -109,9 +110,11 @@ export function useTabIndicator(
 
     const animateTo = (geometry: TabIndicatorGeometry) => {
       const previous = lastGeometryRef.current;
+      cancelIndicatorAnimation();
       write(geometry);
       if (
         dragging ||
+        (previous?.left === geometry.left && previous.width === geometry.width) ||
         getPrefersReducedMotion() ||
         previous === null ||
         typeof indicator.animate !== "function"
@@ -144,12 +147,16 @@ export function useTabIndicator(
     if (transition === null) {
       const geometry = geometryFor(activeTabId);
       if (geometry !== null) {
-        if (dragging) write(geometry);
-        else animateTo(geometry);
+        if (dragging || wasTransitioningRef.current) {
+          cancelIndicatorAnimation();
+          write(geometry);
+        } else animateTo(geometry);
       }
+      wasTransitioningRef.current = false;
       return;
     }
 
+    wasTransitioningRef.current = true;
     // Gesture progress drives the underbar directly; drop any in-flight ease.
     cancelIndicatorAnimation();
     const from = geometryFor(transition.fromTabId);
@@ -160,7 +167,9 @@ export function useTabIndicator(
     const applyFrame = () => {
       const frame = getTabTransitionFrame();
       if (frame === null) return;
-      writeTransform(indicatorStyle, interpolateIndicatorGeometry(from, to, frame.progress).left);
+      const left = interpolateIndicatorGeometry(from, to, frame.progress).left;
+      writeTransform(indicatorStyle, left);
+      lastGeometryRef.current = { left, width: from.width };
     };
     applyFrame();
     return subscribeTabTransitionFrame(applyFrame);

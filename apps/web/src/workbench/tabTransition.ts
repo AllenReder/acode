@@ -85,6 +85,12 @@ export function tabIdsKey(tabs: ReadonlyArray<{ readonly id: string }>): string 
 
 let transitionState: TabTransitionState | null = null;
 let transitionProgress = 0;
+let cancelSettle: (() => void) | null = null;
+
+function stopSettle(): void {
+  cancelSettle?.();
+  cancelSettle = null;
+}
 const stateListeners = new Set<(state: TabTransitionState | null) => void>();
 const frameListeners = new Set<(frame: TabTransitionFrame | null) => void>();
 
@@ -128,6 +134,7 @@ function notifyFrame(): void {
 }
 
 export function beginTabTransition(state: TabTransitionState, initialProgress = 0): void {
+  stopSettle();
   transitionState = state;
   transitionProgress = clampProgress(initialProgress);
   notifyState();
@@ -143,6 +150,7 @@ export function setTabTransitionProgress(progress: number): void {
 }
 
 export function endTabTransition(): void {
+  stopSettle();
   transitionState = null;
   transitionProgress = 0;
   notifyState();
@@ -151,6 +159,7 @@ export function endTabTransition(): void {
 
 /** Test seam: drop any in-flight transition and its listeners. */
 export function resetTabTransitionForTest(): void {
+  stopSettle();
   transitionState = null;
   transitionProgress = 0;
   stateListeners.clear();
@@ -178,9 +187,11 @@ const cancelFrame = (handle: number): void => {
 
 /**
  * Settle an active transition toward 0 (cancel) or 1 (commit) with Apple fluid
- * easing, then clear it. Returns a cancel handle.
+ * easing, then clear it. The module owns cancellation: starting another transition
+ * or settle always stops the old RAF. The returned handle only cancels this settle.
  */
 export function animateTabTransitionTo(target: 0 | 1): () => void {
+  stopSettle();
   if (transitionState === null) return () => {};
   if (getPrefersReducedMotion()) {
     setTabTransitionProgress(target);
@@ -200,15 +211,18 @@ export function animateTabTransitionTo(target: 0 | 1): () => void {
     if (cancelled) return;
     const elapsed = Math.min(1, (now() - startTime) / TAB_SETTLE_DURATION_MS);
     setTabTransitionProgress(start + (target - start) * settleEaseOut(elapsed));
+    if (cancelled) return;
     if (elapsed < 1) {
       frameId = requestFrame(step);
     } else {
       endTabTransition();
     }
   };
-  frameId = requestFrame(step);
-  return () => {
+  const cancel = () => {
     cancelled = true;
     if (frameId !== null) cancelFrame(frameId);
   };
+  cancelSettle = cancel;
+  frameId = requestFrame(step);
+  return cancel;
 }

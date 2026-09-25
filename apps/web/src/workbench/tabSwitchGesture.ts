@@ -11,7 +11,7 @@ export interface PanPhaseInput {
 }
 
 export interface PanPhaseResult {
-  readonly scrollLeft: number;
+  scrollLeft: number;
   /** Pixels the layout could not consume; this becomes Tab switch progress. */
   readonly overscroll: number;
 }
@@ -85,7 +85,7 @@ export function resolveWheelSwitchDirection(horizontalDelta: number): -1 | 1 {
 }
 
 export interface ScrollMetrics {
-  readonly scrollLeft: number;
+  scrollLeft: number;
   readonly clientWidth: number;
   readonly scrollWidth: number;
 }
@@ -117,11 +117,11 @@ function isHorizontallyScrollable(node: Element): boolean {
  * Walk from the wheel target up to the Workbench stage. Any horizontal scroller
  * that still has room in the gesture direction keeps the wheel for itself.
  */
-export function findHorizontalScrollerConsuming(
+export function findHorizontalScroller(
   target: Element | null,
   root: Element,
   delta: number,
-): boolean {
+): (Element & ScrollMetrics) | null {
   let node: Element | null = target;
   while (node !== null && node !== root) {
     if (
@@ -129,9 +129,9 @@ export function findHorizontalScrollerConsuming(
       hasHorizontalScrollRoom(node, delta) &&
       isHorizontallyScrollable(node)
     ) {
-      return true;
+      return node;
     }
     node = node.parentElement;
   }
-  return false;
+  return null;
 }

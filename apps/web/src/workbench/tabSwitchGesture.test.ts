@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  findHorizontalScrollerConsuming,
+  findHorizontalScroller,
   hasHorizontalScrollRoom,
   normalizeWheelDelta,
   resolveHorizontalIntent,
@@ -133,7 +133,7 @@ describe("hasHorizontalScrollRoom", () => {
   });
 });
 
-describe("findHorizontalScrollerConsuming", () => {
+describe("findHorizontalScroller", () => {
   const scroller = (parent: unknown, metrics: { left: number; max: number }) =>
     ({
       scrollLeft: metrics.left,
@@ -145,17 +145,17 @@ describe("findHorizontalScrollerConsuming", () => {
   it("finds a nested scroller with room", () => {
     const root = {} as Element;
     const inner = scroller(root, { left: 0, max: 200 });
-    expect(findHorizontalScrollerConsuming(inner, root, 5)).toBe(true);
+    expect(findHorizontalScroller(inner, root, 5)).toBe(inner);
   });
 
   it("ignores a nested scroller that is already at the requested edge", () => {
     const root = {} as Element;
     const inner = scroller(root, { left: 200, max: 200 });
-    expect(findHorizontalScrollerConsuming(inner, root, 5)).toBe(false);
+    expect(findHorizontalScroller(inner, root, 5)).toBeNull();
   });
 
   it("stops at the root", () => {
     const root = scroller(null, { left: 0, max: 200 });
-    expect(findHorizontalScrollerConsuming(root, root, 5)).toBe(false);
+    expect(findHorizontalScroller(root, root, 5)).toBeNull();
   });
 });

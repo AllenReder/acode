@@ -248,6 +248,10 @@ export function waitForProject(
   });
 }
 
+export function readThreadDetail(ref: ScopedThreadRef): EnvironmentThread | null {
+  return appAtomRegistry.get(environmentThreadDetails.detailAtom(ref));
+}
+
 export function readThreadShell(ref: ScopedThreadRef): EnvironmentThreadShell | null {
   return appAtomRegistry.get(environmentThreadShells.threadShellAtom(ref));
 }

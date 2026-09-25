@@ -37,7 +37,6 @@ import {
   subscribeTabTransitionFrame,
   type TabTransitionFrame,
 } from "./tabTransition";
-import { resolveHorizontalWheelDelta } from "./tabSwitchGesture";
 import {
   animateScrollTo,
   cancelActiveScrollAnimation,
@@ -141,7 +140,6 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
           <TabPaneTree
             key={tab.id}
             tab={tab}
-            snapshot={snapshot}
             projects={projects}
             isActive={tab.id === snapshot.activeTabId}
             transitionRole={roleFor(tab.id)}
@@ -156,14 +154,13 @@ type TabTransitionRole = "active" | "inactive" | "to" | "from" | "hidden";
 
 interface TabPaneTreeProps {
   readonly tab: WorkbenchTab;
-  readonly snapshot: WorkbenchSnapshot;
   readonly projects: ReadonlyArray<EnvironmentAwenProject>;
   readonly isActive: boolean;
   readonly transitionRole: TabTransitionRole;
 }
 
 const TabPaneTree = memo(
-  function TabPaneTree({ tab, snapshot, projects, isActive, transitionRole }: TabPaneTreeProps) {
+  function TabPaneTree({ tab, projects, isActive, transitionRole }: TabPaneTreeProps) {
     const dragState = useWorkbenchDragState();
     const previewTab =
       isActive && dragState?.phase === "dragging" && dragState.valid
@@ -229,20 +226,6 @@ const TabPaneTree = memo(
       observer.observe(element);
       return () => observer.disconnect();
     }, [isActive]);
-
-    useEffect(() => {
-      const viewport = viewportRef.current;
-      if (!isActive || !scrolling || !viewport) return;
-      const wheel = (event: WheelEvent) => {
-        const delta = resolveHorizontalWheelDelta(event, viewport.clientWidth);
-        if (delta === 0) return;
-        event.preventDefault();
-        event.stopPropagation();
-        viewport.scrollLeft += delta;
-      };
-      viewport.addEventListener("wheel", wheel, { capture: true, passive: false });
-      return () => viewport.removeEventListener("wheel", wheel, true);
-    }, [isActive, scrolling]);
 
     const previousTabIdRef = useRef(tab.id);
     const previousSizeRef = useRef(size);
@@ -559,7 +542,6 @@ interface PaneProps {
 function Pane({ tab, projects, paneId, focused }: PaneProps) {
   const setFocused = useWorkbenchStore((s) => s.setFocused);
   const focusRequestId = useWorkbenchStore((s) => s.focusRequestId);
-  const closeView = useWorkbenchStore((s) => s.closeView);
   const requestClosePane = useWorkbenchStore((s) => s.requestClosePane);
   const duplicateToNewTab = useWorkbenchStore((s) => s.duplicateToNewTab);
   const view = tab.panes.get(paneId);

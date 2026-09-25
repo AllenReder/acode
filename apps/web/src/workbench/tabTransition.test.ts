@@ -20,6 +20,7 @@ import {
 
 afterEach(() => {
   resetTabTransitionForTest();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -140,4 +141,25 @@ describe("tab transition store", () => {
     animateTabTransitionTo(1);
     expect(getTabTransition()).toBeNull();
   });
+});
+
+it("a new gesture cancels the previous settle even when its caller keeps no handle", () => {
+  let time = 0;
+  const frames = new Map<number, FrameRequestCallback>();
+  let id = 0;
+  vi.spyOn(performance, "now").mockImplementation(() => time);
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    frames.set(++id, callback);
+    return id;
+  });
+  vi.stubGlobal("cancelAnimationFrame", (handle: number) => frames.delete(handle));
+  beginTabTransition({ fromTabId: "a", toTabId: "b", fromIndex: 0, toIndex: 1, dir: 1 });
+  animateTabTransitionTo(1);
+  beginTabTransition({ fromTabId: "b", toTabId: "c", fromIndex: 1, toIndex: 2, dir: 1 }, 0.2);
+  time = 400;
+  const pending = [...frames.values()];
+  frames.clear();
+  for (const callback of pending) callback(time);
+  expect(getTabTransitionFrame()).toMatchObject({ toTabId: "c", progress: 0.2 });
+  vi.restoreAllMocks();
 });

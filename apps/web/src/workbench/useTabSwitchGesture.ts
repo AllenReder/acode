@@ -4,7 +4,6 @@ import { dismissContextMenu } from "../contextMenuFallback";
 import type { MenuAnchorPosition } from "./paneMenuRegistry";
 import { resolveLayoutPan } from "./tabSwitchGesture";
 import {
-  animateTabTransitionTo,
   beginTabTransition,
   clampProgress,
   endTabTransition,
@@ -14,6 +13,7 @@ import {
   resolveSwitchCommit,
   setTabTransitionProgress,
 } from "./tabTransition";
+import { finishTabSwitch } from "./tabTransitionReact";
 import { useWorkbenchStore } from "./workbenchStore";
 
 const RIGHT_DRAG_THRESHOLD = 5;
@@ -37,12 +37,13 @@ interface RightDragSession {
   active: boolean;
 }
 
-function estimateVelocity(session: RightDragSession): number {
+function estimateVelocity(session: RightDragSession, releasedAt: number): number {
   if (session.samples.length < 2) return 0;
   const last = session.samples.at(-1)!;
-  const cutoff = last.t - VELOCITY_WINDOW_MS;
+  if (releasedAt - last.t >= VELOCITY_WINDOW_MS) return 0;
+  const cutoff = releasedAt - VELOCITY_WINDOW_MS;
   const first = session.samples.find((sample) => sample.t >= cutoff) ?? session.samples[0]!;
-  const dt = last.t - first.t;
+  const dt = releasedAt - first.t;
   if (dt <= 0) return 0;
   return (last.x - first.x) / dt;
 }
@@ -69,7 +70,6 @@ export function useTabSwitchGesture(options: TabSwitchGestureOptions): void {
     const updateDrag = (current: RightDragSession, dx: number) => {
       const store = useWorkbenchStore.getState();
       const tabs = store.tabs;
-      if (tabs.length <= 1) return;
 
       let overscroll = Math.abs(dx);
       if (
@@ -86,7 +86,7 @@ export function useTabSwitchGesture(options: TabSwitchGestureOptions): void {
         overscroll = pan.overscroll;
       }
 
-      if (overscroll <= 0) {
+      if (overscroll <= 0 || tabs.length <= 1) {
         if (getTabTransition() !== null) endTabTransition();
         return;
       }
@@ -115,7 +115,9 @@ export function useTabSwitchGesture(options: TabSwitchGestureOptions): void {
     const finishDrag = () => {
       window.removeEventListener("pointermove", onPointerMove, true);
       window.removeEventListener("pointerup", onPointerUp, true);
-      window.removeEventListener("pointercancel", onPointerUp, true);
+      window.removeEventListener("pointercancel", onCancel, true);
+      window.removeEventListener("blur", onCancel);
+      window.removeEventListener("keydown", onKeyDown, true);
       session = null;
     };
 
@@ -149,15 +151,20 @@ export function useTabSwitchGesture(options: TabSwitchGestureOptions): void {
       if (inFlight === null) return;
       const commit = resolveSwitchCommit({
         progress: getTabTransitionFrame()?.progress ?? 0,
-        velocity: estimateVelocity(current),
+        velocity: estimateVelocity(current, performance.now()),
         dir: inFlight.dir,
       });
-      if (commit) {
-        useWorkbenchStore.getState().activateTab(inFlight.toTabId);
-        animateTabTransitionTo(1);
-      } else {
-        animateTabTransitionTo(0);
-      }
+      finishTabSwitch(commit);
+    };
+
+    const onCancel = () => {
+      if (session === null) return;
+      const active = session.active;
+      finishDrag();
+      if (active) finishTabSwitch(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onCancel();
     };
 
     const onPointerDown = (event: PointerEvent) => {
@@ -168,6 +175,8 @@ export function useTabSwitchGesture(options: TabSwitchGestureOptions): void {
         ".workbench-viewport[data-tab-active='true']",
       );
       const header = target.closest<HTMLElement>("[data-workbench-pane-drag-handle]");
+      if (session !== null) onCancel();
+      endTabTransition();
       session = {
         pointerId: event.pointerId,
         startX: event.clientX,
@@ -183,7 +192,9 @@ export function useTabSwitchGesture(options: TabSwitchGestureOptions): void {
       };
       window.addEventListener("pointermove", onPointerMove, true);
       window.addEventListener("pointerup", onPointerUp, true);
-      window.addEventListener("pointercancel", onPointerUp, true);
+      window.addEventListener("pointercancel", onCancel, true);
+      window.addEventListener("blur", onCancel);
+      window.addEventListener("keydown", onKeyDown, true);
     };
 
     const onContextMenu = (event: MouseEvent) => {
@@ -196,7 +207,10 @@ export function useTabSwitchGesture(options: TabSwitchGestureOptions): void {
     return () => {
       stage.removeEventListener("pointerdown", onPointerDown, true);
       stage.removeEventListener("contextmenu", onContextMenu, true);
-      if (session !== null) finishDrag();
+      if (session !== null) {
+        finishDrag();
+        endTabTransition();
+      }
     };
   }, [stageRef]);
 }

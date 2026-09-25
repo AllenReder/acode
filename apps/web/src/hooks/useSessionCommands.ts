@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import type { EnvironmentId, ThreadId, WorkspaceId } from "@awen/contracts";
+import { useAgentSessionLifecycle, type WillCloseRevert } from "./useAgentSessionLifecycle";
 import { scopeThreadRef } from "@awen/client-runtime/environment";
 import { squashAtomCommandFailure } from "@awen/client-runtime/state/runtime";
 import { requestDestructiveConfirmation } from "../lib/destructiveConfirmation";
@@ -9,7 +9,7 @@ import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
 import { runtimeTerminalIdForTarget } from "../workbench/sessionTarget";
-import { targetKey, type ViewTarget } from "../workbench/viewRegistry";
+import type { ViewTarget } from "../workbench/viewRegistry";
 import { getActiveTab, findPaneBySessionTarget, type SplitDir } from "../workbench/workbenchState";
 import { useWorkbenchStore } from "../workbench/workbenchStore";
 
@@ -25,7 +25,7 @@ function failureToast(title: string, error: unknown) {
   );
 }
 
-export type WillCloseRevert = () => void;
+export type { WillCloseRevert } from "./useAgentSessionLifecycle";
 
 export function useSessionCommands(
   target: SessionTarget,
@@ -35,7 +35,7 @@ export function useSessionCommands(
 ) {
   const store = useWorkbenchStore();
   const stopThreadSession = useAtomCommand(threadEnvironment.stopSession, { reportFailure: false });
-  const archiveThread = useAtomCommand(threadEnvironment.archive, { reportFailure: false });
+  const closeAgent = useAgentSessionLifecycle();
   const deleteThread = useAtomCommand(threadEnvironment.delete, { reportFailure: false });
   const closeTerminal = useAtomCommand(terminalEnvironment.close, { reportFailure: false });
 
@@ -76,44 +76,11 @@ export function useSessionCommands(
         );
         return;
       }
-      const threadShell = readThreadShell(scopeThreadRef(target.environmentId, threadId));
-      if (threadShell?.session && threadShell.session.status === "running") {
-        const stopResult = await stopThreadSession({
-          environmentId: target.environmentId,
-          input: { threadId },
-        });
-        if (stopResult._tag === "Failure") {
-          failureToast("Failed to stop agent session", squashAtomCommandFailure(stopResult));
-          return;
-        }
-      }
-      let revert: WillCloseRevert | void = undefined;
-      if (options?.onWillClose) {
-        revert = await options.onWillClose();
-      }
-      const isZeroTurn = Boolean(threadShell && !threadShell.latestTurn && !threadShell.session);
-      if (isZeroTurn) {
-        const deleteResult = await deleteThread({
-          environmentId: target.environmentId,
-          input: { threadId },
-        });
-        if (deleteResult._tag === "Failure") {
-          revert?.();
-          failureToast("Failed to close agent session", squashAtomCommandFailure(deleteResult));
-          return;
-        }
-        store.removeSessionViews(target);
-        return;
-      }
-      const archiveResult = await archiveThread({
-        environmentId: target.environmentId,
-        input: { threadId },
+      const closed = await closeAgent(scopeThreadRef(target.environmentId, threadId), {
+        reason: "session",
+        ...(options?.onWillClose ? { onWillClose: options.onWillClose } : {}),
       });
-      if (archiveResult._tag === "Failure") {
-        revert?.();
-        failureToast("Failed to close agent session", squashAtomCommandFailure(archiveResult));
-        return;
-      }
+      if (!closed) return;
       store.removeSessionViews(target);
       toastManager.add({ type: "success", title: "Agent session closed" });
     } else {
@@ -141,15 +108,7 @@ export function useSessionCommands(
       store.removeSessionViews(target);
       toastManager.add({ type: "success", title: "Terminal session closed" });
     }
-  }, [
-    agentSession?.threadId,
-    archiveThread,
-    closeTerminal,
-    options,
-    stopThreadSession,
-    store,
-    target,
-  ]);
+  }, [agentSession?.threadId, closeAgent, closeTerminal, options, store, target]);
 
   const handleDeleteSession = useCallback(
     async (sessionTitle?: string) => {
@@ -227,6 +186,7 @@ export function useSessionCommands(
       agentSession?.title,
       closeTerminal,
       deleteThread,
+      options,
       stopThreadSession,
       store,
       target,

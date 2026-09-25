@@ -5,6 +5,7 @@ import { useAwenProjects, useEnvironmentShellSnapshotPresent } from "../state/en
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useEnvironmentCatalogSnapshot } from "../state/environmentCatalogSnapshot";
 import { useEnvironments } from "../state/environments";
+import { AgentSessionLifecycle } from "./AgentSessionLifecycle";
 import { PaneTree } from "./PaneTree";
 import { TabTransitionController } from "./tabTransitionReact";
 import { installTabSwitchProfiler } from "./transitionProfiler";
@@ -174,6 +175,7 @@ export function Workbench({ navigate: navigateTo }: WorkbenchProps = {}) {
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
       <TabTransitionController />
+      <AgentSessionLifecycle projects={projects} />
       <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
       <MaterialSurface
         kind="workbench"
