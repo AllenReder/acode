@@ -68,14 +68,17 @@ more cleanly anyway.
   on a Pane header, and does nothing elsewhere. Crossing the threshold starts the
   gesture and dismisses any open menu. Native `contextmenu` is always suppressed on the
   Workbench stage; menus over Pane content are intentionally not offered.
-- **Shift+wheel and horizontal wheel deltas switch Tabs.** Each discrete notch commits
-  one full sliding switch; notches during a switch are queued and played in turn.
-  Before a wheel gesture is promoted to a Tab switch, every horizontal scroller between
-  the wheel target and the Workbench stage — including a Scrolling layout viewport that
-  still has room in that direction — is given the gesture. `shiftKey + deltaY` is
-  treated as horizontal intent because Windows and Chrome do not always synthesize
-  `deltaX`. The Topbar Tab strip keeps its native horizontal scrolling and never
-  switches Tabs.
+- **Shift+wheel switches Tabs; unmodified trackpad streams scroll content.**
+  Each discrete Shift+wheel notch commits one full sliding switch; notches during a
+  switch are queued (bounded to depth 2) and played in turn. Before a wheel gesture
+  is promoted to a Tab switch, every horizontal scroller between the wheel target
+  and the Workbench stage — including a Scrolling layout viewport that still has room
+  in that direction — is given the gesture. `shiftKey + deltaY` is treated as
+  horizontal intent because Windows and Chrome do not always synthesize `deltaX`.
+  Unmodified trackpad horizontal deltas (`shiftKey: false`) remain continuous content
+  navigation: when content or layout viewports cannot scroll further, they are
+  absorbed and never queue Tab switches. The Topbar Tab strip keeps its native
+  horizontal scrolling and never switches Tabs.
 - **All user-initiated switches share the transition.** Clicking a Tab, pressing the
   Tablist arrow keys, focusing an already-open Tab from the Sidebar, a right-drag commit,
   and a wheel notch all play the same sliding transition: `TAB_SETTLE_DURATION_MS`

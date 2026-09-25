@@ -9,6 +9,9 @@ import { getTabTransition, subscribeTabTransition } from "./tabTransition";
 import { switchAdjacentTab } from "./tabTransitionReact";
 import { useWorkbenchStore } from "./workbenchStore";
 
+/** Maximum number of queued tab switches waiting behind the active transition. */
+const MAX_WHEEL_QUEUE_DEPTH = 2;
+
 /** One stage listener routes horizontal intent from the innermost scroller to Tabs. */
 export function useTabSwitchWheel(stageRef: React.RefObject<HTMLElement | null>): void {
   useEffect(() => {
@@ -44,6 +47,12 @@ export function useTabSwitchWheel(stageRef: React.RefObject<HTMLElement | null>)
         );
         return;
       }
+      // A macOS trackpad emits a continuous stream of unmodified pixel deltas
+      // for one two-finger gesture. Those deltas are content navigation and
+      // must never queue discrete Tab switch commands. Only deliberate
+      // Shift+wheel gestures promote to Tab switching once scrolling is exhausted.
+      if (!event.shiftKey) return;
+      if (queue.length >= MAX_WHEEL_QUEUE_DEPTH) return;
       queue.push(resolveWheelSwitchDirection(delta));
       processQueue();
     };

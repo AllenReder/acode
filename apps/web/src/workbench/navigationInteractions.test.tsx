@@ -201,6 +201,25 @@ it("routes Shift+wheel through inner scroller, layout, then cyclic Tab navigatio
   await settle();
   expect(getTabTransitionFrame()).toMatchObject({ toTabId: tabs[1]!.id, dir: 1 });
 });
+it("does not turn a macOS-style stream of unmodified deltas into Tab switches", async () => {
+  await mount(3);
+  const tabs = useWorkbenchStore.getState().tabs;
+  const initialActive = useWorkbenchStore.getState().activeTabId;
+  for (let index = 0; index < 40; index++) {
+    await act(() => {
+      event(stage, "wheel", {
+        target: stage,
+        deltaX: 15,
+        deltaY: 0,
+        deltaMode: 0,
+        shiftKey: false,
+        ctrlKey: false,
+      });
+    });
+  }
+  expect(useWorkbenchStore.getState().activeTabId).toBe(initialActive);
+  expect(getTabTransitionFrame()).toBeNull();
+});
 it("drains queued wheel switches with reduced motion without a timeout", async () => {
   reduced = true;
   await mount(3);
@@ -211,10 +230,38 @@ it("drains queued wheel switches with reduced motion without a timeout", async (
         deltaX: 100,
         deltaY: 0,
         deltaMode: 0,
-        shiftKey: false,
+        shiftKey: true,
         ctrlKey: false,
       });
   });
   expect(useWorkbenchStore.getState().activeTabId).toBe(tabs[1]!.id);
   expect(getTabTransitionFrame()).toBeNull();
+});
+it("caps queued wheel switches to prevent runaway on Shift+trackpad bursts", async () => {
+  await mount(3);
+  const tabs = useWorkbenchStore.getState().tabs;
+  const wheel = () =>
+    event(stage, "wheel", {
+      deltaX: 100,
+      deltaY: 0,
+      deltaMode: 0,
+      shiftKey: true,
+      ctrlKey: false,
+    });
+  // Fire 10 rapid events; only 1 active transition + at most MAX_WHEEL_QUEUE_DEPTH (2) queued.
+  await act(() => {
+    for (let index = 0; index < 10; index++) wheel();
+  });
+  // The first transition has begun (from tabs[2] to tabs[0]).
+  expect(getTabTransitionFrame()).toMatchObject({ toTabId: tabs[0]!.id, dir: 1 });
+  // Settle first transition; next queued switch begins.
+  await settle();
+  expect(getTabTransitionFrame()).toMatchObject({ toTabId: tabs[1]!.id, dir: 1 });
+  // Settle second transition; next queued switch begins.
+  await settle();
+  expect(getTabTransitionFrame()).toMatchObject({ toTabId: tabs[2]!.id, dir: 1 });
+  // Settle third transition; queue is exhausted (capped at 2 pending, so at most 3 total transitions).
+  await settle();
+  expect(getTabTransitionFrame()).toBeNull();
+  expect(useWorkbenchStore.getState().activeTabId).toBe(tabs[2]!.id);
 });
