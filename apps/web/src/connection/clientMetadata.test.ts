@@ -1,3 +1,4 @@
+import type { DesktopBridge } from "@awen/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -77,14 +78,32 @@ describe("client telemetry metadata", () => {
         appVersion: "1.2.3",
         hosted: false,
         identity: desktopChrome,
-        desktopBridge: { getClientPlatform: () => "darwin" },
+        desktopBridge: {
+          getClientPlatform: () => "darwin",
+          preview: {} as NonNullable<DesktopBridge["preview"]>,
+        },
       }),
     ).toEqual({
       label: "Awen Desktop",
       deviceType: "desktop",
       os: "macOS",
       surface: "desktop",
+      previewHost: true,
       appVersion: "1.2.3",
+    });
+  });
+
+  it("marks desktop shells without a preview host", () => {
+    expect(
+      clientPresentationMetadata({
+        appVersion: "1.2.3",
+        hosted: false,
+        identity: desktopChrome,
+        desktopBridge: { getClientPlatform: () => "win32" },
+      }),
+    ).toMatchObject({
+      surface: "desktop",
+      previewHost: false,
     });
   });
 });

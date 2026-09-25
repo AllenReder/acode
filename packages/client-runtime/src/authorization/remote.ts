@@ -29,6 +29,9 @@ export const appendClientConnectionParams = (
   if (clientMetadata?.surface) {
     url.searchParams.set("clientSurface", clientMetadata.surface);
   }
+  if (clientMetadata?.previewHost !== undefined) {
+    url.searchParams.set("clientPreviewHost", clientMetadata.previewHost ? "1" : "0");
+  }
   if (clientMetadata?.appVersion) {
     url.searchParams.set("clientAppVersion", clientMetadata.appVersion);
   }
