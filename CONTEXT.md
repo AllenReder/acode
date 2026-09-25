@@ -155,6 +155,32 @@ the Topbar Surface downward into the active Tab's Workbench canvas to merge its
 View into the active layout and close the source Tab.
 _Avoid_: Tab merging, Pane detachment, Window docking
 
+**Layout pan**:
+The Workbench navigation gesture that moves a Scrolling layout horizontally to
+reveal Columns beyond the Viewport, preserving each Column's own position in the
+strip. A BSP layout has no Layout pan because its content does not overflow the
+Viewport.
+_Avoid_: Canvas drag, map pan, scroll bar
+
+**Stacked Tab switch**:
+The animated presentation of a Tab change in which the outgoing and incoming Tab
+are shown as full-size cards one Viewport apart, translating as one strip while
+both briefly recede in scale to reveal the Workbench surface behind them. It is a
+presentation of a Tab change, not a change to Tab or Session identity.
+_Avoid_: Carousel, page flip, split slide
+
+**Tab switch progress**:
+The continuous 0–1 measure of a Stacked Tab switch, advanced by pointer travel
+past a layout's horizontal limit or in discrete steps by a wheel notch. It drives
+both the Tab cards and the Tab indicator.
+_Avoid_: Scroll offset, swipe amount
+
+**Tab indicator**:
+The theme-colored underbar beneath the active Tab in the Topbar Surface. It
+conveys the active Tab and any Tab switch progress; it is presentation chrome and
+owns neither Tab focus nor Tab order.
+_Avoid_: Tab highlight, underline, selection bar
+
 **Pane**:
 The smallest functional window in a Tab, holding exactly one View instance.
 Panes and Tabs are layout concepts; a Pane is never an empty or standalone
@@ -367,6 +393,9 @@ _Avoid_: Chat wallpaper, Session background, View background
 - Splitting within an active Tab is explicit through keyboard modifiers or drag-and-drop.
 - The Workbench Viewport never scrolls vertically; vertical scrolling belongs strictly to the Content Layer of individual Panes.
 - In a Scrolling layout, the Viewport scrolls purely horizontally, and the Trailing Canvas Area beyond the rightmost Column is a valid drop target that appends a new Column at the far right.
+- A user-navigated Tab change (click, keyboard, Layout pan, or wheel notch) presents a Stacked Tab switch; a Tab change caused by creating or closing a Tab lands instantly.
+- A Layout pan is unavailable in a BSP layout; a horizontal gesture a layout cannot consume promotes to a Stacked Tab switch instead.
+- The Tab indicator tracks the active Tab and any Tab switch progress and never spans more than one Tab's width.
 - Runtime and provider implementation details must not define Awen domain
   identity.
 - Provider-native lifecycle commands may implement Awen Session operations,

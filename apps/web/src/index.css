@@ -2326,6 +2326,21 @@ html[data-workbench-window-chrome] {
 .workbench-viewport[data-layout-mode="bsp"] {
   overflow: hidden;
 }
+/* Stacked Tab switch (ADR-0019): the source and target Tabs become two cards. */
+.workbench-viewport-container[data-tab-transition="true"] {
+  overflow: hidden;
+}
+.workbench-viewport-container[data-tab-transition="true"] .workbench-viewport {
+  position: absolute;
+  inset: 0;
+  flex: none;
+  overflow: hidden;
+  border-radius: 10px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+  will-change: transform;
+  backface-visibility: hidden;
+  pointer-events: none;
+}
 .workbench-canvas {
   position: relative;
   min-height: 100%;
@@ -2346,6 +2361,18 @@ html[data-workbench-dragging] .workbench-pane-frame {
 html[data-workbench-dragging="active"] .workbench-tab-item {
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
+}
+.workbench-tab-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  height: 2px;
+  width: 0;
+  border-radius: 999px;
+  background: var(--primary);
+  pointer-events: none;
+  will-change: transform, width;
 }
 .workbench-tab-item[data-tab-closing="true"] {
   max-width: 0 !important;

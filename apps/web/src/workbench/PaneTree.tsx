@@ -23,6 +23,23 @@ import type { WorkbenchSnapshot, WorkbenchTab } from "./workbenchState";
 import { useWorkbenchDragState, useWorkbenchDragSource } from "./workbenchDrag";
 import { resolveTargetBreadcrumbs } from "./workbenchTitles";
 import {
+  PaneMenuRegistryContext,
+  usePaneMenuRegistry,
+  type MenuAnchorPosition,
+  type PaneMenuRegistry,
+} from "./paneMenuRegistry";
+import { useTabTransition } from "./tabTransitionReact";
+import { useTabSwitchGesture } from "./useTabSwitchGesture";
+import { useTabSwitchWheel } from "./useTabSwitchWheel";
+import {
+  computeCardOffset,
+  getTabTransitionFrame,
+  stackedTabScale,
+  subscribeTabTransitionFrame,
+  type TabTransitionFrame,
+} from "./tabTransition";
+import { resolveHorizontalWheelDelta } from "./tabSwitchGesture";
+import {
   animateScrollTo,
   cancelActiveScrollAnimation,
   computeScrollingRevealTarget,
@@ -50,35 +67,102 @@ function resolvePaneBoxShadow(paneGap: number, paneShadow: PaneShadow): string {
   }
 }
 
+/** Write one card's slot transform for the current Stacked Tab switch frame. */
+function writeTransitionCardTransform(
+  element: HTMLElement,
+  role: "to" | "from",
+  frame: TabTransitionFrame | null,
+): void {
+  const style = (element as { style?: CSSStyleDeclaration }).style;
+  if (!style) return;
+  if (frame === null) {
+    style.transform = "";
+    return;
+  }
+  const slot = role === "to" ? 0 : -frame.dir;
+  const offset = computeCardOffset(slot, frame.dir, frame.progress);
+  style.transform = `translate3d(${(offset * 100).toFixed(4)}%, 0, 0) scale(${stackedTabScale(frame.progress).toFixed(5)})`;
+}
+
 /**
  * Workbench canvas host that maintains Keep-Alive viewports across all tabs.
- * Switching tabs is an instant 0ms CSS visibility toggle without DOM unmounting.
+ * At rest only the active Tab is shown; during a Stacked Tab switch the source
+ * and target Tabs are laid out as two cards and driven by transition progress.
  */
 export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps) {
+  const transition = useTabTransition();
+  const stageRef = useRef<HTMLDivElement>(null);
+  const menuOpenersRef = useRef(new Map<string, (position: MenuAnchorPosition) => void>());
+
+  const registry = useMemo<PaneMenuRegistry>(
+    () => ({
+      register(paneId, open) {
+        menuOpenersRef.current.set(paneId, open);
+        return () => {
+          if (menuOpenersRef.current.get(paneId) === open) menuOpenersRef.current.delete(paneId);
+        };
+      },
+      open(paneId, position) {
+        const open = menuOpenersRef.current.get(paneId);
+        if (open === undefined) return false;
+        open(position);
+        return true;
+      },
+    }),
+    [],
+  );
+
+  useTabSwitchGesture({ stageRef, onPaneContextMenu: registry.open });
+  useTabSwitchWheel(stageRef);
+
+  const activeTransition =
+    transition !== null &&
+    snapshot.tabs.some((tab) => tab.id === transition.fromTabId) &&
+    snapshot.tabs.some((tab) => tab.id === transition.toTabId)
+      ? transition
+      : null;
+
+  const roleFor = (tabId: string): TabTransitionRole => {
+    if (activeTransition === null) return tabId === snapshot.activeTabId ? "active" : "inactive";
+    if (tabId === activeTransition.toTabId) return "to";
+    if (tabId === activeTransition.fromTabId) return "from";
+    return "hidden";
+  };
+
   return (
-    <div className="workbench-viewport-container relative flex flex-1 min-h-0 min-w-0 flex-col">
-      {snapshot.tabs.map((tab) => (
-        <TabPaneTree
-          key={tab.id}
-          tab={tab}
-          snapshot={snapshot}
-          projects={projects}
-          isActive={tab.id === snapshot.activeTabId}
-        />
-      ))}
-    </div>
+    <PaneMenuRegistryContext.Provider value={registry}>
+      <div
+        ref={stageRef}
+        className="workbench-viewport-container relative flex flex-1 min-h-0 min-w-0 flex-col"
+        data-tab-transition={activeTransition !== null ? "true" : undefined}
+      >
+        {snapshot.tabs.map((tab) => (
+          <TabPaneTree
+            key={tab.id}
+            tab={tab}
+            snapshot={snapshot}
+            projects={projects}
+            isActive={tab.id === snapshot.activeTabId}
+            transitionRole={roleFor(tab.id)}
+          />
+        ))}
+      </div>
+    </PaneMenuRegistryContext.Provider>
   );
 }
+
+type TabTransitionRole = "active" | "inactive" | "to" | "from" | "hidden";
 
 interface TabPaneTreeProps {
   readonly tab: WorkbenchTab;
   readonly snapshot: WorkbenchSnapshot;
   readonly projects: ReadonlyArray<EnvironmentAwenProject>;
   readonly isActive: boolean;
+  readonly transitionRole: TabTransitionRole;
 }
 
 const TabPaneTree = memo(
-  function TabPaneTree({ tab, snapshot, projects, isActive }: TabPaneTreeProps) {
+  function TabPaneTree({ tab, snapshot, projects, isActive, transitionRole }: TabPaneTreeProps) {
     const dragState = useWorkbenchDragState();
     const previewTab =
       isActive && dragState?.phase === "dragging" && dragState.valid
@@ -149,12 +233,11 @@ const TabPaneTree = memo(
       const viewport = viewportRef.current;
       if (!isActive || !scrolling || !viewport) return;
       const wheel = (event: WheelEvent) => {
-        if (Math.abs(event.deltaX) <= Math.abs(event.deltaY) || event.ctrlKey) return;
+        const delta = resolveHorizontalWheelDelta(event, viewport.clientWidth);
+        if (delta === 0) return;
         event.preventDefault();
         event.stopPropagation();
-        viewport.scrollLeft +=
-          event.deltaX *
-          (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.clientWidth : 1);
+        viewport.scrollLeft += delta;
       };
       viewport.addEventListener("wheel", wheel, { capture: true, passive: false });
       return () => viewport.removeEventListener("wheel", wheel, true);
@@ -279,6 +362,21 @@ const TabPaneTree = memo(
       pane?.focus({ preventScroll: true });
     }, [isActive, tab.focusedPaneId]);
 
+    useLayoutEffect(() => {
+      if (transitionRole !== "to" && transitionRole !== "from") return;
+      const viewport = viewportRef.current;
+      if (viewport === null) return;
+      const role = transitionRole;
+      const apply = (frame: TabTransitionFrame | null) =>
+        writeTransitionCardTransform(viewport, role, frame);
+      apply(getTabTransitionFrame());
+      const unsubscribe = subscribeTabTransitionFrame(apply);
+      return () => {
+        unsubscribe();
+        writeTransitionCardTransform(viewport, role, null);
+      };
+    }, [transitionRole]);
+
     const activeLayout = previewLayout ?? layout;
     const canvasStyle = {
       width: Math.max(activeLayout.canvasWidth, size.width),
@@ -288,13 +386,16 @@ const TabPaneTree = memo(
       "--pane-shadow": resolvePaneBoxShadow(paneGap, paneShadow),
     } as React.CSSProperties;
 
+    const hidden = transitionRole === "inactive" || transitionRole === "hidden";
+
     return (
       <div
         ref={viewportRef}
         className="workbench-viewport"
-        style={{ display: isActive ? undefined : "none" }}
+        style={{ display: hidden ? "none" : undefined }}
         data-tab-id={tab.id}
         data-tab-active={isActive ? "true" : "false"}
+        data-tab-transition-role={transitionRole}
         data-layout-mode={scrolling ? "scrolling" : "bsp"}
         aria-hidden={!isActive}
       >
@@ -440,6 +541,7 @@ const TabPaneTree = memo(
   },
   (prev, next) => {
     if (prev.isActive !== next.isActive) return false;
+    if (prev.transitionRole !== next.transitionRole) return false;
     if (prev.tab !== next.tab) return false;
     if (prev.projects !== next.projects) return false;
     return true;
@@ -503,6 +605,16 @@ function Pane({ tab, projects, paneId, focused }: PaneProps) {
         if (clicked === "duplicate") onDuplicate();
       });
   };
+
+  const registry = usePaneMenuRegistry();
+  const openPaneMenuRef = useRef(openPaneMenu);
+  useEffect(() => {
+    openPaneMenuRef.current = openPaneMenu;
+  });
+  useEffect(() => {
+    if (registry === null) return;
+    return registry.register(paneId, (position) => openPaneMenuRef.current(position));
+  }, [registry, paneId]);
 
   const contentRef = useRef<HTMLDivElement>(null);
   const [availableSize, setAvailableSize] = useState({ width: 0, height: 0 });
@@ -610,9 +722,10 @@ function PaneHeader({
         onDragStart(event);
       }}
       onContextMenu={(event) => {
+        // ADR-0019: context menus over the Workbench are suppressed; the Pane
+        // header menu is opened by the right-drag gesture on a non-dragging release.
         event.preventDefault();
         event.stopPropagation();
-        onOpenMenu({ x: event.clientX, y: event.clientY });
       }}
       onKeyDown={(event) => {
         if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;

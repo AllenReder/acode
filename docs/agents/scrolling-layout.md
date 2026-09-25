@@ -6,7 +6,9 @@ Each Column owns a stable identity and ordered Pane references with normalized
 height shares. The canvas maintains at least 140 pixels per Pane; short windows
 can scroll vertically rather than crush content. Horizontal trackpad gestures
 are captured before terminal wheel handling; vertical gestures remain content
-scrolling.
+scrolling. A shift-modified vertical wheel is treated as horizontal intent and,
+once the layout and any nested scroller are at their horizontal limit, advances
+the Workbench Tab switch instead of a Pane Column (ADR-0019).
 
 A Pane edge drop to the left/right creates a Column; top/bottom stacks into the
 target Column. Column controls reorder Columns and their Panes, and let users

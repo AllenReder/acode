@@ -21,6 +21,8 @@ import { targetKey, type ViewTarget } from "./viewRegistry";
 import { tabDisplayTitle, type WorkbenchSnapshot, type WorkbenchTab } from "./workbenchState";
 import { useWorkbenchDragSource, useWorkbenchDragState } from "./workbenchDrag";
 import { useWorkbenchStore } from "./workbenchStore";
+import { useTabIndicator } from "./useTabIndicator";
+import { tabIdsKey } from "./tabTransition";
 import { FLUID_MOTION_DURATION_MS, getPrefersReducedMotion } from "./workbenchMotion";
 import { resolveTargetContext, resolveTargetTitle } from "./workbenchTitles";
 
@@ -105,8 +107,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
     if (stripEl) {
       const stripRect = stripEl.getBoundingClientRect();
       isSlidOut =
-        dragState.pointer.y > stripRect.bottom + 12 ||
-        dragState.pointer.y < stripRect.top - 12;
+        dragState.pointer.y > stripRect.bottom + 12 || dragState.pointer.y < stripRect.top - 12;
       const firstTabEl = stripEl.querySelector<HTMLElement>("[data-tab-id]");
       if (firstTabEl) {
         tabWidth = firstTabEl.getBoundingClientRect().width || 176;
@@ -123,6 +124,17 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
       }
     }
   }
+
+  const tabsKey = tabIdsKey(snapshot.tabs);
+  const indicatorRevision = isAnyTabDragged
+    ? `${tabsKey}|${targetIndex}|${Math.round(deltaX)}|${isSlidOut}`
+    : tabsKey;
+  const indicatorRef = useTabIndicator({
+    stripRef,
+    activeTabId: snapshot.activeTabId,
+    revision: indicatorRevision,
+    dragging: isAnyTabDragged,
+  });
 
   const lastDragInfoRef = useRef<{
     tabId: string;
@@ -206,7 +218,7 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
       <div className="flex h-full min-w-0 flex-1 items-center gap-2 pr-3" data-tauri-drag-region>
         <div
           ref={stripRef}
-          className="flex h-full min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="relative flex h-full min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           data-workbench-tab-strip-drop=""
           data-tauri-drag-region
           role="tablist"
@@ -252,6 +264,12 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
               />
             );
           })}
+          <span
+            ref={indicatorRef}
+            aria-hidden="true"
+            data-tab-indicator=""
+            className="workbench-tab-indicator"
+          />
         </div>
 
         <div
@@ -424,7 +442,7 @@ function WorkbenchTabItem({
       className={cn(
         "workbench-tab-item group relative flex h-full w-44 min-w-28 shrink cursor-pointer items-center gap-2 border-r border-border/60 px-3 text-left select-none [-webkit-app-region:no-drag] will-change-transform",
         active
-          ? "bg-foreground/5 text-foreground font-medium"
+          ? "bg-foreground/5 text-foreground"
           : "bg-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
       )}
       onClick={() => {

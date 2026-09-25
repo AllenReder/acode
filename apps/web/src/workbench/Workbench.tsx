@@ -6,6 +6,7 @@ import { useComposerDraftStore } from "../composerDraftStore";
 import { useEnvironmentCatalogSnapshot } from "../state/environmentCatalogSnapshot";
 import { useEnvironments } from "../state/environments";
 import { PaneTree } from "./PaneTree";
+import { TabTransitionController } from "./tabTransitionReact";
 import { WorkbenchWindowChrome } from "./WorkbenchWindowChrome";
 import { MaterialSurface } from "../components/MaterialSurface";
 import { WorkbenchDropOverlay } from "./workbenchDrag";
@@ -168,6 +169,7 @@ export function Workbench({ navigate: navigateTo }: WorkbenchProps = {}) {
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+      <TabTransitionController />
       <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
       <MaterialSurface
         kind="workbench"
