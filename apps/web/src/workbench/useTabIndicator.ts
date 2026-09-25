@@ -54,6 +54,11 @@ export function useTabIndicator(
   const { stripRef, activeTabId, revision, dragging } = options;
   const indicatorRef = useRef<HTMLSpanElement | null>(null);
   const lastGeometryRef = useRef<TabIndicatorGeometry | null>(null);
+  const transitionGeometryRef = useRef<{
+    readonly key: string;
+    readonly from: TabIndicatorGeometry;
+    readonly to: TabIndicatorGeometry;
+  } | null>(null);
   const transition = useTabTransition();
 
   useLayoutEffect(() => {
@@ -92,6 +97,7 @@ export function useTabIndicator(
     };
 
     if (transition === null) {
+      transitionGeometryRef.current = null;
       const geometry = measureTabGeometry(strip, activeTabId);
       if (geometry !== null) {
         if (dragging) write(geometry);
@@ -104,13 +110,22 @@ export function useTabIndicator(
     if (typeof indicator.getAnimations === "function") {
       indicator.getAnimations().forEach((animation) => animation.cancel());
     }
+    // The Topbar Tabs do not move while the Workbench cards slide, so measure the
+    // two endpoints once. Re-measuring every frame would force a synchronous
+    // reflow of the whole (possibly heavy) card subtree on each frame.
+    const cacheKey = `${transition.fromTabId}>${transition.toTabId}`;
+    if (transitionGeometryRef.current?.key !== cacheKey) {
+      const from = measureTabGeometry(strip, transition.fromTabId);
+      const to = measureTabGeometry(strip, transition.toTabId);
+      transitionGeometryRef.current =
+        from !== null && to !== null ? { key: cacheKey, from, to } : null;
+    }
+    const cached = transitionGeometryRef.current;
+    if (cached === null) return;
     const applyFrame = () => {
       const frame = getTabTransitionFrame();
       if (frame === null) return;
-      const from = measureTabGeometry(strip, frame.fromTabId);
-      const to = measureTabGeometry(strip, frame.toTabId);
-      if (from === null || to === null) return;
-      write(interpolateIndicatorGeometry(from, to, frame.progress));
+      write(interpolateIndicatorGeometry(cached.from, cached.to, frame.progress));
     };
     applyFrame();
     return subscribeTabTransitionFrame(applyFrame);

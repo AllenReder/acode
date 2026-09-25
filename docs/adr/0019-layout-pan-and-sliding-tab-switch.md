@@ -49,11 +49,17 @@ more cleanly anyway.
   edge to edge — no scale, fade, or depth.
 - **The moving cards stay compositing-neutral.** The transition wrapper and cards must
   not introduce `will-change`, `backface-visibility`, `border-radius`, `overflow`, or
-  `box-shadow`. Any of these makes the browser build a render surface around the moving
+  `box-shadow`, and the strip moves with a 2D `translate` rather than a scale or
+  `translate3d`. Any of those makes the browser build a render surface around the moving
   card, which drops the `mask`/`clip-path` on descendant `backdrop-filter` glass (the
   Chat composer and its attached banners) and paints it as a hard rectangle for the
-  duration of the switch. For the same reason, `backdrop-filter` is disabled on every
-  descendant while a card is in motion.
+  duration of the switch. The glass therefore stays live while a card moves instead of
+  being disabled, which would also force a full repaint of the card subtree.
+- **The indicator measures once per switch.** The Topbar Tabs do not move while the
+  Workbench cards slide, so the underbar's two endpoint geometries are read once when the
+  switch begins and interpolated per frame. Re-reading layout every frame would force a
+  synchronous reflow of the whole card subtree on each frame, which stalls the switch for
+  heavy Tabs such as Agent sessions.
 - **Direction follows Tab order.** Dragging the pointer left reveals the next Tab
   from the right edge; dragging right reveals the previous Tab from the left edge.
   Tab order is the Topbar's visual order and wraps cyclically.

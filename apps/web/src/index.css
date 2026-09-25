@@ -2330,7 +2330,8 @@ html[data-workbench-window-chrome] {
    Keep this rule to positioning only. `will-change`, `backface-visibility`,
    `border-radius`, and `overflow` all make the browser create a render surface
    (backdrop root) around the card, which drops the `mask`/`clip-path` on
-   descendant `backdrop-filter` glass and paints it as a hard rectangle. */
+   descendant `backdrop-filter` glass and paints it as a hard rectangle. A 2D
+   `translate` on its own does not, so the glass can stay live while a card moves. */
 .workbench-viewport-container[data-tab-transition="true"] {
   overflow: hidden;
 }
@@ -2339,15 +2340,6 @@ html[data-workbench-window-chrome] {
   inset: 0;
   flex: none;
   pointer-events: none;
-}
-/* Belt and braces for the backdrop root: no glass inside a moving card, so no
-   descendant `backdrop-filter` can be re-composited into a rectangle mid-switch. */
-.workbench-viewport-container[data-tab-transition="true"] .workbench-viewport,
-.workbench-viewport-container[data-tab-transition="true"] .workbench-viewport *,
-.workbench-viewport-container[data-tab-transition="true"] .workbench-viewport *::before,
-.workbench-viewport-container[data-tab-transition="true"] .workbench-viewport *::after {
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
 }
 .workbench-canvas {
   position: relative;

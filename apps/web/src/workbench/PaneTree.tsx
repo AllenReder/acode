@@ -80,7 +80,9 @@ function writeTransitionCardTransform(
   }
   const slot = role === "to" ? 0 : -frame.dir;
   const offset = computeCardOffset(slot, frame.dir, frame.progress);
-  style.transform = `translate3d(${(offset * 100).toFixed(4)}%, 0, 0)`;
+  // A 2D translate keeps the card off the 3D/backdrop-root path so descendant
+  // `backdrop-filter` glass keeps its mask while the strip moves.
+  style.transform = `translate(${(offset * 100).toFixed(4)}%, 0)`;
 }
 
 /**
