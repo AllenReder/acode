@@ -21,7 +21,12 @@ import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
-import { devRunnerStopRequestPath, requestDevRunnerStop } from "./lib/dev-runner-stop.ts";
+import {
+  acknowledgeDevRunnerStop,
+  devRunnerStopAckPath,
+  devRunnerStopRequestPath,
+  requestDevRunnerStop,
+} from "./lib/dev-runner-stop.ts";
 import {
   checkPortAvailabilityOnHosts,
   createDevRunnerEnv,
@@ -1239,7 +1244,10 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           ),
           Effect.gen(function* () {
             yield* Deferred.await(started);
-            yield* Effect.tryPromise(() => requestDevRunnerStop(root, process.pid));
+            const stopRequestPath = yield* Effect.tryPromise(() =>
+              requestDevRunnerStop(root, process.pid),
+            );
+            yield* Effect.tryPromise(() => acknowledgeDevRunnerStop(stopRequestPath));
             yield* TestClock.adjust("100 millis");
             return yield* Effect.never;
           }),
@@ -1247,6 +1255,9 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
 
         assert.equal(completed, undefined);
         assert.isFalse(NodeFS.existsSync(devRunnerStopRequestPath(root, process.pid)));
+        assert.isFalse(
+          NodeFS.existsSync(devRunnerStopAckPath(devRunnerStopRequestPath(root, process.pid))),
+        );
       }).pipe(
         Effect.ensuring(Effect.sync(() => NodeFS.rmSync(root, { force: true, recursive: true }))),
       );

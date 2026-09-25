@@ -26,6 +26,18 @@ export interface DevRunnerStopRequest {
   readonly pid: number;
 }
 
+/** The daemon acknowledges a stop request here after its scope has drained. */
+export function devRunnerStopAckPath(stopRequestPath: string): string {
+  return `${stopRequestPath}.released`;
+}
+
+/** Publish the acknowledgement that lets the runner proceed to tree cleanup. */
+export async function acknowledgeDevRunnerStop(stopRequestPath: string): Promise<string> {
+  const ackPath = devRunnerStopAckPath(stopRequestPath);
+  await NodeFSP.writeFile(ackPath, "released\n", { encoding: "utf8", mode: 0o600 });
+  return ackPath;
+}
+
 /** A request target that cannot be confused with another runner file. */
 export function devRunnerStopRequestPath(baseDir: string, runnerPid: number): string {
   return NodePath.join(baseDir, "runtime", "dev-runner", `${runnerPid}.stop`);

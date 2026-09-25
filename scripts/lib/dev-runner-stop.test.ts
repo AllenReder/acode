@@ -7,6 +7,8 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   DEV_RUNNER_STOP_VERSION,
+  acknowledgeDevRunnerStop,
+  devRunnerStopAckPath,
   devRunnerStopRequestPath,
   requestDevRunnerStop,
 } from "./dev-runner-stop.ts";
@@ -28,6 +30,8 @@ describe("dev-runner stop requests", () => {
         pid: 42,
         version: DEV_RUNNER_STOP_VERSION,
       });
+      expect(await acknowledgeDevRunnerStop(requestPath)).toBe(devRunnerStopAckPath(requestPath));
+      expect(await NodeFSP.readFile(devRunnerStopAckPath(requestPath), "utf8")).toBe("released\n");
     } finally {
       await NodeFSP.rm(root, { force: true, recursive: true });
     }

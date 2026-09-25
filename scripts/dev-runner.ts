@@ -24,7 +24,7 @@ import { Argument, Command, Flag } from "effect/unstable/cli";
 import { ChildProcess } from "effect/unstable/process";
 
 import { type DevShareError, shareDevServer, unshareDevServer } from "./lib/dev-share.ts";
-import { devRunnerStopRequestPath } from "./lib/dev-runner-stop.ts";
+import { devRunnerStopAckPath, devRunnerStopRequestPath } from "./lib/dev-runner-stop.ts";
 import { loadRepoEnv } from "./lib/public-config.ts";
 
 Object.assign(process.env, loadRepoEnv());
@@ -37,6 +37,7 @@ const BASE_WEB_PORT = BASE_WEB_DEV_PORT;
 const MAX_HASH_OFFSET = 3000;
 const MAX_PORT = 65535;
 const DEV_RUNNER_STOP_POLL_INTERVAL = "100 millis" as const;
+const DEV_RUNNER_STOP_ACK_TIMEOUT = "5 seconds" as const;
 // HTTP(S) requests to these ports are blocked by the Fetch standard before a
 // browser reaches the network. Keep the complete list here so explicit or
 // future wider offsets cannot produce a URL that curl accepts but browsers
@@ -704,23 +705,48 @@ export function resolveModePortOffsets<R = NetService.NetService>({
 }
 
 /**
- * Wait for the pid-scoped stop request to appear.
+ * Poll for one control file.
  *
  * Polling rather than watching avoids platform-specific filesystem event
  * behavior and is cheap for one small path while the dev stack runs.
  */
-function waitForDevRunnerStopRequest(stopRequestPath: string) {
+function waitForDevRunnerFile(filePath: string) {
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     for (;;) {
-      if (yield* fileSystem.exists(stopRequestPath)) return;
+      if (yield* fileSystem.exists(filePath)) return;
       yield* Effect.sleep(DEV_RUNNER_STOP_POLL_INTERVAL);
+    }
+  });
+}
+
+/**
+ * Wait for a stop request and, when the daemon participates, its release ack.
+ *
+ * The request file stays visible while the daemon drains so both processes can
+ * observe the same signal. The ack is written after the daemon scope closes
+ * SQLite; waiting for it prevents the child-process finalizer from racing the
+ * graceful shutdown. A timeout keeps a missing or unhealthy daemon bounded.
+ */
+function waitForDevRunnerStopRequest(stopRequestPath: string, stopRequestAckPath: string) {
+  return Effect.gen(function* () {
+    yield* waitForDevRunnerFile(stopRequestPath);
+    const acknowledged = yield* waitForDevRunnerFile(stopRequestAckPath).pipe(
+      Effect.timeoutOption(DEV_RUNNER_STOP_ACK_TIMEOUT),
+    );
+    if (Option.isNone(acknowledged)) {
+      yield* Effect.logWarning(
+        `[dev-runner] daemon did not acknowledge ${stopRequestAckPath}; forcing the child tree to stop`,
+      );
+    } else {
+      yield* Effect.logInfo(`[dev-runner] daemon released ${stopRequestAckPath}`);
     }
   }).pipe(
     Effect.ensuring(
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
         yield* fileSystem.remove(stopRequestPath, { force: true }).pipe(Effect.ignore);
+        yield* fileSystem.remove(stopRequestAckPath, { force: true }).pipe(Effect.ignore);
       }),
     ),
   );
@@ -816,6 +842,12 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
     const baseDir = env.AWEN_HOME ?? (yield* DEFAULT_AWEN_HOME);
     const stopRequestPath =
       hostPlatform === "win32" ? devRunnerStopRequestPath(baseDir, process.pid) : undefined;
+    const stopRequestAckPath =
+      stopRequestPath === undefined ? undefined : devRunnerStopAckPath(stopRequestPath);
+    if (stopRequestPath !== undefined && stopRequestAckPath !== undefined) {
+      env.AWEN_DEV_RUNNER_STOP_FILE = stopRequestPath;
+      env.AWEN_DEV_RUNNER_STOP_ACK_FILE = stopRequestAckPath;
+    }
     const stopFileLog = stopRequestPath === undefined ? "" : ` stopFile=${String(stopRequestPath)}`;
 
     yield* Effect.logInfo(
@@ -829,9 +861,10 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       return;
     }
 
-    if (stopRequestPath !== undefined) {
+    if (stopRequestPath !== undefined && stopRequestAckPath !== undefined) {
       const fileSystem = yield* FileSystem.FileSystem;
       yield* fileSystem.remove(stopRequestPath, { force: true }).pipe(Effect.ignore);
+      yield* fileSystem.remove(stopRequestAckPath, { force: true }).pipe(Effect.ignore);
     }
 
     const sharedWebPort = BASE_WEB_PORT + webOffset;
@@ -943,7 +976,9 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
     );
 
     const waitForStopRequest =
-      stopRequestPath === undefined ? Effect.never : waitForDevRunnerStopRequest(stopRequestPath);
+      stopRequestPath === undefined || stopRequestAckPath === undefined
+        ? Effect.never
+        : waitForDevRunnerStopRequest(stopRequestPath, stopRequestAckPath);
     const exitCode = yield* Effect.raceFirst(
       child.exitCode.pipe(Effect.map((code) => Option.some(Number(code)))),
       waitForStopRequest.pipe(Effect.as(Option.none<number>())),
