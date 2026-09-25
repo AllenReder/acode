@@ -5,10 +5,15 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NetService from "@awen/shared/Net";
 import { BASE_DAEMON_PORT, BASE_WEB_DEV_PORT } from "@awen/shared/daemonPort";
 import { resolveGitWorktreePath } from "@awen/shared/devHome";
-import { HostProcessEnvironment, HostProcessWorkingDirectory } from "@awen/shared/hostProcess";
+import {
+  HostProcessEnvironment,
+  HostProcessPlatform,
+  HostProcessWorkingDirectory,
+} from "@awen/shared/hostProcess";
 import { resolveSpawnCommand } from "@awen/shared/shell";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Hash from "effect/Hash";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -19,6 +24,7 @@ import { Argument, Command, Flag } from "effect/unstable/cli";
 import { ChildProcess } from "effect/unstable/process";
 
 import { type DevShareError, shareDevServer, unshareDevServer } from "./lib/dev-share.ts";
+import { devRunnerStopAckPath, devRunnerStopRequestPath } from "./lib/dev-runner-stop.ts";
 import { loadRepoEnv } from "./lib/public-config.ts";
 
 Object.assign(process.env, loadRepoEnv());
@@ -30,6 +36,8 @@ const BASE_SERVER_PORT = BASE_DAEMON_PORT;
 const BASE_WEB_PORT = BASE_WEB_DEV_PORT;
 const MAX_HASH_OFFSET = 3000;
 const MAX_PORT = 65535;
+const DEV_RUNNER_STOP_POLL_INTERVAL = "100 millis" as const;
+const DEV_RUNNER_STOP_ACK_TIMEOUT = "5 seconds" as const;
 // HTTP(S) requests to these ports are blocked by the Fetch standard before a
 // browser reaches the network. Keep the complete list here so explicit or
 // future wider offsets cannot produce a URL that curl accepts but browsers
@@ -696,6 +704,54 @@ export function resolveModePortOffsets<R = NetService.NetService>({
   });
 }
 
+/**
+ * Poll for one control file.
+ *
+ * Polling rather than watching avoids platform-specific filesystem event
+ * behavior and is cheap for one small path while the dev stack runs.
+ */
+function waitForDevRunnerFile(filePath: string) {
+  return Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    for (;;) {
+      if (yield* fileSystem.exists(filePath)) return;
+      yield* Effect.sleep(DEV_RUNNER_STOP_POLL_INTERVAL);
+    }
+  });
+}
+
+/**
+ * Wait for a stop request and, when the daemon participates, its release ack.
+ *
+ * The request file stays visible while the daemon drains so both processes can
+ * observe the same signal. The ack is written after the daemon scope closes
+ * SQLite; waiting for it prevents the child-process finalizer from racing the
+ * graceful shutdown. A timeout keeps a missing or unhealthy daemon bounded.
+ */
+function waitForDevRunnerStopRequest(stopRequestPath: string, stopRequestAckPath: string) {
+  return Effect.gen(function* () {
+    yield* waitForDevRunnerFile(stopRequestPath);
+    const acknowledged = yield* waitForDevRunnerFile(stopRequestAckPath).pipe(
+      Effect.timeoutOption(DEV_RUNNER_STOP_ACK_TIMEOUT),
+    );
+    if (Option.isNone(acknowledged)) {
+      yield* Effect.logWarning(
+        `[dev-runner] daemon did not acknowledge ${stopRequestAckPath}; forcing the child tree to stop`,
+      );
+    } else {
+      yield* Effect.logInfo(`[dev-runner] daemon released ${stopRequestAckPath}`);
+    }
+  }).pipe(
+    Effect.ensuring(
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        yield* fileSystem.remove(stopRequestPath, { force: true }).pipe(Effect.ignore);
+        yield* fileSystem.remove(stopRequestAckPath, { force: true }).pipe(Effect.ignore);
+      }),
+    ),
+  );
+}
+
 interface DevRunnerCliInput {
   readonly mode: DevMode;
   readonly awenHome: string | undefined;
@@ -736,6 +792,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
     }
 
     const path = yield* Path.Path;
+    const hostPlatform = yield* HostProcessPlatform;
     const workingDirectory = yield* HostProcessWorkingDirectory;
     const worktreePath = yield* resolveGitWorktreePath(workingDirectory);
     const checkoutRoot = worktreePath ?? path.resolve(path.join(import.meta.dirname, ".."));
@@ -783,9 +840,18 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
         ? ` selectedOffset(server=${serverOffset},web=${webOffset})`
         : "";
     const baseDir = env.AWEN_HOME ?? (yield* DEFAULT_AWEN_HOME);
+    const stopRequestPath =
+      hostPlatform === "win32" ? devRunnerStopRequestPath(baseDir, process.pid) : undefined;
+    const stopRequestAckPath =
+      stopRequestPath === undefined ? undefined : devRunnerStopAckPath(stopRequestPath);
+    if (stopRequestPath !== undefined && stopRequestAckPath !== undefined) {
+      env.AWEN_DEV_RUNNER_STOP_FILE = stopRequestPath;
+      env.AWEN_DEV_RUNNER_STOP_ACK_FILE = stopRequestAckPath;
+    }
+    const stopFileLog = stopRequestPath === undefined ? "" : ` stopFile=${String(stopRequestPath)}`;
 
     yield* Effect.logInfo(
-      `[dev-runner] mode=${input.mode} source=${source}${selectionSuffix} serverPort=${String(env.AWEN_PORT)} webPort=${String(env.PORT)} baseDir=${baseDir}`,
+      `[dev-runner] mode=${input.mode} source=${source}${selectionSuffix} serverPort=${String(env.AWEN_PORT)} webPort=${String(env.PORT)} baseDir=${baseDir}${stopFileLog}`,
     );
 
     // Before the share block: --dry-run only resolves and prints. Sharing would
@@ -793,6 +859,12 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
     // surprising side effect from a command documented as inert.
     if (input.dryRun) {
       return;
+    }
+
+    if (stopRequestPath !== undefined && stopRequestAckPath !== undefined) {
+      const fileSystem = yield* FileSystem.FileSystem;
+      yield* fileSystem.remove(stopRequestPath, { force: true }).pipe(Effect.ignore);
+      yield* fileSystem.remove(stopRequestAckPath, { force: true }).pipe(Effect.ignore);
     }
 
     const sharedWebPort = BASE_WEB_PORT + webOffset;
@@ -885,10 +957,12 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       env,
       extendEnv: false,
       shell: spawnCommand.shell,
-      // Keep Vite+ in the same process group so terminal signals (Ctrl+C)
-      // reach it directly. Effect defaults to detached: true on non-Windows,
-      // which would put the runner in a new group and require manual forwarding.
-      detached: false,
+      // POSIX keeps Vite+ in the runner process group so terminal Ctrl+C
+      // reaches the whole stack directly. Windows has no equivalent process
+      // group: isolate Vite+ from the console event, let the runner handle the
+      // interrupt, and rely on Effect finalization to run taskkill /T /F while
+      // the Vite+ tree is still addressable.
+      ...(hostPlatform === "win32" ? { detached: true, windowsHide: true } : { detached: false }),
       forceKillAfter: "1500 millis",
     }).pipe(
       Effect.mapError(
@@ -901,7 +975,14 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       ),
     );
 
-    const exitCode = yield* child.exitCode.pipe(
+    const waitForStopRequest =
+      stopRequestPath === undefined || stopRequestAckPath === undefined
+        ? Effect.never
+        : waitForDevRunnerStopRequest(stopRequestPath, stopRequestAckPath);
+    const exitCode = yield* Effect.raceFirst(
+      child.exitCode.pipe(Effect.map((code) => Option.some(Number(code)))),
+      waitForStopRequest.pipe(Effect.as(Option.none<number>())),
+    ).pipe(
       Effect.mapError(
         (cause) =>
           new DevRunnerProcessError({
@@ -911,10 +992,15 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
           }),
       ),
     );
-    if (exitCode !== 0) {
+
+    if (Option.isNone(exitCode)) {
+      yield* Effect.logInfo("[dev-runner] stop requested; draining the child process tree");
+      return;
+    }
+    if (exitCode.value !== 0) {
       return yield* new DevRunnerProcessExitError({
         ...processContext,
-        exitCode,
+        exitCode: exitCode.value,
       });
     }
   });

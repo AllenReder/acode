@@ -7,8 +7,9 @@ import * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import { chromium } from "playwright";
-import { nodeEntryInvocation, withNodeModulesBin } from "./lib/spawn-command.ts";
+import { requestDevRunnerStop } from "./lib/dev-runner-stop.ts";
 import { createProcessTreePort, stopProcessTree } from "./lib/process-tree.ts";
+import { nodeEntryInvocation, withNodeModulesBin } from "./lib/spawn-command.ts";
 import { removePathWithRetry, runTeardownSteps } from "./lib/teardown-steps.ts";
 import { verifyWorkbenchAppearance } from "./workbench-appearance-checks.mjs";
 
@@ -17,6 +18,7 @@ import { verifyWorkbenchAppearance } from "./workbench-appearance-checks.mjs";
 // most, and reject gpt-6-astra before sending.
 const repositoryRoot = NodePath.resolve(import.meta.dirname, "..");
 const timeoutMs = Number(process.env.WORKBENCH_E2E_TIMEOUT_MS ?? "120000");
+const stopRequestTimeoutMs = 10_000;
 const keepTemporary = process.env.WORKBENCH_E2E_KEEP_TEMP === "1";
 
 function stripAnsi(value) {
@@ -164,17 +166,61 @@ function waitForChildExit(child) {
   return new Promise((resolve) => child.once("exit", () => resolve()));
 }
 
+function waitForChildExitWithin(child, timeoutMs) {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (exited) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.off("exit", onExit);
+      resolve(exited);
+    };
+    const onExit = () => finish(true);
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    child.once("exit", onExit);
+    if (child.exitCode !== null || child.signalCode !== null) onExit();
+  });
+}
+
 /**
  * Terminate the isolated daemon, not just the runner that launched it.
  *
  * `scripts/dev-runner.ts` resolves `vp`, which starts a Vite+ core process,
  * which runs `node --watch src/bin.ts`, which runs the daemon holding this
- * run's SQLite database. Windows has neither process groups nor signal
- * handlers there, so `child.kill` used to reach only the runner while the four
- * processes beneath it kept the temporary home busy.
+ * run of the temporary home.
+ *
+ * Ask the runner through its pid-scoped stop file first. That lets the runner
+ * unwind its Effect scope while `vp` is still alive, so the child-process
+ * finalizer can use `taskkill /T /F` instead of orphaning the descendants.
+ * The process-tree sweep remains the fallback for an early crash or a runner
+ * that does not answer the request.
  */
-async function stopDaemonProcessTree(child) {
+async function stopDaemonProcessTree(child, home) {
   if (typeof child.pid !== "number") return;
+
+  // oxlint-disable-next-line awen/no-global-process-runtime -- Standalone browser harness owns native child process groups.
+  if (NodeOS.platform() === "win32" && child.exitCode === null && child.signalCode === null) {
+    let requestPath = null;
+    try {
+      requestPath = await requestDevRunnerStop(home, child.pid);
+      if (await waitForChildExitWithin(child, stopRequestTimeoutMs)) {
+        console.log(
+          `workbench: dev runner drained its process tree (stop request: ${requestPath})`,
+        );
+        return;
+      }
+      console.error(
+        `workbench: dev runner did not exit within ${String(stopRequestTimeoutMs)}ms after stop request ${requestPath}; falling back to force teardown`,
+      );
+    } catch (error) {
+      console.error(
+        `workbench: could not request the dev-runner stop: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   const port = createProcessTreePort({
     hasRootExited: () => child.exitCode !== null || child.signalCode !== null,
     // oxlint-disable-next-line awen/no-global-process-runtime -- Standalone browser harness owns native child process groups.
@@ -796,7 +842,7 @@ async function main() {
           await browser?.close();
         },
       },
-      { label: "terminate the daemon process tree", run: () => stopDaemonProcessTree(child) },
+      { label: "terminate the daemon process tree", run: () => stopDaemonProcessTree(child, home) },
       {
         label: keepTemporary ? "retain the temporary home" : "remove the temporary home",
         run: () => finishTemporaryHome(temporaryRoot, keepTemporary),

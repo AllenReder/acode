@@ -2,10 +2,16 @@ import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Runtime from "effect/Runtime";
 import { Command } from "effect/unstable/cli";
 
 import * as NetService from "@awen/shared/Net";
 import packageJson from "../package.json" with { type: "json" };
+import {
+  makeDevRunnerStopHandshake,
+  withDevRunnerStopSignal,
+  writeDevRunnerStopAck,
+} from "./devRunnerStop.ts";
 import { authCommand } from "./cli/auth.ts";
 import { appCommand } from "./cli/app.ts";
 import { daemonCommand } from "./cli/daemon.ts";
@@ -59,9 +65,18 @@ if (
     runtimeMain: import.meta.main,
   })
 ) {
-  Command.run(cli, { version: packageJson.version }).pipe(
-    Effect.scoped,
-    Effect.provide(CliRuntimeLayer),
-    NodeRuntime.runMain,
+  const devRunnerStop = makeDevRunnerStopHandshake(process.env);
+  const program = Command.run(cli, { version: packageJson.version });
+  NodeRuntime.runMain(
+    (devRunnerStop === undefined ? program : withDevRunnerStopSignal(program, devRunnerStop)).pipe(
+      Effect.scoped,
+      Effect.provide(CliRuntimeLayer),
+    ),
+    {
+      teardown: (exit, onExit) => {
+        if (devRunnerStop !== undefined) writeDevRunnerStopAck(devRunnerStop);
+        Runtime.defaultTeardown(exit, onExit);
+      },
+    },
   );
 }
