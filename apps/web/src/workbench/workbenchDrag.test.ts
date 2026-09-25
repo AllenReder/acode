@@ -5,6 +5,7 @@ import {
   resolveSidebarDropTargetAtPoint,
   computeVirtualPaneRegions,
   resolveVirtualPaneDropTargetAtPoint,
+  computeEdgeAutoScrollVelocity,
 } from "./workbenchDrag";
 import { leaf, splitPane } from "./layout";
 import { computeBaseTab, type WorkbenchTab, type ViewInstance } from "./workbenchState";
@@ -147,6 +148,28 @@ it("resolves sidebar session reorder target when dragging inside sidebar within 
   // Dragging s2 from different workspace: no reorder target
   const otherWsRes = resolveSidebarDropTargetAtPoint(50, 55, "local:ws2", "s2", resolver);
   expect(otherWsRes).toEqual({
+    isOverSidebar: true,
+    sidebarDropTarget: null,
+  });
+
+  // Dragging s2 over a closed (history) session: no reorder target
+  const closedRow = fakeElement({
+    dataset: {
+      sidebarSessionRow: "true",
+      workspaceKey: "local:ws1",
+      sessionId: "s_closed",
+      sessionClosed: "true",
+    },
+    rect: { left: 10, top: 90, width: 200, height: 30 },
+  });
+  closedRow.closest = ((selector: string) =>
+    selector === "[data-sidebar-session-row]" ? closedRow : null) as Element["closest"];
+  const closedResolver = {
+    isOverSidebar: (x: number, y: number) => x >= 0 && x <= 250 && y >= 0 && y <= 600,
+    elementFromPoint: () => closedRow,
+  };
+  const closedRes = resolveSidebarDropTargetAtPoint(50, 95, "local:ws1", "s2", closedResolver);
+  expect(closedRes).toEqual({
     isOverSidebar: true,
     sidebarDropTarget: null,
   });
@@ -337,5 +360,137 @@ describe("Virtual Base Layout Drag Hit-Testing", () => {
     expect(regions).toHaveLength(0);
     const hit = resolveVirtualPaneDropTargetAtPoint(100, 300, viewportRect, regions);
     expect(hit).toBeNull();
+  });
+
+  it("resolves trailing canvas area to the rightmost column with zone: right in scrolling mode (ADR 0015)", () => {
+    const scrollingTab: WorkbenchTab = {
+      id: "tab-scrolling",
+      layoutMode: "scrolling",
+      layout: leaf("pane-a"),
+      columns: [
+        { id: "col-1", width: 400, paneIds: ["pane-a"], shares: [1] },
+        { id: "col-2", width: 400, paneIds: ["pane-b"], shares: [1] },
+      ],
+      panes: new Map([
+        ["pane-a", dummyView("pane-a")],
+        ["pane-b", dummyView("pane-b")],
+      ]),
+      focusedPaneId: "pane-a",
+      titleMode: "auto",
+      titleOverride: null,
+    };
+
+    const viewportRect = { left: 0, top: 0, width: 1400, height: 800 };
+    // Dragging pane-a: baseTab has col-2 (pane-b)
+    const baseTab = computeBaseTab(scrollingTab, "pane-a");
+    const regions = computeVirtualPaneRegions(baseTab, viewportRect, 0);
+
+    // baseTab has pane-b at left = 0, width = 400
+    expect(regions).toHaveLength(1);
+    expect(regions[0]?.paneId).toBe("pane-b");
+    expect(regions[0]?.rect.left).toBe(0);
+    expect(regions[0]?.rect.width).toBe(400);
+
+    // Point in the trailing canvas area (x = 800, y = 300), far to the right of col-2 (which ends at 400)
+    const hitTrailing = resolveVirtualPaneDropTargetAtPoint(
+      800,
+      300,
+      viewportRect,
+      regions,
+      0,
+      true,
+      "scrolling",
+    );
+
+    expect(hitTrailing).toEqual({
+      kind: "pane",
+      tabId: "tab-scrolling",
+      paneId: "pane-b",
+      zone: "right",
+    });
+
+    // In BSP mode, the same point outside pane regions returns null
+    const hitBsp = resolveVirtualPaneDropTargetAtPoint(
+      800,
+      300,
+      viewportRect,
+      regions,
+      0,
+      true,
+      "bsp",
+    );
+    expect(hitBsp).toBeNull();
+  });
+
+  it("preserves single-pane invariant in scrolling mode when dragging the sole pane (ADR 0015)", () => {
+    const singleScrollingTab: WorkbenchTab = {
+      id: "tab-scrolling-single",
+      layoutMode: "scrolling",
+      layout: leaf("pane-a"),
+      columns: [{ id: "col-1", width: 400, paneIds: ["pane-a"], shares: [1] }],
+      panes: new Map([["pane-a", dummyView("pane-a")]]),
+      focusedPaneId: "pane-a",
+      titleMode: "auto",
+      titleOverride: null,
+    };
+
+    const viewportRect = { left: 0, top: 0, width: 1400, height: 800 };
+    const baseTab = computeBaseTab(singleScrollingTab, "pane-a");
+    expect(baseTab).toBeNull();
+
+    const regions = computeVirtualPaneRegions(baseTab, viewportRect, 0);
+    expect(regions).toHaveLength(0);
+
+    // Hit testing in the trailing canvas area returns null because no base panes exist
+    const hit = resolveVirtualPaneDropTargetAtPoint(
+      800,
+      300,
+      viewportRect,
+      regions,
+      0,
+      true,
+      "scrolling",
+    );
+    expect(hit).toBeNull();
+  });
+
+  describe("computeEdgeAutoScrollVelocity (ADR 0015)", () => {
+    const viewportRect = { left: 100, top: 50, width: 1000, height: 600 };
+
+    it("returns 0 when pointer is in the central region of the viewport", () => {
+      // Middle of viewport: x = 600
+      expect(computeEdgeAutoScrollVelocity(600, viewportRect)).toBe(0);
+      // Just inside edge zone boundary: left + 56 = 156. At x = 160:
+      expect(computeEdgeAutoScrollVelocity(160, viewportRect)).toBe(0);
+      // Right edge zone boundary: left + width - 56 = 1044. At x = 1040:
+      expect(computeEdgeAutoScrollVelocity(1040, viewportRect)).toBe(0);
+    });
+
+    it("returns proportional negative velocity in the left edge zone", () => {
+      // Just entered left edge: x = 155 (depth ~ 0.01)
+      const nearThreshold = computeEdgeAutoScrollVelocity(155, viewportRect);
+      expect(nearThreshold).toBeLessThan(0);
+      expect(nearThreshold).toBeGreaterThanOrEqual(-4);
+
+      // Deep into left edge: x = 100 (depth 1.0, maximum speed)
+      const atEdge = computeEdgeAutoScrollVelocity(100, viewportRect);
+      expect(atEdge).toBe(-20);
+    });
+
+    it("returns proportional positive velocity in the right edge zone", () => {
+      // Just entered right edge: x = 1045 (depth ~ 0.01)
+      const nearThreshold = computeEdgeAutoScrollVelocity(1045, viewportRect);
+      expect(nearThreshold).toBeGreaterThan(0);
+      expect(nearThreshold).toBeLessThanOrEqual(4);
+
+      // Deep into right edge: x = 1100 (depth 1.0, maximum speed)
+      const atEdge = computeEdgeAutoScrollVelocity(1100, viewportRect);
+      expect(atEdge).toBe(20);
+    });
+
+    it("returns 0 when pointer is outside viewport bounds", () => {
+      expect(computeEdgeAutoScrollVelocity(50, viewportRect)).toBe(0); // left of viewport
+      expect(computeEdgeAutoScrollVelocity(1200, viewportRect)).toBe(0); // right of viewport
+    });
   });
 });

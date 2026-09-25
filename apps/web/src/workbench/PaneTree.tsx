@@ -1,4 +1,5 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -16,9 +17,24 @@ import { computePaneLayoutRects } from "./layoutGeometry";
 import { MIN_PANE_HEIGHT } from "./scrollingLayout";
 import { resolveViewDefinition, type ViewTarget } from "./viewRegistry";
 import { useWorkbenchStore } from "./workbenchStore";
-import { getActiveTab, type WorkbenchSnapshot } from "./workbenchState";
+import type { WorkbenchSnapshot, WorkbenchTab } from "./workbenchState";
 import { useWorkbenchDragState, useWorkbenchDragSource } from "./workbenchDrag";
 import { resolveTargetBreadcrumbs } from "./workbenchTitles";
+import {
+  PaneMenuRegistryContext,
+  usePaneMenuRegistry,
+  type MenuAnchorPosition,
+  type PaneMenuRegistry,
+} from "./paneMenuRegistry";
+import { useTabTransition } from "./tabTransitionReact";
+import { useTabSwitchGesture } from "./useTabSwitchGesture";
+import { useTabSwitchWheel } from "./useTabSwitchWheel";
+import {
+  computeCardOffset,
+  getTabTransitionFrame,
+  subscribeTabTransitionFrame,
+  type TabTransitionFrame,
+} from "./tabTransition";
 import {
   animateScrollTo,
   cancelActiveScrollAnimation,
@@ -47,334 +63,491 @@ function resolvePaneBoxShadow(paneGap: number, paneShadow: PaneShadow): string {
   }
 }
 
+/** Write one card's slot transform for the current Sliding Tab switch frame. */
+function writeTransitionCardTransform(
+  element: HTMLElement,
+  role: "to" | "from",
+  frame: TabTransitionFrame | null,
+): void {
+  const style = (element as { style?: CSSStyleDeclaration }).style;
+  if (!style) return;
+  if (frame === null) {
+    style.transform = "";
+    return;
+  }
+  const slot = role === "to" ? 0 : -frame.dir;
+  const offset = computeCardOffset(slot, frame.dir, frame.progress);
+  // A 2D translate keeps the card off the 3D/backdrop-root path so descendant
+  // `backdrop-filter` glass keeps its mask while the strip moves.
+  style.transform = `translate(${(offset * 100).toFixed(4)}%, 0)`;
+}
+
+/**
+ * Workbench canvas host that maintains Keep-Alive viewports across all tabs.
+ * At rest only the active Tab is shown; during a Sliding Tab switch the source
+ * and target Tabs are laid out as two cards and driven by transition progress.
+ */
 export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps) {
-  const tab = getActiveTab(snapshot);
-  const dragState = useWorkbenchDragState();
-  const previewTab =
-    dragState?.phase === "dragging" && dragState.valid
-      ? dragState.result?.snapshot.tabs.find((candidate) => candidate.id === tab.id)
-      : undefined;
-  const scrolling = tab.layoutMode === "scrolling";
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
-  const changeColumn = useWorkbenchStore((s) => s.changeColumn);
-  const setFocused = useWorkbenchStore((s) => s.setFocused);
-  const previousRects = useRef(new Map<string, DOMRect>());
+  const transition = useTabTransition();
+  const stageRef = useRef<HTMLDivElement>(null);
+  const menuOpenersRef = useRef(new Map<string, (position: MenuAnchorPosition) => void>());
 
-  const paneGap = usePrimarySettings((s) => s.paneGap);
-  const paneRadius = usePrimarySettings((s) => s.paneRadius);
-  const paneShadow = usePrimarySettings((s) => s.paneShadow);
-
-  useLayoutEffect(() => {
-    if (scrolling) return;
-    const viewport = viewportRef.current;
-    if (!viewport?.querySelectorAll) return;
-    const frames = viewport.querySelectorAll<HTMLElement>(".workbench-pane-frame");
-    const next = new Map<string, DOMRect>();
-    for (const frame of frames) {
-      const id =
-        frame.querySelector<HTMLElement>("[data-view-instance-id]")?.dataset.viewInstanceId;
-      if (!id) continue;
-      const rect = frame.getBoundingClientRect();
-      next.set(id, rect);
-      const old = previousRects.current.get(id);
-      if (
-        !old ||
-        document.documentElement.dataset.workbenchResizing ||
-        document.documentElement.dataset.workbenchDragging ||
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches
-      )
-        continue;
-      const dx = old.left - rect.left;
-      const dy = old.top - rect.top;
-      if (Math.abs(dx) + Math.abs(dy) > 1) {
-        frame.getAnimations().forEach((animation) => animation.cancel());
-        frame.animate(
-          [{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "translate(0,0)" }],
-          { duration: 220, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
-        );
-      }
-    }
-    previousRects.current = next;
-  }, [tab.layout]);
-
-  useEffect(() => {
-    const element = viewportRef.current;
-    if (!element) return;
-    const update = () => setSize({ width: element.clientWidth, height: element.clientHeight });
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!scrolling || !viewport) return;
-    const wheel = (event: WheelEvent) => {
-      if (Math.abs(event.deltaX) <= Math.abs(event.deltaY) || event.ctrlKey) return;
-      event.preventDefault();
-      event.stopPropagation();
-      viewport.scrollLeft +=
-        event.deltaX *
-        (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.clientWidth : 1);
-    };
-    viewport.addEventListener("wheel", wheel, { capture: true, passive: false });
-    return () => viewport.removeEventListener("wheel", wheel, true);
-  }, [scrolling]);
-
-  const previousTabIdRef = useRef(tab.id);
-  const previousSizeRef = useRef(size);
-  const isInitialMountRef = useRef(true);
-
-  const layout = useMemo(() => computePaneLayoutRects(tab, size, paneGap), [tab, size, paneGap]);
-
-  const previewLayout = useMemo(
-    () => (previewTab ? computePaneLayoutRects(previewTab, size, paneGap) : undefined),
-    [previewTab, size, paneGap],
+  const registry = useMemo<PaneMenuRegistry>(
+    () => ({
+      register(paneId, open) {
+        menuOpenersRef.current.set(paneId, open);
+        return () => {
+          if (menuOpenersRef.current.get(paneId) === open) menuOpenersRef.current.delete(paneId);
+        };
+      },
+      open(paneId, position) {
+        const open = menuOpenersRef.current.get(paneId);
+        if (open === undefined) return false;
+        open(position);
+        return true;
+      },
+    }),
+    [],
   );
 
-  useLayoutEffect(() => {
-    if (!previewLayout) return;
-    const viewport = viewportRef.current;
-    if (!viewport?.querySelectorAll) return;
-    const frames = viewport.querySelectorAll<HTMLElement>(".workbench-pane-frame");
-    const capturedRects = new Map<string, DOMRect>();
-    for (const frame of frames) {
-      const id =
-        frame.querySelector<HTMLElement>("[data-view-instance-id]")?.dataset.viewInstanceId;
-      if (!id) continue;
-      capturedRects.set(id, frame.getBoundingClientRect());
-    }
-    previousRects.current = capturedRects;
-  }, [previewLayout]);
+  useTabSwitchGesture({ stageRef, onPaneContextMenu: registry.open });
+  useTabSwitchWheel(stageRef);
 
-  useEffect(() => {
-    if (!scrolling) return;
-    const viewport = viewportRef.current;
-    if (!viewport) return;
+  const activeTransition =
+    transition !== null &&
+    snapshot.tabs.some((tab) => tab.id === transition.fromTabId) &&
+    snapshot.tabs.some((tab) => tab.id === transition.toTabId)
+      ? transition
+      : null;
 
-    if (dragState?.phase === "dragging" || document.documentElement.dataset.workbenchResizing) {
-      return;
-    }
-
-    const rect = layout.rects.get(tab.focusedPaneId);
-    if (!rect) return;
-
-    const target = computeScrollingRevealTarget({
-      isSingleColumn: (tab.columns ?? []).length <= 1,
-      rect,
-      paneGap,
-      canvasWidth: layout.canvasWidth,
-      canvasHeight: layout.canvasHeight,
-      viewportWidth: viewport.clientWidth,
-      viewportHeight: viewport.clientHeight,
-      currentScrollLeft: viewport.scrollLeft,
-      currentScrollTop: viewport.scrollTop,
-    });
-
-    const isTabSwitch = previousTabIdRef.current !== tab.id;
-    previousTabIdRef.current = tab.id;
-
-    const isWindowResize =
-      previousSizeRef.current.width !== size.width ||
-      previousSizeRef.current.height !== size.height;
-    previousSizeRef.current = size;
-
-    const isInitialMount = isInitialMountRef.current;
-    isInitialMountRef.current = false;
-
-    if (!target.needsScroll) return;
-
-    if (
-      isInitialMount ||
-      isTabSwitch ||
-      isWindowResize ||
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-    ) {
-      cancelActiveScrollAnimation(viewport);
-      viewport.scrollLeft = target.targetLeft;
-      viewport.scrollTop = target.targetTop;
-      return;
-    }
-
-    return animateScrollTo(viewport, target.targetLeft, target.targetTop);
-  }, [scrolling, tab.id, tab.focusedPaneId, tab.columns, layout, size, paneGap, dragState?.phase]);
-
-  const activeLayout = previewLayout ?? layout;
-  const canvasStyle = {
-    width: Math.max(activeLayout.canvasWidth, size.width),
-    height: activeLayout.canvasHeight,
-    "--pane-gap": `${paneGap}px`,
-    "--pane-radius": `${paneRadius}px`,
-    "--pane-shadow": resolvePaneBoxShadow(paneGap, paneShadow),
-  } as React.CSSProperties;
+  const roleFor = (tabId: string): TabTransitionRole => {
+    if (activeTransition === null) return tabId === snapshot.activeTabId ? "active" : "inactive";
+    if (tabId === activeTransition.toTabId) return "to";
+    if (tabId === activeTransition.fromTabId) return "from";
+    return "hidden";
+  };
 
   return (
-    <div
-      ref={viewportRef}
-      className="workbench-viewport"
-      data-layout-mode={scrolling ? "scrolling" : "bsp"}
-    >
-      <div className="workbench-canvas" style={canvasStyle}>
-        {[...tab.panes].map(([paneId, view]) => {
-          const current = layout.rects.get(paneId);
-          const preview = previewLayout?.rects.get(paneId);
-          const targetRect = preview ?? current;
-          const isDraggedPane =
-            dragState?.phase === "dragging" &&
-            dragState.source.kind === "pane" &&
-            dragState.source.paneId === paneId;
-          return (
-            <div
-              key={view.id}
-              className="workbench-pane-frame"
-              style={targetRect}
-              onMouseDownCapture={(event) => {
-                if (paneId !== tab.focusedPaneId) {
-                  setFocused(paneId);
-                  if (typeof document !== "undefined") {
-                    const activeEl = document.activeElement;
-                    if (
-                      activeEl &&
-                      typeof (activeEl as { blur?: unknown }).blur === "function" &&
-                      typeof (activeEl as { closest?: unknown }).closest === "function"
-                    ) {
-                      const activePane = (activeEl as HTMLElement).closest<HTMLElement>(
-                        ".workbench-pane",
-                      );
-                      if (activePane && activePane.dataset.paneId !== paneId) {
-                        (activeEl as HTMLElement).blur();
-                        if (typeof window !== "undefined") {
-                          window.getSelection()?.removeAllRanges();
-                        }
-                      }
-                    }
-                  }
-                  const targetElement = event?.target as HTMLElement | null | undefined;
-                  const isInteractive = Boolean(
-                    targetElement?.closest?.(
-                      'input, textarea, [contenteditable="true"], button, a, select, [role="button"], [role="menuitem"]',
-                    ),
-                  );
-                  if (!isInteractive && event?.currentTarget?.querySelector) {
-                    const pane = event.currentTarget.querySelector<HTMLElement>(".workbench-pane");
-                    pane?.focus({ preventScroll: true });
-                  }
-                }
-              }}
-            >
-              <div
-                className="workbench-pane-preview"
-                data-previewing={Boolean(previewTab)}
-                style={{
-                  opacity: previewTab && !preview ? 0.2 : isDraggedPane ? 0.5 : undefined,
-                }}
-              >
-                <Pane
-                  snapshot={snapshot}
-                  projects={projects}
-                  paneId={paneId}
-                  focused={paneId === tab.focusedPaneId}
-                />
-              </div>
-            </div>
-          );
-        })}
-
-        {layout.sashes.map((sash) => {
-          if (sash.isColumnWidth) {
-            const column = (tab.columns ?? []).find((c) => c.id === sash.columnId);
-            if (!column) return null;
-            return (
-              <ResizeHandle
-                key={sash.id}
-                label={sash.label}
-                dir={sash.dir}
-                style={{
-                  left: sash.left,
-                  top: sash.top,
-                  width: sash.width,
-                  height: sash.height,
-                }}
-                onDelta={(delta) => changeColumn(column.id, { width: column.width + delta })}
-              />
-            );
-          }
-          if (sash.isPaneHeight) {
-            const column = (tab.columns ?? []).find((c) => c.id === sash.columnId);
-            if (!column || sash.paneIndex === undefined) return null;
-            const index = sash.paneIndex;
-            return (
-              <ResizeHandle
-                key={sash.id}
-                label={sash.label}
-                dir={sash.dir}
-                style={{
-                  left: sash.left,
-                  top: sash.top,
-                  width: sash.width,
-                  height: sash.height,
-                }}
-                onDelta={(delta) => {
-                  const shares = [...column.shares];
-                  const a = shares[index]!;
-                  const b = shares[index + 1]!;
-                  const totalPx = sash.totalPx ?? layout.canvasHeight;
-                  if (totalPx <= 0) return;
-                  const min = Math.min(MIN_PANE_HEIGHT / totalPx, (a + b) / 2);
-                  const next = Math.max(min, Math.min(a + b - min, a + delta / totalPx));
-                  shares[index] = next;
-                  shares[index + 1] = a + b - next;
-                  changeColumn(column.id, { shares });
-                }}
-              />
-            );
-          }
-          if (sash.splitId && sash.index !== undefined && sash.sizes) {
-            return (
-              <SashHandle
-                key={sash.id}
-                splitId={sash.splitId}
-                index={sash.index}
-                dir={sash.dir}
-                sizes={sash.sizes}
-                style={{
-                  left: sash.left,
-                  top: sash.top,
-                  width: sash.width,
-                  height: sash.height,
-                }}
-                totalPx={sash.totalPx ?? layout.canvasWidth}
-              />
-            );
-          }
-          return null;
-        })}
+    <PaneMenuRegistryContext.Provider value={registry}>
+      <div
+        ref={stageRef}
+        className="workbench-viewport-container relative flex flex-1 min-h-0 min-w-0 flex-col"
+        data-tab-transition={activeTransition !== null ? "true" : undefined}
+      >
+        {snapshot.tabs.map((tab) => (
+          <TabPaneTree
+            key={tab.id}
+            tab={tab}
+            projects={projects}
+            isActive={tab.id === snapshot.activeTabId}
+            transitionRole={roleFor(tab.id)}
+          />
+        ))}
       </div>
-    </div>
+    </PaneMenuRegistryContext.Provider>
   );
 }
 
+type TabTransitionRole = "active" | "inactive" | "to" | "from" | "hidden";
+
+interface TabPaneTreeProps {
+  readonly tab: WorkbenchTab;
+  readonly projects: ReadonlyArray<EnvironmentAwenProject>;
+  readonly isActive: boolean;
+  readonly transitionRole: TabTransitionRole;
+}
+
+const TabPaneTree = memo(
+  function TabPaneTree({ tab, projects, isActive, transitionRole }: TabPaneTreeProps) {
+    const dragState = useWorkbenchDragState();
+    const previewTab =
+      isActive && dragState?.phase === "dragging" && dragState.valid
+        ? dragState.result?.snapshot.tabs.find((candidate) => candidate.id === tab.id)
+        : undefined;
+    const scrolling = tab.layoutMode === "scrolling";
+    const viewportRef = useRef<HTMLDivElement>(null);
+    const [size, setSize] = useState({ width: 0, height: 0 });
+    const changeColumn = useWorkbenchStore((s) => s.changeColumn);
+    const setFocused = useWorkbenchStore((s) => s.setFocused);
+    const previousRects = useRef(new Map<string, DOMRect>());
+
+    const paneGap = usePrimarySettings((s) => s.paneGap);
+    const paneRadius = usePrimarySettings((s) => s.paneRadius);
+    const paneShadow = usePrimarySettings((s) => s.paneShadow);
+
+    useLayoutEffect(() => {
+      if (!isActive || scrolling) return;
+      const viewport = viewportRef.current;
+      if (!viewport?.querySelectorAll) return;
+      const frames = viewport.querySelectorAll<HTMLElement>(".workbench-pane-frame");
+      const next = new Map<string, DOMRect>();
+      for (const frame of frames) {
+        const id =
+          frame.querySelector<HTMLElement>("[data-view-instance-id]")?.dataset.viewInstanceId;
+        if (!id) continue;
+        const rect = frame.getBoundingClientRect();
+        next.set(id, rect);
+        const old = previousRects.current.get(id);
+        if (
+          !old ||
+          document.documentElement.dataset.workbenchResizing ||
+          document.documentElement.dataset.workbenchDragging ||
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        )
+          continue;
+        const dx = old.left - rect.left;
+        const dy = old.top - rect.top;
+        if (Math.abs(dx) + Math.abs(dy) > 1) {
+          frame.getAnimations().forEach((animation) => animation.cancel());
+          frame.animate(
+            [
+              { transform: "translate(" + dx + "px," + dy + "px)" },
+              { transform: "translate(0,0)" },
+            ],
+            { duration: 220, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+          );
+        }
+      }
+      previousRects.current = next;
+    }, [isActive, scrolling, tab.layout]);
+
+    useEffect(() => {
+      const element = viewportRef.current;
+      if (!element) return;
+      const update = () => {
+        if (element.clientWidth > 0 && element.clientHeight > 0) {
+          setSize({ width: element.clientWidth, height: element.clientHeight });
+        }
+      };
+      update();
+      const observer = new ResizeObserver(update);
+      observer.observe(element);
+      return () => observer.disconnect();
+    }, [isActive]);
+
+    const previousTabIdRef = useRef(tab.id);
+    const previousSizeRef = useRef(size);
+    const isInitialMountRef = useRef(true);
+
+    const layout = useMemo(() => computePaneLayoutRects(tab, size, paneGap), [tab, size, paneGap]);
+
+    const previewLayout = useMemo(
+      () => (previewTab ? computePaneLayoutRects(previewTab, size, paneGap) : undefined),
+      [previewTab, size, paneGap],
+    );
+
+    useLayoutEffect(() => {
+      if (!isActive || !previewLayout) return;
+      const viewport = viewportRef.current;
+      if (!viewport?.querySelectorAll) return;
+      const frames = viewport.querySelectorAll<HTMLElement>(".workbench-pane-frame");
+      const capturedRects = new Map<string, DOMRect>();
+      for (const frame of frames) {
+        const id =
+          frame.querySelector<HTMLElement>("[data-view-instance-id]")?.dataset.viewInstanceId;
+        if (!id) continue;
+        capturedRects.set(id, frame.getBoundingClientRect());
+      }
+      for (const frame of frames) {
+        const id =
+          frame.querySelector<HTMLElement>("[data-view-instance-id]")?.dataset.viewInstanceId;
+        if (!id) continue;
+        const oldRect = capturedRects.get(id);
+        const newRect = frame.getBoundingClientRect();
+        if (!oldRect) continue;
+        const dx = oldRect.left - newRect.left;
+        const dy = oldRect.top - newRect.top;
+        if (Math.abs(dx) + Math.abs(dy) > 1) {
+          frame.getAnimations().forEach((animation) => animation.cancel());
+          frame.animate(
+            [
+              { transform: "translate(" + dx + "px," + dy + "px)" },
+              { transform: "translate(0,0)" },
+            ],
+            { duration: 220, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+          );
+        }
+      }
+    }, [isActive, previewLayout]);
+
+    useLayoutEffect(() => {
+      if (!isActive) return;
+      const viewport = viewportRef.current;
+      if (!scrolling || !viewport) return;
+
+      if (dragState?.phase === "dragging" || document.documentElement.dataset.workbenchResizing) {
+        return;
+      }
+
+      const rect = layout.rects.get(tab.focusedPaneId);
+      if (!rect) return;
+
+      const target = computeScrollingRevealTarget({
+        isSingleColumn: (tab.columns ?? []).length <= 1,
+        rect,
+        paneGap,
+        canvasWidth: layout.canvasWidth,
+        canvasHeight: layout.canvasHeight,
+        viewportWidth: viewport.clientWidth,
+        viewportHeight: viewport.clientHeight,
+        currentScrollLeft: viewport.scrollLeft,
+        currentScrollTop: viewport.scrollTop,
+      });
+
+      if (!target) return;
+
+      const isTabSwitch = previousTabIdRef.current !== tab.id;
+      previousTabIdRef.current = tab.id;
+
+      const isWindowResize =
+        previousSizeRef.current.width !== size.width ||
+        previousSizeRef.current.height !== size.height;
+      previousSizeRef.current = size;
+
+      const isInitialMount = isInitialMountRef.current;
+      isInitialMountRef.current = false;
+
+      if (!target.needsScroll) return;
+
+      if (
+        isInitialMount ||
+        isTabSwitch ||
+        isWindowResize ||
+        window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+      ) {
+        cancelActiveScrollAnimation(viewport);
+        viewport.scrollLeft = target.targetLeft;
+        viewport.scrollTop = target.targetTop;
+        return;
+      }
+
+      return animateScrollTo(viewport, target.targetLeft, target.targetTop);
+    }, [
+      isActive,
+      scrolling,
+      tab.id,
+      tab.focusedPaneId,
+      tab.columns,
+      layout,
+      size,
+      paneGap,
+      dragState?.phase,
+    ]);
+
+    useEffect(() => {
+      if (!isActive) return;
+      const viewport = viewportRef.current;
+      if (!viewport?.querySelector) return;
+      const pane = viewport.querySelector<HTMLElement>(
+        `[data-pane-id="${tab.focusedPaneId}"] .workbench-pane`,
+      );
+      pane?.focus({ preventScroll: true });
+    }, [isActive, tab.focusedPaneId]);
+
+    useLayoutEffect(() => {
+      if (transitionRole !== "to" && transitionRole !== "from") return;
+      const viewport = viewportRef.current;
+      if (viewport === null) return;
+      const role = transitionRole;
+      const apply = (frame: TabTransitionFrame | null) =>
+        writeTransitionCardTransform(viewport, role, frame);
+      apply(getTabTransitionFrame());
+      const unsubscribe = subscribeTabTransitionFrame(apply);
+      return () => {
+        unsubscribe();
+        writeTransitionCardTransform(viewport, role, null);
+      };
+    }, [transitionRole]);
+
+    const activeLayout = previewLayout ?? layout;
+    const canvasStyle = {
+      width: Math.max(activeLayout.canvasWidth, size.width),
+      height: activeLayout.canvasHeight,
+      "--pane-gap": `${paneGap}px`,
+      "--pane-radius": `${paneRadius}px`,
+      "--pane-shadow": resolvePaneBoxShadow(paneGap, paneShadow),
+    } as React.CSSProperties;
+
+    const hidden = transitionRole === "inactive" || transitionRole === "hidden";
+
+    return (
+      <div
+        ref={viewportRef}
+        className="workbench-viewport"
+        style={{ display: hidden ? "none" : undefined }}
+        data-tab-id={tab.id}
+        data-tab-active={isActive ? "true" : "false"}
+        data-tab-transition-role={transitionRole}
+        data-layout-mode={scrolling ? "scrolling" : "bsp"}
+        aria-hidden={!isActive}
+      >
+        <div className="workbench-canvas" style={canvasStyle}>
+          {[...tab.panes].map(([paneId, view]) => {
+            const current = layout.rects.get(paneId);
+            const preview = previewLayout?.rects.get(paneId);
+            const targetRect = preview ?? current;
+            const isDraggedPane =
+              dragState?.phase === "dragging" &&
+              dragState.source.kind === "pane" &&
+              dragState.source.paneId === paneId;
+            return (
+              <div
+                key={view.id}
+                className="workbench-pane-frame"
+                style={targetRect}
+                onMouseDownCapture={(event) => {
+                  if (paneId !== tab.focusedPaneId) {
+                    setFocused(paneId);
+                    if (typeof document !== "undefined") {
+                      const activeEl = document.activeElement;
+                      if (
+                        activeEl &&
+                        typeof (activeEl as { blur?: unknown }).blur === "function" &&
+                        typeof (activeEl as { closest?: unknown }).closest === "function"
+                      ) {
+                        const activePane = (activeEl as HTMLElement).closest<HTMLElement>(
+                          ".workbench-pane",
+                        );
+                        if (activePane && activePane.dataset.paneId !== paneId) {
+                          (activeEl as HTMLElement).blur();
+                          if (typeof window !== "undefined") {
+                            window.getSelection()?.removeAllRanges();
+                          }
+                        }
+                      }
+                    }
+                    const targetElement = event?.target as HTMLElement | null | undefined;
+                    const isInteractive = Boolean(
+                      targetElement?.closest?.(
+                        'input, textarea, [contenteditable="true"], button, a, select, [role="button"], [role="menuitem"]',
+                      ),
+                    );
+                    if (!isInteractive && event?.currentTarget?.querySelector) {
+                      const pane =
+                        event.currentTarget.querySelector<HTMLElement>(".workbench-pane");
+                      pane?.focus({ preventScroll: true });
+                    }
+                  }
+                }}
+              >
+                <div
+                  className="workbench-pane-preview"
+                  data-previewing={Boolean(previewTab)}
+                  style={{
+                    opacity: previewTab && !preview ? 0.2 : isDraggedPane ? 0.5 : undefined,
+                  }}
+                >
+                  <Pane
+                    tab={tab}
+                    projects={projects}
+                    paneId={paneId}
+                    focused={isActive && paneId === tab.focusedPaneId}
+                  />
+                </div>
+              </div>
+            );
+          })}
+
+          {layout.sashes.map((sash) => {
+            if (sash.isColumnWidth) {
+              const column = (tab.columns ?? []).find((c) => c.id === sash.columnId);
+              if (!column) return null;
+              return (
+                <ResizeHandle
+                  key={sash.id}
+                  label={sash.label}
+                  dir={sash.dir}
+                  style={{
+                    left: sash.left,
+                    top: sash.top,
+                    width: sash.width,
+                    height: sash.height,
+                  }}
+                  onDelta={(delta) => changeColumn(column.id, { width: column.width + delta })}
+                />
+              );
+            }
+            if (sash.isPaneHeight) {
+              const column = (tab.columns ?? []).find((c) => c.id === sash.columnId);
+              if (!column || sash.paneIndex === undefined) return null;
+              const index = sash.paneIndex;
+              return (
+                <ResizeHandle
+                  key={sash.id}
+                  label={sash.label}
+                  dir={sash.dir}
+                  style={{
+                    left: sash.left,
+                    top: sash.top,
+                    width: sash.width,
+                    height: sash.height,
+                  }}
+                  onDelta={(delta) => {
+                    const shares = [...column.shares];
+                    const a = shares[index]!;
+                    const b = shares[index + 1]!;
+                    const totalPx = sash.totalPx ?? layout.canvasHeight;
+                    if (totalPx <= 0) return;
+                    const min = Math.min(MIN_PANE_HEIGHT / totalPx, (a + b) / 2);
+                    const next = Math.max(min, Math.min(a + b - min, a + delta / totalPx));
+                    shares[index] = next;
+                    shares[index + 1] = a + b - next;
+                    changeColumn(column.id, { shares });
+                  }}
+                />
+              );
+            }
+            if (sash.splitId && sash.index !== undefined && sash.sizes) {
+              return (
+                <SashHandle
+                  key={sash.id}
+                  splitId={sash.splitId}
+                  index={sash.index}
+                  dir={sash.dir}
+                  sizes={sash.sizes}
+                  style={{
+                    left: sash.left,
+                    top: sash.top,
+                    width: sash.width,
+                    height: sash.height,
+                  }}
+                  totalPx={sash.totalPx ?? layout.canvasWidth}
+                />
+              );
+            }
+            return null;
+          })}
+        </div>
+      </div>
+    );
+  },
+  (prev, next) => {
+    if (prev.isActive !== next.isActive) return false;
+    if (prev.transitionRole !== next.transitionRole) return false;
+    if (prev.tab !== next.tab) return false;
+    if (prev.projects !== next.projects) return false;
+    return true;
+  },
+);
+
 interface PaneProps {
-  readonly snapshot: WorkbenchSnapshot;
+  readonly tab: WorkbenchTab;
   readonly projects: ReadonlyArray<EnvironmentAwenProject>;
   readonly paneId: string;
   readonly focused: boolean;
 }
 
-function Pane({ snapshot, projects, paneId, focused }: PaneProps) {
+function Pane({ tab, projects, paneId, focused }: PaneProps) {
   const setFocused = useWorkbenchStore((s) => s.setFocused);
   const focusRequestId = useWorkbenchStore((s) => s.focusRequestId);
   const requestClosePane = useWorkbenchStore((s) => s.requestClosePane);
-  const activeTab = getActiveTab(snapshot);
-  const view = activeTab.panes.get(paneId);
+  const view = tab.panes.get(paneId);
   const target = view?.target ?? null;
   const definition = target === null ? null : resolveViewDefinition(target);
   const breadcrumbs =
     target === null ? ["Unavailable View"] : resolveTargetBreadcrumbs(target, projects);
   const drag = useWorkbenchDragSource(
-    { kind: "pane", tabId: activeTab.id, paneId },
+    { kind: "pane", tabId: tab.id, paneId },
     breadcrumbs.at(-1) ?? "View",
   );
 
@@ -430,7 +603,7 @@ function Pane({ snapshot, projects, paneId, focused }: PaneProps) {
       className={"workbench-pane flex h-full min-h-0 min-w-0 flex-1 flex-col outline-none"}
       data-pane-id={paneId}
       data-workbench-pane-drop=""
-      data-workbench-tab-id={activeTab.id}
+      data-workbench-tab-id={tab.id}
       data-view-instance-id={view?.id}
       data-pane-focused={focused}
       data-pane-target-kind={target?.kind ?? "empty"}

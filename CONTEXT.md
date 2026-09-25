@@ -75,10 +75,10 @@ split or drop moves it. Presentation copying is not an ACode operation.
 _Avoid_: Session, Runtime panel, Mirror, 镜像, Duplicate View
 
 **New Agent Session View**:
-A Workbench View for composing the first turn of an Agent session before an
-Awen Session identity exists. It is bound to a Workspace and a client-local
-draft identity, not a Session; promotion replaces it with the Agent Session
-View for the Session created on first send.
+A Workbench View for staging the initial turn of an Agent session. Eager Agent
+sessions (ADR-0016) instantiate durable Awen Session identities at creation
+time, so New Agent Session Views automatically upgrade to Agent Session Views
+upon session creation.
 _Avoid_: Draft Session, Provisional Session, Thread
 
 **Workspace View**:
@@ -150,6 +150,38 @@ may display Views from any Workspace of any Project.
 _Avoid_: Workspace, Group, Deck, Page. A Tab is not paseo's Tab, which is a
 view inside one Workspace.
 
+**Tab Canvas Docking**:
+The gesture and layout transaction of dragging an inactive single-pane Tab from
+the Topbar Surface downward into the active Tab's Workbench canvas to merge its
+View into the active layout and close the source Tab.
+_Avoid_: Tab merging, Pane detachment, Window docking
+
+**Layout pan**:
+The Workbench navigation gesture that moves a Scrolling layout horizontally to
+reveal Columns beyond the Viewport, preserving each Column's own position in the
+strip. A BSP layout has no Layout pan because its content does not overflow the
+Viewport.
+_Avoid_: Canvas drag, map pan, scroll bar
+
+**Sliding Tab switch**:
+The animated presentation of a Tab change in which the outgoing and incoming Tab
+are tiled side by side, one Viewport apart, and slide as one rigid strip by a
+single Viewport width. It is a presentation of a Tab change, not a change to Tab
+or Session identity.
+_Avoid_: Stacked switch, carousel, page flip, split slide
+
+**Tab switch progress**:
+The continuous 0–1 measure of a Sliding Tab switch, advanced by pointer travel
+past a layout's horizontal limit or in discrete steps by a wheel notch. It drives
+both the Tab cards and the Tab indicator.
+_Avoid_: Scroll offset, swipe amount
+
+**Tab indicator**:
+The theme-colored underbar beneath the active Tab in the Topbar Surface. It
+conveys the active Tab and any Tab switch progress; it is presentation chrome and
+owns neither Tab focus nor Tab order.
+_Avoid_: Tab highlight, underline, selection bar
+
 **Pane**:
 The smallest functional window in a Tab, holding exactly one View instance.
 Panes and Tabs are layout concepts; a Pane is never an empty or standalone
@@ -169,6 +201,34 @@ the top of the window to the bottom, and houses primary window and settings
 controls when expanded.
 It is a navigator for work and references, not another Tab or Pane.
 _Avoid_: Rail, Workspace panel
+
+**Session Row Tab State**:
+The presentation state of a Session row in the Sidebar reflecting its presence
+and focus across Workbench Tabs: `active-focused` (focused in the active Tab),
+`active-unfocused` (present in the active Tab but unfocused), `background-tab`
+(open in a non-active Tab), and `unopened` (not open in any Tab).
+_Avoid_: Open state, Tab presence, Session status
+
+**Session Status**:
+The current activity, blockage, or failure of a Session, independent of Sidebar
+focus or Workbench Tab presence. One of `approval`, `input`, `plan`, `working`,
+`monitoring`, `failed`, or `ready`; `ready` is the unlabeled resting state. The
+same vocabulary covers Agent and Terminal sessions.
+_Avoid_: Session state, Alert, Indicator. Not Session Row Tab State, which
+describes where a Session is open rather than what it is doing.
+
+**Unread Completion**:
+The signal that a `ready` Session's latest turn completed after the Session was
+last focused, so the user has not seen the finished turn. It is a decoration on
+`ready`, not its own Session Status, and it is the only Sidebar status signal
+that focus acknowledges.
+_Avoid_: Completed status, Done badge, Unread message
+
+**Status Gutter**:
+The fixed-width vertical slot preceding a Sidebar Session row that hosts the
+Session Status dot, plus the Unread Completion dot on a `ready` row, while
+keeping Session provider icons vertically aligned.
+_Avoid_: Margin slot, Alert column, Left padding
 
 **Tab title**:
 The user-visible name of a Tab. It is derived from the first Pane until the
@@ -199,11 +259,26 @@ A first-class unit inside a Scrolling layout. It owns one width policy and a
 vertically ordered set of Panes whose shares fill the Column's height.
 _Avoid_: Split (when referring to a Scrolling layout Column)
 
+**Trailing Canvas Area**:
+The unoccupied horizontal space in a Scrolling layout extending from the right
+edge of the rightmost Column to the viewport boundary or the canvas trailing
+edge. It acts as an open drop target that appends a new Column at the far right.
+_Avoid_: Blank area, Dead zone, Margin
+
 **Agent session**:
 A Session representing one agent conversation: one provider, one model
-selection, one Workspace, and one transcript. Its Awen identity is distinct
-from any provider-native runtime or thread identifier.
+selection, one Workspace, and one transcript. An Agent session is created
+eagerly with durable Awen identity and appears in the Sidebar immediately.
+Its Awen identity is distinct from any provider-native runtime or thread identifier.
 _Avoid_: Agent, Task, Job, Run
+
+**Zero-turn Agent session**:
+An Agent session whose transcript contains no turns yet. It presents an initial
+composer and model selection without requiring a provider runtime process.
+Closing an untouched zero-turn Agent session, or its last remaining View,
+permanently deletes it instead of archiving it to History. Unsent content makes
+the Session touched and preserves it.
+_Avoid_: Draft Session, Provisional Session
 
 **Terminal session**:
 A Session representing one Workspace-owned terminal work context, including its
@@ -309,28 +384,24 @@ _Avoid_: Chat wallpaper, Session background, View background
   main-area content is a View, not a Session.
 - Session identity is independent of its runtime process and provider-native
   session identity.
-- Closing a View, Pane, or Tab does not by itself stop or delete a Session;
-  Session lifecycle actions are explicit.
+- Closing a View, Pane, or Tab does not by itself stop or delete a Session,
+  except that closing the final View of an untouched zero-turn Agent session
+  deletes that empty Session; other Session lifecycle actions are explicit.
 - A Workbench may contain multiple Tabs; each Tab owns its own Panes, and a
   Session View is unique across the whole Workbench rather than per Tab.
 - A Workbench with no opened Session shows a Welcome View rather than an empty
   Pane.
-- A client-local Agent draft is a New Agent Session View, not a Session; no
-  Session identity exists until promotion.
-- A Workspace has at most one client-local Agent draft, and each draft has at
-  most one New Agent Session View across the Workbench. Different Workspaces
-  may have distinct drafts; the same draft cannot appear in multiple Tabs.
-  Closing its View retains the draft; discarding it is explicit.
-- An Awen Deep Link never targets a New Agent Session View. A draft route is a
-  client-local recovery input, and promotion replaces it with the canonical
-  Agent Session route.
+- An Agent session is created eagerly with durable Awen identity (AgentSessionId and ThreadId) and appears in the Sidebar under its Workspace immediately, even before its first turn is sent.
+- A Workspace may contain multiple zero-turn Agent sessions.
+- An untouched zero-turn Agent session (empty transcript and no unsent draft payload) is permanently deleted upon closing rather than archived to History.
+- Dragging a Workspace context menu action onto the Workbench creates that View instance into the targeted Pane (supporting 4-directional edge splits and center replace) or Tab drop zone without requiring prior navigation.
 - A Tab belongs to no Project or Workspace and may display Views from multiple
   Workspaces or Projects.
 - A Pane displays exactly one View instance and is never empty.
 - A Session has at most one Session View in the whole Workbench (ADR-0010),
   whichever Tab it lands in; opening it again focuses that View.
-- Closing one Session View only detaches that View; closing a Session removes
-  that View while preserving its History entry.
+- Closing one Session View only detaches that View, with the untouched zero-turn
+  exception above; closing a Session removes that View while preserving its History entry.
 - Terminal Sessions are presented only by Terminal Session Views; an Agent
   Session View does not own or embed a Terminal Session.
 - A View may present a Session or Workspace without owning its work lifecycle.
@@ -339,7 +410,17 @@ _Avoid_: Chat wallpaper, Session background, View background
 - Opening an unopened Session or draft from the Sidebar opens it as the sole View in a new Tab (or replaces an active Welcome Tab), rather than adding a Pane to the current Tab.
 - Activating a Session that already has an opened Session View focuses that existing View and activates its Tab.
 - Splitting within an active Tab is explicit through keyboard modifiers or drag-and-drop.
+- The Workbench Viewport never scrolls vertically; vertical scrolling belongs strictly to the Content Layer of individual Panes.
+- In a Scrolling layout, the Viewport scrolls purely horizontally, and the Trailing Canvas Area beyond the rightmost Column is a valid drop target that appends a new Column at the far right.
+- A user-navigated Tab change (click, keyboard, Layout pan, or wheel notch) presents a Sliding Tab switch; a Tab change caused by creating or closing a Tab lands instantly.
+- A Layout pan is unavailable in a BSP layout; a horizontal gesture a layout cannot consume promotes to a Sliding Tab switch instead.
+- The Tab indicator tracks the active Tab and any Tab switch progress and never spans more than one Tab's width.
 - Runtime and provider implementation details must not define Awen domain
   identity.
 - Provider-native lifecycle commands may implement Awen Session operations,
   but they do not add user-visible Session actions or lifecycle states.
+- A Workspace header in the Sidebar displays its active Git branch on the left and its Workspace directory name on the right.
+- A Sidebar Session row visually differentiates four Tab states (`active-focused`, `active-unfocused`, `background-tab`, and `unopened`) via active backgrounds, trailing edge indicators (vertical line for active-unfocused, dot for background-tab), and typography without altering Session identity.
+- Terminal Sessions dynamically display the active agent provider icon when an agent CLI runs as their foreground process.
+- A Session's Session Status is focus-independent: focusing a Session never changes or hides what it reports. Focus only acknowledges the Session's Unread Completion.
+- Unread Completion is client-owned: a `ready` Session shows it while its latest turn completed after the Session was last focused, and focusing the Session clears it until a later turn completes.

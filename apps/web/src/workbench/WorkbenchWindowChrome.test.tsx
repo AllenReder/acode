@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { expect, it, vi } from "vite-plus/test";
+import { beforeEach, expect, it, vi } from "vite-plus/test";
 import type {
   AwenProjectId,
   AgentSessionId,
@@ -12,6 +12,7 @@ import type { EnvironmentAwenProject } from "@awen/client-runtime/state/models";
 import { SidebarProvider } from "../components/ui/sidebar";
 import { WorkbenchWindowChrome } from "./WorkbenchWindowChrome";
 import { applyCreateTab, applyOpenTarget, emptyWorkbenchSnapshot } from "./workbenchState";
+import { resetWorkbenchStore, useWorkbenchStore } from "./workbenchStore";
 import type { ViewTarget } from "./viewRegistry";
 
 const environmentId = "env-a" as EnvironmentId;
@@ -77,6 +78,27 @@ const projects: ReadonlyArray<EnvironmentAwenProject> = [
   },
 ];
 
+beforeEach(() => {
+  resetWorkbenchStore();
+  useWorkbenchStore.setState({
+    activateTab: () => {},
+    closeTab: () => {},
+    canCloseTab: () => Promise.resolve(true),
+  });
+  if (typeof window !== "undefined") {
+    window.matchMedia = vi.fn().mockImplementation((query) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+  }
+});
+
 function createTestSnapshot() {
   const ids = (() => {
     let n = 0;
@@ -87,7 +109,7 @@ function createTestSnapshot() {
   return applyOpenTarget(snapshot, terminalTarget, ids);
 }
 
-it("renders the selected compact tab strip with real titles and a new-tab action", () => {
+it("renders the selected compact Topbar Surface with real titles and a new-tab action", () => {
   const snapshot = createTestSnapshot();
 
   const html = renderToStaticMarkup(
@@ -202,4 +224,367 @@ it("renders window controls at the trailing end of the topbar when on Linux desk
   expect(html).toContain('aria-label="Close"');
 
   vi.unstubAllGlobals();
+});
+
+it("renders tabs as draggable tab sources with data-workbench-drag-source", () => {
+  const snapshot = createTestSnapshot();
+
+  const html = renderToStaticMarkup(
+    <SidebarProvider defaultOpen>
+      <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+    </SidebarProvider>,
+  );
+
+  expect(html).toContain('data-workbench-drag-source="tab"');
+});
+
+it("defers inactive tab activation on pointerdown and activates on click unless clicking close button", async () => {
+  const snapshot = createTestSnapshot();
+  const activateTab = vi.fn();
+  const closeTab = vi.fn();
+  useWorkbenchStore.setState({ activateTab, closeTab });
+
+  const { create, act } = await import("react-test-renderer");
+  let renderer: any;
+  await act(async () => {
+    renderer = create(
+      <SidebarProvider defaultOpen>
+        <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+      </SidebarProvider>,
+    );
+  });
+
+  const tabElements = renderer.root.findAllByProps({ role: "tab" });
+  expect(tabElements).toHaveLength(2);
+
+  const inactiveTab = tabElements[0];
+  expect(inactiveTab.props["data-active-tab"]).toBe("false");
+
+  // Pointer down on inactive tab arms drag without activating immediately (ADR-0017)
+  await act(async () => {
+    inactiveTab.props.onPointerDown({
+      button: 0,
+      target: { closest: () => null },
+    });
+  });
+  expect(activateTab).not.toHaveBeenCalled();
+
+  // Click on inactive tab activates it
+  await act(async () => {
+    inactiveTab.props.onClick();
+  });
+  expect(activateTab).toHaveBeenCalledWith(snapshot.tabs[0]!.id);
+
+  // Pointer down on close button does not activate
+  activateTab.mockClear();
+  await act(async () => {
+    inactiveTab.props.onPointerDown({
+      button: 0,
+      target: { closest: (sel: string) => (sel.includes("button") ? {} : null) },
+    });
+  });
+  expect(activateTab).not.toHaveBeenCalled();
+});
+
+it("renders tabs with workbench-tab-item class and will-change-transform for smooth fluid reordering", () => {
+  const snapshot = createTestSnapshot();
+
+  const html = renderToStaticMarkup(
+    <SidebarProvider defaultOpen>
+      <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+    </SidebarProvider>,
+  );
+
+  expect(html).toContain("workbench-tab-item");
+  expect(html).toContain("will-change-transform");
+});
+
+it("initiates fluid collapse animation on close, switching active tab immediately and committing close after 220ms", async () => {
+  vi.useFakeTimers();
+  const snapshot = createTestSnapshot();
+  const activateTab = vi.fn();
+  const closeTab = vi.fn();
+  useWorkbenchStore.setState({ activateTab, closeTab });
+
+  const { create, act } = await import("react-test-renderer");
+  let renderer: any;
+  await act(async () => {
+    renderer = create(
+      <SidebarProvider defaultOpen>
+        <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+      </SidebarProvider>,
+    );
+  });
+
+  const tabElements = renderer.root.findAllByProps({ role: "tab" });
+  expect(tabElements).toHaveLength(2);
+
+  // Tab 1 is the currently active tab (Dev server)
+  const activeTabElement = tabElements[1];
+  expect(activeTabElement.props["data-active-tab"]).toBe("true");
+
+  const closeButton = activeTabElement.findByProps({ "aria-label": "Close Dev server" });
+
+  // Click close on the active tab
+  await act(async () => {
+    closeButton.props.onClick({ stopPropagation: () => {} });
+  });
+
+  // Active tab shifts immediately (0ms) to the adjacent tab (Tab 0)
+  expect(activateTab).toHaveBeenCalledWith(snapshot.tabs[0]!.id);
+
+  // The closed tab enters closing state with data-tab-closing="true" (governed by CSS fluid collapse)
+  expect(activeTabElement.props["data-tab-closing"]).toBe("true");
+
+  // Before 220ms, closeTab has not yet been committed to store
+  expect(closeTab).not.toHaveBeenCalled();
+
+  // Fast forward past the 220ms animation duration
+  await act(async () => {
+    vi.advanceTimersByTime(220);
+  });
+
+  // Store closeTab is now called to formally unmount
+  expect(closeTab).toHaveBeenCalledWith(snapshot.tabs[1]!.id);
+
+  vi.useRealTimers();
+});
+
+it("aborts tab collapse if canCloseTab rejects closure", async () => {
+  const snapshot = createTestSnapshot();
+  const activateTab = vi.fn();
+  const closeTab = vi.fn();
+  const canCloseTab = vi.fn().mockResolvedValue(false);
+  useWorkbenchStore.setState({ activateTab, closeTab, canCloseTab });
+
+  const { create, act } = await import("react-test-renderer");
+  let renderer: any;
+  await act(async () => {
+    renderer = create(
+      <SidebarProvider defaultOpen>
+        <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+      </SidebarProvider>,
+    );
+  });
+
+  const tabElements = renderer.root.findAllByProps({ role: "tab" });
+  const activeTabElement = tabElements[1];
+  const closeButton = activeTabElement.findByProps({ "aria-label": "Close Dev server" });
+
+  await act(async () => {
+    await closeButton.props.onClick({ stopPropagation: () => {} });
+  });
+
+  expect(canCloseTab).toHaveBeenCalledWith(snapshot.tabs[1]!.id);
+  expect(activateTab).not.toHaveBeenCalled();
+  expect(activeTabElement.props["data-tab-closing"]).toBeUndefined();
+  expect(closeTab).not.toHaveBeenCalled();
+});
+
+it("supports concurrent closing animations without blocking", async () => {
+  vi.useFakeTimers();
+  let snapshot = createTestSnapshot();
+  const ids = () => "id-extra";
+  snapshot = applyCreateTab(snapshot, ids);
+
+  const activateTab = vi.fn();
+  const closeTab = vi.fn();
+  useWorkbenchStore.setState({ activateTab, closeTab });
+
+  const { create, act } = await import("react-test-renderer");
+  let renderer: any;
+  await act(async () => {
+    renderer = create(
+      <SidebarProvider defaultOpen>
+        <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+      </SidebarProvider>,
+    );
+  });
+
+  const tabElements = renderer.root.findAllByProps({ role: "tab" });
+  expect(tabElements).toHaveLength(3);
+  const closeBtn1 = tabElements[1].findByProps({ "aria-label": "Close Dev server" });
+  const closeBtn2 = tabElements[2].findAllByProps({ "aria-label": "Close Welcome" })[0];
+
+  // Rapidly close two tabs concurrently while leaving 1 tab remaining
+  await act(async () => {
+    closeBtn1.props.onClick({ stopPropagation: () => {} });
+    closeBtn2?.props.onClick({ stopPropagation: () => {} });
+  });
+
+  expect(tabElements[1].props["data-tab-closing"]).toBe("true");
+  expect(tabElements[2].props["data-tab-closing"]).toBe("true");
+
+  await act(async () => {
+    vi.advanceTimersByTime(220);
+  });
+
+  expect(closeTab).toHaveBeenCalledWith(snapshot.tabs[1]!.id);
+  expect(closeTab).toHaveBeenCalledWith(snapshot.tabs[2]!.id);
+
+  vi.useRealTimers();
+});
+
+it("omits the close button on the sole remaining tab", async () => {
+  const ids = () => "id-single";
+  const snapshot = applyOpenTarget(emptyWorkbenchSnapshot(ids), agentTarget, ids);
+
+  const { create, act } = await import("react-test-renderer");
+  let renderer: any;
+  await act(async () => {
+    renderer = create(
+      <SidebarProvider defaultOpen>
+        <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+      </SidebarProvider>,
+    );
+  });
+
+  const tabElements = renderer.root.findAllByProps({ role: "tab" });
+  expect(tabElements).toHaveLength(1);
+  const closeBtns = tabElements[0].findAllByProps({ "aria-label": "Close Implement tabs" });
+  expect(closeBtns).toHaveLength(0);
+});
+
+it("closes a tab when middle-clicked with button 1", async () => {
+  vi.useFakeTimers();
+  const snapshot = createTestSnapshot();
+
+  // In createTestSnapshot(), tabs[1] is active, tabs[0] is inactive
+  expect(snapshot.activeTabId).toBe(snapshot.tabs[1]!.id);
+
+  const activateTab = vi.fn();
+  const closeTab = vi.fn();
+  useWorkbenchStore.setState({ activateTab, closeTab });
+
+  const { create, act } = await import("react-test-renderer");
+  let renderer: any;
+  await act(async () => {
+    renderer = create(
+      <SidebarProvider defaultOpen>
+        <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+      </SidebarProvider>,
+    );
+  });
+
+  const tabElements = renderer.root.findAllByProps({ role: "tab" });
+  expect(tabElements).toHaveLength(2);
+
+  const preventDefault = vi.fn();
+  const stopPropagation = vi.fn();
+
+  // Test pointerdown / mousedown autoscroll suppression
+  await act(async () => {
+    tabElements[0].props.onPointerDown({
+      button: 1,
+      preventDefault,
+      target: { closest: () => null },
+    });
+    tabElements[0].props.onMouseDown({
+      button: 1,
+      preventDefault,
+    });
+  });
+  expect(preventDefault).toHaveBeenCalledTimes(2);
+
+  // Middle-clicking the INACTIVE tab (tab 0)
+  await act(async () => {
+    tabElements[0].props.onAuxClick({
+      button: 1,
+      preventDefault,
+      stopPropagation,
+      target: { closest: () => null },
+    });
+  });
+
+  expect(tabElements[0].props["data-tab-closing"]).toBe("true");
+  // Middle clicking an inactive tab should not switch active tab
+  expect(activateTab).not.toHaveBeenCalled();
+
+  await act(async () => {
+    vi.advanceTimersByTime(220);
+  });
+
+  expect(closeTab).toHaveBeenCalledWith(snapshot.tabs[0]!.id);
+  vi.useRealTimers();
+});
+
+it("ignores middle-click when only one tab remains", async () => {
+  const ids = () => "id-single";
+  const snapshot = applyOpenTarget(emptyWorkbenchSnapshot(ids), agentTarget, ids);
+
+  const closeTab = vi.fn();
+  useWorkbenchStore.setState({ closeTab });
+
+  const { create, act } = await import("react-test-renderer");
+  let renderer: any;
+  await act(async () => {
+    renderer = create(
+      <SidebarProvider defaultOpen>
+        <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+      </SidebarProvider>,
+    );
+  });
+
+  const tabElements = renderer.root.findAllByProps({ role: "tab" });
+  expect(tabElements).toHaveLength(1);
+
+  await act(async () => {
+    tabElements[0].props.onAuxClick({
+      button: 1,
+      preventDefault: () => {},
+      stopPropagation: () => {},
+      target: { closest: () => null },
+    });
+  });
+
+  expect(tabElements[0].props["data-tab-closing"]).toBeUndefined();
+  expect(closeTab).not.toHaveBeenCalled();
+});
+
+it("ignores non-middle-click on auxClick and ignores middle-click during rename", async () => {
+  const snapshot = createTestSnapshot();
+
+  const closeTab = vi.fn();
+  useWorkbenchStore.setState({ closeTab });
+
+  const { create, act } = await import("react-test-renderer");
+  let renderer: any;
+  await act(async () => {
+    renderer = create(
+      <SidebarProvider defaultOpen>
+        <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+      </SidebarProvider>,
+    );
+  });
+
+  const tabElements = renderer.root.findAllByProps({ role: "tab" });
+
+  // AuxClick with button 2 (right click) should be ignored
+  await act(async () => {
+    tabElements[1].props.onAuxClick({
+      button: 2,
+      preventDefault: () => {},
+      stopPropagation: () => {},
+      target: { closest: () => null },
+    });
+  });
+  expect(tabElements[1].props["data-tab-closing"]).toBeUndefined();
+
+  // Double click active tab to start editing
+  await act(async () => {
+    tabElements[0].props.onDoubleClick();
+  });
+
+  // Re-query tab elements now that editing state is active
+  const updatedTabElements = renderer.root.findAllByProps({ role: "tab" });
+  await act(async () => {
+    updatedTabElements[0].props.onAuxClick({
+      button: 1,
+      preventDefault: () => {},
+      stopPropagation: () => {},
+      target: { closest: (sel: string) => (sel === "input" ? {} : null) },
+    });
+  });
+  expect(updatedTabElements[0].props["data-tab-closing"]).toBeUndefined();
+  expect(closeTab).not.toHaveBeenCalled();
 });

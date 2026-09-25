@@ -758,7 +758,13 @@ describe("resolveSidebarThreadStatus", () => {
     updatedAt: "2026-03-09T10:00:00.000Z",
   };
 
-  const idle = { hasPendingApprovals: false, hasPendingUserInput: false };
+  const idle = {
+    hasPendingApprovals: false,
+    hasPendingUserInput: false,
+    hasActionableProposedPlan: false,
+    interactionMode: "default" as const,
+    latestTurn: null,
+  };
 
   it("prioritizes approval over a running session", () => {
     expect(resolveSidebarThreadStatus({ ...idle, hasPendingApprovals: true, session })).toBe(
@@ -809,6 +815,33 @@ describe("resolveSidebarThreadStatus", () => {
         session: { ...session, status: "ready" as const, lastError: "persisted" },
       }),
     ).toBe("ready");
+  });
+
+  it("reports plan for a settled plan turn with an actionable plan, but not on error", () => {
+    const settledTurn = {
+      turnId: "turn-1",
+      state: "completed" as const,
+      startedAt: "2026-03-09T10:00:00.000Z",
+      completedAt: "2026-03-09T10:05:00.000Z",
+    };
+    expect(
+      resolveSidebarThreadStatus({
+        ...idle,
+        interactionMode: "plan" as const,
+        hasActionableProposedPlan: true,
+        latestTurn: settledTurn as never,
+        session: { ...session, status: "ready" as const },
+      }),
+    ).toBe("plan");
+    expect(
+      resolveSidebarThreadStatus({
+        ...idle,
+        interactionMode: "plan" as const,
+        hasActionableProposedPlan: true,
+        latestTurn: { ...settledTurn, state: "error" } as never,
+        session: { ...session, status: "error" as const, lastError: "boom" },
+      }),
+    ).toBe("failed");
   });
 
   it("defaults to ready with no session", () => {

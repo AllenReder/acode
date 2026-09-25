@@ -1,4 +1,10 @@
-import { MessageSquarePlusIcon, MoveIcon, TerminalIcon } from "lucide-react";
+import {
+  MessageSquarePlusIcon,
+  TerminalIcon,
+  MoveIcon,
+  FolderIcon,
+  GitBranchIcon,
+} from "lucide-react";
 import {
   createContext,
   useCallback,
@@ -13,10 +19,13 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import { paneDropZoneFromPoint, paneDirectionalZoneFromPoint } from "./layout";
+import { paneDropZoneFromPoint, paneDirectionalZoneFromPoint, firstLeafId } from "./layout";
 import { computePaneLayoutRects } from "./layoutGeometry";
+import type { LayoutMode } from "./scrollingLayout";
+import type { ViewTarget } from "./viewRegistry";
 import { usePrimarySettings } from "../hooks/useSettings";
 import { useUiStateStore } from "../uiStateStore";
+import { dismissContextMenu } from "../contextMenuFallback";
 import {
   computeBaseTab,
   initialPaneDropTarget,
@@ -52,6 +61,7 @@ export interface WorkbenchDragState {
   readonly label: string;
   readonly source: ViewDragSource;
   readonly pointer: { readonly x: number; readonly y: number };
+  readonly startPointer: { readonly x: number; readonly y: number };
   readonly startRect: WorkbenchRect;
   readonly target: ViewDropTarget | null;
   readonly result: ViewDropResult | null;
@@ -64,7 +74,7 @@ interface WorkbenchDragControllerValue {
   readonly beginDrag: (
     source: ViewDragSource,
     label: string,
-    event: ReactPointerEvent<HTMLElement>,
+    event: ReactPointerEvent<HTMLElement> | PointerEvent,
   ) => void;
   readonly consumeSuppressedClick: () => boolean;
 }
@@ -85,6 +95,14 @@ function escapeCss(value: string): string {
   return typeof CSS !== "undefined" && typeof CSS.escape === "function"
     ? CSS.escape(value)
     : value.replace(/["\\]/g, "\\$&");
+}
+
+function getActiveViewportElement(): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  return (
+    document.querySelector<HTMLElement>(".workbench-viewport[data-tab-active='true']") ??
+    document.querySelector<HTMLElement>(".workbench-viewport")
+  );
 }
 
 function rectFromElement(element: Element | null): WorkbenchRect | null {
@@ -231,6 +249,9 @@ export function resolveSidebarDropTargetAtPoint(
     (typeof document === "undefined" ? null : document.elementFromPoint(x, y));
   const rowElement = element?.closest<HTMLElement>("[data-sidebar-session-row]");
   if (rowElement) {
+    if (rowElement.dataset.sessionClosed === "true") {
+      return { isOverSidebar: true, sidebarDropTarget: null };
+    }
     const rowWorkspaceKey = rowElement.dataset.workspaceKey;
     const rowSessionId = rowElement.dataset.sessionId;
     if (
@@ -299,6 +320,7 @@ export function resolveVirtualPaneDropTargetAtPoint(
   regions: ReadonlyArray<VirtualPaneRegion>,
   paneGap = 0,
   directionalOnly = false,
+  layoutMode?: LayoutMode,
 ): ViewDropTarget | null {
   if (
     x < viewportRect.left ||
@@ -316,7 +338,28 @@ export function resolveVirtualPaneDropTargetAtPoint(
       y >= rect.top - halfGap &&
       y <= rect.top + rect.height + halfGap,
   );
-  if (!hit) return null;
+  if (!hit) {
+    if (layoutMode === "scrolling" && regions.length > 0) {
+      let rightmostRegion: VirtualPaneRegion | null = null;
+      let maxRight = -Infinity;
+      for (const region of regions) {
+        const right = region.rect.left + region.rect.width;
+        if (right > maxRight) {
+          maxRight = right;
+          rightmostRegion = region;
+        }
+      }
+      if (rightmostRegion !== null && x > maxRight + halfGap) {
+        return {
+          kind: "pane",
+          tabId: rightmostRegion.tabId,
+          paneId: rightmostRegion.paneId,
+          zone: "right",
+        };
+      }
+    }
+    return null;
+  }
   const zone = directionalOnly
     ? paneDirectionalZoneFromPoint(x, y, hit.rect)
     : paneDropZoneFromPoint(x, y, hit.rect);
@@ -326,6 +369,34 @@ export function resolveVirtualPaneDropTargetAtPoint(
     paneId: hit.paneId,
     zone,
   };
+}
+
+export const AUTO_SCROLL_EDGE_THRESHOLD = 56;
+export const AUTO_SCROLL_MIN_SPEED = 3;
+export const AUTO_SCROLL_MAX_SPEED = 20;
+
+/** Compute horizontal auto-scroll velocity when dragging near viewport edges (ADR 0015). */
+export function computeEdgeAutoScrollVelocity(
+  x: number,
+  viewportRect: WorkbenchRect,
+  threshold = AUTO_SCROLL_EDGE_THRESHOLD,
+  minSpeed = AUTO_SCROLL_MIN_SPEED,
+  maxSpeed = AUTO_SCROLL_MAX_SPEED,
+): number {
+  if (x < viewportRect.left || x > viewportRect.left + viewportRect.width) {
+    return 0;
+  }
+  const leftZone = viewportRect.left + threshold;
+  if (x < leftZone) {
+    const depth = Math.max(0, Math.min(1, (leftZone - x) / threshold));
+    return -(minSpeed + depth * (maxSpeed - minSpeed));
+  }
+  const rightZone = viewportRect.left + viewportRect.width - threshold;
+  if (x > rightZone) {
+    const depth = Math.max(0, Math.min(1, (x - rightZone) / threshold));
+    return minSpeed + depth * (maxSpeed - minSpeed);
+  }
+  return 0;
 }
 
 export function WorkbenchDragProvider({ children }: { readonly children: ReactNode }) {
@@ -356,16 +427,31 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
   }, []);
 
   const beginDrag = useCallback(
-    (source: ViewDragSource, label: string, event: ReactPointerEvent<HTMLElement>) => {
+    (
+      source: ViewDragSource,
+      label: string,
+      event: ReactPointerEvent<HTMLElement> | PointerEvent,
+    ) => {
       if (event.button !== 0 || event.defaultPrevented) return;
       cleanupDragRef.current?.();
-      const handle = event.currentTarget;
+      const rawHandle =
+        "currentTarget" in event && event.currentTarget
+          ? event.currentTarget
+          : "target" in event
+            ? event.target
+            : null;
+      const handle =
+        rawHandle !== null && typeof (rawHandle as Element).getBoundingClientRect === "function"
+          ? (rawHandle as HTMLElement)
+          : null;
       const sourceElement =
         source.kind === "pane"
           ? document.querySelector<HTMLElement>(
               `[data-workbench-pane-drop][data-pane-id="${escapeCss(source.paneId)}"]`,
             )
-          : handle;
+          : source.kind === "tab"
+            ? document.querySelector<HTMLElement>(`[data-tab-id="${escapeCss(source.tabId)}"]`)
+            : handle;
       const startRect = rectFromElement(sourceElement) ?? rectFromElement(handle);
       if (startRect === null) return;
       document.documentElement.dataset.workbenchDragging = "pending";
@@ -381,6 +467,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
       clearFrame();
       activeRef.current = false;
       suppressClickRef.current = false;
+      const startPointer = { x: event.clientX, y: event.clientY };
       let lastX = event.clientX;
       let lastY = event.clientY;
       let lastTarget: ViewDropTarget | null = null;
@@ -392,7 +479,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
       const currentStore = useWorkbenchStore.getState();
       const activeTab =
         currentStore.tabs.find((t) => t.id === currentStore.activeTabId) ?? currentStore.tabs[0];
-      const viewportEl = document.querySelector<HTMLElement>(".workbench-viewport");
+      const viewportEl = getActiveViewportElement();
       const viewportRect = rectFromElement(viewportEl);
 
       let baseTab: WorkbenchTab | null = null;
@@ -402,6 +489,11 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         baseTab = sourceTab ? computeBaseTab(sourceTab, source.paneId) : null;
       } else if (source.kind === "sidebar" && activeTab) {
         baseTab = activeTab;
+      } else if (source.kind === "tab" && activeTab && source.tabId !== activeTab.id) {
+        sourceTab = currentStore.tabs.find((t) => t.id === source.tabId);
+        if (sourceTab && sourceTab.panes.size === 1) {
+          baseTab = activeTab;
+        }
       }
 
       const initialTarget =
@@ -443,7 +535,8 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           viewportRect,
           regions,
           paneGapRef.current,
-          source.kind === "pane",
+          source.kind === "pane" || source.kind === "tab",
+          baseTab?.layoutMode,
         );
         lastTarget = hit ?? initialTarget;
         return lastTarget;
@@ -489,7 +582,74 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         });
       };
 
+      let autoScrollRaf: number | null = null;
+
+      const stopAutoScroll = () => {
+        if (autoScrollRaf !== null) {
+          cancelAnimationFrame(autoScrollRaf);
+          autoScrollRaf = null;
+        }
+      };
+
+      // Single source of truth for the auto-scroll preconditions; also narrows the
+      // viewport element and rect that the RAF loop needs to be non-null.
+      const autoScrollSurface = (): {
+        readonly element: HTMLElement;
+        readonly rect: WorkbenchRect;
+      } | null => {
+        if (
+          !activeRef.current ||
+          viewportEl === null ||
+          viewportRect === null ||
+          lastIsOverSidebar ||
+          baseTab?.layoutMode !== "scrolling"
+        ) {
+          return null;
+        }
+        return { element: viewportEl, rect: viewportRect };
+      };
+
+      const stepAutoScroll = () => {
+        autoScrollRaf = null;
+        const surface = autoScrollSurface();
+        if (surface === null) {
+          return;
+        }
+        const velocity = computeEdgeAutoScrollVelocity(lastX, surface.rect);
+        if (velocity === 0) return;
+
+        const maxScroll = Math.max(0, surface.element.scrollWidth - surface.element.clientWidth);
+        const prevScrollLeft = surface.element.scrollLeft;
+        surface.element.scrollLeft = Math.max(0, Math.min(maxScroll, prevScrollLeft + velocity));
+
+        if (surface.element.scrollLeft !== prevScrollLeft) {
+          resolveTarget(lastX, lastY);
+          if (frameRef.current === null) {
+            frameRef.current = requestAnimationFrame(publishPointer);
+          }
+        }
+
+        if (computeEdgeAutoScrollVelocity(lastX, surface.rect) !== 0) {
+          autoScrollRaf = requestAnimationFrame(stepAutoScroll);
+        }
+      };
+
+      const updateAutoScroll = () => {
+        const surface = autoScrollSurface();
+        if (surface === null) {
+          stopAutoScroll();
+          return;
+        }
+        const velocity = computeEdgeAutoScrollVelocity(lastX, surface.rect);
+        if (velocity !== 0 && autoScrollRaf === null) {
+          autoScrollRaf = requestAnimationFrame(stepAutoScroll);
+        } else if (velocity === 0) {
+          stopAutoScroll();
+        }
+      };
+
       const cleanup = () => {
+        stopAutoScroll();
         clearFrame();
         if (stabilizeTimerRef.current !== null) {
           clearTimeout(stabilizeTimerRef.current);
@@ -526,7 +686,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           !cancelled &&
           source.kind === "sidebar" &&
           currentIsOverSidebar &&
-          currentSidebarDropTarget
+          (source.target.kind === "agentSession" || source.target.kind === "workspaceTerminal")
         ) {
           const sourceSessionId =
             source.target.kind === "agentSession"
@@ -535,23 +695,86 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           const workspaceKey = `${source.target.environmentId}:${source.target.workspaceId}`;
           const allSessionRows = Array.from(
             document.querySelectorAll<HTMLElement>(
-              `[data-sidebar-session-row][data-workspace-key="${escapeCss(workspaceKey)}"]`,
+              `[data-sidebar-session-row][data-workspace-key="${escapeCss(workspaceKey)}"]:not([data-session-closed="true"])`,
             ),
           )
             .map((el) => el.dataset.sessionId)
             .filter((id): id is string => Boolean(id));
 
-          useUiStateStore
-            .getState()
-            .reorderWorkspaceSessions(
-              workspaceKey,
-              allSessionRows,
-              sourceSessionId,
-              currentSidebarDropTarget.sessionId,
-              currentSidebarDropTarget.position,
+          if (allSessionRows.length > 1) {
+            const containerEl = document.querySelector<HTMLElement>(
+              `[data-sidebar-active-sessions="${escapeCss(workspaceKey)}"]`,
             );
+            if (containerEl) {
+              const containerRect = containerEl.getBoundingClientRect();
+              const rowHeight = 25;
+              const deltaY = lastY - startPointer.y;
+              const currentCenterY = startRect.top + deltaY + rowHeight / 2 - containerRect.top;
+              const targetIndex = Math.max(
+                0,
+                Math.min(Math.floor(currentCenterY / rowHeight), allSessionRows.length - 1),
+              );
+              const fromIndex = allSessionRows.indexOf(sourceSessionId);
+              if (fromIndex >= 0 && fromIndex !== targetIndex) {
+                const targetSessionId = allSessionRows[targetIndex];
+                if (targetSessionId) {
+                  const position = targetIndex > fromIndex ? "after" : "before";
+                  useUiStateStore
+                    .getState()
+                    .reorderWorkspaceSessions(
+                      workspaceKey,
+                      allSessionRows,
+                      sourceSessionId,
+                      targetSessionId,
+                      position,
+                    );
+                }
+              }
+            } else if (currentSidebarDropTarget) {
+              useUiStateStore
+                .getState()
+                .reorderWorkspaceSessions(
+                  workspaceKey,
+                  allSessionRows,
+                  sourceSessionId,
+                  currentSidebarDropTarget.sessionId,
+                  currentSidebarDropTarget.position,
+                );
+            }
+          }
           setState(null);
           return;
+        }
+
+        if (!cancelled && source.kind === "tab") {
+          const stripEl = document.querySelector<HTMLElement>("[data-workbench-tab-strip-drop]");
+          if (stripEl) {
+            const stripRect = stripEl.getBoundingClientRect();
+            const isOutsideY = lastY > stripRect.bottom + 12 || lastY < stripRect.top - 12;
+            const isOutsideX = lastX < stripRect.left - 20 || lastX > stripRect.right + 20;
+            if (!isOutsideY && !isOutsideX) {
+              const currentStore = useWorkbenchStore.getState();
+              const fromIndex = currentStore.tabs.findIndex((t) => t.id === source.tabId);
+              if (fromIndex >= 0) {
+                const firstTabEl = stripEl.querySelector<HTMLElement>("[data-tab-id]");
+                const tabWidth = firstTabEl?.getBoundingClientRect().width || 176;
+                const deltaX = lastX - startPointer.x;
+                const scrollLeft = stripEl.scrollLeft;
+                const currentCenter =
+                  startRect.left + deltaX + tabWidth / 2 - stripRect.left + scrollLeft;
+                const toIndex = Math.max(
+                  0,
+                  Math.min(Math.floor(currentCenter / tabWidth), currentStore.tabs.length - 1),
+                );
+                if (fromIndex !== toIndex) {
+                  currentStore.moveTab(fromIndex, toIndex);
+                }
+                currentStore.activateTab(source.tabId);
+              }
+              setState(null);
+              return;
+            }
+          }
         }
 
         const liveTarget = cancelled || currentIsOverSidebar ? null : resolveTarget(lastX, lastY);
@@ -560,6 +783,9 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
           target === null ? null : useWorkbenchStore.getState().previewDrop(source, target);
         if (!cancelled && target !== null && result !== null) {
           useWorkbenchStore.getState().commitDrop(result);
+          if (source.kind === "sidebar") {
+            source.onCommit?.(result);
+          }
           setState(null);
           return;
         }
@@ -587,6 +813,11 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
         if (source.kind !== "sidebar") {
           return { isOverSidebar: false, sidebarDropTarget: null };
         }
+        if (source.target.kind !== "agentSession" && source.target.kind !== "workspaceTerminal") {
+          lastIsOverSidebar = false;
+          lastSidebarDropTarget = null;
+          return { isOverSidebar: false, sidebarDropTarget: null };
+        }
         const sourceWorkspaceKey = `${source.target.environmentId}:${source.target.workspaceId}`;
         const sourceSessionId =
           source.target.kind === "agentSession"
@@ -608,6 +839,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
             return;
           }
           activeRef.current = true;
+          dismissContextMenu();
           document.documentElement.dataset.workbenchDragging = "active";
           window.getSelection()?.removeAllRanges();
           const target = isOverSidebar ? null : resolveTarget(lastX, lastY);
@@ -618,6 +850,7 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
             label,
             source,
             pointer: { x: lastX, y: lastY },
+            startPointer,
             startRect,
             target,
             result,
@@ -625,11 +858,13 @@ export function WorkbenchDragProvider({ children }: { readonly children: ReactNo
             isOverSidebar,
             sidebarDropTarget,
           });
+          updateAutoScroll();
           return;
         }
 
         const target = isOverSidebar ? null : resolveTarget(lastX, lastY);
         if (!sameTarget(publishedTarget, target)) publishedTarget = target;
+        updateAutoScroll();
         if (frameRef.current === null) frameRef.current = requestAnimationFrame(publishPointer);
         if (stabilizeTimerRef.current !== null) clearTimeout(stabilizeTimerRef.current);
         stabilizeTimerRef.current = setTimeout(() => {
@@ -691,7 +926,8 @@ export function useWorkbenchDragState(): WorkbenchDragState | null {
 export function useWorkbenchDragSource(source: ViewDragSource, label: string) {
   const controller = useWorkbenchDragController();
   const onPointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLElement>) => controller.beginDrag(source, label, event),
+    (event: ReactPointerEvent<HTMLElement> | PointerEvent) =>
+      controller.beginDrag(source, label, event),
     [controller, label, source],
   );
   return { onPointerDown, consumeSuppressedClick: controller.consumeSuppressedClick };
@@ -725,38 +961,73 @@ function tabInsertionMarker(target: ViewDropTarget): WorkbenchRect | null {
   };
 }
 
+function ghostInfoForView(
+  target: ViewTarget,
+  definitionId?: string,
+): { readonly icon: ReactNode; readonly typeLabel: string } {
+  if (target.kind === "agentSession") {
+    return {
+      icon: <MessageSquarePlusIcon className="size-5 text-primary" />,
+      typeLabel: "Agent Session",
+    };
+  }
+  if (target.kind === "workspaceTerminal") {
+    return {
+      icon: <TerminalIcon className="size-5 text-primary" />,
+      typeLabel: "Terminal Session",
+    };
+  }
+  if (target.kind === "workspace") {
+    const isGit = (target.definitionId ?? definitionId) === "gitView";
+    if (isGit) {
+      return {
+        icon: <GitBranchIcon className="size-5 text-primary" />,
+        typeLabel: "Review Changes",
+      };
+    }
+    return {
+      icon: <FolderIcon className="size-5 text-primary" />,
+      typeLabel: "Browse Files",
+    };
+  }
+  if (target.kind === "newAgentSession") {
+    return {
+      icon: <MessageSquarePlusIcon className="size-5 text-primary" />,
+      typeLabel: "New Agent Session",
+    };
+  }
+  return {
+    icon: <MoveIcon className="size-5 text-primary" />,
+    typeLabel: "View",
+  };
+}
+
 function dragGhostInfo(source: ViewDragSource): {
   readonly icon: ReactNode;
   readonly typeLabel: string;
 } {
   if (source.kind === "sidebar") {
-    if (source.target.kind === "agentSession") {
-      return {
-        icon: <MessageSquarePlusIcon className="size-5 text-primary" />,
-        typeLabel: "Agent Session",
-      };
-    }
-    if (source.target.kind === "workspaceTerminal") {
-      return {
-        icon: <TerminalIcon className="size-5 text-primary" />,
-        typeLabel: "Terminal Session",
-      };
-    }
-  } else if (source.kind === "pane") {
+    return ghostInfoForView(source.target);
+  }
+  if (source.kind === "pane") {
     const tab = useWorkbenchStore.getState().tabs.find((t) => t.id === source.tabId);
     const pane = tab?.panes.get(source.paneId);
-    if (pane?.target.kind === "agentSession") {
-      return {
-        icon: <MessageSquarePlusIcon className="size-5 text-primary" />,
-        typeLabel: "Agent Session",
-      };
+    if (pane) {
+      return ghostInfoForView(pane.target, pane.definitionId);
     }
-    if (pane?.target.kind === "workspaceTerminal") {
-      return {
-        icon: <TerminalIcon className="size-5 text-primary" />,
-        typeLabel: "Terminal Session",
-      };
+  } else if (source.kind === "tab") {
+    const tab = useWorkbenchStore.getState().tabs.find((t) => t.id === source.tabId);
+    if (tab && tab.panes.size === 1) {
+      const paneId = firstLeafId(tab.layout);
+      const pane = tab.panes.get(paneId);
+      if (pane) {
+        return ghostInfoForView(pane.target, pane.definitionId);
+      }
     }
+    return {
+      icon: <MoveIcon className="size-5 text-primary" />,
+      typeLabel: "Tab",
+    };
   }
   return {
     // ADR-0010: dragging a View moves it; no drag gesture copies one.
@@ -773,13 +1044,25 @@ export function WorkbenchDropOverlay() {
   const surfaceRef = useRef<HTMLDivElement>(null);
   const [surfaceRect, setSurfaceRect] = useState<WorkbenchRect | null>(null);
 
+  const isTabInTopbar =
+    state?.source.kind === "tab" &&
+    (() => {
+      if (typeof document === "undefined") return false;
+      const stripEl = document.querySelector<HTMLElement>("[data-workbench-tab-strip-drop]");
+      if (!stripEl) return false;
+      const stripRect = stripEl.getBoundingClientRect();
+      return state.pointer.y <= stripRect.bottom + 12 && state.pointer.y >= stripRect.top - 12;
+    })();
+
+  // Refs attach before layout effects in the same commit, so keying this on
+  // isOverSidebar and isTabInTopbar ensures we measure whenever the overlay mounts or transitions.
   useLayoutEffect(() => {
-    if (!isDragging || surfaceRef.current === null) {
+    if (!isDragging || state?.isOverSidebar || surfaceRef.current === null) {
       setSurfaceRect(null);
       return;
     }
     setSurfaceRect(rectFromElement(surfaceRef.current));
-  }, [isDragging]);
+  }, [isDragging, state?.isOverSidebar, isTabInTopbar]);
 
   const preview = state === null || state.phase === "canceling" ? null : state.result;
   const previewTabId =
@@ -800,14 +1083,14 @@ export function WorkbenchDropOverlay() {
 
   if (state === null || state.isOverSidebar) return null;
 
-  const viewport =
-    typeof document !== "undefined"
-      ? document.querySelector<HTMLElement>(".workbench-viewport")
-      : null;
+  const viewport = getActiveViewportElement();
   const scrollLeft = previewTab?.layoutMode === "scrolling" ? (viewport?.scrollLeft ?? 0) : 0;
   const scrollTop = viewport?.scrollTop ?? 0;
 
-  const destRect = preview && previewLayout ? previewLayout.rects.get(preview.paneId) : null;
+  const destRect =
+    !isTabInTopbar && state.target?.kind === "pane" && preview && previewLayout
+      ? previewLayout.rects.get(preview.paneId)
+      : null;
 
   let destinationRect: WorkbenchRect | null = null;
   if (destRect && surfaceRect) {
@@ -846,7 +1129,10 @@ export function WorkbenchDropOverlay() {
     <>
       <div
         ref={surfaceRef}
-        className="pointer-events-none absolute inset-0 z-40 bg-background/15"
+        className={
+          "pointer-events-none absolute inset-0 z-40 transition-colors duration-150 " +
+          (isTabInTopbar ? "bg-transparent" : "bg-background/15")
+        }
         data-workbench-drop-preview
         data-drop-phase={state.phase}
         data-drop-target-kind={state.target?.kind ?? "none"}
@@ -888,40 +1174,42 @@ export function WorkbenchDropOverlay() {
                   }}
                 />
               )}
-              <div
-                data-workbench-drag-ghost
-                data-phase={state.phase}
-                data-valid={invalid ? "false" : "true"}
-                className={
-                  "pointer-events-none fixed z-[100] flex flex-col items-center justify-center overflow-hidden rounded-xl border p-2.5 shadow-2xl backdrop-blur-md will-change-transform " +
-                  "transition-[opacity,border-color] ease-out motion-reduce:transition-none " +
-                  (invalid
-                    ? "border-destructive/80 bg-destructive/15 text-destructive "
-                    : "border-border/80 bg-background/85 text-foreground ") +
-                  (state.phase === "canceling"
-                    ? "opacity-0 duration-180"
-                    : "opacity-100 duration-75")
-                }
-                style={{
-                  left: 0,
-                  top: 0,
-                  width: `${ghostRect.width}px`,
-                  height: `${ghostRect.height}px`,
-                  transform: `translate3d(${ghostRect.left}px, ${ghostRect.top}px, 0)`,
-                }}
-              >
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  {ghostInfo.icon}
+              {!isTabInTopbar && (
+                <div
+                  data-workbench-drag-ghost
+                  data-phase={state.phase}
+                  data-valid={invalid ? "false" : "true"}
+                  className={
+                    "pointer-events-none fixed z-[100] flex flex-col items-center justify-center overflow-hidden rounded-xl border p-2.5 shadow-2xl backdrop-blur-md will-change-transform " +
+                    "transition-[opacity,border-color] ease-out motion-reduce:transition-none " +
+                    (invalid
+                      ? "border-destructive/80 bg-destructive/15 text-destructive "
+                      : "border-border/80 bg-background/85 text-foreground ") +
+                    (state.phase === "canceling"
+                      ? "opacity-0 duration-180"
+                      : "opacity-100 duration-75")
+                  }
+                  style={{
+                    left: 0,
+                    top: 0,
+                    width: `${ghostRect.width}px`,
+                    height: `${ghostRect.height}px`,
+                    transform: `translate3d(${ghostRect.left}px, ${ghostRect.top}px, 0)`,
+                  }}
+                >
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    {ghostInfo.icon}
+                  </div>
+                  <div className="flex flex-col items-center min-w-0 max-w-full mt-1.5">
+                    <span className="truncate max-w-[136px] text-xs font-semibold text-foreground leading-tight text-center">
+                      {state.label}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground font-medium leading-tight mt-0.5 text-center">
+                      {ghostInfo.typeLabel}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex flex-col items-center min-w-0 max-w-full mt-1.5">
-                  <span className="truncate max-w-[136px] text-xs font-semibold text-foreground leading-tight text-center">
-                    {state.label}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground font-medium leading-tight mt-0.5 text-center">
-                    {ghostInfo.typeLabel}
-                  </span>
-                </div>
-              </div>
+              )}
             </>,
             document.body,
           )

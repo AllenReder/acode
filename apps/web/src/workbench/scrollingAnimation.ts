@@ -22,19 +22,16 @@ export interface ScrollRevealTarget {
 }
 
 /**
- * Apple-style fluid ease-out: cubic-bezier(0.22, 1, 0.36, 1).
- * High initial velocity for immediate responsiveness, settling into a silky soft stop.
+ * Cubic-bezier easing evaluated by solving x(u) = t with Newton-Raphson.
+ * Control points mirror a CSS `cubic-bezier(x1, y1, x2, y2)`.
  */
-export function appleEaseOut(t: number): number {
+export function cubicBezierEase(t: number, x1: number, y1: number, x2: number, y2: number): number {
   if (t <= 0) return 0;
   if (t >= 1) return 1;
 
-  const x1 = 0.22;
-  const x2 = 0.36;
-
   // Solve x(u) = t using Newton-Raphson
   let u = t;
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 6; i++) {
     const oneMinusU = 1 - u;
     const currentX = 3 * oneMinusU * oneMinusU * u * x1 + 3 * oneMinusU * u * u * x2 + u * u * u;
     const diff = currentX - t;
@@ -48,7 +45,24 @@ export function appleEaseOut(t: number): number {
   }
 
   const oneMinusU = 1 - u;
-  return 1 - oneMinusU * oneMinusU * oneMinusU;
+  return 3 * oneMinusU * oneMinusU * u * y1 + 3 * oneMinusU * u * u * y2 + u * u * u;
+}
+
+/**
+ * Apple-style fluid ease-out: cubic-bezier(0.22, 1, 0.36, 1).
+ * High initial velocity for immediate responsiveness, settling into a silky soft stop.
+ */
+export function appleEaseOut(t: number): number {
+  return cubicBezierEase(t, 0.22, 1, 0.36, 1);
+}
+
+/**
+ * Standard settle ease: cubic-bezier(0.4, 0, 0.2, 1). Unlike {@link appleEaseOut}
+ * it starts from rest, so continuing a paused interactive gesture on release does
+ * not snap forward.
+ */
+export function settleEaseOut(t: number): number {
+  return cubicBezierEase(t, 0.4, 0, 0.2, 1);
 }
 
 /**
@@ -101,10 +115,8 @@ export function computeScrollingRevealTarget(input: ScrollRevealInput): ScrollRe
   } = input;
 
   const maxScrollLeft = Math.max(0, canvasWidth - viewportWidth);
-  const maxScrollTop = Math.max(0, canvasHeight - viewportHeight);
 
   let targetLeft = currentScrollLeft;
-  let targetTop = currentScrollTop;
 
   // Horizontal reveal
   if (isSingleColumn) {
@@ -126,22 +138,9 @@ export function computeScrollingRevealTarget(input: ScrollRevealInput): ScrollRe
     );
   }
 
-  // Vertical reveal (for stacked panes)
-  if (maxScrollTop > 0) {
-    targetTop = computeEdgeRevealTarget(
-      rect.top,
-      rect.height,
-      paneGap,
-      currentScrollTop,
-      viewportHeight,
-      maxScrollTop,
-    );
-  } else {
-    targetTop = 0;
-  }
-
-  const needsScroll =
-    Math.abs(targetLeft - currentScrollLeft) >= 1 || Math.abs(targetTop - currentScrollTop) >= 1;
+  // Viewport never scrolls vertically (ADR 0015)
+  const targetTop = 0;
+  const needsScroll = Math.abs(targetLeft - currentScrollLeft) >= 1;
 
   return {
     targetLeft,

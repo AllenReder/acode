@@ -29,7 +29,16 @@ const mockState = {
   projects: [] as any[],
   environments: [] as any[],
   navigate: vi.fn(),
+  threadShell: null as any,
 };
+
+const mockTerminalSessions = {
+  sessions: [] as any[],
+};
+
+vi.mock("../state/terminalSessions", () => ({
+  useKnownTerminalSessions: () => mockTerminalSessions.sessions,
+}));
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mockState.navigate,
@@ -47,6 +56,7 @@ vi.mock("../state/entities", () => ({
   useAwenProjects: () => mockState.projects,
   useAwenAgentSessionShell: () => null,
   readThreadShell: () => null,
+  useThreadShell: () => mockState.threadShell,
 }));
 
 vi.mock("../state/environments", () => ({
@@ -112,6 +122,7 @@ vi.mock("../hooks/useSettings", () => ({
 
 import { AwenSidebar, workspaceMenuItems } from "./AwenSidebar";
 import { toastManager } from "./ui/toast";
+import { useUiStateStore } from "../uiStateStore";
 
 function removableWorkspaceProject() {
   return [
@@ -148,6 +159,9 @@ describe("AwenSidebar", () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
     mockState.projects = [];
+    mockTerminalSessions.sessions = [];
+    mockState.threadShell = null;
+    useUiStateStore.setState({ threadLastVisitedAtById: {} });
   });
 
   it("renders the sidebar header and add project button when there are no projects", async () => {
@@ -248,6 +262,195 @@ describe("AwenSidebar", () => {
     expect(reviewChangesItem).toBeDefined();
     expect(reviewChangesItem?.label).toBe("Review Changes");
     expect(reviewChangesItem?.icon).toBe("git-branch");
+  });
+
+  it("renders branch name on the left and workspace directory name on the right without role badge", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    mockState.projects = [
+      {
+        id: "p1",
+        environmentId: "local",
+        title: "awen",
+        workspaces: [
+          {
+            id: "w1",
+            title: "awen",
+            workspaceRoot: "/code/awen",
+            role: "main",
+            branch: "main",
+            sessions: [],
+            historySessions: [],
+          },
+        ],
+      },
+    ];
+
+    await act(() => {
+      renderer = create(<AwenSidebar />);
+    });
+
+    const workspaceRow = renderer.root.findByProps({ "data-testid": "sidebar-workspace-row" });
+    expect(
+      workspaceRow.findByProps({ "data-testid": "sidebar-workspace-branch" }).props.children,
+    ).toBe("main");
+    expect(
+      workspaceRow.findByProps({ "data-testid": "sidebar-workspace-dir" }).props.children,
+    ).toBe("awen");
+    expect(workspaceRow.findAllByProps({ "data-testid": "sidebar-workspace-role" })).toHaveLength(
+      0,
+    );
+  });
+
+  it("renders agent sessions with provider icon and terminal sessions with terminal/agent icon and 14px status gutter", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    mockState.projects = [
+      {
+        id: "p1",
+        environmentId: "local",
+        title: "awen",
+        workspaces: [
+          {
+            id: "w1",
+            title: "awen",
+            workspaceRoot: "/code/awen",
+            role: "main",
+            branch: "main",
+            sessions: [
+              { kind: "agent", id: "agent-1", threadId: "thread-1", title: "Coding Agent" },
+              { kind: "terminal", id: "term-1", title: "Terminal Shell" },
+            ],
+            historySessions: [],
+          },
+        ],
+      },
+    ];
+
+    await act(() => {
+      renderer = create(<AwenSidebar />);
+    });
+
+    // Expand workspace
+    const workspaceRow = renderer.root.findByProps({ "data-testid": "sidebar-workspace-row" });
+    await act(() => {
+      workspaceRow.props.onClick();
+    });
+
+    const sessionRows = renderer.root.findAllByProps({ "data-sidebar-session-row": "true" });
+    expect(sessionRows).toHaveLength(2);
+
+    // Both rows must render the 14px Status Gutter
+    const gutters = renderer.root.findAllByProps({ "data-status-gutter": "true" });
+    expect(gutters.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("dynamically shows agent icon and running alert for terminal running an agent CLI", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    mockState.projects = [
+      {
+        id: "p1",
+        environmentId: "local",
+        title: "awen",
+        workspaces: [
+          {
+            id: "w1",
+            title: "awen",
+            workspaceRoot: "/code/awen",
+            role: "main",
+            branch: "main",
+            sessions: [{ kind: "terminal", id: "term-1", title: "Terminal Shell" }],
+            historySessions: [],
+          },
+        ],
+      },
+    ];
+
+    mockTerminalSessions.sessions = [
+      {
+        target: { terminalId: "term-1" },
+        state: {
+          summary: {
+            terminalId: "term-1",
+            hasRunningSubprocess: true,
+            label: "codex",
+            status: "running",
+          },
+        },
+      },
+    ];
+
+    await act(() => {
+      renderer = create(<AwenSidebar />);
+    });
+
+    const workspaceRow = renderer.root.findByProps({ "data-testid": "sidebar-workspace-row" });
+    await act(() => {
+      workspaceRow.props.onClick();
+    });
+
+    const terminalRow = renderer.root.findByProps({ "data-session-kind": "terminal" });
+    expect(terminalRow.props.status).toBe("working");
+  });
+
+  it("keeps a completed agent session unread until its thread is visited", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    mockState.projects = [
+      {
+        id: "p1",
+        environmentId: "local",
+        title: "awen",
+        workspaces: [
+          {
+            id: "w1",
+            title: "awen",
+            workspaceRoot: "/code/awen",
+            role: "main",
+            branch: "main",
+            sessions: [
+              { kind: "agent", id: "agent-1", threadId: "thread-1", title: "Coding Agent" },
+            ],
+            historySessions: [],
+          },
+        ],
+      },
+    ];
+    mockState.threadShell = {
+      id: "thread-1",
+      environmentId: "local",
+      hasPendingApprovals: false,
+      hasPendingUserInput: false,
+      hasActionableProposedPlan: false,
+      interactionMode: "default",
+      backgroundLiveness: null,
+      session: null,
+      latestTurn: {
+        turnId: "turn-1",
+        state: "completed",
+        startedAt: "2026-03-09T10:00:00.000Z",
+        completedAt: "2026-03-09T10:05:00.000Z",
+      },
+    };
+    useUiStateStore.setState({ threadLastVisitedAtById: {} });
+
+    await act(() => {
+      renderer = create(<AwenSidebar />);
+    });
+    const workspaceRow = renderer.root.findByProps({ "data-testid": "sidebar-workspace-row" });
+    await act(() => {
+      workspaceRow.props.onClick();
+    });
+
+    let agentRow = renderer.root.findByProps({ "data-session-kind": "agent" });
+    expect(agentRow.props.status).toBe("ready");
+    expect(agentRow.props.isUnread).toBe(true);
+
+    // Focusing the session stamps the visit at the completion; the dot clears.
+    await act(() => {
+      useUiStateStore.setState({
+        threadLastVisitedAtById: { "local:thread-1": "2026-03-09T10:05:00.000Z" },
+      });
+    });
+    agentRow = renderer.root.findByProps({ "data-session-kind": "agent" });
+    expect(agentRow.props.isUnread).toBe(false);
   });
 
   it.each([

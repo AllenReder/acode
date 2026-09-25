@@ -515,6 +515,14 @@ export function showContextMenuFallback<T extends string>(
               if (canDismissFromPointer) cleanup(item.id);
             });
           }
+
+          if (typeof item.onPointerDown === "function") {
+            button.addEventListener("pointerdown", (event) => {
+              if (event.button === 0) {
+                item.onPointerDown!(event);
+              }
+            });
+          }
         }
 
         inner.appendChild(button);

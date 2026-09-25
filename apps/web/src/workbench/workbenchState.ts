@@ -14,6 +14,7 @@ import {
 import {
   closeLeaf,
   firstLeafId,
+  leaf,
   leafParent,
   neighborLeafId,
   leafIds,
@@ -28,9 +29,9 @@ import {
   type PaneEdge,
   type PaneDropZone,
   type SplitDir,
-} from "./layout.ts";
-import { definitionIdForTarget, targetKey, type ViewTarget } from "./viewRegistry.ts";
-import { fallbackTargetTitle } from "./workbenchTitles.ts";
+} from "./layout";
+import { definitionIdForTarget, targetKey, targetsEqual, type ViewTarget } from "./viewRegistry";
+import { fallbackTargetTitle } from "./workbenchTitles";
 
 /** One presentation occurrence, independent of the Session it displays. */
 export interface ViewInstance {
@@ -57,8 +58,13 @@ export interface WorkbenchSnapshot {
 export type SessionViewTarget = Extract<ViewTarget, { kind: "agentSession" | "workspaceTerminal" }>;
 
 export type ViewDragSource =
-  | { readonly kind: "sidebar"; readonly target: SessionViewTarget }
-  | { readonly kind: "pane"; readonly tabId: string; readonly paneId: string };
+  | {
+      readonly kind: "sidebar";
+      readonly target: ViewTarget;
+      readonly onCommit?: (result: ViewDropResult) => void;
+    }
+  | { readonly kind: "pane"; readonly tabId: string; readonly paneId: string }
+  | { readonly kind: "tab"; readonly tabId: string };
 
 /**
  * True for the Session kinds whose View is unique across the whole Workbench.
@@ -90,6 +96,33 @@ export function getActiveTab(snapshot: WorkbenchSnapshot): WorkbenchTab {
   const tab = snapshot.tabs.find((tab) => tab.id === snapshot.activeTabId);
   if (!tab) throw new Error("Workbench active Tab is missing");
   return tab;
+}
+
+export type SessionRowTabState =
+  | "active-focused"
+  | "active-unfocused"
+  | "background-tab"
+  | "unopened";
+
+export function getSessionRowTabState(
+  snapshot: WorkbenchSnapshot,
+  target: ViewTarget,
+): SessionRowTabState {
+  const activeTab = getActiveTab(snapshot);
+  const focused = activeTab.panes.get(activeTab.focusedPaneId);
+  if (focused !== undefined && targetsEqual(focused.target, target)) {
+    return "active-focused";
+  }
+  for (const pane of activeTab.panes.values()) {
+    if (targetsEqual(pane.target, target)) return "active-unfocused";
+  }
+  for (const otherTab of snapshot.tabs) {
+    if (otherTab.id === activeTab.id) continue;
+    for (const pane of otherTab.panes.values()) {
+      if (targetsEqual(pane.target, target)) return "background-tab";
+    }
+  }
+  return "unopened";
 }
 
 function viewInstance(target: ViewTarget, generateId: () => string): ViewInstance {
@@ -321,7 +354,9 @@ function placeViewInTab(
 ): { readonly tab: WorkbenchTab; readonly paneId: string } {
   const anchor = tab.panes.get(target.anchorPaneId);
   const reusesAnchorPane =
-    target.zone === "replace" || anchor === undefined || anchor.target.kind === "welcome";
+    target.zone === "replace" ||
+    anchor === undefined ||
+    (tab.panes.size === 1 && anchor.target.kind === "welcome");
 
   if (reusesAnchorPane) {
     const paneId = target.paneId ?? target.anchorPaneId;
@@ -431,7 +466,8 @@ function findNewAgentSessionPane(
       if (
         view.target.kind === "newAgentSession" &&
         view.target.environmentId === target.environmentId &&
-        view.target.workspaceId === target.workspaceId
+        view.target.workspaceId === target.workspaceId &&
+        view.target.draftId === target.draftId
       ) {
         return { tabId: tab.id, paneId };
       }
@@ -689,6 +725,100 @@ export function applyViewDrop(
   target: ViewDropTarget,
   generateId: () => string,
 ): ViewDropResult | null {
+  if (source.kind === "tab") {
+    const fromIndex = snapshot.tabs.findIndex((candidate) => candidate.id === source.tabId);
+    if (fromIndex < 0) return null;
+    const tab = snapshot.tabs[fromIndex]!;
+    const paneId = firstLeafId(tab.layout);
+
+    if (target.kind === "existingTab") {
+      const toIndex = snapshot.tabs.findIndex((candidate) => candidate.id === target.tabId);
+      if (toIndex < 0 || fromIndex === toIndex) {
+        return { snapshot, tabId: tab.id, paneId };
+      }
+      return {
+        snapshot: applyMoveTab(snapshot, fromIndex, toIndex),
+        tabId: tab.id,
+        paneId,
+      };
+    }
+
+    if (target.kind === "newTab") {
+      const targetIndex = Math.max(0, Math.min(target.index, snapshot.tabs.length - 1));
+      if (fromIndex === targetIndex) {
+        return { snapshot, tabId: tab.id, paneId };
+      }
+      return {
+        snapshot: applyMoveTab(snapshot, fromIndex, targetIndex),
+        tabId: tab.id,
+        paneId,
+      };
+    }
+
+    if (target.kind === "pane") {
+      if (source.tabId === snapshot.activeTabId || target.tabId !== snapshot.activeTabId) {
+        return null;
+      }
+      if (tab.panes.size !== 1) {
+        return null;
+      }
+      const sourcePaneId = firstLeafId(tab.layout);
+      const sourceView = tab.panes.get(sourcePaneId);
+      if (!sourceView) return null;
+
+      const targetTab = snapshot.tabs.find((candidate) => candidate.id === target.tabId);
+      if (!targetTab || !targetTab.panes.has(target.paneId)) {
+        return null;
+      }
+
+      if (findPaneByTarget(targetTab, sourceView.target) !== null) {
+        return null;
+      }
+
+      const targetPane = targetTab.panes.get(target.paneId);
+      let targetAfter: WorkbenchTab;
+      if (targetTab.panes.size === 1 && targetPane?.target.kind === "welcome") {
+        const panes = new Map<string, ViewInstance>();
+        panes.set(sourcePaneId, sourceView);
+        targetAfter = reconcileTab({
+          ...targetTab,
+          layout: leaf(sourcePaneId),
+          panes,
+          focusedPaneId: sourcePaneId,
+        });
+      } else {
+        if (target.zone === "replace") {
+          return null;
+        }
+        const panes = new Map(targetTab.panes);
+        panes.set(sourcePaneId, sourceView);
+        targetAfter = reconcileTab({
+          ...targetTab,
+          ...placedLayout(targetTab, sourcePaneId, target.paneId, target.zone),
+          panes,
+          focusedPaneId: sourcePaneId,
+        });
+      }
+
+      const remainingTabs = snapshot.tabs.filter((candidate) => candidate.id !== source.tabId);
+      const tabs = remainingTabs.map((candidate) =>
+        candidate.id === targetTab.id ? targetAfter : candidate,
+      );
+
+      return {
+        snapshot: {
+          ...snapshot,
+          tabs,
+          activeTabId: targetTab.id,
+        },
+        tabId: targetTab.id,
+        paneId: sourcePaneId,
+      };
+    }
+
+    return null;
+  }
+
   if (source.kind === "pane" && target.kind === "pane") {
     const sourceTab = snapshot.tabs.find((candidate) => candidate.id === source.tabId);
     const targetTab = snapshot.tabs.find((candidate) => candidate.id === target.tabId);
@@ -975,6 +1105,27 @@ export function applyCloseTab(snapshot: WorkbenchSnapshot, tabId: string): Workb
   if (snapshot.activeTabId !== tabId) return { ...snapshot, tabs };
   const nextActive = tabs[Math.min(closingIndex, tabs.length - 1)];
   return nextActive === undefined ? snapshot : { tabs, activeTabId: nextActive.id };
+}
+
+export function applyMoveTab(
+  snapshot: WorkbenchSnapshot,
+  fromIndex: number,
+  toIndex: number,
+): WorkbenchSnapshot {
+  if (
+    fromIndex < 0 ||
+    fromIndex >= snapshot.tabs.length ||
+    toIndex < 0 ||
+    toIndex >= snapshot.tabs.length ||
+    fromIndex === toIndex
+  ) {
+    return snapshot;
+  }
+  const nextTabs = [...snapshot.tabs];
+  const [moved] = nextTabs.splice(fromIndex, 1);
+  if (!moved) return snapshot;
+  nextTabs.splice(toIndex, 0, moved);
+  return { ...snapshot, tabs: nextTabs };
 }
 
 /** Compare two targets by Session identity across environments and workspaces. */

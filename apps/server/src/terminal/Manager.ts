@@ -385,7 +385,9 @@ function truncateTerminalWireLabel(value: string): string {
   return value.slice(0, MAX_TERMINAL_LABEL_LENGTH);
 }
 
-function normalizeChildCommandName(raw: string, platform: NodeJS.Platform): string | null {
+const RUNTIME_LAUNCHERS = new Set(["node", "bun", "deno", "python", "python3", "npx"]);
+
+export function normalizeChildCommandName(raw: string, platform: NodeJS.Platform): string | null {
   let trimmed = raw.trim();
   if (trimmed.length === 0) return null;
   if (
@@ -394,13 +396,45 @@ function normalizeChildCommandName(raw: string, platform: NodeJS.Platform): stri
   ) {
     trimmed = trimmed.slice(1, -1).trim();
   }
-  const firstToken = (trimmed.split(/\s+/)[0] ?? trimmed).trim();
-  if (firstToken.length === 0) return null;
+
+  const tokens: string[] = [];
+  const tokenRegex = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
+  let match: RegExpExecArray | null;
+  while ((match = tokenRegex.exec(trimmed)) !== null) {
+    tokens.push(match[1] ?? match[2] ?? match[0]);
+  }
+
+  const firstToken = tokens[0]?.trim();
+  if (!firstToken || firstToken.length === 0) return null;
   const separators = platform === "win32" ? /[\\/]/ : /\//;
   const base = firstToken.split(separators).at(-1) ?? firstToken;
   const withoutExe =
     platform === "win32" && base.toLowerCase().endsWith(".exe") ? base.slice(0, -4) : base;
-  return withoutExe.length > 0 ? withoutExe : null;
+  if (withoutExe.length === 0) return null;
+
+  if (RUNTIME_LAUNCHERS.has(withoutExe.toLowerCase())) {
+    for (let i = 1; i < tokens.length; i++) {
+      const token = tokens[i]!.trim();
+      if (token.startsWith("-") || (platform === "win32" && /^\/[a-zA-Z0-9?]+$/.test(token))) {
+        continue;
+      }
+      const tokenBase = token
+        .replace(/^['"]|['"]$/g, "")
+        .split(separators)
+        .at(-1);
+      if (tokenBase) {
+        const tokenWithoutExt =
+          platform === "win32" && tokenBase.toLowerCase().endsWith(".exe")
+            ? tokenBase.slice(0, -4)
+            : tokenBase.replace(/\.(?:[cm]?[jt]sx?|py)$/i, "");
+        if (tokenWithoutExt.length > 0) {
+          return tokenWithoutExt;
+        }
+      }
+    }
+  }
+
+  return withoutExe;
 }
 
 function terminalWireLabel(session: TerminalSessionState): string {
@@ -782,30 +816,90 @@ function processTableSnapshotFromProcesses(
   return { childrenByParent, commandById };
 }
 
-function deriveSubprocessInspectResult(
+const TRANSPARENT_WRAPPERS = new Set([
+  "conhost",
+  "openconsole",
+  "cmd",
+  "powershell",
+  "pwsh",
+  "wsl",
+  "wslhost",
+  "sh",
+  "bash",
+  "zsh",
+  "dash",
+]);
+
+const KNOWN_AGENT_COMMANDS = new Set(["codex", "claude", "claude-code", "opencode", "cursor"]);
+
+export function deriveSubprocessInspectResult(
   snapshot: TerminalProcessTableSnapshot,
   terminalPid: number,
   platform: NodeJS.Platform,
 ): TerminalSubprocessInspectResult {
-  const childPid = (snapshot.childrenByParent.get(terminalPid) ?? [])[0];
-  if (childPid === undefined) {
+  const directChildren = snapshot.childrenByParent.get(terminalPid) ?? [];
+  if (directChildren.length === 0) {
     return { hasRunningSubprocess: false, childCommand: null, processIds: [] };
   }
+
   const processIds = new Set<number>([terminalPid]);
-  const pending = [terminalPid];
-  while (pending.length > 0) {
-    const parentPid = pending.pop();
+  const descendantPids: number[] = [];
+  const queue = [terminalPid];
+
+  while (queue.length > 0) {
+    const parentPid = queue.shift();
     if (parentPid === undefined) continue;
     for (const pid of snapshot.childrenByParent.get(parentPid) ?? []) {
       if (processIds.has(pid)) continue;
       processIds.add(pid);
-      pending.push(pid);
+      descendantPids.push(pid);
+      queue.push(pid);
     }
   }
-  const normalized = normalizeChildCommandName(snapshot.commandById.get(childPid) ?? "", platform);
+
+  // Filter out pure console infrastructure processes like conhost from marking running activity
+  const substantiveDescendants = descendantPids.filter((pid) => {
+    const rawCmd = snapshot.commandById.get(pid) ?? "";
+    const name = normalizeChildCommandName(rawCmd, platform);
+    return name !== "conhost" && name !== "openconsole";
+  });
+
+  if (substantiveDescendants.length === 0) {
+    return { hasRunningSubprocess: false, childCommand: null, processIds: [...processIds] };
+  }
+
+  // Look for any descendant running a known agent command first
+  let chosenCommand: string | null = null;
+  for (const pid of substantiveDescendants) {
+    const rawCmd = snapshot.commandById.get(pid) ?? "";
+    const name = normalizeChildCommandName(rawCmd, platform);
+    if (name && KNOWN_AGENT_COMMANDS.has(name.toLowerCase())) {
+      chosenCommand = name;
+      break;
+    }
+  }
+
+  // If no known agent found, choose the first non-wrapper descendant, or fallback to the direct child
+  if (!chosenCommand) {
+    for (const pid of substantiveDescendants) {
+      const rawCmd = snapshot.commandById.get(pid) ?? "";
+      const name = normalizeChildCommandName(rawCmd, platform);
+      if (name && !TRANSPARENT_WRAPPERS.has(name.toLowerCase())) {
+        chosenCommand = name;
+        break;
+      }
+    }
+  }
+
+  if (!chosenCommand && substantiveDescendants.length > 0) {
+    const firstSubstantive = substantiveDescendants[0]!;
+    const rawCmd = snapshot.commandById.get(firstSubstantive) ?? "";
+    chosenCommand = normalizeChildCommandName(rawCmd, platform);
+  }
+
   return {
     hasRunningSubprocess: true,
-    childCommand: normalized ? truncateTerminalWireLabel(normalized) : null,
+    childCommand: chosenCommand ? truncateTerminalWireLabel(chosenCommand) : null,
     processIds: [...processIds],
   };
 }
@@ -835,7 +929,7 @@ const posixProcessTableSnapshot = Effect.fn("terminal.posixProcessTableSnapshot"
   const result = yield* processRunner
     .run({
       command: psCommand,
-      args: ["-eo", "pid=,ppid=,comm="],
+      args: ["-eo", "pid=,ppid=,args="],
       timeout: "1 second",
       maxOutputBytes: 524_288,
       outputMode: "truncate",
@@ -871,7 +965,7 @@ const windowsProcessTableSnapshot = Effect.fn("terminal.windowsProcessTableSnaps
   > {
     const processRunner = yield* ProcessRunner.ProcessRunner;
     const command =
-      'Get-CimInstance Win32_Process -ErrorAction Stop | ForEach-Object { Write-Output "$($_.ProcessId)|$($_.ParentProcessId)|$($_.Name)" }';
+      'Get-CimInstance Win32_Process -ErrorAction Stop | ForEach-Object { $cmd = if ($_.CommandLine) { $_.CommandLine.Trim() } else { $_.Name }; Write-Output "$($_.ProcessId)|$($_.ParentProcessId)|$cmd" }';
     const result = yield* processRunner
       .run({
         command: "powershell.exe",
@@ -895,9 +989,11 @@ const windowsProcessTableSnapshot = Effect.fn("terminal.windowsProcessTableSnaps
       });
     }
     const processes = result.stdout.split(/\r?\n/g).flatMap((line) => {
-      const [pidRaw, ppidRaw, name = ""] = line.trim().split("|", 3);
-      const pid = Number(pidRaw);
-      const ppid = Number(ppidRaw);
+      const parts = line.trim().split("|");
+      if (parts.length < 3) return [];
+      const pid = Number(parts[0]);
+      const ppid = Number(parts[1]);
+      const name = parts.slice(2).join("|").trim();
       return Number.isInteger(pid) && pid > 0 && Number.isInteger(ppid)
         ? [{ pid, ppid, name }]
         : [];

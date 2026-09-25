@@ -168,6 +168,35 @@ it("intercepts pane closure with registered close guard when dirty", async () =>
   expect(getActiveTab(store.getState()).panes.has(paneId)).toBe(false);
 });
 
+it("canCloseTab checks close guards for all panes in the tab", async () => {
+  const ids = makeIds();
+  const initial = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids);
+  const tab = getActiveTab(initial);
+  const paneId = tab.focusedPaneId;
+  const store = createWorkbenchStore({ initialSnapshot: initial, generateId: ids });
+
+  let isDirty = true;
+  let confirmResult = false;
+  store.getState().registerCloseGuard(paneId, {
+    isDirty: () => isDirty,
+    confirmClose: async () => confirmResult,
+  });
+
+  // When dirty and user cancels confirmation -> canCloseTab returns false
+  const canClose1 = await store.getState().canCloseTab(tab.id);
+  expect(canClose1).toBe(false);
+
+  // When dirty and user confirms -> canCloseTab returns true
+  confirmResult = true;
+  const canClose2 = await store.getState().canCloseTab(tab.id);
+  expect(canClose2).toBe(true);
+
+  // When clean -> canCloseTab returns true without confirmation
+  isDirty = false;
+  const canClose3 = await store.getState().canCloseTab(tab.id);
+  expect(canClose3).toBe(true);
+});
+
 it("splits relative to a specific pane and focuses existing targets if already present", () => {
   const ids = makeIds();
   const initial = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids);
@@ -195,4 +224,67 @@ it("splits relative to a specific pane and focuses existing targets if already p
   const tabAfterRefocus = getActiveTab(store.getState());
   expect(tabAfterRefocus.panes.size).toBe(2);
   expect(tabAfterRefocus.focusedPaneId).toBe(filePaneId);
+});
+
+it("moves a tab from one index to another and persists the new order", () => {
+  const ids = makeIds();
+  let initial = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids);
+  initial = applyCreateTab(initial, ids);
+  initial = applyCreateTab(initial, ids);
+
+  const writes: WorkbenchSnapshot[] = [];
+  const store = createWorkbenchStore({
+    initialSnapshot: initial,
+    generateId: ids,
+    persist: (snapshot) => writes.push(snapshot),
+  });
+
+  const tab0Id = store.getState().tabs[0]!.id;
+  const tab1Id = store.getState().tabs[1]!.id;
+  const tab2Id = store.getState().tabs[2]!.id;
+
+  // Move tab 0 to index 2
+  store.getState().moveTab(0, 2);
+
+  expect(store.getState().tabs.map((t) => t.id)).toEqual([tab1Id, tab2Id, tab0Id]);
+  expect(writes).toHaveLength(1);
+  expect(writes[0]!.tabs.map((t) => t.id)).toEqual([tab1Id, tab2Id, tab0Id]);
+
+  // Invalid indices should no-op
+  store.getState().moveTab(0, 0);
+  store.getState().moveTab(-1, 2);
+  store.getState().moveTab(0, 99);
+  expect(writes).toHaveLength(1);
+});
+
+it("previews and commits a Tab drop to reorder tabs", () => {
+  const ids = makeIds();
+  let initial = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids);
+  initial = applyCreateTab(initial, ids);
+  initial = applyCreateTab(initial, ids);
+
+  const writes: WorkbenchSnapshot[] = [];
+  const store = createWorkbenchStore({
+    initialSnapshot: initial,
+    generateId: ids,
+    persist: (snapshot) => writes.push(snapshot),
+  });
+
+  const tab0Id = store.getState().tabs[0]!.id;
+  const tab1Id = store.getState().tabs[1]!.id;
+  const tab2Id = store.getState().tabs[2]!.id;
+
+  // Drag tab 0 to existingTab 2
+  const preview = store
+    .getState()
+    .previewDrop({ kind: "tab", tabId: tab0Id }, { kind: "existingTab", tabId: tab2Id });
+
+  expect(preview).not.toBeNull();
+  expect(preview!.snapshot.tabs.map((t) => t.id)).toEqual([tab1Id, tab2Id, tab0Id]);
+  expect(store.getState().tabs.map((t) => t.id)).toEqual([tab0Id, tab1Id, tab2Id]);
+  expect(writes).toHaveLength(0);
+
+  store.getState().commitDrop(preview!);
+  expect(store.getState().tabs.map((t) => t.id)).toEqual([tab1Id, tab2Id, tab0Id]);
+  expect(writes).toHaveLength(1);
 });

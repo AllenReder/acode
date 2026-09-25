@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { computePaneLayoutRects } from "./layoutGeometry";
+import { computePaneLayoutRects, SCROLLING_TRAILING_PADDING } from "./layoutGeometry";
 import { leaf, type LayoutNode } from "./layout";
 import type { WorkbenchTab } from "./workbenchState";
 import type { ViewTarget } from "./viewRegistry";
@@ -99,9 +99,39 @@ describe("layoutGeometry", () => {
       const horizontalGap = p3.left - (p1.left + p1.width);
       expect(horizontalGap).toBe(gap);
 
-      // Right margin after col 2 must be exactly gap
+      // Right margin after col 2 includes gap and trailing drop padding (ADR 0015)
       const rightMargin = result.canvasWidth - (p3.left + p3.width);
-      expect(rightMargin).toBe(gap);
+      expect(rightMargin).toBe(gap + SCROLLING_TRAILING_PADDING);
+    });
+
+    it("strictly locks canvasHeight to viewportHeight even when many panes stack (ADR 0015)", () => {
+      const tab: WorkbenchTab = {
+        id: "tab-1",
+        layoutMode: "scrolling",
+        layout: leaf("p1"),
+        focusedPaneId: "p1",
+        titleMode: "auto",
+        titleOverride: "",
+        panes: new Map([
+          ["p1", { id: "v1", definitionId: "test", target: testTarget }],
+          ["p2", { id: "v2", definitionId: "test", target: testTarget }],
+          ["p3", { id: "v3", definitionId: "test", target: testTarget }],
+          ["p4", { id: "v4", definitionId: "test", target: testTarget }],
+        ]),
+        columns: [
+          {
+            id: "col-1",
+            width: 500,
+            paneIds: ["p1", "p2", "p3", "p4"],
+            shares: [0.25, 0.25, 0.25, 0.25],
+          },
+        ],
+      };
+
+      const viewportHeight = 400;
+      const result = computePaneLayoutRects(tab, { width: 1000, height: viewportHeight }, 16);
+      expect(result.canvasHeight).toBe(viewportHeight);
+      expect(result.rects.get("p1")!.height).toBeGreaterThan(0);
     });
   });
 

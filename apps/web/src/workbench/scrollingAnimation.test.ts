@@ -3,6 +3,7 @@ import {
   appleEaseOut,
   computeScrollingRevealTarget,
   animateScrollTo,
+  settleEaseOut,
   type ScrollRevealInput,
 } from "./scrollingAnimation";
 
@@ -23,6 +24,21 @@ describe("appleEaseOut", () => {
     }
     // High initial acceleration: at t=0.5 it should cover over 80% of the distance
     expect(appleEaseOut(0.5)).toBeGreaterThan(0.8);
+  });
+});
+
+describe("settleEaseOut", () => {
+  it("starts at 0 and ends at 1", () => {
+    expect(settleEaseOut(0)).toBe(0);
+    expect(settleEaseOut(1)).toBe(1);
+  });
+
+  it("starts from rest, unlike the front-loaded Apple curve", () => {
+    // cubic-bezier(0.4, 0, 0.2, 1) barely moves at the very start, so a paused
+    // release does not snap forward the way the Apple curve does.
+    expect(settleEaseOut(0.1)).toBeLessThan(0.1);
+    expect(settleEaseOut(0.1)).toBeLessThan(appleEaseOut(0.1));
+    expect(settleEaseOut(0.5)).toBeLessThan(appleEaseOut(0.5));
   });
 });
 
@@ -114,7 +130,7 @@ describe("computeScrollingRevealTarget", () => {
     expect(result.targetLeft).toBe(284);
   });
 
-  it("reveals stacked panes vertically when vertical overflow exists", () => {
+  it("keeps targetTop at 0 because Workbench Viewport never scrolls vertically (ADR 0015)", () => {
     const input: ScrollRevealInput = {
       isSingleColumn: false,
       rect: { left: 16, top: 500, width: 560, height: 400 },
@@ -126,11 +142,8 @@ describe("computeScrollingRevealTarget", () => {
       currentScrollLeft: 0,
       currentScrollTop: 0,
     };
-    // Safe bottom is 500 + 400 + 16 = 916. Viewport height 600.
-    // targetTop = 916 - 600 = 316
     const result = computeScrollingRevealTarget(input);
-    expect(result.needsScroll).toBe(true);
-    expect(result.targetTop).toBe(316);
+    expect(result.targetTop).toBe(0);
   });
 });
 

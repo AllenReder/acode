@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   approval: false,
   sessionError: false,
   turnError: false,
+  planReady: false,
   add: vi.fn(
     (_toast: { title: string; description: string; actionProps: { onClick: () => void } }) =>
       "toast-1",
@@ -40,10 +41,13 @@ vi.mock("@effect/atom-react", () => ({
           archivedAt: state.archivedAt,
           hasPendingUserInput: state.input,
           hasPendingApprovals: state.approval,
+          hasActionableProposedPlan: state.planReady,
+          interactionMode: "plan",
           session: state.sessionError ? { status: "error" } : null,
           latestTurn: {
             turnId: "turn-1",
             state: state.turnError ? "error" : state.completedAt ? "completed" : "running",
+            startedAt: state.completedAt ? "2026-09-13T09:00:00.000Z" : null,
             completedAt: state.completedAt,
           },
         },
@@ -109,6 +113,7 @@ beforeEach(() => {
     approval: false,
     sessionError: false,
     turnError: false,
+    planReady: false,
   });
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("window", new EventTarget());
@@ -190,6 +195,17 @@ describe("thread notifications", () => {
       tag: "env-1:thread-1",
       silent: true,
     });
+  });
+
+  it("raises a plan-ready thread as attention instead of completion", async () => {
+    state.mode = "notifications-and-sound";
+    await render();
+    state.planReady = true;
+    await complete();
+    await render();
+    expect(state.add).toHaveBeenCalledTimes(1);
+    expect(state.add).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Plan ready" }));
+    expect(state.sound).toHaveBeenCalledWith("input", expect.any(Function));
   });
 
   it("keeps background desktop alerts when in-app notifications are disabled", async () => {

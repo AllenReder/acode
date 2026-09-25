@@ -5,7 +5,10 @@ import { useAwenProjects, useEnvironmentShellSnapshotPresent } from "../state/en
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useEnvironmentCatalogSnapshot } from "../state/environmentCatalogSnapshot";
 import { useEnvironments } from "../state/environments";
+import { AgentSessionLifecycle } from "./AgentSessionLifecycle";
 import { PaneTree } from "./PaneTree";
+import { TabTransitionController } from "./tabTransitionReact";
+import { installTabSwitchProfiler } from "./transitionProfiler";
 import { WorkbenchWindowChrome } from "./WorkbenchWindowChrome";
 import { MaterialSurface } from "../components/MaterialSurface";
 import { WorkbenchDropOverlay } from "./workbenchDrag";
@@ -20,6 +23,9 @@ import {
 import { targetKey, type ViewTarget } from "./viewRegistry";
 import "./viewDefinitions";
 import { useWorkbenchStore } from "./workbenchStore";
+
+// Opt-in tab-switch profiler; no-op unless `?profileTabSwitch` or the localStorage flag is set.
+installTabSwitchProfiler();
 
 interface WorkbenchProps {
   readonly navigate?: (input: {
@@ -168,6 +174,8 @@ export function Workbench({ navigate: navigateTo }: WorkbenchProps = {}) {
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+      <TabTransitionController />
+      <AgentSessionLifecycle projects={projects} />
       <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
       <MaterialSurface
         kind="workbench"

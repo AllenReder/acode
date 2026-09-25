@@ -1,18 +1,37 @@
-import type { ComponentProps } from "react";
+import { useCallback, useState, type ComponentProps } from "react";
 import { cn } from "../../lib/utils";
-import { findSessionViewPane, isSessionViewFocused } from "../../workbench/workbenchState";
+import { getSessionRowTabState, type SessionRowTabState } from "../../workbench/workbenchState";
 import { useWorkbenchStore } from "../../workbench/workbenchStore";
-import { type ViewTarget } from "../../workbench/viewRegistry";
+import type { ViewTarget } from "../../workbench/viewRegistry";
 import { sessionRouteForTarget } from "../../workbench/deepLinks";
 import { useSessionActionMenu } from "../../hooks/useSessionActionMenu";
 import { useWorkbenchDragSource, useWorkbenchDragState } from "../../workbench/workbenchDrag";
+import { FLUID_MOTION_DURATION_MS, getPrefersReducedMotion } from "../../workbench/workbenchMotion";
+import type { WillCloseRevert } from "../../hooks/useSessionCommands";
+import type { SessionStatus } from "./sidebarSessionPresentation";
 
 export type SessionTarget = Extract<ViewTarget, { kind: "agentSession" | "workspaceTerminal" }>;
+export type SessionTabState = SessionRowTabState;
+
+const STATUS_DOT_CLASS: Record<Exclude<SessionStatus, "ready">, string> = {
+  approval: "size-1.5 rounded-full bg-amber-500",
+  input: "size-1.5 rounded-full bg-indigo-500",
+  plan: "size-1.5 rounded-full bg-violet-500",
+  working: "size-1.5 rounded-full bg-sky-500 animate-pulse",
+  monitoring: "size-1.5 rounded-full bg-sky-500",
+  failed: "size-1.5 rounded-full bg-destructive",
+};
+
+const UNREAD_COMPLETION_DOT_CLASS = "size-1.5 rounded-full bg-emerald-500";
 
 export interface SessionRowProps extends ComponentProps<"button"> {
   readonly target: SessionTarget;
   readonly isClosed?: boolean;
+  readonly isClosing?: boolean;
+  readonly onWillClose?: () => Promise<WillCloseRevert | void> | WillCloseRevert | void;
   readonly sessionTitle?: string;
+  readonly status?: SessionStatus;
+  readonly isUnread?: boolean;
   readonly onStartRename?: () => void;
   readonly navigateTo?: (input: {
     readonly to: string;
@@ -25,7 +44,11 @@ export interface SessionRowProps extends ComponentProps<"button"> {
 export function SessionRow({
   target,
   isClosed = false,
+  isClosing = false,
+  onWillClose,
   sessionTitle,
+  status = "ready",
+  isUnread = false,
   onStartRename,
   navigateTo,
   onClick,
@@ -33,18 +56,23 @@ export function SessionRow({
   onContextMenu,
   onKeyDown,
   onPointerDown,
+  onMouseDown,
+  onAuxClick,
   className,
   ...props
 }: SessionRowProps) {
-  const isFocused = useWorkbenchStore((state) => isSessionViewFocused(state, target));
+  const tabState = useWorkbenchStore((state) => getSessionRowTabState(state, target));
 
-  const isOpenInWorkbench = useWorkbenchStore(
-    (state) => findSessionViewPane(state, target) !== null,
-  );
+  const isFocused = tabState === "active-focused";
+  const isOpenInActiveTab = isFocused || tabState === "active-unfocused";
+  const isOpenInWorkbench = tabState !== "unopened";
 
   const workspaceKey = `${target.environmentId}:${target.workspaceId}`;
   const sessionId =
     target.kind === "agentSession" ? target.agentSessionId : target.terminalSessionId;
+
+  const dotClass =
+    status === "ready" ? (isUnread ? UNREAD_COMPLETION_DOT_CLASS : null) : STATUS_DOT_CLASS[status];
 
   const dragState = useWorkbenchDragState();
   const draggedTarget = dragState?.source.kind === "sidebar" ? dragState.source.target : null;
@@ -59,21 +87,29 @@ export function SessionRow({
         ? draggedTarget.terminalSessionId === target.terminalSessionId
         : false);
 
-  const isReorderTarget =
-    dragState !== null &&
-    dragState.isOverSidebar &&
-    dragState.sidebarDropTarget !== null &&
-    dragState.sidebarDropTarget.workspaceKey === workspaceKey &&
-    dragState.sidebarDropTarget.sessionId === sessionId;
+  const [selfClosing, setSelfClosing] = useState(false);
+  const handleWillClose = useCallback(async () => {
+    setSelfClosing(true);
+    if (!getPrefersReducedMotion()) {
+      await new Promise<void>((resolve) => setTimeout(resolve, FLUID_MOTION_DURATION_MS));
+    }
+    const outerRevert = await onWillClose?.();
+    return () => {
+      setSelfClosing(false);
+      outerRevert?.();
+    };
+  }, [onWillClose]);
 
-  const dropPosition = isReorderTarget ? dragState.sidebarDropTarget?.position : null;
+  const closing = isClosing || selfClosing;
+  const buttonStyle = closing ? undefined : props.style;
 
-  const { openMenu } = useSessionActionMenu({
+  const { openMenu, commands } = useSessionActionMenu({
     target,
     isClosed,
     sessionTitle,
     onStartRename,
     navigateTo,
+    onWillClose: handleWillClose,
   });
   const drag = useWorkbenchDragSource(
     { kind: "sidebar", target },
@@ -95,25 +131,31 @@ export function SessionRow({
   return (
     <button
       {...props}
+      style={buttonStyle}
       type="button"
       role="treeitem"
       aria-level={3}
       data-workbench-drag-source="sidebar"
       data-sidebar-session-row="true"
+      data-session-closed={isClosed ? "true" : undefined}
+      data-session-closing={closing ? "true" : undefined}
       data-workspace-key={workspaceKey}
       data-session-id={sessionId}
       className={cn(
-        "relative flex min-h-6 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
-        isBeingDragged && "opacity-40",
+        "sidebar-session-row-item relative flex min-h-6 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground will-change-transform",
+        isBeingDragged && (props.style?.opacity !== undefined ? undefined : "opacity-40"),
         isFocused
-          ? "bg-sidebar-row-active font-medium text-sidebar-foreground"
-          : isOpenInWorkbench
+          ? "bg-sidebar-row-active font-bold text-sidebar-foreground"
+          : tabState === "active-unfocused"
             ? "text-sidebar-foreground"
-            : undefined,
+            : tabState === "background-tab"
+              ? "text-sidebar-foreground/80"
+              : undefined,
         isClosed && "opacity-75",
         className,
       )}
-      aria-current={isFocused ? "page" : isOpenInWorkbench ? "true" : undefined}
+      aria-current={isFocused ? "page" : isOpenInActiveTab ? "true" : undefined}
+      data-session-tab-state={tabState}
       data-session-focused={isFocused ? "true" : "false"}
       data-session-open={isOpenInWorkbench ? "true" : "false"}
       aria-description="Open Session (Alt/Option: split right; Alt/Option+Shift: split down)"
@@ -151,25 +193,58 @@ export function SessionRow({
         onKeyDown?.(event);
       }}
       onPointerDown={(event) => {
-        drag.onPointerDown(event);
+        if (event.button === 1) {
+          event.preventDefault();
+        } else if (!isClosed && !closing) {
+          drag.onPointerDown(event);
+        }
         onPointerDown?.(event);
       }}
+      onMouseDown={(event) => {
+        if (event.button === 1) {
+          event.preventDefault();
+        }
+        onMouseDown?.(event);
+      }}
+      onAuxClick={(event) => {
+        if (event.button === 1) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (!closing && !isBeingDragged) {
+            if (isClosed) {
+              void commands.deleteSession(sessionTitle);
+            } else {
+              void commands.closeSession();
+            }
+          }
+        }
+        onAuxClick?.(event);
+      }}
     >
-      {isOpenInWorkbench && !isFocused ? (
-        <span aria-hidden="true" className="absolute left-0.5 size-1 rounded-full bg-primary" />
+      <span
+        aria-hidden="true"
+        data-status-gutter="true"
+        data-session-status={status}
+        data-session-unread={isUnread ? "true" : "false"}
+        className="pointer-events-none flex size-3.5 shrink-0 items-center justify-center"
+      >
+        {dotClass !== null ? <span className={dotClass} /> : null}
+      </span>
+      {tabState === "active-unfocused" ? (
+        <span
+          aria-hidden="true"
+          data-session-indicator="active-unfocused"
+          className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 h-3.5 w-0.5 rounded-full bg-primary/80"
+        />
+      ) : null}
+      {tabState === "background-tab" ? (
+        <span
+          aria-hidden="true"
+          data-session-indicator="background-tab"
+          className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 size-0.5 rounded-full bg-muted-foreground/70"
+        />
       ) : null}
       {props.children}
-      {dropPosition === "before" ? (
-        <span
-          data-sidebar-reorder-indicator="before"
-          className="pointer-events-none absolute -top-px inset-x-1 h-0.5 rounded-full bg-primary z-20 shadow-[0_0_4px_var(--color-primary)]"
-        />
-      ) : dropPosition === "after" ? (
-        <span
-          data-sidebar-reorder-indicator="after"
-          className="pointer-events-none absolute -bottom-px inset-x-1 h-0.5 rounded-full bg-primary z-20 shadow-[0_0_4px_var(--color-primary)]"
-        />
-      ) : null}
     </button>
   );
 }

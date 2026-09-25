@@ -10,7 +10,12 @@ import {
   terminalSessionRefForRuntime,
   type TerminalSessionRef,
 } from "./session.ts";
-import { AwenProjectShell, AwenSessionShell, agentSessionsIn } from "./workspace.ts";
+import {
+  AwenProjectShell,
+  AwenSessionShell,
+  AwenWorkspaceShell,
+  agentSessionsIn,
+} from "./workspace.ts";
 import type { AwenAgentSessionShell } from "./workspace.ts";
 
 const WS_A = WorkspaceId.make("workspace:project-a");
@@ -344,5 +349,33 @@ describe("Workspace Session projection compatibility", () => {
     const sessions = agentSessionsIn(project.workspaces[0]!);
     expect(sessions).toHaveLength(1);
     expect(sessions[0]?.threadId).toBe(THREAD);
+  });
+
+  it("decodes AwenWorkspaceShell with optional branch field", () => {
+    const withBranch = decodeSync(AwenWorkspaceShell, {
+      id: WS_A,
+      projectId: "awen-project:p",
+      awenProjectId: "project-p",
+      title: "Workspace",
+      workspaceRoot: "/tmp/p",
+      role: "main",
+      branch: "feature/sidebar-ui",
+      createdAt: "2026-09-19T00:00:00.000Z",
+      updatedAt: "2026-09-19T00:00:00.000Z",
+    });
+    expect(withBranch.branch).toBe("feature/sidebar-ui");
+
+    const withNullBranch = decodeSync(AwenWorkspaceShell, {
+      id: WS_A,
+      projectId: "awen-project:p",
+      awenProjectId: "project-p",
+      title: "Workspace",
+      workspaceRoot: "/tmp/p",
+      role: "main",
+      branch: null,
+      createdAt: "2026-09-19T00:00:00.000Z",
+      updatedAt: "2026-09-19T00:00:00.000Z",
+    });
+    expect(withNullBranch.branch).toBeNull();
   });
 });

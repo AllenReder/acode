@@ -2355,15 +2355,35 @@ html[data-workbench-window-chrome] {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   overscroll-behavior-x: contain;
   background: transparent;
   scrollbar-width: thin;
   scroll-padding: 12px;
 }
+.workbench-viewport[data-layout-mode="bsp"] {
+  overflow: hidden;
+}
+/* Sliding Tab switch (ADR-0019): the source and target Tabs become two cards.
+   Keep this rule to positioning only. `will-change`, `backface-visibility`,
+   `border-radius`, and `overflow` all make the browser create a render surface
+   (backdrop root) around the card, which drops the `mask`/`clip-path` on
+   descendant `backdrop-filter` glass and paints it as a hard rectangle. A 2D
+   `translate` on its own does not, so the glass can stay live while a card moves. */
+.workbench-viewport-container[data-tab-transition="true"] {
+  overflow: hidden;
+}
+.workbench-viewport-container[data-tab-transition="true"] .workbench-viewport {
+  position: absolute;
+  inset: 0;
+  flex: none;
+  pointer-events: none;
+}
 .workbench-canvas {
   position: relative;
   min-height: 100%;
+  height: 100%;
 }
 .workbench-pane-frame {
   position: absolute;
@@ -2376,6 +2396,72 @@ html[data-workbench-dragging] .workbench-pane-frame {
     width 220ms cubic-bezier(0.22, 1, 0.36, 1),
     height 220ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: left, top, width, height;
+}
+html[data-workbench-dragging="active"] .workbench-tab-item {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+.workbench-tab-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  height: 2px;
+  width: 0;
+  border-radius: 999px;
+  background: var(--primary);
+  pointer-events: none;
+  will-change: transform, width;
+}
+.workbench-tab-item[data-tab-closing="true"] {
+  max-width: 0 !important;
+  min-width: 0 !important;
+  width: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  border-right-width: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+  transition:
+    max-width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    min-width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    margin 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-width 220ms cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+html[data-workbench-dragging="active"] .sidebar-session-row-item {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+.sidebar-session-row-item[data-session-closing="true"] {
+  max-height: 0 !important;
+  min-height: 0 !important;
+  height: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+  transition:
+    max-height 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    min-height 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    margin 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .workbench-tab-item[data-tab-closing="true"],
+  .sidebar-session-row-item[data-session-closing="true"] {
+    transition: none !important;
+  }
 }
 html[data-workbench-resizing] .workbench-pane-frame {
   transition: none !important;

@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { useAgentSessionLifecycle, type WillCloseRevert } from "./useAgentSessionLifecycle";
 import { scopeThreadRef } from "@awen/client-runtime/environment";
 import { squashAtomCommandFailure } from "@awen/client-runtime/state/runtime";
 import { requestDestructiveConfirmation } from "../lib/destructiveConfirmation";
@@ -24,10 +25,17 @@ function failureToast(title: string, error: unknown) {
   );
 }
 
-export function useSessionCommands(target: SessionTarget) {
+export type { WillCloseRevert } from "./useAgentSessionLifecycle";
+
+export function useSessionCommands(
+  target: SessionTarget,
+  options?: {
+    readonly onWillClose?: () => Promise<WillCloseRevert | void> | WillCloseRevert | void;
+  },
+) {
   const store = useWorkbenchStore();
   const stopThreadSession = useAtomCommand(threadEnvironment.stopSession, { reportFailure: false });
-  const archiveThread = useAtomCommand(threadEnvironment.archive, { reportFailure: false });
+  const closeAgent = useAgentSessionLifecycle();
   const deleteThread = useAtomCommand(threadEnvironment.delete, { reportFailure: false });
   const closeTerminal = useAtomCommand(terminalEnvironment.close, { reportFailure: false });
 
@@ -62,25 +70,11 @@ export function useSessionCommands(target: SessionTarget) {
         );
         return;
       }
-      const threadShell = readThreadShell(scopeThreadRef(target.environmentId, threadId));
-      if (threadShell?.session && threadShell.session.status === "running") {
-        const stopResult = await stopThreadSession({
-          environmentId: target.environmentId,
-          input: { threadId },
-        });
-        if (stopResult._tag === "Failure") {
-          failureToast("Failed to stop agent session", squashAtomCommandFailure(stopResult));
-          return;
-        }
-      }
-      const archiveResult = await archiveThread({
-        environmentId: target.environmentId,
-        input: { threadId },
+      const closed = await closeAgent(scopeThreadRef(target.environmentId, threadId), {
+        reason: "session",
+        ...(options?.onWillClose ? { onWillClose: options.onWillClose } : {}),
       });
-      if (archiveResult._tag === "Failure") {
-        failureToast("Failed to close agent session", squashAtomCommandFailure(archiveResult));
-        return;
-      }
+      if (!closed) return;
       store.removeSessionViews(target);
       toastManager.add({ type: "success", title: "Agent session closed" });
     } else {
@@ -92,18 +86,23 @@ export function useSessionCommands(target: SessionTarget) {
         );
         return;
       }
+      let revert: WillCloseRevert | void = undefined;
+      if (options?.onWillClose) {
+        revert = await options.onWillClose();
+      }
       const result = await closeTerminal({
         environmentId: target.environmentId,
         input: { workspaceId: target.workspaceId, terminalId, deleteHistory: false },
       });
       if (result._tag === "Failure") {
+        revert?.();
         failureToast("Failed to close terminal session", squashAtomCommandFailure(result));
         return;
       }
       store.removeSessionViews(target);
       toastManager.add({ type: "success", title: "Terminal session closed" });
     }
-  }, [agentSession?.threadId, archiveThread, closeTerminal, stopThreadSession, store, target]);
+  }, [agentSession?.threadId, closeAgent, closeTerminal, options, store, target]);
 
   const handleDeleteSession = useCallback(
     async (sessionTitle?: string) => {
@@ -120,10 +119,15 @@ export function useSessionCommands(target: SessionTarget) {
         onFailure: (error) => failureToast("Failed to confirm session deletion", error),
       });
       if (!confirmed) return;
+      let revert: WillCloseRevert | void = undefined;
+      if (options?.onWillClose) {
+        revert = await options.onWillClose();
+      }
 
       if (target.kind === "agentSession") {
         const threadId = agentSession?.threadId;
         if (!threadId) {
+          revert?.();
           failureToast(
             "Failed to delete agent session",
             new Error("Agent session thread is not loaded."),
@@ -142,6 +146,7 @@ export function useSessionCommands(target: SessionTarget) {
           input: { threadId },
         });
         if (deleteResult._tag === "Failure") {
+          revert?.();
           failureToast("Failed to delete agent session", squashAtomCommandFailure(deleteResult));
           return;
         }
@@ -150,6 +155,7 @@ export function useSessionCommands(target: SessionTarget) {
       } else {
         const terminalId = runtimeTerminalIdForTarget(target);
         if (!terminalId) {
+          revert?.();
           failureToast(
             "Failed to delete terminal session",
             new Error("Terminal id could not be resolved."),
@@ -161,6 +167,7 @@ export function useSessionCommands(target: SessionTarget) {
           input: { workspaceId: target.workspaceId, terminalId, deleteHistory: true },
         });
         if (result._tag === "Failure") {
+          revert?.();
           failureToast("Failed to delete terminal session", squashAtomCommandFailure(result));
           return;
         }
@@ -173,6 +180,7 @@ export function useSessionCommands(target: SessionTarget) {
       agentSession?.title,
       closeTerminal,
       deleteThread,
+      options,
       stopThreadSession,
       store,
       target,

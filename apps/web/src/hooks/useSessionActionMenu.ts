@@ -9,13 +9,16 @@ import {
   type SessionActionMenuId,
   type SessionActionMenuState,
 } from "../components/sidebar/sessionActionMenu.logic";
-import { useSessionCommands, type SessionTarget } from "./useSessionCommands";
+import { useSessionCommands, type SessionTarget, type WillCloseRevert } from "./useSessionCommands";
 
 export function useSessionActionMenu(input: {
   readonly target: SessionTarget;
   readonly isClosed?: boolean | undefined;
   readonly sessionTitle?: string | undefined;
   readonly onStartRename?: (() => void) | undefined;
+  readonly onWillClose?:
+    | (() => Promise<WillCloseRevert | void> | WillCloseRevert | void)
+    | undefined;
   readonly navigateTo?:
     | ((input: {
         readonly to: string;
@@ -24,9 +27,9 @@ export function useSessionActionMenu(input: {
       }) => void)
     | undefined;
 }) {
-  const { target, isClosed = false, sessionTitle, onStartRename, navigateTo } = input;
+  const { target, isClosed = false, sessionTitle, onStartRename, onWillClose, navigateTo } = input;
   const store = useWorkbenchStore();
-  const commands = useSessionCommands(target);
+  const commands = useSessionCommands(target, onWillClose ? { onWillClose } : undefined);
 
   const openMenu = useCallback(
     (position: { x: number; y: number }) => {
@@ -82,5 +85,7 @@ export function useSessionActionMenu(input: {
     [commands, isClosed, navigateTo, onStartRename, sessionTitle, store, target],
   );
 
-  return { openMenu };
+  return { openMenu, commands };
 }
+
+export default useSessionActionMenu;

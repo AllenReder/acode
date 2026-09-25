@@ -2109,12 +2109,15 @@ export default function ChatView(props: ChatViewProps) {
   const activeRunningTurnId =
     (activeThread?.session?.status === "running" ? activeThread.session.activeTurnId : null) ??
     (activeLatestTurn?.state === "running" ? activeLatestTurn.turnId : null);
-  // Reading a finished thread clears the sidebar's Done badge. The visit is
-  // stamped at the turn's completion time — not now/updatedAt — so it clears
-  // exactly the completion the user is looking at: a wake or completion that
-  // lands later still gets its signal (markThreadVisited never moves the
-  // timestamp backwards).
+  // Reading a finished thread clears the sidebar's Done badge, but only while
+  // this View is the focused pane: a kept-alive background Tab must not
+  // acknowledge a completion the user never saw. The visit is stamped at the
+  // turn's completion time — not now/updatedAt — so it clears exactly the
+  // completion the user is looking at: a wake or completion that lands later
+  // still gets its signal (markThreadVisited never moves the timestamp
+  // backwards).
   useEffect(() => {
+    if (!focused) return;
     const completedAt = serverThread?.latestTurn?.completedAt;
     if (!serverThread?.id || !completedAt) return;
     markThreadVisited(
@@ -2122,6 +2125,7 @@ export default function ChatView(props: ChatViewProps) {
       completedAt,
     );
   }, [
+    focused,
     markThreadVisited,
     serverThread?.environmentId,
     serverThread?.id,

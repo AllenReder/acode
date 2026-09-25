@@ -1,8 +1,10 @@
 import type {
+  AgentSessionId,
   AwenWorkspaceShell,
   ContextMenuItem,
   EnvironmentId,
   ProjectId,
+  TerminalSessionId,
   ThreadId,
   WorkspaceId,
 } from "@awen/contracts";
@@ -22,7 +24,16 @@ import {
   PlusIcon,
   TerminalIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { useComposerDraftStore } from "../composerDraftStore";
@@ -32,13 +43,21 @@ import { newDraftId, newThreadId } from "../lib/utils";
 import { readLocalApi } from "../localApi";
 import { environmentServerConfigsAtom } from "../state/server";
 import { useEnvironments } from "../state/environments";
-import { useAwenProjects } from "../state/entities";
+import { useAwenProjects, useThreadShell } from "../state/entities";
 import { projectEnvironment, workspaceEnvironment } from "../state/projects";
 import { terminalEnvironment } from "../state/terminal";
 import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
-import { scopeProjectRef } from "@awen/client-runtime/environment";
+import { scopeProjectRef, scopeThreadRef, scopedThreadKey } from "@awen/client-runtime/environment";
+import { useKnownTerminalSessions } from "../state/terminalSessions";
 import { SessionRow } from "./sidebar/SessionRow";
+import {
+  isUnreadCompletion,
+  resolveAgentIcon,
+  resolveAgentSessionStatus,
+  resolveTerminalIcon,
+  resolveTerminalSessionStatus,
+} from "./sidebar/sidebarSessionPresentation";
 import { AddWorkspaceDialog, NewWorkspaceDialog } from "./sidebar/WorkspaceDialogs";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { nextWorkspaceTerminalId } from "./Sidebar.logic";
@@ -49,6 +68,8 @@ import { sessionRouteForTarget } from "../workbench/deepLinks";
 import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { runtimeTerminalIdForTarget, terminalTargetForRuntime } from "../workbench/sessionTarget";
 import type { ViewTarget } from "../workbench/viewRegistry";
+import { useWorkbenchDragController, useWorkbenchDragState } from "../workbench/workbenchDrag";
+import { NO_PROVIDER_MODEL_SELECTION } from "../providerInstances";
 import { useWorkbenchStore } from "../workbench/workbenchStore";
 
 type ProjectMenuId =
@@ -108,12 +129,36 @@ export function projectMenuItems(input: {
 
 export function workspaceMenuItems(input: {
   readonly canDeleteDirectory: boolean;
+  readonly onDragBrowseFiles?: (event: PointerEvent) => void;
+  readonly onDragReviewChanges?: (event: PointerEvent) => void;
+  readonly onDragNewAgentSession?: (event: PointerEvent) => void;
+  readonly onDragNewTerminalSession?: (event: PointerEvent) => void;
 }): ReadonlyArray<ContextMenuItem<WorkspaceMenuId>> {
   return [
-    { id: "browse-files", label: "Browse Files", icon: "folder" },
-    { id: "review-changes", label: "Review Changes", icon: "git-branch" },
-    { id: "new-agent-session", label: "New Agent Session", icon: "message-square-plus" },
-    { id: "new-terminal-session", label: "New Terminal Session", icon: "terminal" },
+    {
+      id: "browse-files",
+      label: "Browse Files",
+      icon: "folder",
+      ...(input.onDragBrowseFiles ? { onPointerDown: input.onDragBrowseFiles } : {}),
+    },
+    {
+      id: "review-changes",
+      label: "Review Changes",
+      icon: "git-branch",
+      ...(input.onDragReviewChanges ? { onPointerDown: input.onDragReviewChanges } : {}),
+    },
+    {
+      id: "new-agent-session",
+      label: "New Agent Session",
+      icon: "message-square-plus",
+      ...(input.onDragNewAgentSession ? { onPointerDown: input.onDragNewAgentSession } : {}),
+    },
+    {
+      id: "new-terminal-session",
+      label: "New Terminal Session",
+      icon: "terminal",
+      ...(input.onDragNewTerminalSession ? { onPointerDown: input.onDragNewTerminalSession } : {}),
+    },
     { id: "rename-workspace", label: "Rename", icon: "pencil", separatorBefore: true },
     {
       id: "remove-workspace",
@@ -208,6 +253,8 @@ export function AwenSidebar() {
   const openTerminal = useAtomCommand(terminalEnvironment.open);
   const renameTerminalSession = useAtomCommand(terminalEnvironment.rename);
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata);
+  const createThread = useAtomCommand(threadEnvironment.create, { reportFailure: false });
+  const dragController = useWorkbenchDragController();
 
   const openAddProject = useCallback(() => openCommandPalette({ open: "add-project" }), []);
 
@@ -237,24 +284,47 @@ export function AwenSidebar() {
     [navigate],
   );
 
+  const createEagerAgentSession = useCallback(
+    (
+      project: EnvironmentAwenProject,
+      workspace: AwenWorkspaceShell,
+      draftId: ReturnType<typeof newDraftId>,
+      threadId: ReturnType<typeof newThreadId>,
+    ) => {
+      useComposerDraftStore
+        .getState()
+        .setWorkspaceDraftThreadId(
+          workspace.id,
+          scopeProjectRef(project.environmentId, workspace.awenProjectId),
+          draftId,
+          { threadId, createdAt: new Date().toISOString() },
+        );
+      void createThread({
+        environmentId: project.environmentId,
+        input: {
+          threadId,
+          projectId: workspace.awenProjectId,
+          title: "New Agent Session",
+          modelSelection: NO_PROVIDER_MODEL_SELECTION,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: workspace.workspaceRoot,
+          createdAt: new Date().toISOString(),
+        },
+      });
+    },
+    [createThread],
+  );
+
   const newAgentSession = useCallback(
     (project: EnvironmentAwenProject, workspace: AwenWorkspaceShell) => {
-      const drafts = useComposerDraftStore.getState();
-      const existing = drafts.getDraftSessionByWorkspace(project.environmentId, workspace.id);
-      if (existing !== null) {
-        openDraft(project.environmentId, workspace.id, existing.draftId);
-        return;
-      }
       const draftId = newDraftId();
-      drafts.setWorkspaceDraftThreadId(
-        workspace.id,
-        scopeProjectRef(project.environmentId, workspace.awenProjectId),
-        draftId,
-        { threadId: newThreadId(), createdAt: new Date().toISOString() },
-      );
+      const threadId = newThreadId();
+      createEagerAgentSession(project, workspace, draftId, threadId);
       openDraft(project.environmentId, workspace.id, draftId);
     },
-    [openDraft],
+    [createEagerAgentSession, openDraft],
   );
 
   const newTerminalSession = useCallback(
@@ -393,7 +463,89 @@ export function AwenSidebar() {
       if (!api) return;
       void (async () => {
         const clicked = await api.contextMenu.show(
-          workspaceMenuItems({ canDeleteDirectory: workspace.origin === "awen-created" }),
+          workspaceMenuItems({
+            canDeleteDirectory: workspace.origin === "awen-created",
+            onDragBrowseFiles: (event) => {
+              dragController.beginDrag(
+                {
+                  kind: "sidebar",
+                  target: {
+                    kind: "workspace",
+                    definitionId: "fileView",
+                    environmentId: project.environmentId,
+                    workspaceId: workspace.id,
+                  },
+                },
+                "Browse Files",
+                event,
+              );
+            },
+            onDragReviewChanges: (event) => {
+              dragController.beginDrag(
+                {
+                  kind: "sidebar",
+                  target: {
+                    kind: "workspace",
+                    definitionId: "gitView",
+                    environmentId: project.environmentId,
+                    workspaceId: workspace.id,
+                  },
+                },
+                "Review Changes",
+                event,
+              );
+            },
+            onDragNewAgentSession: (event) => {
+              const draftId = newDraftId();
+              const threadId = newThreadId();
+              const target = {
+                kind: "newAgentSession" as const,
+                environmentId: project.environmentId,
+                workspaceId: workspace.id,
+                draftId,
+              };
+              dragController.beginDrag(
+                {
+                  kind: "sidebar",
+                  target,
+                  onCommit: () => {
+                    createEagerAgentSession(project, workspace, draftId, threadId);
+                  },
+                },
+                "New Agent Session",
+                event,
+              );
+            },
+            onDragNewTerminalSession: (event) => {
+              const terminalId = nextWorkspaceTerminalId();
+              const target = terminalTargetForRuntime({
+                environmentId: project.environmentId,
+                workspaceId: workspace.id,
+                terminalId,
+              });
+              dragController.beginDrag(
+                {
+                  kind: "sidebar",
+                  target,
+                  onCommit: () => {
+                    void openTerminal({
+                      environmentId: project.environmentId,
+                      input: { workspaceId: workspace.id, terminalId },
+                    }).then((result) => {
+                      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+                        commandFailureToast(
+                          "Unable to create terminal",
+                          squashAtomCommandFailure(result),
+                        );
+                      }
+                    });
+                  },
+                },
+                "Terminal Session",
+                event,
+              );
+            },
+          }),
           position,
         );
         if (clicked === null) return;
@@ -460,7 +612,15 @@ export function AwenSidebar() {
         }
       })();
     },
-    [newAgentSession, newTerminalSession, removeWorkspace, renameWorkspace],
+    [
+      createEagerAgentSession,
+      dragController,
+      newAgentSession,
+      newTerminalSession,
+      openTerminal,
+      removeWorkspace,
+      renameWorkspace,
+    ],
   );
 
   const renameAgent = useCallback(
@@ -635,85 +795,33 @@ export function AwenSidebar() {
                                 })}
                               >
                                 <GitBranchIcon className="size-3 shrink-0" />
-                                <span className="min-w-0 flex-1 truncate">{workspace.title}</span>
-                                <span className="shrink-0 text-[10px] uppercase opacity-60">
-                                  {workspace.role}
+                                <span
+                                  data-testid="sidebar-workspace-branch"
+                                  className="min-w-0 flex-1 truncate font-medium"
+                                >
+                                  {workspace.branch ||
+                                    (workspace.role === "main" ? "main" : workspace.title)}
+                                </span>
+                                <span
+                                  data-testid="sidebar-workspace-dir"
+                                  className="shrink-0 text-[10px] text-sidebar-muted-foreground"
+                                >
+                                  {workspace.workspaceRoot?.split(/[\\/]/).filter(Boolean).pop() ||
+                                    workspace.title}
                                 </span>
                               </button>
                             </div>
                             {workspaceExpanded ? (
                               <div className="ms-4 flex flex-col gap-px border-s border-sidebar-border ps-1.5">
-                                {activeSessions.map((session) => {
-                                  if (session.kind === "agent") {
-                                    return (
-                                      <SessionRow
-                                        key={session.id}
-                                        data-testid="sidebar-session-row"
-                                        data-session-kind="agent"
-                                        sessionTitle={session.title}
-                                        target={{
-                                          kind: "agentSession",
-                                          environmentId: project.environmentId,
-                                          workspaceId: workspace.id,
-                                          agentSessionId: session.id,
-                                        }}
-                                        onStartRename={() =>
-                                          renameAgent(
-                                            project.environmentId,
-                                            session.threadId,
-                                            session.title,
-                                          )
-                                        }
-                                        navigateTo={(route) =>
-                                          void navigate({
-                                            ...route,
-                                            to: route.to as never,
-                                          } as never)
-                                        }
-                                      >
-                                        <span className="min-w-0 flex-1 truncate">
-                                          {session.title}
-                                        </span>
-                                      </SessionRow>
-                                    );
-                                  }
-                                  return (
-                                    <SessionRow
-                                      key={session.id}
-                                      data-testid="sidebar-session-row"
-                                      data-session-kind="terminal"
-                                      sessionTitle={session.title}
-                                      target={{
-                                        kind: "workspaceTerminal",
-                                        environmentId: project.environmentId,
-                                        workspaceId: workspace.id,
-                                        terminalSessionId: session.id,
-                                      }}
-                                      navigateTo={(route) =>
-                                        void navigate({ ...route, to: route.to as never } as never)
-                                      }
-                                      onStartRename={() =>
-                                        renameTerminal(
-                                          {
-                                            kind: "workspaceTerminal",
-                                            environmentId: project.environmentId,
-                                            workspaceId: workspace.id,
-                                            terminalSessionId: session.id,
-                                          },
-                                          session.title,
-                                        )
-                                      }
-                                    >
-                                      <TerminalIcon className="size-3 shrink-0" />
-                                      <span className="min-w-0 flex-1 truncate">
-                                        {session.title}
-                                      </span>
-                                      <span className="shrink-0 text-[10px] opacity-60">
-                                        {session.status}
-                                      </span>
-                                    </SessionRow>
-                                  );
-                                })}
+                                <WorkspaceActiveSessions
+                                  project={project}
+                                  workspace={workspace}
+                                  workspaceKey={workspaceKey}
+                                  activeSessions={activeSessions}
+                                  renameAgent={renameAgent}
+                                  renameTerminal={renameTerminal}
+                                  navigate={navigate}
+                                />
                                 {historySessions.length > 0 ? (
                                   <button
                                     type="button"
@@ -739,74 +847,25 @@ export function AwenSidebar() {
                                 {historyExpanded.has(workspaceKey)
                                   ? historySessions.map((session) =>
                                       session.kind === "agent" ? (
-                                        <SessionRow
+                                        <WorkspaceAgentSessionRow
                                           key={session.id}
-                                          data-testid="sidebar-session-row"
-                                          data-session-kind="agent"
-                                          data-session-closed="true"
+                                          project={project}
+                                          workspace={workspace}
+                                          session={session}
                                           isClosed
-                                          sessionTitle={session.title}
-                                          target={{
-                                            kind: "agentSession",
-                                            environmentId: project.environmentId,
-                                            workspaceId: workspace.id,
-                                            agentSessionId: session.id,
-                                          }}
-                                          onStartRename={() =>
-                                            renameAgent(
-                                              project.environmentId,
-                                              session.threadId,
-                                              session.title,
-                                            )
-                                          }
-                                          navigateTo={(route) =>
-                                            void navigate({
-                                              ...route,
-                                              to: route.to as never,
-                                            } as never)
-                                          }
-                                        >
-                                          <span className="min-w-0 flex-1 truncate">
-                                            {session.title}
-                                          </span>
-                                        </SessionRow>
+                                          renameAgent={renameAgent}
+                                          navigate={navigate}
+                                        />
                                       ) : (
-                                        <SessionRow
+                                        <WorkspaceTerminalSessionRow
                                           key={session.id}
-                                          data-testid="sidebar-session-row"
-                                          data-session-kind="terminal"
-                                          data-session-closed="true"
+                                          project={project}
+                                          workspace={workspace}
+                                          session={session}
                                           isClosed
-                                          sessionTitle={session.title}
-                                          target={{
-                                            kind: "workspaceTerminal",
-                                            environmentId: project.environmentId,
-                                            workspaceId: workspace.id,
-                                            terminalSessionId: session.id,
-                                          }}
-                                          navigateTo={(route) =>
-                                            void navigate({
-                                              ...route,
-                                              to: route.to as never,
-                                            } as never)
-                                          }
-                                          onStartRename={() =>
-                                            renameTerminal(
-                                              {
-                                                kind: "workspaceTerminal",
-                                                environmentId: project.environmentId,
-                                                workspaceId: workspace.id,
-                                                terminalSessionId: session.id,
-                                              },
-                                              session.title,
-                                            )
-                                          }
-                                        >
-                                          <TerminalIcon className="size-3 shrink-0" />
-                                          <span className="min-w-0 flex-1 truncate">
-                                            {session.title}
-                                          </span>
-                                        </SessionRow>
+                                          renameTerminal={renameTerminal}
+                                          navigate={navigate}
+                                        />
                                       ),
                                     )
                                   : null}
@@ -849,5 +908,339 @@ export function AwenSidebar() {
         onCreate={handleCreateWorkspace}
       />
     </>
+  );
+}
+
+function WorkspaceAgentSessionRow({
+  project,
+  workspace,
+  session,
+  isClosed = false,
+  style,
+  renameAgent,
+  navigate,
+}: {
+  readonly project: EnvironmentAwenProject;
+  readonly workspace: EnvironmentAwenProject["workspaces"][number];
+  readonly session: { readonly id: string; readonly title: string; readonly threadId: ThreadId };
+  readonly isClosed?: boolean;
+  readonly style?: CSSProperties;
+  readonly renameAgent: (environmentId: EnvironmentId, threadId: ThreadId, title: string) => void;
+  readonly navigate: ReturnType<typeof useNavigate>;
+}) {
+  const threadRef = useMemo(
+    () => scopeThreadRef(project.environmentId, session.threadId),
+    [project.environmentId, session.threadId],
+  );
+  const threadShell = useThreadShell(threadRef);
+  const threadKey = scopedThreadKey(threadRef);
+  const lastVisitedAt = useUiStateStore((state) => state.threadLastVisitedAtById[threadKey]);
+  const ProviderIcon = resolveAgentIcon(threadShell?.modelSelection?.instanceId);
+  const status = isClosed ? "ready" : resolveAgentSessionStatus(threadShell);
+  const isUnread =
+    !isClosed &&
+    isUnreadCompletion({
+      status,
+      latestTurn: threadShell?.latestTurn,
+      lastVisitedAt,
+    });
+
+  return (
+    <SessionRow
+      key={session.id}
+      style={style}
+      data-testid="sidebar-session-row"
+      data-session-kind="agent"
+      data-session-closed={isClosed ? "true" : undefined}
+      isClosed={isClosed}
+      sessionTitle={session.title}
+      status={status}
+      isUnread={isUnread}
+      target={{
+        kind: "agentSession",
+        environmentId: project.environmentId,
+        workspaceId: workspace.id,
+        agentSessionId: session.id as AgentSessionId,
+      }}
+      onStartRename={() => renameAgent(project.environmentId, session.threadId, session.title)}
+      navigateTo={(route) => void navigate({ ...route, to: route.to as never } as never)}
+    >
+      <ProviderIcon className="size-3.5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{session.title}</span>
+    </SessionRow>
+  );
+}
+
+function WorkspaceTerminalSessionRow({
+  project,
+  workspace,
+  session,
+  isClosed = false,
+  style,
+  renameTerminal,
+  navigate,
+}: {
+  readonly project: EnvironmentAwenProject;
+  readonly workspace: EnvironmentAwenProject["workspaces"][number];
+  readonly session: { readonly id: string; readonly title: string };
+  readonly isClosed?: boolean;
+  readonly style?: CSSProperties;
+  readonly renameTerminal: (
+    target: Extract<ViewTarget, { kind: "workspaceTerminal" }>,
+    title: string,
+  ) => void;
+  readonly navigate: ReturnType<typeof useNavigate>;
+}) {
+  const knownSessions = useKnownTerminalSessions({
+    environmentId: project.environmentId,
+    threadId: null,
+    workspaceId: workspace.id,
+  });
+  const runtimeTerminalId = runtimeTerminalIdForTarget({
+    kind: "workspaceTerminal",
+    environmentId: project.environmentId,
+    workspaceId: workspace.id,
+    terminalSessionId: session.id as TerminalSessionId,
+  });
+  const terminalSession = knownSessions.find(
+    (item) =>
+      item.target.terminalId === session.id ||
+      item.state.summary?.sessionId === session.id ||
+      item.state.summary?.terminalId === session.id ||
+      (runtimeTerminalId !== null &&
+        (item.target.terminalId === runtimeTerminalId ||
+          item.state.summary?.terminalId === runtimeTerminalId)),
+  );
+  const summary = terminalSession?.state.summary;
+  const TerminalOrAgentIcon = resolveTerminalIcon(summary);
+  const status = isClosed ? "ready" : resolveTerminalSessionStatus(summary);
+
+  return (
+    <SessionRow
+      key={session.id}
+      style={style}
+      data-testid="sidebar-session-row"
+      data-session-kind="terminal"
+      data-session-closed={isClosed ? "true" : undefined}
+      isClosed={isClosed}
+      sessionTitle={session.title}
+      status={status}
+      target={{
+        kind: "workspaceTerminal",
+        environmentId: project.environmentId,
+        workspaceId: workspace.id,
+        terminalSessionId: session.id as TerminalSessionId,
+      }}
+      navigateTo={(route) => void navigate({ ...route, to: route.to as never } as never)}
+      onStartRename={() =>
+        renameTerminal(
+          {
+            kind: "workspaceTerminal",
+            environmentId: project.environmentId,
+            workspaceId: workspace.id,
+            terminalSessionId: session.id as TerminalSessionId,
+          },
+          session.title,
+        )
+      }
+    >
+      <TerminalOrAgentIcon className="size-3.5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{session.title}</span>
+    </SessionRow>
+  );
+}
+
+interface WorkspaceActiveSessionsProps {
+  readonly project: EnvironmentAwenProject;
+  readonly workspace: EnvironmentAwenProject["workspaces"][number];
+  readonly workspaceKey: string;
+  readonly activeSessions: ReadonlyArray<
+    NonNullable<EnvironmentAwenProject["workspaces"][number]["sessions"]>[number]
+  >;
+  readonly renameAgent: (environmentId: EnvironmentId, threadId: ThreadId, title: string) => void;
+  readonly renameTerminal: (
+    target: Extract<ViewTarget, { kind: "workspaceTerminal" }>,
+    title: string,
+  ) => void;
+  readonly navigate: ReturnType<typeof useNavigate>;
+}
+
+function WorkspaceActiveSessions({
+  project,
+  workspace,
+  workspaceKey,
+  activeSessions,
+  renameAgent,
+  renameTerminal,
+  navigate,
+}: WorkspaceActiveSessionsProps) {
+  const dragState = useWorkbenchDragState();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [settlingSession, setSettlingSession] = useState<{
+    sessionId: string;
+    offset: number;
+  } | null>(null);
+  const lastSessionDragInfoRef = useRef<{
+    sessionId: string;
+    fromIndex: number;
+    toIndex: number;
+    deltaY: number;
+  } | null>(null);
+
+  const isSessionTarget =
+    dragState?.source.kind === "sidebar" &&
+    (dragState.source.target.kind === "agentSession" ||
+      dragState.source.target.kind === "workspaceTerminal");
+  const isSidebarDrag =
+    dragState?.phase === "dragging" &&
+    dragState.source.kind === "sidebar" &&
+    dragState.isOverSidebar;
+  const isCurrentWorkspaceDrag =
+    isSidebarDrag &&
+    isSessionTarget &&
+    dragState.source.target.environmentId === project.environmentId &&
+    dragState.source.target.workspaceId === workspace.id;
+
+  const draggedSessionId =
+    isCurrentWorkspaceDrag && dragState && isSessionTarget
+      ? dragState.source.target.kind === "agentSession"
+        ? dragState.source.target.agentSessionId
+        : dragState.source.target.terminalSessionId
+      : null;
+
+  const draggedSourceIndex = draggedSessionId
+    ? activeSessions.findIndex((s) => s.id === draggedSessionId)
+    : -1;
+
+  const rowHeight = 25; // 24px button height + 1px gap
+  const deltaY =
+    isCurrentWorkspaceDrag && dragState ? dragState.pointer.y - dragState.startPointer.y : 0;
+
+  let targetIndex = draggedSourceIndex;
+  if (isCurrentWorkspaceDrag && draggedSourceIndex >= 0 && dragState) {
+    const containerEl = containerRef.current;
+    if (containerEl) {
+      const containerRect = containerEl.getBoundingClientRect();
+      const currentCenterY = dragState.startRect.top + deltaY + rowHeight / 2 - containerRect.top;
+      const rawSlot = Math.floor(currentCenterY / rowHeight);
+      targetIndex = Math.max(0, Math.min(rawSlot, activeSessions.length - 1));
+    }
+  }
+
+  if (isCurrentWorkspaceDrag && draggedSessionId && draggedSourceIndex >= 0) {
+    lastSessionDragInfoRef.current = {
+      sessionId: draggedSessionId,
+      fromIndex: draggedSourceIndex,
+      toIndex: targetIndex,
+      deltaY,
+    };
+  } else if (lastSessionDragInfoRef.current) {
+    const prev = lastSessionDragInfoRef.current;
+    lastSessionDragInfoRef.current = null;
+    const isCancelled = dragState?.phase === "canceling" || dragState?.phase === "rejected";
+    const initialOffset = isCancelled
+      ? prev.deltaY
+      : (prev.fromIndex - prev.toIndex) * rowHeight + prev.deltaY;
+    if (Math.abs(initialOffset) > 2) {
+      setSettlingSession({ sessionId: prev.sessionId, offset: initialOffset });
+    }
+  }
+
+  useEffect(() => {
+    if (!settlingSession) return;
+    let cancelled = false;
+    requestAnimationFrame(() => {
+      if (cancelled) return;
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        setSettlingSession(null);
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [settlingSession]);
+
+  return (
+    <div
+      ref={containerRef}
+      data-sidebar-active-sessions={workspaceKey}
+      className="flex flex-col gap-px"
+    >
+      {activeSessions.map((session, index) => {
+        const isDragged = isCurrentWorkspaceDrag && session.id === draggedSessionId;
+        const isSettling = settlingSession?.sessionId === session.id;
+
+        let sessionStyle: CSSProperties | undefined;
+        if (isCurrentWorkspaceDrag && draggedSourceIndex >= 0) {
+          if (isDragged) {
+            sessionStyle = {
+              transform: `translate3d(0, ${deltaY}px, 0)`,
+              zIndex: 30,
+              opacity: 0.95,
+              pointerEvents: "none",
+              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.25)",
+              transition: "none",
+            };
+          } else {
+            let shift = 0;
+            if (targetIndex > draggedSourceIndex) {
+              if (index > draggedSourceIndex && index <= targetIndex) {
+                shift = -rowHeight;
+              }
+            } else if (targetIndex < draggedSourceIndex) {
+              if (index >= targetIndex && index < draggedSourceIndex) {
+                shift = rowHeight;
+              }
+            }
+            sessionStyle = {
+              transform: shift !== 0 ? `translate3d(0, ${shift}px, 0)` : undefined,
+              transition: "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)",
+            };
+          }
+        } else if (settlingSession) {
+          if (settlingSession.sessionId === session.id) {
+            sessionStyle = {
+              transform: `translate3d(0, ${settlingSession.offset}px, 0)`,
+              transition: "none",
+            };
+          } else {
+            sessionStyle = {
+              transition: "none",
+            };
+          }
+        } else {
+          sessionStyle = {
+            transition: "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)",
+          };
+        }
+
+        if (session.kind === "agent") {
+          return (
+            <WorkspaceAgentSessionRow
+              key={session.id}
+              style={sessionStyle}
+              project={project}
+              workspace={workspace}
+              session={session}
+              renameAgent={renameAgent}
+              navigate={navigate}
+            />
+          );
+        }
+
+        return (
+          <WorkspaceTerminalSessionRow
+            key={session.id}
+            style={sessionStyle}
+            project={project}
+            workspace={workspace}
+            session={session}
+            renameTerminal={renameTerminal}
+            navigate={navigate}
+          />
+        );
+      })}
+    </div>
   );
 }

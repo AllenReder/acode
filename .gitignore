@@ -49,4 +49,5 @@ node_modules/
 
 # pnpm content-addressable store; never belongs in the repo.
 .pnpm-store/
+.pi/
 apps/desktop/runtime/
