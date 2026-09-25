@@ -18,7 +18,6 @@ import { extractJsonObject, fromLenientJson } from "@awen/shared/schemaJson";
 import { satisfiesSemverRange } from "@awen/shared/semver";
 import { HostProcessPlatform } from "@awen/shared/hostProcess";
 import * as Context from "effect/Context";
-import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -60,14 +59,18 @@ const scpCommandForPlatform = (platform: NodeJS.Platform): string =>
 
 export const resolveScpCommand = Effect.map(HostProcessPlatform, scpCommandForPlatform);
 import {
+  classifySshFailure,
   SshCommandError,
   SshHttpBridgeError,
   SshInvalidTargetError,
   SshLaunchError,
+  SshLocalPackageError,
   SshPairingError,
   SshPasswordPromptError,
   SshReadinessError,
 } from "./errors.ts";
+
+export { SshLocalPackageError } from "./errors.ts";
 
 const DEFAULT_REMOTE_PORT = 3773;
 const REMOTE_PORT_SCAN_WINDOW = 200;
@@ -116,11 +119,6 @@ export function parseRemotePackageStageHome(stdout: string): string | null {
   const home = line?.slice(prefix.length);
   return home !== undefined && home.startsWith("/") && !home.includes("\0") ? home : null;
 }
-
-export class SshLocalPackageError extends Data.TaggedError("SshLocalPackageError")<{
-  readonly message: string;
-  readonly cause?: unknown;
-}> {}
 
 export interface RemoteAwenRunnerOptions {
   /**
@@ -858,30 +856,30 @@ AWEN_NODE_SCRIPT_PATH=@@AWEN_NODE_SCRIPT_PATH@@
 if [ -n "$AWEN_NODE_SCRIPT_PATH" ]; then
   ensure_remote_node_path || true
   if ! command -v node >/dev/null 2>&1; then
-    printf 'Remote host is missing node on PATH. Install Node or configure a supported version manager for non-interactive shells.\\n' >&2
+    printf 'AWEN_ERROR prerequisite-missing Remote host is missing node on PATH. Install Node or configure a supported version manager for non-interactive shells.\\n' >&2
     exit 1
   fi
   exec node "$AWEN_NODE_SCRIPT_PATH" "$@"
 fi
 AWEN_ARCHIVE_VERSION=@@AWEN_ARCHIVE_VERSION@@
 if [ -z "$AWEN_ARCHIVE_VERSION" ]; then
-  printf 'No Awen server release version was provided for the remote runtime.\\n' >&2
+  printf 'AWEN_ERROR install-download-checksum No Awen server release version was provided for the remote runtime.\\n' >&2
   exit 1
 fi
 if [ "$(uname -s)" != "Linux" ]; then
-  printf 'Awen remote daemon install currently supports Linux x64 only; remote OS is %s.\\n' "$(uname -s)" >&2
+  printf 'AWEN_ERROR prerequisite-missing Awen remote daemon install currently supports Linux x64 only; remote OS is %s.\\n' "$(uname -s)" >&2
   exit 1
 fi
 case "$(uname -m)" in
   x86_64 | amd64) ;;
-  *) printf 'Awen remote daemon install currently supports Linux x64 only; remote architecture is %s.\\n' "$(uname -m)" >&2; exit 1 ;;
+  *) printf 'AWEN_ERROR prerequisite-missing Awen remote daemon install currently supports Linux x64 only; remote architecture is %s.\\n' "$(uname -m)" >&2; exit 1 ;;
 esac
 if ! ensure_remote_node_path; then
-  printf 'Remote host is missing Node.js 22 or newer on PATH. Install Node.js or configure a supported version manager for non-interactive shells.\\n' >&2
+  printf 'AWEN_ERROR prerequisite-missing Remote host is missing Node.js 22 or newer on PATH. Install Node.js or configure a supported version manager for non-interactive shells.\\n' >&2
   exit 1
 fi
 if ! command -v git >/dev/null 2>&1; then
-  printf 'Remote host is missing Git on PATH. Install Git before connecting Awen.\\n' >&2
+  printf 'AWEN_ERROR prerequisite-missing Remote host is missing Git on PATH. Install Git before connecting Awen.\\n' >&2
   exit 1
 fi
 AWEN_RELEASE_BASE_URL=@@AWEN_RELEASE_BASE_URL@@
@@ -913,7 +911,7 @@ if ! awen_runtime_ready; then
       fi
     fi
     if [ "$AWEN_LOCK_WAITED" -ge @@AWEN_ARCHIVE_LOCK_WAIT_SECONDS@@ ]; then
-      printf 'Another Awen %s installation has held %s for too long.\\n' "$AWEN_ARCHIVE_VERSION" "$AWEN_LOCK" >&2
+      printf 'AWEN_ERROR install-download-checksum Another Awen %s installation has held %s for too long.\\n' "$AWEN_ARCHIVE_VERSION" "$AWEN_LOCK" >&2
       exit 1
     fi
     sleep 1
@@ -954,7 +952,7 @@ AWEN_HOME_FALLBACK="\${AWEN_HOME:-\${HOME}/.awen}"
       elif command -v wget >/dev/null 2>&1; then
         wget -q --timeout=30 --tries=1 "$1" -O "$2" && AWEN_FETCH_OK=1 || AWEN_FETCH_OK=0
       else
-        printf 'Remote host needs curl or wget to download %s.\\n' "$AWEN_ARCHIVE" >&2
+        printf 'AWEN_ERROR install-download-checksum Remote host needs curl or wget to download %s.\\n' "$AWEN_ARCHIVE" >&2
         AWEN_FETCH_OK=0
       fi
       if [ -n "\${AWEN_PROGRESS_PID:-}" ]; then
@@ -982,12 +980,12 @@ AWEN_HOME_FALLBACK="\${AWEN_HOME:-\${HOME}/.awen}"
     AWEN_ACTUAL="$(shasum -a 256 "$AWEN_STAGING/$AWEN_ARCHIVE" | cut -d' ' -f1)"
   fi
   if [ -z "$AWEN_EXPECTED" ] || [ "$AWEN_ACTUAL" != "$AWEN_EXPECTED" ]; then
-    printf 'Checksum mismatch for %s.\\n' "$AWEN_ARCHIVE" >&2; exit 1
+    printf 'AWEN_ERROR install-download-checksum Checksum mismatch for %s.\\n' "$AWEN_ARCHIVE" >&2; exit 1
   fi
   tar -xzf "$AWEN_STAGING/$AWEN_ARCHIVE" -C "$AWEN_STAGING" --strip-components=1
   rm -f "$AWEN_STAGING/$AWEN_ARCHIVE" "$AWEN_STAGING/SHA256SUMS"
   if ! "$AWEN_STAGING/bin/awen" --version >/dev/null 2>&1; then
-    printf 'The Awen %s executable does not run on this host.\\n' "$AWEN_ARCHIVE_VERSION" >&2; exit 1
+    printf 'AWEN_ERROR install-download-checksum The Awen %s executable does not run on this host.\\n' "$AWEN_ARCHIVE_VERSION" >&2; exit 1
   fi
   printf '%s\\n' "$AWEN_ARCHIVE_VERSION" > "$AWEN_STAGING/.install-complete"
   rm -rf "$AWEN_RUNTIME_DIR"
@@ -1028,7 +1026,7 @@ AWEN_ARCHIVE_MODE=@@AWEN_ARCHIVE_MODE@@
 if [ "$AWEN_ARCHIVE_MODE" = "1" ]; then
   "$RUNNER_FILE" --version >/dev/null
 elif ! ensure_remote_node_path; then
-  printf 'Remote host is missing node on PATH. Install Node or configure a supported version manager for non-interactive shells.\\n' >&2
+  printf 'AWEN_ERROR prerequisite-missing Remote host is missing node on PATH. Install Node or configure a supported version manager for non-interactive shells.\\n' >&2
   exit 1
 fi
 pick_port() {
@@ -1141,9 +1139,9 @@ if [ -z "$REMOTE_PORT" ]; then
   REMOTE_PORT="$(pick_port)" || true
   if [ -z "$REMOTE_PORT" ]; then
     if [ "$AWEN_ARCHIVE_MODE" = "1" ]; then
-      printf 'Failed to find an available port on the remote host.\\n' >&2
+      printf 'AWEN_ERROR daemon-start Failed to find an available port on the remote host.\\n' >&2
     else
-      printf 'Failed to find an available port on the remote host. Ensure node is available on PATH.\\n' >&2
+      printf 'AWEN_ERROR daemon-start Failed to find an available port on the remote host. Ensure node is available on PATH.\\n' >&2
     fi
     exit 1
   fi
@@ -1153,7 +1151,7 @@ if [ -z "$REMOTE_PORT" ]; then
   printf '%s\\n' "$REMOTE_PORT" >"$PORT_FILE"
   printf 'managed\\n' >"$MANAGED_FILE"
   if ! wait_ready "@@AWEN_READY_TIMEOUT_MS@@"; then
-    printf 'Remote Awen daemon did not become ready on 127.0.0.1:%s.\\n' "$REMOTE_PORT" >&2
+    printf 'AWEN_ERROR daemon-start Remote Awen daemon did not become ready on 127.0.0.1:%s.\\n' "$REMOTE_PORT" >&2
     if [ -s "$LOG_FILE" ]; then
       tail -n 80 "$LOG_FILE" >&2 2>/dev/null || true
     else
@@ -1236,7 +1234,10 @@ cat >"$RUNNER_FILE" <<'SH'
 SH
 chmod 700 "$RUNNER_FILE"
 PAIRING_BASE_DIR="$DEFAULT_SERVER_HOME"
-AWEN_HOME="$AWEN_HOME" "$RUNNER_FILE" auth pairing create --base-dir "$PAIRING_BASE_DIR" --json
+if ! AWEN_HOME="$AWEN_HOME" "$RUNNER_FILE" auth pairing create --base-dir "$PAIRING_BASE_DIR" --json; then
+  printf 'AWEN_ERROR daemon-authentication Failed to create an authorized pairing credential for the remote daemon.\\n' >&2
+  exit 1
+fi
 `;
 
 const REMOTE_LOG_TAIL_SCRIPT = `set -eu
@@ -1980,10 +1981,11 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
         launchOrReuseRemoteServer(input.resolvedTarget, authOptions, input.runner).pipe(
           Effect.catch((error) =>
             Effect.gen(function* () {
-              // Authentication failures must surface as-is so the password
-              // prompt retry sees them; downloading and uploading a ~70 MB
-              // package first would only delay and muddy that signal.
-              if (isSshAuthFailure(error)) {
+              // Only package acquisition/verification failures can benefit
+              // from the local upload fallback. Authentication, host trust,
+              // prerequisites, and daemon-start failures must surface as-is
+              // instead of downloading and uploading a ~70 MB package first.
+              if (classifySshFailure(error).code !== "install-download-checksum") {
                 return yield* error;
               }
               if (!isNodeScriptRunner(input.runner) && input.runner?.archiveVersion) {

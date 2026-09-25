@@ -42,6 +42,45 @@ describe("Tauri desktop SSH API client", () => {
     );
   });
 
+  it("preserves structured failure codes from the local daemon", async () => {
+    const client = createDesktopSshApiClient({
+      getBaseUrl: () => "http://127.0.0.1:3773/",
+      getBearerToken: async () => "local-token",
+      fetchFn: vi.fn().mockResolvedValue(
+        Response.json(
+          {
+            error: {
+              code: "ssh-authentication",
+              message: "SSH authentication failed.",
+            },
+          },
+          { status: 401 },
+        ),
+      ),
+    });
+
+    await expect(
+      client.request("/api/desktop/ssh/ensure", { method: "POST" }),
+    ).rejects.toMatchObject({
+      code: "ssh-authentication",
+      message: "SSH authentication failed.",
+      status: 401,
+    });
+  });
+
+  it("classifies local daemon fetch failures as unreachable", async () => {
+    const client = createDesktopSshApiClient({
+      getBaseUrl: () => "http://127.0.0.1:3773/",
+      getBearerToken: async () => "local-token",
+      fetchFn: vi.fn().mockRejectedValue(new TypeError("fetch failed")),
+    });
+
+    await expect(client.request("/api/desktop/ssh/hosts")).rejects.toMatchObject({
+      code: "unreachable",
+      message: "fetch failed",
+    });
+  });
+
   it("passes cancellation to the SSH request", async () => {
     const controller = new AbortController();
     const fetchMock = vi.fn().mockResolvedValue(Response.json(null));

@@ -67,6 +67,21 @@ describe("connection presentation", () => {
     expect(connectionStatusText(connection)).toBe("Client not supported");
   });
 
+  it("preserves the structured failure code for the UI", () => {
+    const connection = presentConnectionState(
+      supervisorState({
+        phase: "blocked",
+        lastFailure: new ConnectionBlockedError({
+          reason: "unsupported",
+          failureCode: "host-key-change",
+          detail: "The SSH host key changed.",
+        }),
+      }),
+    );
+
+    expect(connection.failureCode).toBe("host-key-change");
+  });
+
   it("preserves profile display information without exposing credentials", () => {
     expect(connectionCatalogDisplayUrl(ENTRY)).toBe("https://environment.example.test");
   });
@@ -76,6 +91,7 @@ describe("connection presentation", () => {
       phase: "connecting",
       error: null,
       traceId: null,
+      failureCode: null,
     });
     expect(
       presentConnectionState(
@@ -93,6 +109,7 @@ describe("connection presentation", () => {
       phase: "reconnecting",
       error: "Socket closed.",
       traceId: "trace-previous",
+      failureCode: null,
     });
     expect(
       presentConnectionState(
@@ -111,6 +128,7 @@ describe("connection presentation", () => {
       phase: "reconnecting",
       error: "Disconnected.",
       traceId: "trace-1",
+      failureCode: null,
     });
   });
 
@@ -132,6 +150,7 @@ describe("connection presentation", () => {
       phase: "reconnecting",
       error: "Remote bearer connection timed out.",
       traceId: "trace-retry",
+      failureCode: null,
     });
   });
 
@@ -140,6 +159,7 @@ describe("connection presentation", () => {
       phase: "reconnecting",
       error: "Remote bearer request timed out.",
       traceId: "trace-retry",
+      failureCode: null,
     } as const;
     expect(connectionStatusText(connection)).toBe(
       "Failed to connect. Reconnecting... Reason: Remote bearer request timed out.",
@@ -160,6 +180,7 @@ describe("connection presentation", () => {
       phase: "offline",
       error: null,
       traceId: null,
+      failureCode: null,
     });
   });
 
@@ -176,6 +197,7 @@ describe("connection presentation", () => {
       phase: "connected",
       error: null,
       traceId: null,
+      failureCode: null,
     });
   });
 
@@ -194,6 +216,7 @@ describe("connection presentation", () => {
       phase: "available",
       error: null,
       traceId: null,
+      failureCode: null,
     });
   });
 });
