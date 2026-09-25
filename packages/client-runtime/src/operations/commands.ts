@@ -2,6 +2,8 @@ import {
   CommandId,
   ORCHESTRATION_WS_METHODS,
   type ClientOrchestrationCommand,
+  type OrchestrationGetOperationResultInput,
+  type OrchestrationOperationResult,
 } from "@awen/contracts";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -22,6 +24,11 @@ type CommandInput<T extends CommandType> = Omit<
   "type" | "commandId" | "createdAt"
 > & {
   readonly commandId?: CommandId;
+  /**
+   * Stable identity for one explicit user operation. Reusing it while the
+   * result is unknown reuses `commandId`; a repeated user action gets a new id.
+   */
+  readonly operationId?: string;
 } & ("createdAt" extends keyof CommandOf<T>
     ? {
         readonly createdAt?: CommandOf<T>["createdAt"];
@@ -65,13 +72,24 @@ type CommandEffect = Effect.Effect<
   Crypto.Crypto | EnvironmentSupervisor
 >;
 
-function commandId(input: { readonly commandId?: CommandId }) {
+const retainedCommandIds = new Map<string, CommandId>();
+
+function commandId(input: { readonly commandId?: CommandId; readonly operationId?: string }) {
   return Effect.gen(function* () {
     if (input.commandId !== undefined) {
       return input.commandId;
     }
+    const retained =
+      input.operationId === undefined ? undefined : retainedCommandIds.get(input.operationId);
+    if (retained !== undefined) {
+      return retained;
+    }
     const crypto = yield* Crypto.Crypto;
-    return yield* crypto.randomUUIDv4.pipe(Effect.orDie, Effect.map(CommandId.make));
+    const generated = yield* crypto.randomUUIDv4.pipe(Effect.orDie, Effect.map(CommandId.make));
+    if (input.operationId !== undefined) {
+      retainedCommandIds.set(input.operationId, generated);
+    }
+    return generated;
   });
 }
 
@@ -88,9 +106,32 @@ function timestampedCommandMetadata(input: {
   });
 }
 
-function dispatch(command: ClientOrchestrationCommand) {
-  return request(ORCHESTRATION_WS_METHODS.dispatchCommand, command);
+function dispatch(command: ClientOrchestrationCommand & { readonly operationId?: string }) {
+  const { operationId, ...wireCommand } = command;
+  return request(
+    ORCHESTRATION_WS_METHODS.dispatchCommand,
+    wireCommand as ClientOrchestrationCommand,
+  ).pipe(
+    Effect.tap(() =>
+      operationId === undefined
+        ? Effect.void
+        : Effect.sync(() => {
+            retainedCommandIds.delete(operationId);
+          }),
+    ),
+  );
 }
+
+export const getOperationResult: (
+  input: OrchestrationGetOperationResultInput,
+) => Effect.Effect<
+  OrchestrationOperationResult,
+  | EnvironmentRpcFailure<typeof ORCHESTRATION_WS_METHODS.getOperationResult>
+  | EnvironmentRpcUnavailableError,
+  EnvironmentSupervisor
+> = Effect.fn("EnvironmentCommands.getOperationResult")(function* (input) {
+  return yield* request(ORCHESTRATION_WS_METHODS.getOperationResult, input);
+});
 
 export const createProject: (input: CreateProjectInput) => CommandEffect = Effect.fn(
   "EnvironmentCommands.createProject",

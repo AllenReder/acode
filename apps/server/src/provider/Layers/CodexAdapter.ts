@@ -32,6 +32,7 @@ import {
   ProviderSendTurnInput,
 } from "@awen/contracts";
 import * as Effect from "effect/Effect";
+import { CODEX_APPROVAL_REQUEST_KINDS } from "../approvalRequestCapabilities.ts";
 import * as NodeCrypto from "node:crypto";
 import * as Crypto from "effect/Crypto";
 import * as Exit from "effect/Exit";
@@ -2716,6 +2717,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     capabilities: {
       sessionModelSwitch: "in-session",
       promptlessTurnContinuation: true,
+      approvalRequestKinds: CODEX_APPROVAL_REQUEST_KINDS,
     },
     startSession,
     sendTurn,

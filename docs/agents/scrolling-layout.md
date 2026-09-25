@@ -11,10 +11,11 @@ scrolling.
 A Pane edge drop to the left/right creates a Column; top/bottom stacks into the
 target Column. Column controls reorder Columns and their Panes, and let users
 choose an existing Session for a new Column or stacked Pane. They never create
-work. A Session already displayed in that Tab is focused instead of duplicated.
-Duplicate pane creates another View in a new Tab; that Tab can use either layout.
-Moving a View to a Tab preserves its identity and removes empty source Columns.
-Closing the last Pane returns Welcome in the selected layout.
+work. A Session already displayed anywhere in the Workbench is moved into that
+Column or Pane instead of duplicated, so a Session still has exactly one
+Session View (ADR-0010). Moving a View to a Tab preserves its identity and
+removes empty source Columns. Closing the last Pane returns Welcome in the
+selected layout.
 
 On first BSP → Scrolling conversion, BSP leaf reading order becomes one Column
 per Pane. First Scrolling → BSP conversion uses left-to-right Column order and

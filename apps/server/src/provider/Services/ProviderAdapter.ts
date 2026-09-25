@@ -12,6 +12,7 @@ import type {
   ProviderApprovalDecision,
   ProviderDriverKind,
   ProviderUserInputAnswers,
+  ProviderRequestKind,
   ProviderRuntimeEvent,
   ProviderSendTurnInput,
   ProviderSession,
@@ -52,6 +53,8 @@ export interface ProviderAdapterCapabilities {
   readonly promptlessTurnContinuation?: boolean;
   /** False when native conversation history cannot be rewound. */
   readonly supportsConversationRollback?: boolean;
+  /** Approval request kinds this adapter can surface and answer. */
+  readonly approvalRequestKinds?: ReadonlyArray<ProviderRequestKind>;
 }
 
 export interface ProviderThreadTurnSnapshot {

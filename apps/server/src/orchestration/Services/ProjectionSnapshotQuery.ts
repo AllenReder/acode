@@ -34,6 +34,7 @@ import type * as Option from "effect/Option";
 import type * as Effect from "effect/Effect";
 
 import type { ProjectionRepositoryError } from "../../persistence/Errors.ts";
+import type { ProjectionPendingApproval } from "../../persistence/Services/ProjectionPendingApprovals.ts";
 
 export interface ProjectionSnapshotCounts {
   readonly projectCount: number;
@@ -84,6 +85,11 @@ export interface ProjectionSnapshotQueryShape {
     readonly threadId: ThreadId;
     readonly requestId: ApprovalRequestId;
   }) => Effect.Effect<Option.Option<OrchestrationThreadActivity>, ProjectionRepositoryError>;
+
+  /** Read the durable pending-approval row used to arbitrate concurrent replies. */
+  readonly getPendingApproval?: (input: {
+    readonly requestId: ApprovalRequestId;
+  }) => Effect.Effect<Option.Option<ProjectionPendingApproval>, ProjectionRepositoryError>;
 
   /**
    * Read every activity of one kind across active (not deleted, not archived)

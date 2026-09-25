@@ -57,8 +57,8 @@ A client-owned presentation bound to a Workspace or Session: for example an
 agent conversation, terminal, file browser, git status, or content contributed
 by a plugin. A View is the content shown in the main area; the Sidebar exposes
 navigation references to the underlying Project, Workspace, and Session. A View
-has no independent work lifecycle; opening, moving, copying, or closing a View
-does not create or terminate the underlying Session or Workspace work.
+has no independent work lifecycle; opening, moving, or closing a View does
+not create or terminate the underlying Session or Workspace work.
 _Avoid_: Panel, Surface, Tool, Widget
 
 **Workbench**:
@@ -69,9 +69,10 @@ _Avoid_: Shell, Session manager, Navigator
 
 **Session View**:
 A View whose target is an Agent session or Terminal session and which presents
-that Session's current work. A Session View may be opened in multiple Tabs, but
-the same Session has at most one Session View in any one Tab.
-_Avoid_: Session, Runtime panel
+that Session's current work. A Session has exactly one Session View across the
+whole Workbench: opening an already open Session focuses it, and an explicit
+split or drop moves it. Presentation copying is not an ACode operation.
+_Avoid_: Session, Runtime panel, Mirror, 镜像, Duplicate View
 
 **New Agent Session View**:
 A Workbench View for composing the first turn of an Agent session before an
@@ -113,8 +114,8 @@ _Avoid_: Panel registration, View instance
 
 **View instance**:
 One client-owned occurrence of a View definition bound to its target and
-referenced by a Pane. Copying or moving an instance changes presentation
-references, never Session or Workspace work.
+referenced by a Pane. Moving an instance changes its presentation position,
+never Session or Workspace work, and a Session View instance is never copied.
 _Avoid_: Session, process, daemon entity
 
 **Workspace path**:
@@ -310,8 +311,8 @@ _Avoid_: Chat wallpaper, Session background, View background
   session identity.
 - Closing a View, Pane, or Tab does not by itself stop or delete a Session;
   Session lifecycle actions are explicit.
-- A Workbench may contain multiple Tabs, and each Tab owns its own Pane and
-  Session View uniqueness rules.
+- A Workbench may contain multiple Tabs; each Tab owns its own Panes, and a
+  Session View is unique across the whole Workbench rather than per Tab.
 - A Workbench with no opened Session shows a Welcome View rather than an empty
   Pane.
 - A client-local Agent draft is a New Agent Session View, not a Session; no
@@ -326,14 +327,15 @@ _Avoid_: Chat wallpaper, Session background, View background
 - A Tab belongs to no Project or Workspace and may display Views from multiple
   Workspaces or Projects.
 - A Pane displays exactly one View instance and is never empty.
-- A Session may have multiple Session View instances across Tabs, but its
-  Session View may appear at most once in any one Tab.
+- A Session has at most one Session View in the whole Workbench (ADR-0010),
+  whichever Tab it lands in; opening it again focuses that View.
 - Closing one Session View only detaches that View; closing a Session removes
-  every Session View for it from every Tab while preserving its History entry.
+  that View while preserving its History entry.
 - Terminal Sessions are presented only by Terminal Session Views; an Agent
   Session View does not own or embed a Terminal Session.
 - A View may present a Session or Workspace without owning its work lifecycle.
-- Multiple Views may reference the same Session.
+- File, Git, Project, and Workspace Views keep their own per-Tab coexistence
+  rules; Workbench uniqueness applies only to Session Views.
 - Opening an unopened Session or draft from the Sidebar opens it as the sole View in a new Tab (or replaces an active Welcome Tab), rather than adding a Pane to the current Tab.
 - Activating a Session that already has an opened Session View focuses that existing View and activates its Tab.
 - Splitting within an active Tab is explicit through keyboard modifiers or drag-and-drop.

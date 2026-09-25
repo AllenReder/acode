@@ -10,6 +10,7 @@ import {
 import { createModelCapabilities } from "@awen/shared/model";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import { ANTIGRAVITY_APPROVAL_REQUEST_KINDS } from "../approvalRequestCapabilities.ts";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
@@ -136,7 +137,11 @@ export const makeAntigravityProvider = Effect.fn("makeAntigravityProvider")(func
   const checkedAt = DateTime.formatIso(yield* DateTime.now);
   const initialDraft = {
     ...buildServerProvider({
-      presentation: { displayName: "Antigravity", showInteractionModeToggle: false },
+      presentation: {
+        displayName: "Antigravity",
+        showInteractionModeToggle: false,
+        approvalRequestKinds: ANTIGRAVITY_APPROVAL_REQUEST_KINDS,
+      },
       enabled: settings.enabled,
       checkedAt,
       models: [],

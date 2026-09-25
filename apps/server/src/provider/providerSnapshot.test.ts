@@ -10,6 +10,7 @@ import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import {
+  buildServerProvider,
   isCommandMissingCause,
   parseGenericCliVersion,
   providerModelsFromSettings,
@@ -177,5 +178,27 @@ describe("ProviderCommandNotFoundError", () => {
       expect(error).not.toHaveProperty("stderr");
       expect(error.message).not.toContain("secret-token-value");
     });
+  });
+});
+
+describe("buildServerProvider", () => {
+  it("publishes the adapter approval request-kind declaration", () => {
+    const snapshot = buildServerProvider({
+      presentation: {
+        displayName: "Test provider",
+        approvalRequestKinds: ["command", "file-read"],
+      },
+      enabled: true,
+      checkedAt: "2026-01-01T00:00:00.000Z",
+      models: [],
+      probe: {
+        installed: true,
+        version: null,
+        status: "ready",
+        auth: { status: "unknown" },
+      },
+    });
+
+    expect(snapshot.approvalRequestKinds).toEqual(["command", "file-read"]);
   });
 });

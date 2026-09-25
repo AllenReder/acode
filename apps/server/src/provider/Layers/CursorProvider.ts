@@ -15,6 +15,7 @@ import * as Duration from "effect/Duration";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import { CURSOR_APPROVAL_REQUEST_KINDS } from "../approvalRequestCapabilities.ts";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -58,6 +59,7 @@ const CURSOR_PRESENTATION = {
   supportsConversationRollback: false,
   badgeLabel: "Early Access",
   showInteractionModeToggle: true,
+  approvalRequestKinds: CURSOR_APPROVAL_REQUEST_KINDS,
 } as const;
 const EMPTY_CAPABILITIES: ModelCapabilities = createModelCapabilities({
   optionDescriptors: [],

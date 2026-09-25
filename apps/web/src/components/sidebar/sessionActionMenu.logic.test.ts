@@ -6,8 +6,8 @@ describe("buildSessionActionMenuItems", () => {
     const items = buildSessionActionMenuItems({
       kind: "agent",
       isClosed: false,
-      isOpenInActiveTab: false,
-      isFocusedInActiveTab: false,
+      isOpenInWorkbench: false,
+      isFocusedInWorkbench: false,
       canRename: true,
       canClose: true,
       canDelete: true,
@@ -27,12 +27,12 @@ describe("buildSessionActionMenuItems", () => {
     expect(deleteItem?.destructive).toBe(true);
   });
 
-  it("includes Focus when session is open in active tab and disables it if already focused", () => {
+  it("includes Focus when the session is open in the Workbench and disables it if already focused", () => {
     const itemsUnfocused = buildSessionActionMenuItems({
       kind: "agent",
       isClosed: false,
-      isOpenInActiveTab: true,
-      isFocusedInActiveTab: false,
+      isOpenInWorkbench: true,
+      isFocusedInWorkbench: false,
       canRename: true,
       canClose: true,
       canDelete: true,
@@ -45,8 +45,8 @@ describe("buildSessionActionMenuItems", () => {
     const itemsFocused = buildSessionActionMenuItems({
       kind: "agent",
       isClosed: false,
-      isOpenInActiveTab: true,
-      isFocusedInActiveTab: true,
+      isOpenInWorkbench: true,
+      isFocusedInWorkbench: true,
       canRename: true,
       canClose: true,
       canDelete: true,
@@ -59,8 +59,8 @@ describe("buildSessionActionMenuItems", () => {
     const items = buildSessionActionMenuItems({
       kind: "terminal",
       isClosed: false,
-      isOpenInActiveTab: false,
-      isFocusedInActiveTab: false,
+      isOpenInWorkbench: false,
+      isFocusedInWorkbench: false,
       canRename: false,
       canClose: true,
       canDelete: true,
@@ -73,8 +73,8 @@ describe("buildSessionActionMenuItems", () => {
     const items = buildSessionActionMenuItems({
       kind: "terminal",
       isClosed: true,
-      isOpenInActiveTab: false,
-      isFocusedInActiveTab: false,
+      isOpenInWorkbench: false,
+      isFocusedInWorkbench: false,
       canRename: true,
       canClose: true,
       canDelete: true,
@@ -87,8 +87,8 @@ describe("buildSessionActionMenuItems", () => {
     const items = buildSessionActionMenuItems({
       kind: "agent",
       isClosed: true,
-      isOpenInActiveTab: false,
-      isFocusedInActiveTab: false,
+      isOpenInWorkbench: false,
+      isFocusedInWorkbench: false,
       canRename: true,
       canClose: true,
       canDelete: true,

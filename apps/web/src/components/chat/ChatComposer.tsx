@@ -1317,6 +1317,7 @@ export interface ChatComposerProps {
 
   // Pending approvals / inputs
   activePendingApproval: PendingApproval | null;
+  activePendingApprovalUnsupportedReason: string | null;
   pendingApprovals: PendingApproval[];
   pendingUserInputs: PendingUserInput[];
   activePendingProgress: {
@@ -1459,6 +1460,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     isPreparingWorktree,
     environmentUnavailable,
     activePendingApproval,
+    activePendingApprovalUnsupportedReason,
     pendingApprovals,
     pendingUserInputs,
     activePendingProgress,
@@ -6014,6 +6016,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       <ComposerPendingApprovalPanel
                         approval={activePendingApproval}
                         pendingCount={pendingApprovals.length}
+                        unsupportedReason={activePendingApprovalUnsupportedReason}
                       />
                     </ComposerBanner.Content>
                     <ComposerBanner.Actions>
@@ -6023,6 +6026,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                           activePendingApproval.requestId,
                         )}
                         options={activePendingApproval.options}
+                        disabled={activePendingApprovalUnsupportedReason !== null}
                         onRespondToApproval={onRespondToApproval}
                       />
                     </ComposerBanner.Actions>

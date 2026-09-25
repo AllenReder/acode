@@ -22,6 +22,19 @@ describe("ComposerPendingApprovalActions", () => {
     expect(markup).not.toContain("sm:h-6");
   });
 
+  it("disables every action when the provider cannot handle the request kind", () => {
+    const markup = renderToStaticMarkup(
+      <ComposerPendingApprovalActions
+        requestId={ApprovalRequestId.make("approval-unsupported")}
+        isResponding={false}
+        disabled
+        onRespondToApproval={async () => undefined}
+      />,
+    );
+
+    expect(markup.match(/disabled=""/g)).toHaveLength(4);
+  });
+
   it("shows only the approval choices advertised by an MCP server", () => {
     const markup = renderToStaticMarkup(
       <ComposerPendingApprovalActions

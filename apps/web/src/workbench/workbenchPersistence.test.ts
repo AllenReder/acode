@@ -18,8 +18,8 @@ import {
   applyRenameTab,
   applySplitFocused,
   emptyWorkbenchSnapshot,
-  getActiveTab,
 } from "./workbenchState";
+import { createWorkbenchStore } from "./workbenchStore";
 
 const ENV_A: EnvironmentId = "env-a" as EnvironmentId;
 const WS_A: WorkspaceId = "ws-a" as WorkspaceId;
@@ -76,10 +76,79 @@ describe("workbench persistence", () => {
     expect(leafIds(restored!.tabs[0]!.layout)).toEqual([...restored!.tabs[0]!.panes.keys()]);
   });
 
-  it("rejects two Views of the same Session in one Tab", () => {
+  it("accepts a legacy Session duplicate inside one Tab for the store to repair", () => {
     const ids = makeIds();
     const raw = JSON.parse(
       serializeWorkbenchSnapshot(applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids)),
+    ) as {
+      tabs: Array<{
+        layout: unknown;
+        focusedPaneId: string;
+        panes: Array<[string, { id: string } & Record<string, unknown>]>;
+      }>;
+    };
+    const firstPane = raw.tabs[0]!.panes[0]!;
+    raw.tabs[0]!.layout = {
+      type: "split",
+      id: "split-a",
+      dir: "right",
+      children: [raw.tabs[0]!.layout, { type: "leaf", id: "pane-b" }],
+      sizes: [0.5, 0.5],
+    };
+    raw.tabs[0]!.panes.push(["pane-b", { ...firstPane[1], id: "view-b" }]);
+
+    // ADR-0010 repairs one Session to one View after decoding, so a snapshot
+    // that predates it must survive decoding instead of costing every Tab.
+    const restored = deserializeWorkbenchSnapshot(JSON.stringify(raw));
+
+    expect(restored).not.toBeNull();
+    expect(restored!.tabs[0]!.panes.size).toBe(2);
+  });
+
+  it("repairs a legacy cross-Tab Session mirror on load", () => {
+    const ids = makeIds();
+    const raw = JSON.parse(
+      serializeWorkbenchSnapshot(applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids)),
+    ) as {
+      tabs: Array<Record<string, unknown> & { id: string; panes: Array<[string, unknown]> }>;
+    };
+    const firstPane = raw.tabs[0]!.panes[0]!;
+    const firstTabId = raw.tabs[0]!.id;
+    raw.tabs.push({
+      ...raw.tabs[0]!,
+      id: "tab-mirror",
+      layout: { type: "leaf", id: "pane-mirror" },
+      focusedPaneId: "pane-mirror",
+      panes: [["pane-mirror", { ...(firstPane[1] as object), id: "view-mirror" }]],
+    });
+    const stored = JSON.stringify(raw);
+
+    const restored = readWorkbenchSnapshot({
+      getItem: () => stored,
+      setItem: () => undefined,
+    });
+    expect(restored).not.toBeNull();
+    expect(restored!.tabs).toHaveLength(2);
+
+    const store = createWorkbenchStore({ initialSnapshot: restored!, generateId: ids });
+
+    expect(store.getState().tabs).toHaveLength(2);
+    expect(store.getState().activeTabId).toBe(firstTabId);
+    expect(store.getState().tabs[0]!.panes.size).toBe(1);
+    const mirrorTab = store.getState().tabs[1]!;
+    expect([...mirrorTab.panes.values()][0]?.target).toEqual({ kind: "welcome" });
+  });
+
+  it("rejects two Views of the same non-Session target in one Tab", () => {
+    const ids = makeIds();
+    const fileView: ViewTarget = {
+      kind: "workspace",
+      definitionId: "fileView",
+      environmentId: ENV_A,
+      workspaceId: WS_A,
+    };
+    const raw = JSON.parse(
+      serializeWorkbenchSnapshot(applyOpenTarget(emptyWorkbenchSnapshot(ids), fileView, ids)),
     ) as {
       tabs: Array<{
         layout: unknown;

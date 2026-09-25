@@ -8,7 +8,9 @@ import {
 } from "@awen/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Crypto from "effect/Crypto";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as SubscriptionRef from "effect/SubscriptionRef";
@@ -48,13 +50,18 @@ const TARGET = new PrimaryConnectionTarget({
 
 const makeSupervisor = Effect.fn("TestEnvironmentCommands.makeSupervisor")(function* (
   dispatched: ClientOrchestrationCommand[],
+  dispatchCommand?: (
+    command: ClientOrchestrationCommand,
+  ) => Effect.Effect<{ readonly sequence: number }, never>,
 ) {
   const client = {
-    [ORCHESTRATION_WS_METHODS.dispatchCommand]: (command: ClientOrchestrationCommand) =>
-      Effect.sync(() => {
-        dispatched.push(command);
-        return { sequence: dispatched.length };
-      }),
+    [ORCHESTRATION_WS_METHODS.dispatchCommand]:
+      dispatchCommand ??
+      ((command: ClientOrchestrationCommand) =>
+        Effect.sync(() => {
+          dispatched.push(command);
+          return { sequence: dispatched.length };
+        })),
   } as unknown as WsRpcProtocolClient;
   const session: RpcSession.RpcSession = {
     client,
@@ -99,6 +106,51 @@ describe("environment commands", () => {
           createdAt: "2026-06-06T00:00:00.000Z",
         },
       ]);
+    }).pipe(Effect.provide(TEST_CRYPTO_LAYER)),
+  );
+
+  it.effect("retains one command id for retries of the same operation identity", () =>
+    Effect.gen(function* () {
+      const dispatched: ClientOrchestrationCommand[] = [];
+      const firstDispatched = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const supervisor = yield* makeSupervisor(dispatched, (command) =>
+        Effect.gen(function* () {
+          dispatched.push(command);
+          if (dispatched.length === 1) {
+            yield* Deferred.succeed(firstDispatched, undefined);
+          }
+          yield* Deferred.await(release);
+          return { sequence: 1 };
+        }),
+      );
+      const input = {
+        operationId: "project-create-retained",
+        projectId: ProjectId.make("project-retained"),
+        title: "Retained project",
+        workspaceRoot: "/workspace/retained",
+        createdAt: "2026-06-06T00:00:00.000Z",
+      } as const;
+
+      const first = yield* createProject(input).pipe(
+        Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+        Effect.forkChild,
+      );
+      yield* Deferred.await(firstDispatched);
+      const second = yield* createProject(input).pipe(
+        Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+        Effect.forkChild,
+      );
+      while (dispatched.length < 2) {
+        yield* Effect.yieldNow;
+      }
+      yield* Deferred.succeed(release, undefined);
+      yield* Fiber.join(first);
+      yield* Fiber.join(second);
+
+      expect(dispatched).toHaveLength(2);
+      expect(dispatched[1]?.commandId).toBe(dispatched[0]?.commandId);
+      expect("operationId" in (dispatched[0] ?? {})).toBe(false);
     }).pipe(Effect.provide(TEST_CRYPTO_LAYER)),
   );
 

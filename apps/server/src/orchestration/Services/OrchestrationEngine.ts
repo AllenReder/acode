@@ -11,9 +11,11 @@
  * @module OrchestrationEngineService
  */
 import type {
+  CommandId,
   OrchestrationClientOrigin,
   OrchestrationCommand,
   OrchestrationEvent,
+  OrchestrationOperationResult,
   ThreadId,
 } from "@awen/contracts";
 import * as Context from "effect/Context";
@@ -22,7 +24,10 @@ import type * as Scope from "effect/Scope";
 import type * as Stream from "effect/Stream";
 
 import type { OrchestrationDispatchError } from "../Errors.ts";
-import type { OrchestrationEventStoreError } from "../../persistence/Errors.ts";
+import type {
+  OrchestrationCommandReceiptRepositoryError,
+  OrchestrationEventStoreError,
+} from "../../persistence/Errors.ts";
 import type { OrchestrationAggregateReplayStats } from "../../persistence/Services/OrchestrationEventStore.ts";
 
 export interface OrchestrationThreadReplayRange {
@@ -74,6 +79,19 @@ export interface OrchestrationEngineShape {
     command: OrchestrationCommand,
     options?: { readonly origin?: OrchestrationClientOrigin },
   ) => Effect.Effect<{ sequence: number }, OrchestrationDispatchError, never>;
+
+  /**
+   * Read the durable acceptance result for one operation identity.
+   *
+   * This is a read-only lookup: it never dispatches the command again.
+   */
+  readonly getOperationResult?: (
+    operationId: CommandId,
+  ) => Effect.Effect<
+    OrchestrationOperationResult,
+    OrchestrationCommandReceiptRepositoryError,
+    never
+  >;
 
   /**
    * Stream persisted domain events in dispatch order.

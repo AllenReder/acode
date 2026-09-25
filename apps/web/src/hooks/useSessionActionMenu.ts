@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { settlePromise } from "@awen/client-runtime/state/runtime";
 import { readLocalApi } from "../localApi";
-import { getActiveTab, findPaneBySessionTarget } from "../workbench/workbenchState";
+import { findSessionViewPane, isSessionViewFocused } from "../workbench/workbenchState";
 import { useWorkbenchStore } from "../workbench/workbenchStore";
 import { sessionRouteForTarget } from "../workbench/deepLinks";
 import {
@@ -34,17 +34,14 @@ export function useSessionActionMenu(input: {
         const api = readLocalApi();
         if (!api) return;
 
-        const tab = getActiveTab(store);
-        const existingPaneId = findPaneBySessionTarget(tab, target);
-        const isOpenInActiveTab = existingPaneId !== null;
-        const isFocusedInActiveTab =
-          existingPaneId !== null && existingPaneId === tab.focusedPaneId;
+        const isOpenInWorkbench = findSessionViewPane(store, target) !== null;
+        const isFocusedInWorkbench = isSessionViewFocused(store, target);
 
         const state: SessionActionMenuState = {
           kind: target.kind === "agentSession" ? "agent" : "terminal",
           isClosed,
-          isOpenInActiveTab,
-          isFocusedInActiveTab,
+          isOpenInWorkbench,
+          isFocusedInWorkbench,
           canRename: onStartRename !== undefined,
           canClose: true,
           canDelete: true,

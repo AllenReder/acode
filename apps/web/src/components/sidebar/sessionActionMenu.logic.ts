@@ -12,10 +12,13 @@ export type SessionActionMenuId =
 export interface SessionActionMenuState {
   readonly kind: "agent" | "terminal";
   readonly isClosed: boolean;
-  /** Whether this Session already has a View in the active Tab. */
-  readonly isOpenInActiveTab: boolean;
-  /** Whether this Session's View is currently focused in the active Tab. */
-  readonly isFocusedInActiveTab: boolean;
+  /**
+   * Whether this Session already has its one Session View in the Workbench.
+   * ADR-0010 makes a Session View unique across Tabs, not just within one.
+   */
+  readonly isOpenInWorkbench: boolean;
+  /** Whether that View currently has focus. */
+  readonly isFocusedInWorkbench: boolean;
   readonly canRename: boolean;
   readonly canClose: boolean;
   readonly canDelete: boolean;
@@ -25,9 +28,10 @@ export interface SessionActionMenuState {
  * Build the capability-gated context menu items for an Agent or Terminal Session.
  *
  * Rules:
- * - Active rows show Open, Focus (when in tab), Split right/down, Close session, Delete session.
- * - History rows show Open, Focus (when in tab), Split right/down, Delete session (no Close session).
- * - Focus is disabled if already focused; Split focuses existing target if already open.
+ * - Active rows show Open, Focus (when open), Split right/down, Close session, Delete session.
+ * - History rows show Open, Focus (when open), Split right/down, Delete session (no Close session).
+ * - Focus is disabled if already focused; Split moves the existing View instead of
+ *   opening a second one.
  * - Rename is provided when the caller exposes a rename operation.
  * - Delete session is styled as destructive with separator.
  */
@@ -42,12 +46,12 @@ export function buildSessionActionMenuItems(
     },
   ];
 
-  if (state.isOpenInActiveTab) {
+  if (state.isOpenInWorkbench) {
     items.push({
       id: "focus",
       label: "Focus",
       icon: "crosshair",
-      disabled: state.isFocusedInActiveTab,
+      disabled: state.isFocusedInWorkbench,
     });
   }
 

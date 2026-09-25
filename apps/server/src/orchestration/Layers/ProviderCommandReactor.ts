@@ -260,6 +260,53 @@ const make = Effect.gen(function* () {
   >();
   const stoppingThreadIds = new Set<ThreadId>();
 
+  const appendApprovalAlreadyHandledActivity = (input: {
+    readonly threadId: ThreadId;
+    readonly requestId: string;
+    readonly effectiveDecision:
+      | "accept"
+      | "acceptForSession"
+      | "acceptAlways"
+      | "decline"
+      | "cancel"
+      | null;
+    readonly attemptedDecision:
+      | "accept"
+      | "acceptForSession"
+      | "acceptAlways"
+      | "decline"
+      | "cancel";
+    readonly turnId: TurnId | null;
+    readonly createdAt: string;
+  }) =>
+    Effect.all({
+      commandId: serverCommandId("approval-already-handled-activity"),
+      eventId: serverEventId(),
+    }).pipe(
+      Effect.flatMap(({ commandId, eventId }) =>
+        orchestrationEngine.dispatch({
+          type: "thread.activity.append",
+          commandId,
+          threadId: input.threadId,
+          activity: {
+            id: eventId,
+            tone: "approval",
+            kind: "approval.respond.already-resolved",
+            summary: "Approval already handled",
+            payload: {
+              requestId: input.requestId,
+              decision: input.effectiveDecision,
+              attemptedDecision: input.attemptedDecision,
+            },
+            turnId: input.turnId,
+            createdAt: input.createdAt,
+          },
+          createdAt: input.createdAt,
+        }),
+      ),
+      Effect.asVoid,
+    );
+
   const appendProviderFailureActivity = (input: {
     readonly threadId: ThreadId;
     readonly kind:
@@ -1613,6 +1660,34 @@ const make = Effect.gen(function* () {
   const processApprovalResponseRequested = Effect.fn("processApprovalResponseRequested")(function* (
     event: Extract<ProviderIntentEvent, { type: "thread.approval-response-requested" }>,
   ) {
+    const getPendingApproval = projectionSnapshotQuery.getPendingApproval;
+    const pendingApproval = getPendingApproval
+      ? yield* getPendingApproval({ requestId: event.payload.requestId })
+      : Option.none();
+    if (Option.isNone(pendingApproval)) {
+      return yield* appendProviderFailureActivity({
+        threadId: event.payload.threadId,
+        kind: "provider.approval.respond.failed",
+        summary: "Provider approval response failed",
+        detail: stalePendingRequestDetail("approval", event.payload.requestId),
+        turnId: null,
+        createdAt: event.payload.createdAt,
+        requestId: event.payload.requestId,
+      });
+    }
+
+    const approval = pendingApproval.value;
+    if (approval.status === "resolved" && approval.responseCommandId !== event.commandId) {
+      return yield* appendApprovalAlreadyHandledActivity({
+        threadId: approval.threadId,
+        requestId: event.payload.requestId,
+        effectiveDecision: approval.decision,
+        attemptedDecision: event.payload.decision,
+        turnId: approval.turnId,
+        createdAt: event.payload.createdAt,
+      });
+    }
+
     const thread = yield* resolveThreadShell(event.payload.threadId);
     if (!thread) {
       return;
