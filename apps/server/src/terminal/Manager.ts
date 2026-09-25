@@ -813,30 +813,96 @@ function processTableSnapshotFromProcesses(
   return { childrenByParent, commandById };
 }
 
-function deriveSubprocessInspectResult(
+const TRANSPARENT_WRAPPERS = new Set([
+  "conhost",
+  "openconsole",
+  "cmd",
+  "powershell",
+  "pwsh",
+  "wsl",
+  "wslhost",
+  "sh",
+  "bash",
+  "zsh",
+  "dash",
+]);
+
+const KNOWN_AGENT_COMMANDS = new Set([
+  "codex",
+  "claude",
+  "claude-code",
+  "opencode",
+  "cursor",
+]);
+
+export function deriveSubprocessInspectResult(
   snapshot: TerminalProcessTableSnapshot,
   terminalPid: number,
   platform: NodeJS.Platform,
 ): TerminalSubprocessInspectResult {
-  const childPid = (snapshot.childrenByParent.get(terminalPid) ?? [])[0];
-  if (childPid === undefined) {
+  const directChildren = snapshot.childrenByParent.get(terminalPid) ?? [];
+  if (directChildren.length === 0) {
     return { hasRunningSubprocess: false, childCommand: null, processIds: [] };
   }
+
   const processIds = new Set<number>([terminalPid]);
+  const descendantPids: number[] = [];
   const pending = [terminalPid];
+
   while (pending.length > 0) {
     const parentPid = pending.pop();
     if (parentPid === undefined) continue;
     for (const pid of snapshot.childrenByParent.get(parentPid) ?? []) {
       if (processIds.has(pid)) continue;
       processIds.add(pid);
+      descendantPids.push(pid);
       pending.push(pid);
     }
   }
-  const normalized = normalizeChildCommandName(snapshot.commandById.get(childPid) ?? "", platform);
+
+  // Filter out pure console infrastructure processes like conhost from marking running activity
+  const substantiveDescendants = descendantPids.filter((pid) => {
+    const rawCmd = snapshot.commandById.get(pid) ?? "";
+    const name = normalizeChildCommandName(rawCmd, platform);
+    return name !== "conhost" && name !== "openconsole";
+  });
+
+  if (substantiveDescendants.length === 0) {
+    return { hasRunningSubprocess: false, childCommand: null, processIds: [...processIds] };
+  }
+
+  // Look for any descendant running a known agent command first
+  let chosenCommand: string | null = null;
+  for (const pid of substantiveDescendants) {
+    const rawCmd = snapshot.commandById.get(pid) ?? "";
+    const name = normalizeChildCommandName(rawCmd, platform);
+    if (name && KNOWN_AGENT_COMMANDS.has(name.toLowerCase())) {
+      chosenCommand = name;
+      break;
+    }
+  }
+
+  // If no known agent found, choose the first non-wrapper descendant, or fallback to the direct child
+  if (!chosenCommand) {
+    for (const pid of substantiveDescendants) {
+      const rawCmd = snapshot.commandById.get(pid) ?? "";
+      const name = normalizeChildCommandName(rawCmd, platform);
+      if (name && !TRANSPARENT_WRAPPERS.has(name.toLowerCase())) {
+        chosenCommand = name;
+        break;
+      }
+    }
+  }
+
+  if (!chosenCommand && substantiveDescendants.length > 0) {
+    const firstSubstantive = substantiveDescendants[0]!;
+    const rawCmd = snapshot.commandById.get(firstSubstantive) ?? "";
+    chosenCommand = normalizeChildCommandName(rawCmd, platform);
+  }
+
   return {
     hasRunningSubprocess: true,
-    childCommand: normalized ? truncateTerminalWireLabel(normalized) : null,
+    childCommand: chosenCommand ? truncateTerminalWireLabel(chosenCommand) : null,
     processIds: [...processIds],
   };
 }

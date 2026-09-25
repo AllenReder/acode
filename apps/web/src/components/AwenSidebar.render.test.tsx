@@ -31,6 +31,14 @@ const mockState = {
   navigate: vi.fn(),
 };
 
+const mockTerminalSessions = {
+  sessions: [] as any[],
+};
+
+vi.mock("../state/terminalSessions", () => ({
+  useKnownTerminalSessions: () => mockTerminalSessions.sessions,
+}));
+
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mockState.navigate,
   useCanGoBack: () => true,
@@ -149,6 +157,7 @@ describe("AwenSidebar", () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
     mockState.projects = [];
+    mockTerminalSessions.sessions = [];
   });
 
   it("renders the sidebar header and add project button when there are no projects", async () => {
@@ -322,6 +331,56 @@ describe("AwenSidebar", () => {
     // Both rows must render the 14px Status Gutter
     const gutters = renderer.root.findAllByProps({ "data-status-gutter": "true" });
     expect(gutters.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("dynamically shows agent icon and running alert for terminal running an agent CLI", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    mockState.projects = [
+      {
+        id: "p1",
+        environmentId: "local",
+        title: "awen",
+        workspaces: [
+          {
+            id: "w1",
+            title: "awen",
+            workspaceRoot: "/code/awen",
+            role: "main",
+            branch: "main",
+            sessions: [
+              { kind: "terminal", id: "term-1", title: "Terminal Shell" },
+            ],
+            historySessions: [],
+          },
+        ],
+      },
+    ];
+
+    mockTerminalSessions.sessions = [
+      {
+        target: { terminalId: "term-1" },
+        state: {
+          summary: {
+            terminalId: "term-1",
+            hasRunningSubprocess: true,
+            label: "codex",
+            status: "running",
+          },
+        },
+      },
+    ];
+
+    await act(() => {
+      renderer = create(<AwenSidebar />);
+    });
+
+    const workspaceRow = renderer.root.findByProps({ "data-testid": "sidebar-workspace-row" });
+    await act(() => {
+      workspaceRow.props.onClick();
+    });
+
+    const terminalRow = renderer.root.findByProps({ "data-session-kind": "terminal" });
+    expect(terminalRow.props.statusAlert).toBe("running");
   });
 
   it.each([

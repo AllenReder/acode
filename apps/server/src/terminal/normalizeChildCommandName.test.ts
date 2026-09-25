@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { normalizeChildCommandName } from "./Manager.ts";
+import { deriveSubprocessInspectResult, normalizeChildCommandName } from "./Manager.ts";
 
 describe("normalizeChildCommandName", () => {
   it("normalizes direct binary names", () => {
@@ -48,5 +48,54 @@ describe("normalizeChildCommandName", () => {
   it("returns null for empty strings", () => {
     expect(normalizeChildCommandName("", "win32")).toBeNull();
     expect(normalizeChildCommandName("   ", "linux")).toBeNull();
+  });
+});
+
+describe("deriveSubprocessInspectResult", () => {
+  it("treats terminal with only conhost.exe as idle", () => {
+    const snapshot = {
+      childrenByParent: new Map([[1000, [1001]]]),
+      commandById: new Map([
+        [1000, "powershell.exe"],
+        [1001, "conhost.exe"],
+      ]),
+    };
+    const result = deriveSubprocessInspectResult(snapshot, 1000, "win32");
+    expect(result.hasRunningSubprocess).toBe(false);
+    expect(result.childCommand).toBeNull();
+  });
+
+  it("finds agent command across descendant tree even when wrapped by conhost and cmd", () => {
+    const snapshot = {
+      childrenByParent: new Map([
+        [1000, [1001, 1002]],
+        [1002, [1003]],
+      ]),
+      commandById: new Map([
+        [1000, "powershell.exe"],
+        [1001, "conhost.exe"],
+        [1002, "cmd.exe /c codex.cmd"],
+        [1003, '"C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\Administrator\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\bin\\codex.js"'],
+      ]),
+    };
+    const result = deriveSubprocessInspectResult(snapshot, 1000, "win32");
+    expect(result.hasRunningSubprocess).toBe(true);
+    expect(result.childCommand).toBe("codex");
+  });
+
+  it("finds claude-code or opencode directly", () => {
+    const snapshot = {
+      childrenByParent: new Map([
+        [1000, [1001, 1002]],
+      ]),
+      commandById: new Map([
+        [1000, "pwsh.exe"],
+        [1001, "conhost.exe"],
+        [1002, "claude.exe"],
+      ]),
+    };
+    const result = deriveSubprocessInspectResult(snapshot, 1000, "win32");
+    expect(result.hasRunningSubprocess).toBe(true);
+    expect(result.childCommand).toBe("claude");
   });
 });
