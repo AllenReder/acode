@@ -1069,7 +1069,9 @@ describe("applyViewDrop", () => {
       snap = applyOpenTarget(snap, terminal("term-1"), ids);
       const terminalTabId = snap.activeTabId;
       const terminalPaneId = snap.tabs.find((t) => t.id === terminalTabId)!.focusedPaneId;
-      const terminalView = snap.tabs.find((t) => t.id === terminalTabId)!.panes.get(terminalPaneId)!;
+      const terminalView = snap.tabs
+        .find((t) => t.id === terminalTabId)!
+        .panes.get(terminalPaneId)!;
 
       // Switch active tab back to empty Tab 1
       snap = { ...snap, activeTabId: emptyTabId };
@@ -1102,7 +1104,9 @@ describe("applyViewDrop", () => {
       snap = applyOpenTarget(snap, terminal("term-1"), ids);
       const inactiveTabId = snap.activeTabId;
       const inactivePaneId = snap.tabs.find((t) => t.id === inactiveTabId)!.focusedPaneId;
-      const inactiveView = snap.tabs.find((t) => t.id === inactiveTabId)!.panes.get(inactivePaneId)!;
+      const inactiveView = snap.tabs
+        .find((t) => t.id === inactiveTabId)!
+        .panes.get(inactivePaneId)!;
 
       snap = { ...snap, activeTabId };
 
@@ -1117,7 +1121,10 @@ describe("applyViewDrop", () => {
       expect(result!.snapshot.tabs.find((t) => t.id === inactiveTabId)).toBeUndefined();
       const targetTab = result!.snapshot.tabs.find((t) => t.id === activeTabId)!;
       expect(targetTab.columns?.length).toBe(2);
-      expect(targetTab.columns?.map((c) => c.paneIds)).toEqual([[activeTabPaneId], [inactivePaneId]]);
+      expect(targetTab.columns?.map((c) => c.paneIds)).toEqual([
+        [activeTabPaneId],
+        [inactivePaneId],
+      ]);
       expect(targetTab.panes.get(inactivePaneId)).toBe(inactiveView);
     });
 

@@ -10,7 +10,12 @@ import {
   terminalSessionRefForRuntime,
   type TerminalSessionRef,
 } from "./session.ts";
-import { AwenProjectShell, AwenSessionShell, AwenWorkspaceShell, agentSessionsIn } from "./workspace.ts";
+import {
+  AwenProjectShell,
+  AwenSessionShell,
+  AwenWorkspaceShell,
+  agentSessionsIn,
+} from "./workspace.ts";
 import type { AwenAgentSessionShell } from "./workspace.ts";
 
 const WS_A = WorkspaceId.make("workspace:project-a");

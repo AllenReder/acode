@@ -135,7 +135,6 @@ export interface ContextMenuItem<T extends string = string> {
 
 // Fallback interface declaration for Node/non-DOM environments
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   interface PointerEvent {}
 }
 

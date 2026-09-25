@@ -806,10 +806,8 @@ export function AwenSidebar() {
                                   data-testid="sidebar-workspace-dir"
                                   className="shrink-0 text-[10px] text-sidebar-muted-foreground"
                                 >
-                                  {workspace.workspaceRoot
-                                    ?.split(/[\\/]/)
-                                    .filter(Boolean)
-                                    .pop() || workspace.title}
+                                  {workspace.workspaceRoot?.split(/[\\/]/).filter(Boolean).pop() ||
+                                    workspace.title}
                                 </span>
                               </button>
                             </div>

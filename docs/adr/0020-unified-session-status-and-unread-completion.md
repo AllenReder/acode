@@ -17,7 +17,7 @@ agent detection there still stand.
 
 ADR-0018's Status Gutter shipped five alert states derived in
 `resolveAgentSessionStatusAlert` / `resolveTerminalSessionStatusAlert`, with a
-`SessionRow` dismissal keyed on a string built from the *resolved* alert. Because
+`SessionRow` dismissal keyed on a string built from the _resolved_ alert. Because
 `isFocused` was an input to that resolver, focusing a completed session produced
 the key `idle:…` while blurring produced `completed-unread:…`; the recorded
 dismissal never matched, so the green dot returned the moment focus left. The

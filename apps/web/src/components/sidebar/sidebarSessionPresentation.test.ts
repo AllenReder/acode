@@ -76,13 +76,17 @@ describe("sidebarSessionPresentation", () => {
       expect(resolveAgentSessionStatus(agent({ session: { status: "error" } }))).toBe("failed");
       // A failed session outranks lingering background liveness.
       expect(
-        resolveAgentSessionStatus(agent({ session: { status: "error" }, backgroundLiveness: "working" })),
+        resolveAgentSessionStatus(
+          agent({ session: { status: "error" }, backgroundLiveness: "working" }),
+        ),
       ).toBe("failed");
     });
 
     it("falls back to a failed latest turn when the session is absent", () => {
       expect(
-        resolveAgentSessionStatus(agent({ session: null, latestTurn: { state: "error" } as never })),
+        resolveAgentSessionStatus(
+          agent({ session: null, latestTurn: { state: "error" } as never }),
+        ),
       ).toBe("failed");
     });
 
@@ -131,9 +135,9 @@ describe("sidebarSessionPresentation", () => {
 
   describe("resolveTerminalSessionStatus", () => {
     it("reports working while a foreground subprocess runs", () => {
-      expect(
-        resolveTerminalSessionStatus({ hasRunningSubprocess: true, status: "running" }),
-      ).toBe("working");
+      expect(resolveTerminalSessionStatus({ hasRunningSubprocess: true, status: "running" })).toBe(
+        "working",
+      );
     });
 
     it("reports failed on an error status or a non-zero exit code", () => {
@@ -141,13 +145,21 @@ describe("sidebarSessionPresentation", () => {
         resolveTerminalSessionStatus({ hasRunningSubprocess: false, status: "error", exitCode: 1 }),
       ).toBe("failed");
       expect(
-        resolveTerminalSessionStatus({ hasRunningSubprocess: false, status: "exited", exitCode: 1 }),
+        resolveTerminalSessionStatus({
+          hasRunningSubprocess: false,
+          status: "exited",
+          exitCode: 1,
+        }),
       ).toBe("failed");
     });
 
     it("reports ready for a clean exit or an idle shell", () => {
       expect(
-        resolveTerminalSessionStatus({ hasRunningSubprocess: false, status: "running", exitCode: 0 }),
+        resolveTerminalSessionStatus({
+          hasRunningSubprocess: false,
+          status: "running",
+          exitCode: 0,
+        }),
       ).toBe("ready");
       expect(resolveTerminalSessionStatus(null)).toBe("ready");
     });
@@ -158,7 +170,11 @@ describe("sidebarSessionPresentation", () => {
 
     it("is unread for a completed ready session with no visit marker", () => {
       expect(
-        isUnreadCompletion({ status: "ready", latestTurn: completedTurn, lastVisitedAt: undefined }),
+        isUnreadCompletion({
+          status: "ready",
+          latestTurn: completedTurn,
+          lastVisitedAt: undefined,
+        }),
       ).toBe(true);
     });
 
@@ -184,7 +200,11 @@ describe("sidebarSessionPresentation", () => {
 
     it("is never unread for a non-ready session or a non-completed turn", () => {
       expect(
-        isUnreadCompletion({ status: "working", latestTurn: completedTurn, lastVisitedAt: undefined }),
+        isUnreadCompletion({
+          status: "working",
+          latestTurn: completedTurn,
+          lastVisitedAt: undefined,
+        }),
       ).toBe(false);
       expect(
         isUnreadCompletion({
@@ -194,44 +214,46 @@ describe("sidebarSessionPresentation", () => {
         }),
       ).toBe(false);
       expect(
-        isUnreadCompletion({ status: "ready", latestTurn: { state: "completed" }, lastVisitedAt: undefined }),
+        isUnreadCompletion({
+          status: "ready",
+          latestTurn: { state: "completed" },
+          lastVisitedAt: undefined,
+        }),
       ).toBe(false);
     });
 
     it("treats a malformed visit marker as never visited", () => {
       expect(
-        isUnreadCompletion({ status: "ready", latestTurn: completedTurn, lastVisitedAt: "not-a-date" }),
+        isUnreadCompletion({
+          status: "ready",
+          latestTurn: completedTurn,
+          lastVisitedAt: "not-a-date",
+        }),
       ).toBe(true);
     });
   });
 
   describe("resolveTerminalIcon", () => {
     it("returns agent icon when running a detected agent CLI", () => {
-      expect(
-        resolveTerminalIcon({ hasRunningSubprocess: true, label: "opencode" }),
-      ).toBe(OpenCodeIcon);
+      expect(resolveTerminalIcon({ hasRunningSubprocess: true, label: "opencode" })).toBe(
+        OpenCodeIcon,
+      );
 
-      expect(
-        resolveTerminalIcon({ hasRunningSubprocess: true, label: "claude" }),
-      ).toBe(ClaudeAI);
+      expect(resolveTerminalIcon({ hasRunningSubprocess: true, label: "claude" })).toBe(ClaudeAI);
 
-      expect(
-        resolveTerminalIcon({ hasRunningSubprocess: true, label: "codex" }),
-      ).toBe(OpenAI);
+      expect(resolveTerminalIcon({ hasRunningSubprocess: true, label: "codex" })).toBe(OpenAI);
 
-      expect(
-        resolveTerminalIcon({ hasRunningSubprocess: true, label: "cursor" }),
-      ).toBe(CursorIcon);
+      expect(resolveTerminalIcon({ hasRunningSubprocess: true, label: "cursor" })).toBe(CursorIcon);
     });
 
     it("falls back to TerminalIcon when idle or running other commands", () => {
-      expect(
-        resolveTerminalIcon({ hasRunningSubprocess: true, label: "python" }),
-      ).toBe(TerminalIcon);
+      expect(resolveTerminalIcon({ hasRunningSubprocess: true, label: "python" })).toBe(
+        TerminalIcon,
+      );
 
-      expect(
-        resolveTerminalIcon({ hasRunningSubprocess: false, label: "claude" }),
-      ).toBe(TerminalIcon);
+      expect(resolveTerminalIcon({ hasRunningSubprocess: false, label: "claude" })).toBe(
+        TerminalIcon,
+      );
 
       expect(resolveTerminalIcon(null)).toBe(TerminalIcon);
     });

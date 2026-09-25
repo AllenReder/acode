@@ -876,6 +876,7 @@ it.layer(
   it.effect("preserves non-notFound cwd stat failures", () =>
     Effect.gen(function* () {
       if ((yield* HostProcessPlatform) === "win32") return;
+      if (typeof process.getuid === "function" && process.getuid() === 0) return;
 
       const path = yield* Path.Path;
 
@@ -1411,7 +1412,7 @@ it.layer(
 
       // Every spawn is the shared table snapshot — no per-terminal `pgrep`
       // or per-child `ps -p` invocations.
-      expect(runCalls.every((call) => call.args.join(" ") === "-eo pid=,ppid=,comm=")).toBe(true);
+      expect(runCalls.every((call) => call.args.join(" ") === "-eo pid=,ppid=,args=")).toBe(true);
     }),
   );
 

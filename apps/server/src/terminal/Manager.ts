@@ -418,7 +418,10 @@ export function normalizeChildCommandName(raw: string, platform: NodeJS.Platform
       if (token.startsWith("-") || (platform === "win32" && /^\/[a-zA-Z0-9?]+$/.test(token))) {
         continue;
       }
-      const tokenBase = token.replace(/^['"]|['"]$/g, "").split(separators).at(-1);
+      const tokenBase = token
+        .replace(/^['"]|['"]$/g, "")
+        .split(separators)
+        .at(-1);
       if (tokenBase) {
         const tokenWithoutExt =
           platform === "win32" && tokenBase.toLowerCase().endsWith(".exe")
@@ -827,13 +830,7 @@ const TRANSPARENT_WRAPPERS = new Set([
   "dash",
 ]);
 
-const KNOWN_AGENT_COMMANDS = new Set([
-  "codex",
-  "claude",
-  "claude-code",
-  "opencode",
-  "cursor",
-]);
+const KNOWN_AGENT_COMMANDS = new Set(["codex", "claude", "claude-code", "opencode", "cursor"]);
 
 export function deriveSubprocessInspectResult(
   snapshot: TerminalProcessTableSnapshot,
@@ -847,16 +844,16 @@ export function deriveSubprocessInspectResult(
 
   const processIds = new Set<number>([terminalPid]);
   const descendantPids: number[] = [];
-  const pending = [terminalPid];
+  const queue = [terminalPid];
 
-  while (pending.length > 0) {
-    const parentPid = pending.pop();
+  while (queue.length > 0) {
+    const parentPid = queue.shift();
     if (parentPid === undefined) continue;
     for (const pid of snapshot.childrenByParent.get(parentPid) ?? []) {
       if (processIds.has(pid)) continue;
       processIds.add(pid);
       descendantPids.push(pid);
-      pending.push(pid);
+      queue.push(pid);
     }
   }
 

@@ -572,7 +572,6 @@ function Pane({ tab, projects, paneId, focused }: PaneProps) {
     [focused, paneId, setFocused],
   );
 
-
   const contentRef = useRef<HTMLDivElement>(null);
   const [availableSize, setAvailableSize] = useState({ width: 0, height: 0 });
   useEffect(() => {

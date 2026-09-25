@@ -290,9 +290,15 @@ describe("AwenSidebar", () => {
     });
 
     const workspaceRow = renderer.root.findByProps({ "data-testid": "sidebar-workspace-row" });
-    expect(workspaceRow.findByProps({ "data-testid": "sidebar-workspace-branch" }).props.children).toBe("main");
-    expect(workspaceRow.findByProps({ "data-testid": "sidebar-workspace-dir" }).props.children).toBe("awen");
-    expect(workspaceRow.findAllByProps({ "data-testid": "sidebar-workspace-role" })).toHaveLength(0);
+    expect(
+      workspaceRow.findByProps({ "data-testid": "sidebar-workspace-branch" }).props.children,
+    ).toBe("main");
+    expect(
+      workspaceRow.findByProps({ "data-testid": "sidebar-workspace-dir" }).props.children,
+    ).toBe("awen");
+    expect(workspaceRow.findAllByProps({ "data-testid": "sidebar-workspace-role" })).toHaveLength(
+      0,
+    );
   });
 
   it("renders agent sessions with provider icon and terminal sessions with terminal/agent icon and 14px status gutter", async () => {
@@ -351,9 +357,7 @@ describe("AwenSidebar", () => {
             workspaceRoot: "/code/awen",
             role: "main",
             branch: "main",
-            sessions: [
-              { kind: "terminal", id: "term-1", title: "Terminal Shell" },
-            ],
+            sessions: [{ kind: "terminal", id: "term-1", title: "Terminal Shell" }],
             historySessions: [],
           },
         ],

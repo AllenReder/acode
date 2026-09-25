@@ -26,23 +26,17 @@ describe("normalizeChildCommandName", () => {
       ),
     ).toBe("opencode");
 
-    expect(
-      normalizeChildCommandName("npx @anthropic-ai/claude-code", "linux"),
-    ).toBe("claude-code");
+    expect(normalizeChildCommandName("npx @anthropic-ai/claude-code", "linux")).toBe("claude-code");
 
-    expect(
-      normalizeChildCommandName("bun /app/codex.ts", "darwin"),
-    ).toBe("codex");
+    expect(normalizeChildCommandName("bun /app/codex.ts", "darwin")).toBe("codex");
 
-    expect(
-      normalizeChildCommandName("python main.py", "linux"),
-    ).toBe("main");
+    expect(normalizeChildCommandName("python main.py", "linux")).toBe("main");
   });
 
   it("handles flags before script", () => {
-    expect(
-      normalizeChildCommandName("node --no-warnings /app/opencode.js", "linux"),
-    ).toBe("opencode");
+    expect(normalizeChildCommandName("node --no-warnings /app/opencode.js", "linux")).toBe(
+      "opencode",
+    );
   });
 
   it("returns null for empty strings", () => {
@@ -75,7 +69,10 @@ describe("deriveSubprocessInspectResult", () => {
         [1000, "powershell.exe"],
         [1001, "conhost.exe"],
         [1002, "cmd.exe /c codex.cmd"],
-        [1003, '"C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\Administrator\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\bin\\codex.js"'],
+        [
+          1003,
+          '"C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\Administrator\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\bin\\codex.js"',
+        ],
       ]),
     };
     const result = deriveSubprocessInspectResult(snapshot, 1000, "win32");
@@ -85,9 +82,7 @@ describe("deriveSubprocessInspectResult", () => {
 
   it("finds claude-code or opencode directly", () => {
     const snapshot = {
-      childrenByParent: new Map([
-        [1000, [1001, 1002]],
-      ]),
+      childrenByParent: new Map([[1000, [1001, 1002]]]),
       commandById: new Map([
         [1000, "pwsh.exe"],
         [1001, "conhost.exe"],
@@ -97,5 +92,38 @@ describe("deriveSubprocessInspectResult", () => {
     const result = deriveSubprocessInspectResult(snapshot, 1000, "win32");
     expect(result.hasRunningSubprocess).toBe(true);
     expect(result.childCommand).toBe("claude");
+  });
+  it("prefers direct child non-wrapper command over its child process", () => {
+    const snapshot = {
+      childrenByParent: new Map([
+        [1000, [1001]],
+        [1001, [1002]],
+      ]),
+      commandById: new Map([
+        [1000, "bash"],
+        [1001, "vim"],
+        [1002, "git status"],
+      ]),
+    };
+    const result = deriveSubprocessInspectResult(snapshot, 1000, "linux");
+    expect(result.hasRunningSubprocess).toBe(true);
+    expect(result.childCommand).toBe("vim");
+  });
+
+  it("unwraps transparent shell wrapper to find inner child command", () => {
+    const snapshot = {
+      childrenByParent: new Map([
+        [1000, [1001]],
+        [1001, [1002]],
+      ]),
+      commandById: new Map([
+        [1000, "powershell.exe"],
+        [1001, "cmd.exe /c run.bat"],
+        [1002, "vim.exe"],
+      ]),
+    };
+    const result = deriveSubprocessInspectResult(snapshot, 1000, "win32");
+    expect(result.hasRunningSubprocess).toBe(true);
+    expect(result.childCommand).toBe("vim");
   });
 });

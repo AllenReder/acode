@@ -98,7 +98,11 @@ export function getActiveTab(snapshot: WorkbenchSnapshot): WorkbenchTab {
   return tab;
 }
 
-export type SessionRowTabState = "active-focused" | "active-unfocused" | "background-tab" | "unopened";
+export type SessionRowTabState =
+  | "active-focused"
+  | "active-unfocused"
+  | "background-tab"
+  | "unopened";
 
 export function getSessionRowTabState(
   snapshot: WorkbenchSnapshot,

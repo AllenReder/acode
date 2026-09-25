@@ -390,8 +390,8 @@ it("tracks and differentiates all four Session Row Tab States: active-focused, a
   expect(row1!.props["data-session-tab-state"]).toBe("active-unfocused");
 
   // Active-unfocused renders a 2px vertical line indicator
-  const indicator1 = renderer!.root.find(
-    (node) => Boolean(node?.props && node.props["data-session-indicator"] === "active-unfocused"),
+  const indicator1 = renderer!.root.find((node) =>
+    Boolean(node?.props && node.props["data-session-indicator"] === "active-unfocused"),
   );
   expect(indicator1).toBeDefined();
 
@@ -406,8 +406,8 @@ it("tracks and differentiates all four Session Row Tab States: active-focused, a
   expect(row4!.props["data-session-tab-state"]).toBe("unopened");
 
   // Background-tab renders a 2px dot indicator
-  const backgroundDots = renderer!.root.findAll(
-    (node) => Boolean(node?.props && node.props["data-session-indicator"] === "background-tab"),
+  const backgroundDots = renderer!.root.findAll((node) =>
+    Boolean(node?.props && node.props["data-session-indicator"] === "background-tab"),
   );
   expect(backgroundDots.length).toBeGreaterThanOrEqual(2);
 });
@@ -424,13 +424,27 @@ it("renders one Session Status dot per row and the Unread Completion dot on a re
   await act(() => {
     renderer = create(
       <>
-        <SessionRow target={target} status="approval">Approval</SessionRow>
-        <SessionRow target={target} status="input">Input</SessionRow>
-        <SessionRow target={target} status="plan">Plan</SessionRow>
-        <SessionRow target={target} status="working">Working</SessionRow>
-        <SessionRow target={target} status="monitoring">Monitoring</SessionRow>
-        <SessionRow target={target} status="failed">Failed</SessionRow>
-        <SessionRow target={target} status="ready" isUnread>Unread</SessionRow>
+        <SessionRow target={target} status="approval">
+          Approval
+        </SessionRow>
+        <SessionRow target={target} status="input">
+          Input
+        </SessionRow>
+        <SessionRow target={target} status="plan">
+          Plan
+        </SessionRow>
+        <SessionRow target={target} status="working">
+          Working
+        </SessionRow>
+        <SessionRow target={target} status="monitoring">
+          Monitoring
+        </SessionRow>
+        <SessionRow target={target} status="failed">
+          Failed
+        </SessionRow>
+        <SessionRow target={target} status="ready" isUnread>
+          Unread
+        </SessionRow>
         <SessionRow target={target}>Ready</SessionRow>
       </>,
     );
@@ -489,7 +503,9 @@ it("keeps a failure dot visible while the row is focused and after focus moves a
   await act(() => {
     renderer = create(
       <>
-        <SessionRow target={target} status="failed">Failed</SessionRow>
+        <SessionRow target={target} status="failed">
+          Failed
+        </SessionRow>
         <SessionRow target={other}>Other</SessionRow>
       </>,
     );

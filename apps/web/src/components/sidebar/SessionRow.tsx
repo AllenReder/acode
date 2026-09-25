@@ -1,9 +1,6 @@
 import { useCallback, useState, type ComponentProps } from "react";
 import { cn } from "../../lib/utils";
-import {
-  getSessionRowTabState,
-  type SessionRowTabState,
-} from "../../workbench/workbenchState";
+import { getSessionRowTabState, type SessionRowTabState } from "../../workbench/workbenchState";
 import { useWorkbenchStore } from "../../workbench/workbenchStore";
 import type { ViewTarget } from "../../workbench/viewRegistry";
 import { sessionRouteForTarget } from "../../workbench/deepLinks";
@@ -75,11 +72,7 @@ export function SessionRow({
     target.kind === "agentSession" ? target.agentSessionId : target.terminalSessionId;
 
   const dotClass =
-    status === "ready"
-      ? isUnread
-        ? UNREAD_COMPLETION_DOT_CLASS
-        : null
-      : STATUS_DOT_CLASS[status];
+    status === "ready" ? (isUnread ? UNREAD_COMPLETION_DOT_CLASS : null) : STATUS_DOT_CLASS[status];
 
   const dragState = useWorkbenchDragState();
   const draggedTarget = dragState?.source.kind === "sidebar" ? dragState.source.target : null;
