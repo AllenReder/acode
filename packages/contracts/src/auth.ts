@@ -161,6 +161,8 @@ export const AuthClientPresentationMetadata = Schema.Struct({
   osMajorVersion: Schema.optionalKey(Schema.Int),
   deviceModel: Schema.optionalKey(TrimmedNonEmptyString),
   surface: Schema.optionalKey(ClientSurface),
+  /** Whether this client can host the embedded browser preview surface. */
+  previewHost: Schema.optionalKey(Schema.Boolean),
   webDeployment: Schema.optionalKey(ClientWebDeployment),
   browser: Schema.optionalKey(TrimmedNonEmptyString),
   appVersion: Schema.optionalKey(TrimmedNonEmptyString),

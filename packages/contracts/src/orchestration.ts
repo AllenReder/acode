@@ -1963,6 +1963,8 @@ export const ThreadActivityAppendedPayload = Schema.Struct({
 export const OrchestrationClientOrigin = Schema.Struct({
   surface: Schema.optional(ClientSurface),
   appVersion: Schema.optional(TrimmedNonEmptyString),
+  /** Whether the connected client can host embedded browser previews. */
+  previewHost: Schema.optional(Schema.Boolean),
 });
 export type OrchestrationClientOrigin = typeof OrchestrationClientOrigin.Type;
 

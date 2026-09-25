@@ -5684,6 +5684,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         event: string;
         properties: Readonly<Record<string, unknown>> | undefined;
       }> = [];
+      const dispatchedOrigins: Array<unknown> = [];
 
       yield* buildAppUnderTest({
         layers: {
@@ -5692,13 +5693,17 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
               Effect.sync(() => analyticsEvents.push({ event, properties })),
           },
           orchestrationEngine: {
-            dispatch: () => Effect.succeed({ sequence: 1 }),
+            dispatch: (_command, options) =>
+              Effect.sync(() => {
+                dispatchedOrigins.push(options?.origin);
+                return { sequence: 1 };
+              }),
           },
         },
       });
 
       const webUrl = yield* getWsServerUrl(
-        "/ws?clientSurface=web&clientAppVersion=2.0.0&clientDeviceType=desktop&clientOs=Windows&clientWebDeployment=hosted&clientBrowser=Chrome&connectionMethod=direct",
+        "/ws?clientSurface=web&clientPreviewHost=0&clientAppVersion=2.0.0&clientDeviceType=desktop&clientOs=Windows&clientWebDeployment=hosted&clientBrowser=Chrome&connectionMethod=direct",
       );
       const mobileUrl = yield* getWsServerUrl(
         "/ws?clientSurface=mobile&clientAppVersion=3.0.0&clientDeviceType=tablet&clientOs=Android&clientOsMajorVersion=15&clientDeviceModel=Pixel+Tablet",
@@ -5730,6 +5735,17 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         ),
       );
 
+      assert.deepEqual(dispatchedOrigins, [
+        {
+          surface: "mobile",
+          appVersion: "3.0.0",
+        },
+        {
+          surface: "web",
+          appVersion: "2.0.0",
+          previewHost: false,
+        },
+      ]);
       assert.deepEqual(
         analyticsEvents
           .filter(({ event }) => event === "client.turn.requested")

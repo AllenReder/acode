@@ -205,7 +205,7 @@ describe("ProviderCommandReactor", () => {
       model: "gpt-5-codex",
     };
     const startSessionEffect = input?.startSessionEffect;
-    const startSession = vi.fn((_: unknown, input: unknown) => {
+    const startSession = vi.fn((_: unknown, input: unknown, _constraints?: unknown) => {
       const sessionIndex = nextSessionIndex++;
       const resumeCursor =
         typeof input === "object" && input !== null && "resumeCursor" in input
@@ -426,7 +426,7 @@ describe("ProviderCommandReactor", () => {
           readEvents: engine.readEvents,
           readThreadEvents: engine.readThreadEvents,
           getThreadReplayStats: engine.getThreadReplayStats,
-          dispatch: (command) => {
+          dispatch: (command, options) => {
             if (command.type === "thread.title.regeneration.complete") {
               titleRegenerationCompletionDispatchAttempts += 1;
               if (
@@ -446,7 +446,7 @@ describe("ProviderCommandReactor", () => {
                   ? input?.beforeTurnStartDispatch
                   : undefined;
             return (before?.() ?? Effect.void).pipe(
-              Effect.andThen(engine.dispatch(command)),
+              Effect.andThen(engine.dispatch(command, options)),
               Effect.tap(() =>
                 isReplay ? (input?.afterTurnStartDispatch?.() ?? Effect.void) : Effect.void,
               ),
@@ -854,20 +854,23 @@ describe("ProviderCommandReactor", () => {
     const now = "2026-01-01T00:00:00.000Z";
 
     await Effect.runPromise(
-      harness.engine.dispatch({
-        type: "thread.turn.start",
-        commandId: CommandId.make("cmd-turn-start-1"),
-        threadId: ThreadId.make("thread-1"),
-        message: {
-          messageId: asMessageId("user-message-1"),
-          role: "user",
-          text: "hello reactor",
-          attachments: [],
+      harness.engine.dispatch(
+        {
+          type: "thread.turn.start",
+          commandId: CommandId.make("cmd-turn-start-1"),
+          threadId: ThreadId.make("thread-1"),
+          message: {
+            messageId: asMessageId("user-message-1"),
+            role: "user",
+            text: "hello reactor",
+            attachments: [],
+          },
+          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+          runtimeMode: "approval-required",
+          createdAt: now,
         },
-        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-        runtimeMode: "approval-required",
-        createdAt: now,
-      }),
+        { origin: { surface: "desktop", previewHost: false } },
+      ),
     );
 
     await waitFor(() => harness.startSession.mock.calls.length === 1);
@@ -881,6 +884,7 @@ describe("ProviderCommandReactor", () => {
       },
       runtimeMode: "approval-required",
     });
+    expect(harness.startSession.mock.calls[0]?.[2]).toEqual({ previewHost: false });
 
     const readModel = await harness.readModel();
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));

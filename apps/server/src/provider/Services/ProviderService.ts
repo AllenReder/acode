@@ -38,6 +38,11 @@ import type { ProviderInstanceRoutingInfo } from "./ProviderAdapterRegistry.ts";
 /**
  * ProviderServiceShape - Service API for provider session and turn orchestration.
  */
+export interface ProviderSessionStartConstraints {
+  /** False when the client dispatching this start cannot host embedded previews. */
+  readonly previewHost?: boolean;
+}
+
 export interface ProviderServiceShape {
   /**
    * Start a provider session.
@@ -45,6 +50,7 @@ export interface ProviderServiceShape {
   readonly startSession: (
     threadId: ThreadId,
     input: ProviderSessionStartInput,
+    constraints?: ProviderSessionStartConstraints,
   ) => Effect.Effect<ProviderSession, ProviderServiceError>;
 
   /**
