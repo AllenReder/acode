@@ -18,21 +18,24 @@ export interface MaterialSettings {
   readonly overlayOpacity: number;
 }
 
-export function isNativeGlassPlatform(): boolean {
-  if (typeof window === "undefined") return false;
+type NativeGlassPlatform = "darwin" | "win32";
+
+function resolveNativeGlassPlatform(): NativeGlassPlatform | null {
+  if (typeof window === "undefined") return null;
   const desktopPlatform = window.desktopBridge?.getClientPlatform?.();
-  const isDarwinOrWin = desktopPlatform === "darwin" || desktopPlatform === "win32";
-  const isMac =
-    typeof navigator !== "undefined" &&
-    (/Mac|iPhone|iPad/i.test(navigator.platform) || /Mac/i.test(navigator.userAgent));
-  const isWin =
-    typeof navigator !== "undefined" &&
-    (/Win/i.test(navigator.platform) || /Windows/i.test(navigator.userAgent));
-  return (
-    (isDarwinOrWin ||
-      Boolean(isTauri || (window as any).isTauri || (window as any).__TAURI_INTERNALS__)) &&
-    (isMac || isWin || isDarwinOrWin)
-  );
+  if (desktopPlatform === "darwin" || desktopPlatform === "win32") return desktopPlatform;
+  if (desktopPlatform) return null;
+  if (!isTauri && !(window as any).isTauri && !(window as any).__TAURI_INTERNALS__) return null;
+  if (typeof navigator === "undefined") return null;
+
+  const isMac = /Mac|iPhone|iPad/i.test(navigator.platform) || /Mac/i.test(navigator.userAgent);
+  if (isMac) return "darwin";
+  const isWin = /Win/i.test(navigator.platform) || /Windows/i.test(navigator.userAgent);
+  return isWin ? "win32" : null;
+}
+
+export function isNativeGlassPlatform(): boolean {
+  return resolveNativeGlassPlatform() !== null;
 }
 
 export async function syncNativeWindowGlass(enabled: boolean, blurRadius: number) {
@@ -52,9 +55,11 @@ export function applyMaterialSettings(
   root: HTMLElement | null = typeof document !== "undefined" ? document.documentElement : null,
 ) {
   if (!root) return;
-  const nativeStage = options.stageEnabled && isNativeGlassPlatform();
+  const nativeGlassPlatform = resolveNativeGlassPlatform();
+  const nativeStage = options.stageEnabled && nativeGlassPlatform !== null;
   const stageChanged = root.classList.contains("material-stage-native") !== nativeStage;
   root.classList.toggle("material-stage-native", nativeStage);
+  root.classList.toggle("material-stage-windows", nativeStage && nativeGlassPlatform === "win32");
   root.classList.toggle("material-stage-opaque", !nativeStage);
 
   root.style.setProperty(

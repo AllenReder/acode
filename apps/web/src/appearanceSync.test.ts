@@ -66,6 +66,35 @@ describe("appearanceSync", () => {
       expect(isNativeGlassPlatform()).toBe(true);
     });
 
+    it("marks only the Windows native stage for the overlay material fallback", () => {
+      vi.stubGlobal("window", {
+        desktopBridge: {
+          getClientPlatform: () => "win32",
+        },
+      });
+      vi.stubGlobal("navigator", { platform: "Win32", userAgent: "Windows" });
+      const { root, classes } = makeRoot();
+
+      applyMaterialSettings(
+        {
+          stageEnabled: true,
+          blurRadius: 24,
+          backgroundMaskLightOpacity: 10,
+          backgroundMaskDarkOpacity: 35,
+          sidebarOpacity: 65,
+          topbarOpacity: 75,
+          workbenchOpacity: 88,
+          workbenchGlass: true,
+          overlayOpacity: 90,
+        },
+        root,
+      );
+
+      expect(classes.has("material-stage-native")).toBe(true);
+      expect(classes.has("material-stage-windows")).toBe(true);
+      expect(classes.has("material-stage-opaque")).toBe(false);
+    });
+
     it("returns false on Linux desktop so the opaque fallback stays active", () => {
       vi.stubGlobal("window", {
         desktopBridge: {
@@ -113,6 +142,7 @@ describe("appearanceSync", () => {
       expect(properties.get("--material-workbench-opacity")).toBe("0.88");
       expect(properties.get("--material-overlay-opacity")).toBe("0.9");
       expect(classes.has("material-stage-native")).toBe(true);
+      expect(classes.has("material-stage-windows")).toBe(false);
       expect(classes.has("material-stage-opaque")).toBe(false);
       expect(setWindowGlassEnabled).toHaveBeenCalledWith(true);
       expect(setWindowBackgroundBlur).toHaveBeenCalledWith(24);

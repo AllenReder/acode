@@ -42,3 +42,25 @@ describe("opaque material tokens", () => {
     );
   });
 });
+describe("Windows overlay material fallback", () => {
+  it("replaces unsupported backdrop blur with a distinct elevated material", async () => {
+    const css = await NodeFSP.readFile(new URL("./index.css", import.meta.url), "utf8");
+    const start = css.indexOf("html.material-stage-windows .material-surface-overlay {");
+    const end = css.indexOf("/* Native compositor blur", start);
+    expect(
+      start,
+      "Windows overlay fallback must follow the shared overlay material",
+    ).toBeGreaterThan(-1);
+    expect(end, "Windows overlay fallback must be bounded by the opaque fallback").toBeGreaterThan(
+      start,
+    );
+    const block = css.slice(start, end);
+
+    expect(block).toMatch(/-webkit-backdrop-filter:\s*none;/);
+    expect(block).toMatch(/backdrop-filter:\s*none;/);
+    expect(block).toMatch(/background-image:\s*[^;]*linear-gradient/s);
+    expect(block).toMatch(/var\(--surface-grain\)/);
+    expect(block).toMatch(/border:\s*1px solid color-mix\(/);
+    expect(block).toMatch(/box-shadow:\s*[^;]+;/s);
+  });
+});
