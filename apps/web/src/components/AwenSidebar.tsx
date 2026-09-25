@@ -1,8 +1,10 @@
 import type {
+  AgentSessionId,
   AwenWorkspaceShell,
   ContextMenuItem,
   EnvironmentId,
   ProjectId,
+  TerminalSessionId,
   ThreadId,
   WorkspaceId,
 } from "@awen/contracts";
@@ -41,13 +43,20 @@ import { newDraftId, newThreadId } from "../lib/utils";
 import { readLocalApi } from "../localApi";
 import { environmentServerConfigsAtom } from "../state/server";
 import { useEnvironments } from "../state/environments";
-import { useAwenProjects } from "../state/entities";
+import { useAwenProjects, useThreadShell } from "../state/entities";
 import { projectEnvironment, workspaceEnvironment } from "../state/projects";
 import { terminalEnvironment } from "../state/terminal";
 import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
-import { scopeProjectRef } from "@awen/client-runtime/environment";
+import { scopeProjectRef, scopeThreadRef } from "@awen/client-runtime/environment";
+import { useKnownTerminalSessions } from "../state/terminalSessions";
 import { SessionRow } from "./sidebar/SessionRow";
+import {
+  resolveAgentIcon,
+  resolveAgentSessionStatusAlert,
+  resolveTerminalIcon,
+  resolveTerminalSessionStatusAlert,
+} from "./sidebar/sidebarSessionPresentation";
 import { AddWorkspaceDialog, NewWorkspaceDialog } from "./sidebar/WorkspaceDialogs";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { nextWorkspaceTerminalId } from "./Sidebar.logic";
@@ -57,7 +66,8 @@ import { SidebarContent, SidebarGroup } from "./ui/sidebar";
 import { sessionRouteForTarget } from "../workbench/deepLinks";
 import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { runtimeTerminalIdForTarget, terminalTargetForRuntime } from "../workbench/sessionTarget";
-import type { ViewTarget } from "../workbench/viewRegistry";
+import { targetsEqual, type ViewTarget } from "../workbench/viewRegistry";
+import { getActiveTab } from "../workbench/workbenchState";
 import { useWorkbenchDragController, useWorkbenchDragState } from "../workbench/workbenchDrag";
 import { NO_PROVIDER_MODEL_SELECTION } from "../providerInstances";
 import { useWorkbenchStore } from "../workbench/workbenchStore";
@@ -785,9 +795,21 @@ export function AwenSidebar() {
                                 })}
                               >
                                 <GitBranchIcon className="size-3 shrink-0" />
-                                <span className="min-w-0 flex-1 truncate">{workspace.title}</span>
-                                <span className="shrink-0 text-[10px] uppercase opacity-60">
-                                  {workspace.role}
+                                <span
+                                  data-testid="sidebar-workspace-branch"
+                                  className="min-w-0 flex-1 truncate font-medium"
+                                >
+                                  {workspace.branch ||
+                                    (workspace.role === "main" ? "main" : workspace.title)}
+                                </span>
+                                <span
+                                  data-testid="sidebar-workspace-dir"
+                                  className="shrink-0 text-[10px] text-sidebar-muted-foreground"
+                                >
+                                  {workspace.workspaceRoot
+                                    ?.split(/[\\/]/)
+                                    .filter(Boolean)
+                                    .pop() || workspace.title}
                                 </span>
                               </button>
                             </div>
@@ -827,74 +849,25 @@ export function AwenSidebar() {
                                 {historyExpanded.has(workspaceKey)
                                   ? historySessions.map((session) =>
                                       session.kind === "agent" ? (
-                                        <SessionRow
+                                        <WorkspaceAgentSessionRow
                                           key={session.id}
-                                          data-testid="sidebar-session-row"
-                                          data-session-kind="agent"
-                                          data-session-closed="true"
+                                          project={project}
+                                          workspace={workspace}
+                                          session={session}
                                           isClosed
-                                          sessionTitle={session.title}
-                                          target={{
-                                            kind: "agentSession",
-                                            environmentId: project.environmentId,
-                                            workspaceId: workspace.id,
-                                            agentSessionId: session.id,
-                                          }}
-                                          onStartRename={() =>
-                                            renameAgent(
-                                              project.environmentId,
-                                              session.threadId,
-                                              session.title,
-                                            )
-                                          }
-                                          navigateTo={(route) =>
-                                            void navigate({
-                                              ...route,
-                                              to: route.to as never,
-                                            } as never)
-                                          }
-                                        >
-                                          <span className="min-w-0 flex-1 truncate">
-                                            {session.title}
-                                          </span>
-                                        </SessionRow>
+                                          renameAgent={renameAgent}
+                                          navigate={navigate}
+                                        />
                                       ) : (
-                                        <SessionRow
+                                        <WorkspaceTerminalSessionRow
                                           key={session.id}
-                                          data-testid="sidebar-session-row"
-                                          data-session-kind="terminal"
-                                          data-session-closed="true"
+                                          project={project}
+                                          workspace={workspace}
+                                          session={session}
                                           isClosed
-                                          sessionTitle={session.title}
-                                          target={{
-                                            kind: "workspaceTerminal",
-                                            environmentId: project.environmentId,
-                                            workspaceId: workspace.id,
-                                            terminalSessionId: session.id,
-                                          }}
-                                          navigateTo={(route) =>
-                                            void navigate({
-                                              ...route,
-                                              to: route.to as never,
-                                            } as never)
-                                          }
-                                          onStartRename={() =>
-                                            renameTerminal(
-                                              {
-                                                kind: "workspaceTerminal",
-                                                environmentId: project.environmentId,
-                                                workspaceId: workspace.id,
-                                                terminalSessionId: session.id,
-                                              },
-                                              session.title,
-                                            )
-                                          }
-                                        >
-                                          <TerminalIcon className="size-3 shrink-0" />
-                                          <span className="min-w-0 flex-1 truncate">
-                                            {session.title}
-                                          </span>
-                                        </SessionRow>
+                                          renameTerminal={renameTerminal}
+                                          navigate={navigate}
+                                        />
                                       ),
                                     )
                                   : null}
@@ -937,6 +910,136 @@ export function AwenSidebar() {
         onCreate={handleCreateWorkspace}
       />
     </>
+  );
+}
+
+function WorkspaceAgentSessionRow({
+  project,
+  workspace,
+  session,
+  isClosed = false,
+  style,
+  renameAgent,
+  navigate,
+}: {
+  readonly project: EnvironmentAwenProject;
+  readonly workspace: EnvironmentAwenProject["workspaces"][number];
+  readonly session: { readonly id: string; readonly title: string; readonly threadId: ThreadId };
+  readonly isClosed?: boolean;
+  readonly style?: CSSProperties;
+  readonly renameAgent: (environmentId: EnvironmentId, threadId: ThreadId, title: string) => void;
+  readonly navigate: ReturnType<typeof useNavigate>;
+}) {
+  const threadRef = useMemo(
+    () => scopeThreadRef(project.environmentId, session.threadId),
+    [project.environmentId, session.threadId],
+  );
+  const threadShell = useThreadShell(threadRef);
+  const isFocused = useWorkbenchStore((state) => {
+    const activeTab = getActiveTab(state);
+    const focused = activeTab.panes.get(activeTab.focusedPaneId);
+    return (
+      focused !== undefined &&
+      targetsEqual(focused.target, {
+        kind: "agentSession",
+        environmentId: project.environmentId,
+        workspaceId: workspace.id,
+        agentSessionId: session.id as AgentSessionId,
+      })
+    );
+  });
+  const ProviderIcon = resolveAgentIcon(threadShell?.modelSelection?.instanceId);
+  const statusAlert = isClosed ? "idle" : resolveAgentSessionStatusAlert(threadShell, { isFocused });
+
+  return (
+    <SessionRow
+      key={session.id}
+      style={style}
+      data-testid="sidebar-session-row"
+      data-session-kind="agent"
+      data-session-closed={isClosed ? "true" : undefined}
+      isClosed={isClosed}
+      sessionTitle={session.title}
+      statusAlert={statusAlert}
+      target={{
+        kind: "agentSession",
+        environmentId: project.environmentId,
+        workspaceId: workspace.id,
+        agentSessionId: session.id as AgentSessionId,
+      }}
+      onStartRename={() => renameAgent(project.environmentId, session.threadId, session.title)}
+      navigateTo={(route) => void navigate({ ...route, to: route.to as never } as never)}
+    >
+      <ProviderIcon className="size-3.5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{session.title}</span>
+    </SessionRow>
+  );
+}
+
+function WorkspaceTerminalSessionRow({
+  project,
+  workspace,
+  session,
+  isClosed = false,
+  style,
+  renameTerminal,
+  navigate,
+}: {
+  readonly project: EnvironmentAwenProject;
+  readonly workspace: EnvironmentAwenProject["workspaces"][number];
+  readonly session: { readonly id: string; readonly title: string };
+  readonly isClosed?: boolean;
+  readonly style?: CSSProperties;
+  readonly renameTerminal: (
+    target: Extract<ViewTarget, { kind: "workspaceTerminal" }>,
+    title: string,
+  ) => void;
+  readonly navigate: ReturnType<typeof useNavigate>;
+}) {
+  const knownSessions = useKnownTerminalSessions({
+    environmentId: project.environmentId,
+    threadId: null,
+    workspaceId: workspace.id,
+  });
+  const terminalSession = knownSessions.find(
+    (item) => item.state.summary?.terminalId === session.id,
+  );
+  const summary = terminalSession?.state.summary;
+  const TerminalOrAgentIcon = resolveTerminalIcon(summary);
+  const statusAlert = isClosed ? "idle" : resolveTerminalSessionStatusAlert(summary);
+
+  return (
+    <SessionRow
+      key={session.id}
+      style={style}
+      data-testid="sidebar-session-row"
+      data-session-kind="terminal"
+      data-session-closed={isClosed ? "true" : undefined}
+      isClosed={isClosed}
+      sessionTitle={session.title}
+      statusAlert={statusAlert}
+      target={{
+        kind: "workspaceTerminal",
+        environmentId: project.environmentId,
+        workspaceId: workspace.id,
+        terminalSessionId: session.id as TerminalSessionId,
+      }}
+      navigateTo={(route) => void navigate({ ...route, to: route.to as never } as never)}
+      onStartRename={() =>
+        renameTerminal(
+          {
+            kind: "workspaceTerminal",
+            environmentId: project.environmentId,
+            workspaceId: workspace.id,
+            terminalSessionId: session.id as TerminalSessionId,
+          },
+          session.title,
+        )
+      }
+    >
+      <TerminalOrAgentIcon className="size-3.5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{session.title}</span>
+    </SessionRow>
   );
 }
 
@@ -1107,63 +1210,28 @@ function WorkspaceActiveSessions({
 
         if (session.kind === "agent") {
           return (
-            <SessionRow
+            <WorkspaceAgentSessionRow
               key={session.id}
               style={sessionStyle}
-              data-testid="sidebar-session-row"
-              data-session-kind="agent"
-              sessionTitle={session.title}
-              target={{
-                kind: "agentSession",
-                environmentId: project.environmentId,
-                workspaceId: workspace.id,
-                agentSessionId: session.id,
-              }}
-              onStartRename={() =>
-                renameAgent(project.environmentId, session.threadId, session.title)
-              }
-              navigateTo={(route) =>
-                void navigate({
-                  ...route,
-                  to: route.to as never,
-                } as never)
-              }
-            >
-              <span className="min-w-0 flex-1 truncate">{session.title}</span>
-            </SessionRow>
+              project={project}
+              workspace={workspace}
+              session={session}
+              renameAgent={renameAgent}
+              navigate={navigate}
+            />
           );
         }
 
         return (
-          <SessionRow
+          <WorkspaceTerminalSessionRow
             key={session.id}
             style={sessionStyle}
-            data-testid="sidebar-session-row"
-            data-session-kind="terminal"
-            sessionTitle={session.title}
-            target={{
-              kind: "workspaceTerminal",
-              environmentId: project.environmentId,
-              workspaceId: workspace.id,
-              terminalSessionId: session.id,
-            }}
-            navigateTo={(route) => void navigate({ ...route, to: route.to as never } as never)}
-            onStartRename={() =>
-              renameTerminal(
-                {
-                  kind: "workspaceTerminal",
-                  environmentId: project.environmentId,
-                  workspaceId: workspace.id,
-                  terminalSessionId: session.id,
-                },
-                session.title,
-              )
-            }
-          >
-            <TerminalIcon className="size-3 shrink-0" />
-            <span className="min-w-0 flex-1 truncate">{session.title}</span>
-            <span className="shrink-0 text-[10px] opacity-60">{session.status}</span>
-          </SessionRow>
+            project={project}
+            workspace={workspace}
+            session={session}
+            renameTerminal={renameTerminal}
+            navigate={navigate}
+          />
         );
       })}
     </div>

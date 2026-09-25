@@ -175,6 +175,19 @@ controls when expanded.
 It is a navigator for work and references, not another Tab or Pane.
 _Avoid_: Rail, Workspace panel
 
+**Session Row Tab State**:
+The presentation state of a Session row in the Sidebar reflecting its presence
+and focus across Workbench Tabs: `active-focused` (focused in the active Tab),
+`active-unfocused` (present in the active Tab but unfocused), `background-tab`
+(open in a non-active Tab), and `unopened` (not open in any Tab).
+_Avoid_: Open state, Tab presence, Session status
+
+**Status Gutter**:
+The fixed-width vertical slot preceding a Sidebar Session row that hosts status
+alert indicators (such as waiting for user action, background running, error, or
+unread turn completion) while keeping Session provider icons vertically aligned.
+_Avoid_: Margin slot, Alert column, Left padding
+
 **Tab title**:
 The user-visible name of a Tab. It is derived from the first Pane until the
 user overrides and locks it manually.
@@ -358,3 +371,6 @@ _Avoid_: Chat wallpaper, Session background, View background
   identity.
 - Provider-native lifecycle commands may implement Awen Session operations,
   but they do not add user-visible Session actions or lifecycle states.
+- A Workspace header in the Sidebar displays its active Git branch on the left and its Workspace directory name on the right.
+- A Sidebar Session row visually differentiates four Tab states (`active-focused`, `active-unfocused`, `background-tab`, and `unopened`) via active backgrounds, trailing edge indicators (vertical line for active-unfocused, dot for background-tab), and typography without altering Session identity.
+- Terminal Sessions dynamically display the active agent provider icon when an agent CLI runs as their foreground process.

@@ -333,6 +333,110 @@ it("distinguishes the focused Session from other opened and unopened Sessions", 
   expect(row3!.props["aria-current"]).toBeUndefined();
 });
 
+it("tracks and differentiates all four Session Row Tab States: active-focused, active-unfocused, background-tab, and unopened", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const target1 = {
+    kind: "agentSession",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    agentSessionId: "tab_s1" as AgentSessionId,
+  } as const;
+  const target2 = {
+    kind: "agentSession",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    agentSessionId: "tab_s2" as AgentSessionId,
+  } as const;
+  const target3 = {
+    kind: "agentSession",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    agentSessionId: "tab_s3" as AgentSessionId,
+  } as const;
+  const targetUnopened = {
+    kind: "agentSession",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    agentSessionId: "tab_s4" as AgentSessionId,
+  } as const;
+
+  await act(() => {
+    renderer = create(
+      <>
+        <SessionRow target={target1}>Session 1</SessionRow>
+        <SessionRow target={target2}>Session 2</SessionRow>
+        <SessionRow target={target3}>Session 3</SessionRow>
+        <SessionRow target={targetUnopened}>Session 4</SessionRow>
+      </>,
+    );
+  });
+
+  const [row1, row2, row3, row4] = renderer!.root.findAllByType("button");
+
+  // Step 1: Open target1 in active tab (active-focused)
+  await act(() => row1!.props.onClick({ altKey: false }));
+
+  // Step 2: Split target2 into active tab (target2 is active-focused, target1 becomes active-unfocused)
+  await act(() => row2!.props.onClick({ altKey: true, shiftKey: false }));
+
+  expect(row2!.props["data-session-tab-state"]).toBe("active-focused");
+  expect(row1!.props["data-session-tab-state"]).toBe("active-unfocused");
+
+  // Active-unfocused renders a 2px vertical line indicator
+  const indicator1 = renderer!.root.find(
+    (node) => Boolean(node?.props && node.props["data-session-indicator"] === "active-unfocused"),
+  );
+  expect(indicator1).toBeDefined();
+
+  // Step 3: Create a new tab and open target3 there (now target3 is active-focused in tab 2; target1 & target2 are background-tab)
+  await act(() => {
+    useWorkbenchStore.getState().openTarget(target3);
+  });
+
+  expect(row3!.props["data-session-tab-state"]).toBe("active-focused");
+  expect(row1!.props["data-session-tab-state"]).toBe("background-tab");
+  expect(row2!.props["data-session-tab-state"]).toBe("background-tab");
+  expect(row4!.props["data-session-tab-state"]).toBe("unopened");
+
+  // Background-tab renders a 2px dot indicator
+  const backgroundDots = renderer!.root.findAll(
+    (node) => Boolean(node?.props && node.props["data-session-indicator"] === "background-tab"),
+  );
+  expect(backgroundDots.length).toBeGreaterThanOrEqual(2);
+});
+
+it("renders the 14px Status Gutter with prioritized alert states", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const target = {
+    kind: "agentSession",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    agentSessionId: "alert_s1" as AgentSessionId,
+  } as const;
+
+  await act(() => {
+    renderer = create(
+      <>
+        <SessionRow target={target} statusAlert="action-required">Action Required</SessionRow>
+        <SessionRow target={target} statusAlert="error">Error</SessionRow>
+        <SessionRow target={target} statusAlert="running">Running</SessionRow>
+        <SessionRow target={target} statusAlert="completed-unread">Completed</SessionRow>
+        <SessionRow target={target}>Idle</SessionRow>
+      </>,
+    );
+  });
+
+  const gutters = renderer!.root.findAll(
+    (node) => Boolean(node?.props && node.props["data-status-gutter"] === "true"),
+  );
+  expect(gutters).toHaveLength(5);
+  expect(gutters[0]!.props["data-status-alert"]).toBe("action-required");
+  expect(gutters[1]!.props["data-status-alert"]).toBe("error");
+  expect(gutters[2]!.props["data-status-alert"]).toBe("running");
+  expect(gutters[3]!.props["data-status-alert"]).toBe("completed-unread");
+  expect(gutters[4]!.props["data-status-alert"]).toBe("idle");
+});
+
 it("marks closed sessions with data-session-closed and suppresses drag initiation on pointerdown", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const target = {

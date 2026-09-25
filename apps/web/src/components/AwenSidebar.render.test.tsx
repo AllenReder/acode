@@ -47,6 +47,7 @@ vi.mock("../state/entities", () => ({
   useAwenProjects: () => mockState.projects,
   useAwenAgentSessionShell: () => null,
   readThreadShell: () => null,
+  useThreadShell: () => null,
 }));
 
 vi.mock("../state/environments", () => ({
@@ -248,6 +249,79 @@ describe("AwenSidebar", () => {
     expect(reviewChangesItem).toBeDefined();
     expect(reviewChangesItem?.label).toBe("Review Changes");
     expect(reviewChangesItem?.icon).toBe("git-branch");
+  });
+
+  it("renders branch name on the left and workspace directory name on the right without role badge", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    mockState.projects = [
+      {
+        id: "p1",
+        environmentId: "local",
+        title: "awen",
+        workspaces: [
+          {
+            id: "w1",
+            title: "awen",
+            workspaceRoot: "/code/awen",
+            role: "main",
+            branch: "main",
+            sessions: [],
+            historySessions: [],
+          },
+        ],
+      },
+    ];
+
+    await act(() => {
+      renderer = create(<AwenSidebar />);
+    });
+
+    const workspaceRow = renderer.root.findByProps({ "data-testid": "sidebar-workspace-row" });
+    expect(workspaceRow.findByProps({ "data-testid": "sidebar-workspace-branch" }).props.children).toBe("main");
+    expect(workspaceRow.findByProps({ "data-testid": "sidebar-workspace-dir" }).props.children).toBe("awen");
+    expect(workspaceRow.findAllByProps({ "data-testid": "sidebar-workspace-role" })).toHaveLength(0);
+  });
+
+  it("renders agent sessions with provider icon and terminal sessions with terminal/agent icon and 14px status gutter", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    mockState.projects = [
+      {
+        id: "p1",
+        environmentId: "local",
+        title: "awen",
+        workspaces: [
+          {
+            id: "w1",
+            title: "awen",
+            workspaceRoot: "/code/awen",
+            role: "main",
+            branch: "main",
+            sessions: [
+              { kind: "agent", id: "agent-1", threadId: "thread-1", title: "Coding Agent" },
+              { kind: "terminal", id: "term-1", title: "Terminal Shell" },
+            ],
+            historySessions: [],
+          },
+        ],
+      },
+    ];
+
+    await act(() => {
+      renderer = create(<AwenSidebar />);
+    });
+
+    // Expand workspace
+    const workspaceRow = renderer.root.findByProps({ "data-testid": "sidebar-workspace-row" });
+    await act(() => {
+      workspaceRow.props.onClick();
+    });
+
+    const sessionRows = renderer.root.findAllByProps({ "data-sidebar-session-row": "true" });
+    expect(sessionRows).toHaveLength(2);
+
+    // Both rows must render the 14px Status Gutter
+    const gutters = renderer.root.findAllByProps({ "data-status-gutter": "true" });
+    expect(gutters.length).toBeGreaterThanOrEqual(2);
   });
 
   it.each([

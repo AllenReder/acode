@@ -123,6 +123,7 @@ export const AwenWorkspaceShell = Schema.Struct({
   role: WorkspaceRole,
   /** Only set for "worktree" Workspaces; absent on "main". */
   origin: Schema.optional(WorkspaceOrigin),
+  branch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   /**
    * Sessions of every kind. Decoded with `ForwardCompatibleArray` so a server
    * that adds a Session kind this build does not know drops that one element

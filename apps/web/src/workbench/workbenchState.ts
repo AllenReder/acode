@@ -30,7 +30,7 @@ import {
   type PaneDropZone,
   type SplitDir,
 } from "./layout";
-import { definitionIdForTarget, targetKey, type ViewTarget } from "./viewRegistry";
+import { definitionIdForTarget, targetKey, targetsEqual, type ViewTarget } from "./viewRegistry";
 import { fallbackTargetTitle } from "./workbenchTitles";
 
 /** One presentation occurrence, independent of the Session it displays. */
@@ -92,6 +92,29 @@ export function getActiveTab(snapshot: WorkbenchSnapshot): WorkbenchTab {
   const tab = snapshot.tabs.find((tab) => tab.id === snapshot.activeTabId);
   if (!tab) throw new Error("Workbench active Tab is missing");
   return tab;
+}
+
+export type SessionRowTabState = "active-focused" | "active-unfocused" | "background-tab" | "unopened";
+
+export function getSessionRowTabState(
+  snapshot: WorkbenchSnapshot,
+  target: ViewTarget,
+): SessionRowTabState {
+  const activeTab = getActiveTab(snapshot);
+  const focused = activeTab.panes.get(activeTab.focusedPaneId);
+  if (focused !== undefined && targetsEqual(focused.target, target)) {
+    return "active-focused";
+  }
+  for (const pane of activeTab.panes.values()) {
+    if (targetsEqual(pane.target, target)) return "active-unfocused";
+  }
+  for (const otherTab of snapshot.tabs) {
+    if (otherTab.id === activeTab.id) continue;
+    for (const pane of otherTab.panes.values()) {
+      if (targetsEqual(pane.target, target)) return "background-tab";
+    }
+  }
+  return "unopened";
 }
 
 function viewInstance(target: ViewTarget, generateId: () => string): ViewInstance {

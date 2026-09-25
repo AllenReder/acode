@@ -1,6 +1,10 @@
 import { useCallback, useState, type ComponentProps } from "react";
 import { cn } from "../../lib/utils";
-import { getActiveTab } from "../../workbench/workbenchState";
+import {
+  getActiveTab,
+  getSessionRowTabState,
+  type SessionRowTabState,
+} from "../../workbench/workbenchState";
 import { useWorkbenchStore } from "../../workbench/workbenchStore";
 import { targetsEqual, type ViewTarget } from "../../workbench/viewRegistry";
 import { sessionRouteForTarget } from "../../workbench/deepLinks";
@@ -10,6 +14,20 @@ import { FLUID_MOTION_DURATION_MS, getPrefersReducedMotion } from "../../workben
 import type { WillCloseRevert } from "../../hooks/useSessionCommands";
 
 export type SessionTarget = Extract<ViewTarget, { kind: "agentSession" | "workspaceTerminal" }>;
+export type SessionTabState = SessionRowTabState;
+export type SessionStatusAlert =
+  | "action-required"
+  | "error"
+  | "running"
+  | "completed-unread"
+  | "idle";
+
+const ALERT_DOT_CLASS: Record<Exclude<SessionStatusAlert, "idle">, string> = {
+  "action-required": "size-2 rounded-full bg-amber-500",
+  error: "size-2 rounded-full bg-destructive",
+  running: "size-2 rounded-full bg-sky-500 animate-pulse",
+  "completed-unread": "size-2 rounded-full bg-emerald-500",
+};
 
 export interface SessionRowProps extends ComponentProps<"button"> {
   readonly target: SessionTarget;
@@ -17,6 +35,7 @@ export interface SessionRowProps extends ComponentProps<"button"> {
   readonly isClosing?: boolean;
   readonly onWillClose?: () => Promise<WillCloseRevert | void> | WillCloseRevert | void;
   readonly sessionTitle?: string;
+  readonly statusAlert?: SessionStatusAlert;
   readonly onStartRename?: () => void;
   readonly navigateTo?: (input: {
     readonly to: string;
@@ -32,6 +51,7 @@ export function SessionRow({
   isClosing = false,
   onWillClose,
   sessionTitle,
+  statusAlert = "idle",
   onStartRename,
   navigateTo,
   onClick,
@@ -44,19 +64,10 @@ export function SessionRow({
   className,
   ...props
 }: SessionRowProps) {
-  const isFocused = useWorkbenchStore((state) => {
-    const tab = getActiveTab(state);
-    const focused = tab.panes.get(tab.focusedPaneId);
-    return focused !== undefined && targetsEqual(focused.target, target);
-  });
+  const tabState = useWorkbenchStore((state) => getSessionRowTabState(state, target));
 
-  const isOpenInActiveTab = useWorkbenchStore((state) => {
-    const tab = getActiveTab(state);
-    for (const pane of tab.panes.values()) {
-      if (targetsEqual(pane.target, target)) return true;
-    }
-    return false;
-  });
+  const isFocused = tabState === "active-focused";
+  const isOpenInActiveTab = isFocused || tabState === "active-unfocused";
 
   const workspaceKey = `${target.environmentId}:${target.workspaceId}`;
   const sessionId =
@@ -133,14 +144,17 @@ export function SessionRow({
         "sidebar-session-row-item relative flex min-h-6 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground will-change-transform",
         isBeingDragged && (props.style?.opacity !== undefined ? undefined : "opacity-40"),
         isFocused
-          ? "bg-sidebar-row-active font-medium text-sidebar-foreground"
-          : isOpenInActiveTab
+          ? "bg-sidebar-row-active font-bold text-sidebar-foreground"
+          : tabState === "active-unfocused"
             ? "text-sidebar-foreground"
-            : undefined,
+            : tabState === "background-tab"
+              ? "text-sidebar-foreground/80"
+              : undefined,
         isClosed && "opacity-75",
         className,
       )}
       aria-current={isFocused ? "page" : isOpenInActiveTab ? "true" : undefined}
+      data-session-tab-state={tabState}
       data-session-focused={isFocused ? "true" : "false"}
       data-session-open-in-tab={isOpenInActiveTab ? "true" : "false"}
       aria-description="Open Session (Alt/Option: split right; Alt/Option+Shift: split down)"
@@ -206,8 +220,27 @@ export function SessionRow({
         onAuxClick?.(event);
       }}
     >
-      {isOpenInActiveTab && !isFocused ? (
-        <span aria-hidden="true" className="absolute left-0.5 size-1 rounded-full bg-primary" />
+      <span
+        aria-hidden="true"
+        data-status-gutter="true"
+        data-status-alert={statusAlert}
+        className="pointer-events-none flex size-3.5 shrink-0 items-center justify-center"
+      >
+        {statusAlert !== "idle" ? <span className={ALERT_DOT_CLASS[statusAlert]} /> : null}
+      </span>
+      {tabState === "active-unfocused" ? (
+        <span
+          aria-hidden="true"
+          data-session-indicator="active-unfocused"
+          className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 h-3.5 w-0.5 rounded-full bg-primary/80"
+        />
+      ) : null}
+      {tabState === "background-tab" ? (
+        <span
+          aria-hidden="true"
+          data-session-indicator="background-tab"
+          className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 size-0.5 rounded-full bg-muted-foreground/70"
+        />
       ) : null}
       {props.children}
     </button>
