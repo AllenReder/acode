@@ -5540,6 +5540,84 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.effect.each([
+    { acceptedBeforeResponse: false, expectedTag: "unknown" as const },
+    { acceptedBeforeResponse: true, expectedTag: "accepted" as const },
+  ])(
+    "reads an operation after its response channel disconnects (accepted=$acceptedBeforeResponse)",
+    ({ acceptedBeforeResponse, expectedTag }) =>
+      Effect.gen(function* () {
+        let dispatchCount = 0;
+        const requestReceived = yield* Deferred.make<void>();
+        const releaseDispatch = yield* Deferred.make<void>();
+        const receipts = new Map<CommandId, { readonly sequence: number }>();
+        const operationId = CommandId.make(
+          `cmd-disconnect-${acceptedBeforeResponse ? "accepted" : "pending"}`,
+        );
+        const command = {
+          type: "project.meta.update" as const,
+          commandId: operationId,
+          projectId: ProjectId.make("project-operation-disconnect"),
+          title: "Operation disconnect",
+        };
+
+        yield* buildAppUnderTest({
+          layers: {
+            orchestrationEngine: {
+              dispatch: (incoming) =>
+                Effect.gen(function* () {
+                  dispatchCount += 1;
+                  yield* Deferred.succeed(requestReceived, undefined);
+                  if (!acceptedBeforeResponse) {
+                    yield* Deferred.await(releaseDispatch);
+                  }
+                  const receipt = { sequence: dispatchCount };
+                  receipts.set(incoming.commandId, receipt);
+                  if (acceptedBeforeResponse) {
+                    yield* Deferred.await(releaseDispatch);
+                  }
+                  return receipt;
+                }),
+              getOperationResult: (operation) =>
+                Effect.sync(() => {
+                  const receipt = receipts.get(operation);
+                  return receipt
+                    ? {
+                        _tag: "accepted" as const,
+                        operationId: operation,
+                        sequence: receipt.sequence,
+                      }
+                    : { _tag: "unknown" as const, operationId: operation };
+                }),
+            },
+          },
+        });
+
+        const wsUrl = yield* getWsServerUrl("/ws");
+        const disconnected = yield* Effect.scoped(
+          withWsRpcClient(wsUrl, (client) =>
+            client[ORCHESTRATION_WS_METHODS.dispatchCommand](command),
+          ),
+        ).pipe(Effect.forkChild);
+        yield* Deferred.await(requestReceived);
+        yield* Fiber.interrupt(disconnected);
+
+        const result = yield* Effect.scoped(
+          withWsRpcClient(wsUrl, (client) =>
+            client[ORCHESTRATION_WS_METHODS.getOperationResult]({ operationId }),
+          ),
+        );
+        assert.equal(dispatchCount, 1, "querying must not dispatch the operation again");
+        assert.equal(result._tag, expectedTag);
+        assert.equal(result.operationId, operationId);
+        if (result._tag === "accepted") {
+          assert.equal(result.sequence, 1);
+        }
+
+        yield* Deferred.succeed(releaseDispatch, undefined);
+      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect("returns the durable Awen session from websocket thread creation", () =>
     Effect.gen(function* () {
       const threadId = ThreadId.make("thread-session-result");
