@@ -11,14 +11,17 @@ import {
 } from "@awen/shared/hostProcess";
 import { assert, describe, it } from "@effect/vitest";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
+import { devRunnerStopRequestPath, requestDevRunnerStop } from "./lib/dev-runner-stop.ts";
 import {
   checkPortAvailabilityOnHosts,
   createDevRunnerEnv,
@@ -49,6 +52,22 @@ function mockProcess(exit: number | PlatformError.PlatformError) {
         ? Effect.succeed(ChildProcessSpawner.ExitCode(exit))
         : Effect.fail(exit),
     isRunning: Effect.succeed(false),
+    kill: () => Effect.void,
+    unref: Effect.succeed(Effect.void),
+    stdin: Sink.drain,
+    stdout: Stream.empty,
+    stderr: Stream.empty,
+    all: Stream.empty,
+    getInputFd: () => Sink.drain,
+    getOutputFd: () => Stream.empty,
+  });
+}
+
+function mockPendingProcess() {
+  return ChildProcessSpawner.makeHandle({
+    pid: ChildProcessSpawner.ProcessId(1),
+    exitCode: Effect.never,
+    isRunning: Effect.succeed(true),
     kill: () => Effect.void,
     unref: Effect.succeed(Effect.void),
     stdin: Sink.drain,
@@ -1195,6 +1214,83 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         assert.ok(!error.message.includes(cause.message));
         assert.notProperty(error, "args");
         assert.notInclude(error.message, "secret-token-value");
+      });
+    });
+
+    it.effect("stops through the pid-scoped request file", () => {
+      const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "awen-dev-runner-stop-"));
+
+      return Effect.gen(function* () {
+        const started = yield* Deferred.make<void>();
+        const spawnerLayer = Layer.succeed(
+          ChildProcessSpawner.ChildProcessSpawner,
+          ChildProcessSpawner.make(() =>
+            Deferred.succeed(started, undefined).pipe(Effect.as(mockPendingProcess())),
+          ),
+        );
+
+        const completed = yield* Effect.raceFirst(
+          runDevRunnerWithInput({
+            ...devServerInput,
+            awenHome: root,
+          }).pipe(
+            Effect.provide(Layer.mergeAll(emptyConfigLayer, netServiceLayer, spawnerLayer)),
+            Effect.provideService(HostProcessPlatform, "win32"),
+          ),
+          Effect.gen(function* () {
+            yield* Deferred.await(started);
+            yield* Effect.tryPromise(() => requestDevRunnerStop(root, process.pid));
+            yield* TestClock.adjust("100 millis");
+            return yield* Effect.never;
+          }),
+        );
+
+        assert.equal(completed, undefined);
+        assert.isFalse(NodeFS.existsSync(devRunnerStopRequestPath(root, process.pid)));
+      }).pipe(
+        Effect.ensuring(Effect.sync(() => NodeFS.rmSync(root, { force: true, recursive: true }))),
+      );
+    });
+
+    it.effect("keeps POSIX children attached and detaches Windows children", () => {
+      const captured: Array<{
+        readonly detached: boolean | undefined;
+        readonly platform: "linux" | "win32";
+        readonly windowsHide: boolean | undefined;
+      }> = [];
+
+      const run = (platform: "linux" | "win32") => {
+        const spawnerLayer = Layer.succeed(
+          ChildProcessSpawner.ChildProcessSpawner,
+          ChildProcessSpawner.make((command) => {
+            const options = (
+              command as {
+                readonly options?: { readonly detached?: boolean; readonly windowsHide?: boolean };
+              }
+            ).options;
+            captured.push({
+              detached: options?.detached,
+              platform,
+              windowsHide: options?.windowsHide,
+            });
+            return Effect.succeed(mockProcess(0));
+          }),
+        );
+
+        return runDevRunnerWithInput(devServerInput).pipe(
+          Effect.provide(Layer.mergeAll(emptyConfigLayer, netServiceLayer, spawnerLayer)),
+          Effect.provideService(HostProcessPlatform, platform),
+        );
+      };
+
+      return Effect.gen(function* () {
+        yield* run("linux");
+        yield* run("win32");
+
+        assert.deepStrictEqual(captured, [
+          { detached: false, platform: "linux", windowsHide: undefined },
+          { detached: true, platform: "win32", windowsHide: true },
+        ]);
       });
     });
 
