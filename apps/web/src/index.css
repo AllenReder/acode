@@ -385,6 +385,45 @@ html.material-stage-opaque #root {
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
 }
 
+/* WebView2 cannot sample app content through a backdrop-filter while the DWM
+   window is transparent. Replace that no-op with a denser Fluent-style
+   material: a semi-transparent tint, subtle grain and sheen, an explicit edge,
+   and a deep shadow that keeps the overlay legible above the workbench.
+   macOS keeps the live backdrop filter, and browsers keep the opaque fallback
+   below. */
+html.material-stage-windows .material-surface-overlay {
+  --material-windows-overlay-opacity: calc(var(--material-overlay-opacity, 0.9) * 90%);
+  --material-windows-overlay-tint: color-mix(
+    in srgb,
+    var(--material-overlay-tint) 94%,
+    var(--foreground)
+  );
+  background-color: color-mix(
+    in srgb,
+    var(--material-windows-overlay-tint) var(--material-windows-overlay-opacity),
+    transparent
+  );
+  background-image:
+    linear-gradient(135deg, color-mix(in srgb, var(--foreground) 6%, transparent), transparent 46%),
+    var(--surface-grain);
+  background-repeat: no-repeat, repeat;
+  background-size: auto, var(--surface-grain-size);
+  border: 1px solid color-mix(in srgb, var(--foreground) 15%, transparent);
+  box-shadow:
+    inset 0 1px color-mix(in srgb, var(--foreground) 6%, transparent),
+    0 18px 48px -20px rgb(0 0 0 / 45%),
+    0 6px 16px -10px rgb(0 0 0 / 28%);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+
+  @variant dark {
+    box-shadow:
+      inset 0 1px color-mix(in srgb, var(--foreground) 9%, transparent),
+      0 22px 56px -20px rgb(0 0 0 / 85%),
+      0 8px 20px -12px rgb(0 0 0 / 65%);
+  }
+}
+
 /* Native compositor blur is unavailable on Linux and in the browser. Keep those
    regions fully opaque, but derive their solids from the semantic palette so
    Sidebar, Topbar, Workbench, and Overlay do not collapse into one flat plane. */
