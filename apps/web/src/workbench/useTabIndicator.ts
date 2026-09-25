@@ -19,17 +19,38 @@ function escapeSelector(value: string): string {
   return value.replace(/["\\]/g, "\\$&");
 }
 
+function geometryFromElement(
+  stripRect: DOMRect,
+  scrollLeft: number,
+  element: HTMLElement,
+): TabIndicatorGeometry {
+  const rect = element.getBoundingClientRect();
+  return { left: rect.left - stripRect.left + scrollLeft, width: rect.width };
+}
+
+function measureAllTabs(strip: HTMLElement): Map<string, TabIndicatorGeometry> {
+  const map = new Map<string, TabIndicatorGeometry>();
+  const stripRect = strip.getBoundingClientRect();
+  const scrollLeft = strip.scrollLeft;
+  for (const element of strip.querySelectorAll<HTMLElement>("[data-tab-id]")) {
+    const id = element.dataset.tabId;
+    if (id !== undefined) map.set(id, geometryFromElement(stripRect, scrollLeft, element));
+  }
+  return map;
+}
+
 function measureTabGeometry(strip: HTMLElement, tabId: string): TabIndicatorGeometry | null {
   const element = strip.querySelector<HTMLElement>(`[data-tab-id="${escapeSelector(tabId)}"]`);
   if (element === null) return null;
-  const stripRect = strip.getBoundingClientRect();
-  const rect = element.getBoundingClientRect();
-  return { left: rect.left - stripRect.left + strip.scrollLeft, width: rect.width };
+  return geometryFromElement(strip.getBoundingClientRect(), strip.scrollLeft, element);
 }
 
-function writeIndicatorGeometry(style: CSSStyleDeclaration, geometry: TabIndicatorGeometry): void {
-  style.transform = `translateX(${geometry.left}px)`;
-  style.width = `${geometry.width}px`;
+function writeTransform(style: CSSStyleDeclaration, left: number): void {
+  style.transform = `translateX(${left}px)`;
+}
+
+function writeWidth(style: CSSStyleDeclaration, width: number): void {
+  style.width = `${width}px`;
 }
 
 export interface TabIndicatorOptions {
@@ -47,6 +68,11 @@ export interface TabIndicatorOptions {
 /**
  * Positions the shared Topbar Tab underbar (ADR-0019). It follows Tab switch
  * progress directly and animates with Apple fluid easing on ordinary changes.
+ *
+ * Reading layout (`getBoundingClientRect`) is what stalls a switch: the cards have
+ * just been repositioned, so any read forces a synchronous reflow of the whole
+ * (possibly heavy) card subtree. Tab geometry is therefore cached at rest and
+ * reused for the whole switch, and only `transform` is written per frame.
  */
 export function useTabIndicator(
   options: TabIndicatorOptions,
@@ -54,11 +80,10 @@ export function useTabIndicator(
   const { stripRef, activeTabId, revision, dragging } = options;
   const indicatorRef = useRef<HTMLSpanElement | null>(null);
   const lastGeometryRef = useRef<TabIndicatorGeometry | null>(null);
-  const transitionGeometryRef = useRef<{
-    readonly key: string;
-    readonly from: TabIndicatorGeometry;
-    readonly to: TabIndicatorGeometry;
-  } | null>(null);
+  const cacheRef = useRef<{ key: string | null; map: Map<string, TabIndicatorGeometry> }>({
+    key: null,
+    map: new Map(),
+  });
   const transition = useTabTransition();
 
   useLayoutEffect(() => {
@@ -70,7 +95,8 @@ export function useTabIndicator(
     if (revision === "") return;
 
     const write = (geometry: TabIndicatorGeometry) => {
-      writeIndicatorGeometry(indicatorStyle, geometry);
+      writeTransform(indicatorStyle, geometry.left);
+      writeWidth(indicatorStyle, geometry.width);
       lastGeometryRef.current = geometry;
     };
 
@@ -96,9 +122,21 @@ export function useTabIndicator(
       );
     };
 
+    // Re-measure the strip only when its own layout changed, never per switch.
+    if (!dragging && cacheRef.current.key !== revision) {
+      cacheRef.current = { key: revision, map: measureAllTabs(strip) };
+    }
+    const geometryFor = (tabId: string): TabIndicatorGeometry | null => {
+      if (dragging) return measureTabGeometry(strip, tabId);
+      const cached = cacheRef.current.map.get(tabId);
+      if (cached !== undefined) return cached;
+      const geometry = measureTabGeometry(strip, tabId);
+      if (geometry !== null) cacheRef.current.map.set(tabId, geometry);
+      return geometry;
+    };
+
     if (transition === null) {
-      transitionGeometryRef.current = null;
-      const geometry = measureTabGeometry(strip, activeTabId);
+      const geometry = geometryFor(activeTabId);
       if (geometry !== null) {
         if (dragging) write(geometry);
         else animateTo(geometry);
@@ -110,22 +148,15 @@ export function useTabIndicator(
     if (typeof indicator.getAnimations === "function") {
       indicator.getAnimations().forEach((animation) => animation.cancel());
     }
-    // The Topbar Tabs do not move while the Workbench cards slide, so measure the
-    // two endpoints once. Re-measuring every frame would force a synchronous
-    // reflow of the whole (possibly heavy) card subtree on each frame.
-    const cacheKey = `${transition.fromTabId}>${transition.toTabId}`;
-    if (transitionGeometryRef.current?.key !== cacheKey) {
-      const from = measureTabGeometry(strip, transition.fromTabId);
-      const to = measureTabGeometry(strip, transition.toTabId);
-      transitionGeometryRef.current =
-        from !== null && to !== null ? { key: cacheKey, from, to } : null;
-    }
-    const cached = transitionGeometryRef.current;
-    if (cached === null) return;
+    const from = geometryFor(transition.fromTabId);
+    const to = geometryFor(transition.toTabId);
+    if (from === null || to === null) return;
+    // Width is written once; only the transform changes per frame.
+    writeWidth(indicatorStyle, from.width);
     const applyFrame = () => {
       const frame = getTabTransitionFrame();
       if (frame === null) return;
-      write(interpolateIndicatorGeometry(cached.from, cached.to, frame.progress));
+      writeTransform(indicatorStyle, interpolateIndicatorGeometry(from, to, frame.progress).left);
     };
     applyFrame();
     return subscribeTabTransitionFrame(applyFrame);
@@ -135,13 +166,15 @@ export function useTabIndicator(
     const strip = stripRef.current;
     if (strip === null || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
+      cacheRef.current = { key: null, map: new Map() };
       if (getTabTransition() !== null) return;
       const indicator = indicatorRef.current;
       const indicatorStyle = (indicator as { style?: CSSStyleDeclaration } | null)?.style;
       if (indicator === null || !indicatorStyle) return;
       const geometry = measureTabGeometry(strip, activeTabId);
       if (geometry === null) return;
-      writeIndicatorGeometry(indicatorStyle, geometry);
+      writeTransform(indicatorStyle, geometry.left);
+      writeWidth(indicatorStyle, geometry.width);
       lastGeometryRef.current = geometry;
     });
     observer.observe(strip);
