@@ -9,12 +9,31 @@ export function detectAgentDriverFromCommand(
 ): ProviderDriverKind | null {
   if (!command) return null;
   const normalized = command.toLowerCase().trim();
-  if (normalized === "opencode") return ProviderDriverKind.make("opencode");
-  if (normalized === "claude" || normalized === "claude-code") {
+  if (
+    normalized === "opencode" ||
+    /(?:^|[\\/_-])opencode(?:\.exe|\.cmd|\.js|\.ps1)?$/i.test(normalized)
+  ) {
+    return ProviderDriverKind.make("opencode");
+  }
+  if (
+    normalized === "claude" ||
+    normalized === "claude-code" ||
+    /(?:^|[\\/_-])claude(?:-code)?(?:\.exe|\.cmd|\.js|\.ps1)?$/i.test(normalized)
+  ) {
     return ProviderDriverKind.make("claudeAgent");
   }
-  if (normalized === "codex") return ProviderDriverKind.make("codex");
-  if (normalized === "cursor") return ProviderDriverKind.make("cursor");
+  if (
+    normalized === "codex" ||
+    /(?:^|[\\/_-])codex(?:\.exe|\.cmd|\.js|\.ps1)?$/i.test(normalized)
+  ) {
+    return ProviderDriverKind.make("codex");
+  }
+  if (
+    normalized === "cursor" ||
+    /(?:^|[\\/_-])cursor(?:\.exe|\.cmd|\.js|\.ps1)?$/i.test(normalized)
+  ) {
+    return ProviderDriverKind.make("cursor");
+  }
   return null;
 }
 

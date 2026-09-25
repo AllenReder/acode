@@ -1001,8 +1001,20 @@ function WorkspaceTerminalSessionRow({
     threadId: null,
     workspaceId: workspace.id,
   });
+  const runtimeTerminalId = runtimeTerminalIdForTarget({
+    kind: "workspaceTerminal",
+    environmentId: project.environmentId,
+    workspaceId: workspace.id,
+    terminalSessionId: session.id as TerminalSessionId,
+  });
   const terminalSession = knownSessions.find(
-    (item) => item.state.summary?.terminalId === session.id,
+    (item) =>
+      item.target.terminalId === session.id ||
+      item.state.summary?.sessionId === session.id ||
+      item.state.summary?.terminalId === session.id ||
+      (runtimeTerminalId !== null &&
+        (item.target.terminalId === runtimeTerminalId ||
+          item.state.summary?.terminalId === runtimeTerminalId)),
   );
   const summary = terminalSession?.state.summary;
   const TerminalOrAgentIcon = resolveTerminalIcon(summary);

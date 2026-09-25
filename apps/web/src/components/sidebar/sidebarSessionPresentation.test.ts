@@ -14,11 +14,15 @@ describe("sidebarSessionPresentation", () => {
   describe("detectAgentDriverFromCommand", () => {
     it("detects known agent CLIs case-insensitively and ignores non-agents", () => {
       expect(detectAgentDriverFromCommand("opencode")).toBe("opencode");
+      expect(detectAgentDriverFromCommand("opencode.exe")).toBe("opencode");
       expect(detectAgentDriverFromCommand("OpenCode")).toBe("opencode");
       expect(detectAgentDriverFromCommand("claude")).toBe("claudeAgent");
+      expect(detectAgentDriverFromCommand("claude.exe")).toBe("claudeAgent");
       expect(detectAgentDriverFromCommand("claude-code")).toBe("claudeAgent");
       expect(detectAgentDriverFromCommand("codex")).toBe("codex");
+      expect(detectAgentDriverFromCommand("codex.exe")).toBe("codex");
       expect(detectAgentDriverFromCommand("cursor")).toBe("cursor");
+      expect(detectAgentDriverFromCommand("cursor.exe")).toBe("cursor");
       expect(detectAgentDriverFromCommand("bash")).toBeNull();
       expect(detectAgentDriverFromCommand("node")).toBeNull();
       expect(detectAgentDriverFromCommand(null)).toBeNull();

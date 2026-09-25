@@ -385,7 +385,9 @@ function truncateTerminalWireLabel(value: string): string {
   return value.slice(0, MAX_TERMINAL_LABEL_LENGTH);
 }
 
-function normalizeChildCommandName(raw: string, platform: NodeJS.Platform): string | null {
+const RUNTIME_LAUNCHERS = new Set(["node", "bun", "deno", "python", "python3", "npx"]);
+
+export function normalizeChildCommandName(raw: string, platform: NodeJS.Platform): string | null {
   let trimmed = raw.trim();
   if (trimmed.length === 0) return null;
   if (
@@ -394,13 +396,42 @@ function normalizeChildCommandName(raw: string, platform: NodeJS.Platform): stri
   ) {
     trimmed = trimmed.slice(1, -1).trim();
   }
-  const firstToken = (trimmed.split(/\s+/)[0] ?? trimmed).trim();
-  if (firstToken.length === 0) return null;
+
+  const tokens: string[] = [];
+  const tokenRegex = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
+  let match: RegExpExecArray | null;
+  while ((match = tokenRegex.exec(trimmed)) !== null) {
+    tokens.push(match[1] ?? match[2] ?? match[0]);
+  }
+
+  const firstToken = tokens[0]?.trim();
+  if (!firstToken || firstToken.length === 0) return null;
   const separators = platform === "win32" ? /[\\/]/ : /\//;
   const base = firstToken.split(separators).at(-1) ?? firstToken;
   const withoutExe =
     platform === "win32" && base.toLowerCase().endsWith(".exe") ? base.slice(0, -4) : base;
-  return withoutExe.length > 0 ? withoutExe : null;
+  if (withoutExe.length === 0) return null;
+
+  if (RUNTIME_LAUNCHERS.has(withoutExe.toLowerCase())) {
+    for (let i = 1; i < tokens.length; i++) {
+      const token = tokens[i]!.trim();
+      if (token.startsWith("-") || (platform === "win32" && /^\/[a-zA-Z0-9?]+$/.test(token))) {
+        continue;
+      }
+      const tokenBase = token.replace(/^['"]|['"]$/g, "").split(separators).at(-1);
+      if (tokenBase) {
+        const tokenWithoutExt =
+          platform === "win32" && tokenBase.toLowerCase().endsWith(".exe")
+            ? tokenBase.slice(0, -4)
+            : tokenBase.replace(/\.(?:[cm]?[jt]sx?|py)$/i, "");
+        if (tokenWithoutExt.length > 0) {
+          return tokenWithoutExt;
+        }
+      }
+    }
+  }
+
+  return withoutExe;
 }
 
 function terminalWireLabel(session: TerminalSessionState): string {
@@ -835,7 +866,7 @@ const posixProcessTableSnapshot = Effect.fn("terminal.posixProcessTableSnapshot"
   const result = yield* processRunner
     .run({
       command: psCommand,
-      args: ["-eo", "pid=,ppid=,comm="],
+      args: ["-eo", "pid=,ppid=,args="],
       timeout: "1 second",
       maxOutputBytes: 524_288,
       outputMode: "truncate",
@@ -871,7 +902,7 @@ const windowsProcessTableSnapshot = Effect.fn("terminal.windowsProcessTableSnaps
   > {
     const processRunner = yield* ProcessRunner.ProcessRunner;
     const command =
-      'Get-CimInstance Win32_Process -ErrorAction Stop | ForEach-Object { Write-Output "$($_.ProcessId)|$($_.ParentProcessId)|$($_.Name)" }';
+      'Get-CimInstance Win32_Process -ErrorAction Stop | ForEach-Object { $cmd = if ($_.CommandLine) { $_.CommandLine.Trim() } else { $_.Name }; Write-Output "$($_.ProcessId)|$($_.ParentProcessId)|$cmd" }';
     const result = yield* processRunner
       .run({
         command: "powershell.exe",
@@ -895,9 +926,11 @@ const windowsProcessTableSnapshot = Effect.fn("terminal.windowsProcessTableSnaps
       });
     }
     const processes = result.stdout.split(/\r?\n/g).flatMap((line) => {
-      const [pidRaw, ppidRaw, name = ""] = line.trim().split("|", 3);
-      const pid = Number(pidRaw);
-      const ppid = Number(ppidRaw);
+      const parts = line.trim().split("|");
+      if (parts.length < 3) return [];
+      const pid = Number(parts[0]);
+      const ppid = Number(parts[1]);
+      const name = parts.slice(2).join("|").trim();
       return Number.isInteger(pid) && pid > 0 && Number.isInteger(ppid)
         ? [{ pid, ppid, name }]
         : [];
