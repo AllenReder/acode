@@ -208,10 +208,25 @@ and focus across Workbench Tabs: `active-focused` (focused in the active Tab),
 (open in a non-active Tab), and `unopened` (not open in any Tab).
 _Avoid_: Open state, Tab presence, Session status
 
+**Session Status**:
+The current activity, blockage, or failure of a Session, independent of Sidebar
+focus or Workbench Tab presence. One of `approval`, `input`, `plan`, `working`,
+`monitoring`, `failed`, or `ready`; `ready` is the unlabeled resting state. The
+same vocabulary covers Agent and Terminal sessions.
+_Avoid_: Session state, Alert, Indicator. Not Session Row Tab State, which
+describes where a Session is open rather than what it is doing.
+
+**Unread Completion**:
+The signal that a `ready` Session's latest turn completed after the Session was
+last focused, so the user has not seen the finished turn. It is a decoration on
+`ready`, not its own Session Status, and it is the only Sidebar status signal
+that focus acknowledges.
+_Avoid_: Completed status, Done badge, Unread message
+
 **Status Gutter**:
-The fixed-width vertical slot preceding a Sidebar Session row that hosts status
-alert indicators (such as waiting for user action, background running, error, or
-unread turn completion) while keeping Session provider icons vertically aligned.
+The fixed-width vertical slot preceding a Sidebar Session row that hosts the
+Session Status dot, plus the Unread Completion dot on a `ready` row, while
+keeping Session provider icons vertically aligned.
 _Avoid_: Margin slot, Alert column, Left padding
 
 **Tab title**:
@@ -403,3 +418,5 @@ _Avoid_: Chat wallpaper, Session background, View background
 - A Workspace header in the Sidebar displays its active Git branch on the left and its Workspace directory name on the right.
 - A Sidebar Session row visually differentiates four Tab states (`active-focused`, `active-unfocused`, `background-tab`, and `unopened`) via active backgrounds, trailing edge indicators (vertical line for active-unfocused, dot for background-tab), and typography without altering Session identity.
 - Terminal Sessions dynamically display the active agent provider icon when an agent CLI runs as their foreground process.
+- A Session's Session Status is focus-independent: focusing a Session never changes or hides what it reports. Focus only acknowledges the Session's Unread Completion.
+- Unread Completion is client-owned: a `ready` Session shows it while its latest turn completed after the Session was last focused, and focusing the Session clears it until a later turn completes.

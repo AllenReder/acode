@@ -4,7 +4,9 @@ Awen projects the active Git branch directly on `AwenWorkspaceShell` to display 
 
 ## Status
 
-Accepted.
+Accepted. Session-row status derivation and alert dismissal are superseded by
+[ADR-0020](./0020-unified-session-status-and-unread-completion.md); the Status
+Gutter, the four Session Row Tab States, and terminal agent detection here stand.
 
 ## Context
 
