@@ -1,6 +1,7 @@
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { CODEX_APPROVAL_REQUEST_KINDS } from "../approvalRequestCapabilities.ts";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
@@ -67,6 +68,7 @@ const CODEX_PRESENTATION = {
   displayName: "Codex",
   showInteractionModeToggle: true,
   reportsContextWindow: true,
+  approvalRequestKinds: CODEX_APPROVAL_REQUEST_KINDS,
 } as const;
 
 export interface CodexAppServerProviderSnapshot {

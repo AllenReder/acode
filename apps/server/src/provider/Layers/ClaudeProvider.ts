@@ -5,6 +5,7 @@ import {
 } from "@awen/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import { CLAUDE_APPROVAL_REQUEST_KINDS } from "../approvalRequestCapabilities.ts";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -58,6 +59,7 @@ const CLAUDE_PRESENTATION = {
   displayName: "Claude",
   showInteractionModeToggle: true,
   reportsContextWindow: true,
+  approvalRequestKinds: CLAUDE_APPROVAL_REQUEST_KINDS,
 } as const;
 function toTitleCaseWords(value: string): string {
   const parts: Array<string> = [];

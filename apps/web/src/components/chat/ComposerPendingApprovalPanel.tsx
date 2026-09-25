@@ -5,12 +5,14 @@ import { cn } from "~/lib/utils";
 interface ComposerPendingApprovalPanelProps {
   approval: PendingApproval;
   pendingCount: number;
+  unsupportedReason?: string | null;
   className?: string;
 }
 
 export const ComposerPendingApprovalPanel = memo(function ComposerPendingApprovalPanel({
   approval,
   pendingCount,
+  unsupportedReason = null,
   className,
 }: ComposerPendingApprovalPanelProps) {
   const fallbackLabel =
@@ -52,6 +54,15 @@ export const ComposerPendingApprovalPanel = memo(function ComposerPendingApprova
       {pendingCount > 1 ? (
         <span className="shrink-0 text-[10px] font-medium text-muted-foreground tabular-nums">
           1/{pendingCount}
+        </span>
+      ) : null}
+      {unsupportedReason ? (
+        <span
+          data-approval-unsupported="true"
+          role="status"
+          className="shrink-0 text-[11px] font-medium text-destructive-foreground"
+        >
+          {unsupportedReason}
         </span>
       ) : null}
     </span>

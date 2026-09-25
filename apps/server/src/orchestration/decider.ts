@@ -93,7 +93,11 @@ function openRequests(thread: Pick<OrchestrationThread, "activities">) {
     if (requestId === null) continue;
     if (activity.kind === "approval.requested" || activity.kind === "user-input.requested") {
       requests.set(requestId, activity);
-    } else if (activity.kind === "approval.resolved" || activity.kind === "user-input.resolved") {
+    } else if (
+      activity.kind === "approval.resolved" ||
+      activity.kind === "approval.respond.already-resolved" ||
+      activity.kind === "user-input.resolved"
+    ) {
       requests.delete(requestId);
     } else if (
       (activity.kind === "provider.approval.respond.failed" ||

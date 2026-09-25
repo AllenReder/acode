@@ -8,6 +8,7 @@ import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import { OPENCODE_APPROVAL_REQUEST_KINDS } from "../approvalRequestCapabilities.ts";
 
 import { createModelCapabilities } from "@awen/shared/model";
 import { compareSemverVersions } from "@awen/shared/semver";
@@ -31,6 +32,7 @@ import * as OpenCodeServerOwner from "../OpenCodeServerOwner.ts";
 const OPENCODE_PRESENTATION = {
   displayName: "OpenCode",
   showInteractionModeToggle: false,
+  approvalRequestKinds: OPENCODE_APPROVAL_REQUEST_KINDS,
 } as const;
 const OPENCODE_VERSION_PROBE_TIMEOUT = "4 seconds";
 

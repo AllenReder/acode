@@ -1,6 +1,7 @@
 import type {
   OrchestrationClientOrigin,
   OrchestrationEvent,
+  OrchestrationOperationResult,
   OrchestrationReadModel,
   ProjectId,
   ThreadId,
@@ -447,11 +448,36 @@ const makeOrchestrationEngine = Effect.gen(function* () {
       return yield* Deferred.await(result);
     });
 
+  const getOperationResult: OrchestrationEngineShape["getOperationResult"] = (operationId) =>
+    commandReceiptRepository.getByCommandId({ commandId: operationId }).pipe(
+      Effect.map(
+        Option.match({
+          onNone: (): OrchestrationOperationResult => ({
+            _tag: "unknown",
+            operationId,
+          }),
+          onSome: (receipt): OrchestrationOperationResult =>
+            receipt.status === "accepted"
+              ? {
+                  _tag: "accepted",
+                  operationId,
+                  sequence: receipt.resultSequence,
+                }
+              : {
+                  _tag: "rejected",
+                  operationId,
+                  error: receipt.error ?? "Previously rejected.",
+                },
+        }),
+      ),
+    );
+
   return {
     readEvents,
     readThreadEvents,
     getThreadReplayStats,
     dispatch,
+    getOperationResult,
     subscribeDomainEvents: PubSub.subscribe(eventPubSub).pipe(Effect.map(Stream.fromSubscription)),
     // Each access creates a fresh PubSub subscription so that multiple
     // consumers (wsServer, ProviderRuntimeIngestion, CheckpointReactor, etc.)

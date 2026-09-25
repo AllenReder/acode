@@ -459,6 +459,29 @@ describe("pending questions", () => {
   });
 });
 
+it("closes an approval when another client already handled it", () => {
+  const requested = makeActivity({
+    id: "approval-already-handled-requested",
+    kind: "approval.requested",
+    payload: { requestId: "request-already-handled", requestKind: "command" },
+  });
+  const handled = makeActivity({
+    id: "approval-already-handled",
+    kind: "approval.respond.already-resolved",
+    createdAt: "2026-02-23T00:00:01.000Z",
+    payload: {
+      requestId: "request-already-handled",
+      decision: "accept",
+      attemptedDecision: "decline",
+    },
+  });
+
+  expect(derivePendingRequests([requested, handled])).toEqual({
+    approvals: [],
+    userInputs: [],
+  });
+});
+
 describe.each(["approval", "user-input"])("%s request completion", (requestKind) => {
   const requested = makeActivity({
     id: `${requestKind}-requested`,

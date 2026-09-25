@@ -19,6 +19,7 @@ import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import { OPENCODE_APPROVAL_REQUEST_KINDS } from "../approvalRequestCapabilities.ts";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Fiber from "effect/Fiber";
@@ -3920,6 +3921,8 @@ export function makeOpenCodeAdapter(
       provider: PROVIDER,
       capabilities: {
         sessionModelSwitch: "in-session",
+
+        approvalRequestKinds: OPENCODE_APPROVAL_REQUEST_KINDS,
       },
       startSession,
       sendTurn,

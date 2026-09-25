@@ -42,6 +42,7 @@ import {
   type OrchestrationShellStreamEvent,
   type OrchestrationShellStreamItem,
   OrchestrationGetFullThreadDiffError,
+  OrchestrationGetOperationResultError,
   OrchestrationGetSnapshotError,
   OrchestrationSearchThreadsError,
   OrchestrationGetTurnDiffError,
@@ -2010,6 +2011,26 @@ const makeWsRpcLayer = (
                         message: "Failed to dispatch orchestration command",
                         cause,
                       }),
+                ),
+              ),
+              { "rpc.aggregate": "orchestration" },
+            ),
+          [ORCHESTRATION_WS_METHODS.getOperationResult]: (input) =>
+            observeRpcEffect(
+              ORCHESTRATION_WS_METHODS.getOperationResult,
+              (
+                orchestrationEngine.getOperationResult?.(input.operationId) ??
+                Effect.succeed({
+                  _tag: "unknown" as const,
+                  operationId: input.operationId,
+                })
+              ).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new OrchestrationGetOperationResultError({
+                      message: "Failed to read the operation result",
+                      cause,
+                    }),
                 ),
               ),
               { "rpc.aggregate": "orchestration" },

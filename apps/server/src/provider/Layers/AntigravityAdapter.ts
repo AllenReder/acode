@@ -21,6 +21,7 @@ import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import { ANTIGRAVITY_APPROVAL_REQUEST_KINDS } from "../approvalRequestCapabilities.ts";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
@@ -1247,7 +1248,11 @@ export const makeAntigravityAdapter = Effect.fn("makeAntigravityAdapter")(functi
 
   return {
     provider: PROVIDER,
-    capabilities: { sessionModelSwitch: "in-session", supportsConversationRollback: false },
+    capabilities: {
+      sessionModelSwitch: "in-session",
+      supportsConversationRollback: false,
+      approvalRequestKinds: ANTIGRAVITY_APPROVAL_REQUEST_KINDS,
+    },
     compaction: { type: "slash-command", command: "/compact" },
     startSession,
     sendTurn,

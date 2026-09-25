@@ -970,6 +970,8 @@ const buildAppUnderTest = (options?: {
                 hasCreateEvent: false,
               }),
             dispatch: () => Effect.succeed({ sequence: 0 }),
+            getOperationResult: (operationId) =>
+              Effect.succeed({ _tag: "unknown" as const, operationId }),
             streamDomainEvents: Stream.empty,
             latestSequence: Effect.succeed(0),
             ...options?.layers?.orchestrationEngine,
@@ -5411,6 +5413,130 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       assert.isAtLeast(response.sequence, 0);
       assert.equal(stat.type, "Directory");
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("replays an operation by identity without dispatching it twice", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const workspaceRoot = yield* fs.makeTempDirectoryScoped({
+        prefix: "awen-ws-operation-result-",
+      });
+      let nextSequence = 0;
+      const receipts = new Map<
+        CommandId,
+        { readonly sequence: number; readonly command: OrchestrationCommand }
+      >();
+      yield* buildAppUnderTest({
+        layers: {
+          orchestrationEngine: {
+            dispatch: (command) =>
+              Effect.sync(() => {
+                const existing = receipts.get(command.commandId);
+                if (existing) {
+                  return { sequence: existing.sequence };
+                }
+                nextSequence += 1;
+                receipts.set(command.commandId, { sequence: nextSequence, command });
+                return { sequence: nextSequence };
+              }),
+            getOperationResult: (operationId) =>
+              Effect.sync(() => {
+                const receipt = receipts.get(operationId);
+                return receipt
+                  ? {
+                      _tag: "accepted" as const,
+                      operationId,
+                      sequence: receipt.sequence,
+                    }
+                  : { _tag: "unknown" as const, operationId };
+              }),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const operationId = CommandId.make("cmd-ws-operation-result-turn");
+      const result = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          Effect.gen(function* () {
+            yield* client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
+              type: "project.create",
+              commandId: CommandId.make("cmd-ws-operation-result-project"),
+              projectId: ProjectId.make("project-ws-operation-result"),
+              title: "Operation result",
+              workspaceRoot,
+              defaultModelSelection: {
+                instanceId: ProviderInstanceId.make("codex"),
+                model: "gpt-5-codex",
+              },
+              createdAt: "2026-01-01T00:00:00.000Z",
+            });
+            yield* client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
+              type: "thread.create",
+              commandId: CommandId.make("cmd-ws-operation-result-thread"),
+              threadId: ThreadId.make("thread-ws-operation-result"),
+              projectId: ProjectId.make("project-ws-operation-result"),
+              title: "Operation result",
+              modelSelection: {
+                instanceId: ProviderInstanceId.make("codex"),
+                model: "gpt-5-codex",
+              },
+              runtimeMode: "full-access",
+              interactionMode: "default",
+              branch: null,
+              worktreePath: null,
+              createdAt: "2026-01-01T00:00:00.000Z",
+            });
+            const turn = {
+              type: "thread.turn.start" as const,
+              commandId: operationId,
+              threadId: ThreadId.make("thread-ws-operation-result"),
+              message: {
+                messageId: MessageId.make("msg-ws-operation-result"),
+                role: "user" as const,
+                text: "hello",
+                attachments: [],
+              },
+              runtimeMode: "full-access" as const,
+              interactionMode: "default" as const,
+              createdAt: "2026-01-01T00:00:00.000Z",
+            };
+            const first = yield* client[ORCHESTRATION_WS_METHODS.dispatchCommand](turn);
+            const replay = yield* client[ORCHESTRATION_WS_METHODS.dispatchCommand](turn);
+            const accepted = yield* client[ORCHESTRATION_WS_METHODS.getOperationResult]({
+              operationId,
+            });
+            const unknown = yield* client[ORCHESTRATION_WS_METHODS.getOperationResult]({
+              operationId: CommandId.make("cmd-ws-operation-result-unseen"),
+            });
+            const secondTurn = yield* client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
+              ...turn,
+              commandId: CommandId.make("cmd-ws-operation-result-second-turn"),
+              message: {
+                ...turn.message,
+                messageId: MessageId.make("msg-ws-operation-result-second"),
+                text: "hello again",
+              },
+              createdAt: "2026-01-01T00:00:01.000Z",
+            });
+            return { first, replay, accepted, unknown, secondTurn };
+          }),
+        ),
+      );
+
+      assert.deepEqual(result.replay, result.first);
+      assert.deepEqual(result.accepted, {
+        _tag: "accepted",
+        operationId,
+        sequence: result.first.sequence,
+      });
+      assert.deepEqual(result.unknown, {
+        _tag: "unknown",
+        operationId: CommandId.make("cmd-ws-operation-result-unseen"),
+      });
+      assert.isAbove(result.secondTurn.sequence, result.first.sequence);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 

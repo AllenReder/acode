@@ -465,6 +465,7 @@ export function toolGroupAction(entry: WorkLogPresentationEntry): ToolGroupActio
   if (
     entry.sourceActivityKind === "approval.requested" ||
     entry.sourceActivityKind === "approval.resolved" ||
+    entry.sourceActivityKind === "approval.respond.already-resolved" ||
     entry.sourceActivityKind === "provider.approval.respond.failed"
   ) {
     return "update";

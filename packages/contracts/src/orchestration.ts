@@ -36,6 +36,7 @@ import { AwenAgentSessionShell, AwenProjectShell, WorkspaceOrigin } from "./work
 
 export const ORCHESTRATION_WS_METHODS = {
   dispatchCommand: "orchestration.dispatchCommand",
+  getOperationResult: "orchestration.getOperationResult",
   getWorkflowScript: "orchestration.getWorkflowScript",
   getTurnDiff: "orchestration.getTurnDiff",
   getFullThreadDiff: "orchestration.getFullThreadDiff",
@@ -2242,6 +2243,34 @@ export const DispatchResult = Schema.Struct({
 });
 export type DispatchResult = typeof DispatchResult.Type;
 
+export const OrchestrationGetOperationResultInput = Schema.Struct({
+  /** Stable command receipt identity retained by a client until the result is known. */
+  operationId: CommandId,
+});
+export type OrchestrationGetOperationResultInput = typeof OrchestrationGetOperationResultInput.Type;
+
+/**
+ * Durable acceptance result for one operation identity.
+ *
+ * `unknown` means this daemon has no receipt for the identity. It does not
+ * assert that the operation failed, and callers must not retry an irreversible
+ * operation solely from this answer.
+ */
+export const OrchestrationOperationResult = Schema.Union([
+  Schema.TaggedStruct("accepted", {
+    operationId: CommandId,
+    sequence: NonNegativeInt,
+  }),
+  Schema.TaggedStruct("rejected", {
+    operationId: CommandId,
+    error: Schema.String,
+  }),
+  Schema.TaggedStruct("unknown", {
+    operationId: CommandId,
+  }),
+]);
+export type OrchestrationOperationResult = typeof OrchestrationOperationResult.Type;
+
 export const OrchestrationGetTurnDiffInput = TurnCountRange.mapFields(
   Struct.assign({
     threadId: ThreadId,
@@ -2342,6 +2371,10 @@ export const OrchestrationRpcSchemas = {
     input: ClientOrchestrationCommand,
     output: DispatchResult,
   },
+  getOperationResult: {
+    input: OrchestrationGetOperationResultInput,
+    output: OrchestrationOperationResult,
+  },
   getWorkflowScript: {
     input: OrchestrationGetWorkflowScriptInput,
     output: OrchestrationGetWorkflowScriptResult,
@@ -2386,6 +2419,14 @@ export class OrchestrationDispatchCommandError extends Schema.TaggedError<Orches
     message: TrimmedNonEmptyString,
     cause: Schema.optional(Schema.Defect()),
     bootstrapThreadDisposition: Schema.optional(Schema.Literal("deleted")),
+  },
+) {}
+
+export class OrchestrationGetOperationResultError extends Schema.TaggedError<OrchestrationGetOperationResultError>()(
+  "OrchestrationGetOperationResultError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect()),
   },
 ) {}
 

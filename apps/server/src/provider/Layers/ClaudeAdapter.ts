@@ -76,6 +76,7 @@ import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import { CLAUDE_APPROVAL_REQUEST_KINDS } from "../approvalRequestCapabilities.ts";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Fiber from "effect/Fiber";
@@ -5455,6 +5456,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "in-session",
+      approvalRequestKinds: CLAUDE_APPROVAL_REQUEST_KINDS,
     },
     compaction: { type: "slash-command", command: "/compact" },
     startSession,
