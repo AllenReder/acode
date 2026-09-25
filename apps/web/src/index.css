@@ -2326,7 +2326,11 @@ html[data-workbench-window-chrome] {
 .workbench-viewport[data-layout-mode="bsp"] {
   overflow: hidden;
 }
-/* Stacked Tab switch (ADR-0019): the source and target Tabs become two cards. */
+/* Stacked Tab switch (ADR-0019): the source and target Tabs become two cards.
+   Keep this rule to positioning only. `will-change`, `backface-visibility`,
+   `border-radius`, and `overflow` all make the browser create a render surface
+   (backdrop root) around the card, which drops the `mask`/`clip-path` on
+   descendant `backdrop-filter` glass and paints it as a hard rectangle. */
 .workbench-viewport-container[data-tab-transition="true"] {
   overflow: hidden;
 }
@@ -2334,12 +2338,16 @@ html[data-workbench-window-chrome] {
   position: absolute;
   inset: 0;
   flex: none;
-  overflow: hidden;
-  border-radius: 10px;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
-  will-change: transform;
-  backface-visibility: hidden;
   pointer-events: none;
+}
+/* Belt and braces for the backdrop root: no glass inside a moving card, so no
+   descendant `backdrop-filter` can be re-composited into a rectangle mid-switch. */
+.workbench-viewport-container[data-tab-transition="true"] .workbench-viewport,
+.workbench-viewport-container[data-tab-transition="true"] .workbench-viewport *,
+.workbench-viewport-container[data-tab-transition="true"] .workbench-viewport *::before,
+.workbench-viewport-container[data-tab-transition="true"] .workbench-viewport *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
 .workbench-canvas {
   position: relative;

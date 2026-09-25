@@ -43,6 +43,13 @@ it made the indicator's width carry gesture state and read as a second animation
   scale to both, `s(p) = 1 - 0.06 * (1 - |2p - 1|)`: full size at the ends, 94% at the
   midpoint. Cards never change opacity; the gaps opened by the scale reveal the
   Workbench Material Surface behind them, producing the stacked-card depth.
+- **The moving cards stay compositing-neutral.** The transition wrapper and cards must
+  not introduce `will-change`, `backface-visibility`, `border-radius`, `overflow`, or
+  `box-shadow`. Any of these makes the browser build a render surface around the moving
+  card, which drops the `mask`/`clip-path` on descendant `backdrop-filter` glass (the
+  Chat composer and its attached banners) and paints it as a hard rectangle for the
+  duration of the switch. For the same reason, `backdrop-filter` is disabled on every
+  descendant while a card is in motion.
 - **Direction follows Tab order.** Dragging the pointer left reveals the next Tab
   from the right edge; dragging right reveals the previous Tab from the left edge.
   Tab order is the Topbar's visual order and wraps cyclically.
