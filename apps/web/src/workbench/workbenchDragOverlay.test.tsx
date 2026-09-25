@@ -630,7 +630,6 @@ describe("WorkbenchDrag lifecycle and overlay animations", () => {
 
   it("renders destination indicator and commits drop when dragging an inactive single-pane Tab into the workbench canvas (ADR-0017)", async () => {
     const listeners = stubDragWindow();
-    vi.useFakeTimers();
 
     const terminalTarget = {
       kind: "workspaceTerminal" as const,
@@ -779,7 +778,26 @@ describe("WorkbenchDrag lifecycle and overlay animations", () => {
 
     expect(fakeDataset.workbenchDragging).toBe("pending");
 
-    // 2. Drag downward into canvas (> 12px below Topbar, e.g. clientY = 200)
+    // 2. Drag within Topbar (> DRAG_THRESHOLD, but y stays within Topbar)
+    await act(async () => {
+      listeners["pointermove"]?.forEach((fn) =>
+        fn({
+          clientX: 220,
+          clientY: 20,
+        }),
+      );
+    });
+
+    expect(fakeDataset.workbenchDragging).toBe("active");
+    // While in topbar, destination indicator should NOT be rendered
+    expect(
+      renderer!.root.findAllByProps({
+        "data-workbench-preview-pane": true,
+        "data-destination": "true",
+      }),
+    ).toHaveLength(0);
+
+    // 3. Drag downward into canvas (> 12px below Topbar, e.g. clientY = 200)
     await act(async () => {
       listeners["pointermove"]?.forEach((fn) =>
         fn({
@@ -789,14 +807,13 @@ describe("WorkbenchDrag lifecycle and overlay animations", () => {
       );
     });
 
-    expect(fakeDataset.workbenchDragging).toBe("active");
     const destinationPane = renderer!.root.findByProps({
       "data-workbench-preview-pane": true,
       "data-destination": "true",
     });
     expect(destinationPane.props.className).toContain("workbench-drop-destination-indicator");
 
-    // 3. Pointerup: commits the drop to active tab
+    // 4. Pointerup: commits the drop to active tab
     act(() => {
       listeners["pointerup"]?.forEach((fn) => fn({}));
     });

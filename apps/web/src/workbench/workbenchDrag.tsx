@@ -22,6 +22,7 @@ import { createPortal } from "react-dom";
 import { paneDropZoneFromPoint, paneDirectionalZoneFromPoint, firstLeafId } from "./layout";
 import { computePaneLayoutRects } from "./layoutGeometry";
 import type { LayoutMode } from "./scrollingLayout";
+import type { ViewTarget } from "./viewRegistry";
 import { usePrimarySettings } from "../hooks/useSettings";
 import { useUiStateStore } from "../uiStateStore";
 import { dismissContextMenu } from "../contextMenuFallback";
@@ -1042,15 +1043,25 @@ export function WorkbenchDropOverlay() {
   const surfaceRef = useRef<HTMLDivElement>(null);
   const [surfaceRect, setSurfaceRect] = useState<WorkbenchRect | null>(null);
 
+  const isTabInTopbar =
+    state?.source.kind === "tab" &&
+    (() => {
+      if (typeof document === "undefined") return false;
+      const stripEl = document.querySelector<HTMLElement>("[data-workbench-tab-strip-drop]");
+      if (!stripEl) return false;
+      const stripRect = stripEl.getBoundingClientRect();
+      return state.pointer.y <= stripRect.bottom + 12 && state.pointer.y >= stripRect.top - 12;
+    })();
+
   // Refs attach before layout effects in the same commit, so keying this on
-  // isOverSidebar is enough to re-measure whenever the overlay remounts.
+  // isOverSidebar and isTabInTopbar ensures we measure whenever the overlay mounts or transitions.
   useLayoutEffect(() => {
     if (!isDragging || state?.isOverSidebar || surfaceRef.current === null) {
       setSurfaceRect(null);
       return;
     }
     setSurfaceRect(rectFromElement(surfaceRef.current));
-  }, [isDragging, state?.isOverSidebar]);
+  }, [isDragging, state?.isOverSidebar, isTabInTopbar]);
 
   const preview = state === null || state.phase === "canceling" ? null : state.result;
   const previewTabId =
@@ -1069,23 +1080,16 @@ export function WorkbenchDropOverlay() {
     return computePaneLayoutRects(previewTab, surfaceRect, paneGap);
   }, [previewTab, surfaceRect, paneGap]);
 
-  const isTabInTopbar =
-    state?.source.kind === "tab" &&
-    (() => {
-      if (typeof document === "undefined") return false;
-      const stripEl = document.querySelector<HTMLElement>("[data-workbench-tab-strip-drop]");
-      if (!stripEl) return false;
-      const stripRect = stripEl.getBoundingClientRect();
-      return state.pointer.y <= stripRect.bottom + 12 && state.pointer.y >= stripRect.top - 12;
-    })();
-
-  if (state === null || state.isOverSidebar || isTabInTopbar) return null;
+  if (state === null || state.isOverSidebar) return null;
 
   const viewport = getActiveViewportElement();
   const scrollLeft = previewTab?.layoutMode === "scrolling" ? (viewport?.scrollLeft ?? 0) : 0;
   const scrollTop = viewport?.scrollTop ?? 0;
 
-  const destRect = preview && previewLayout ? previewLayout.rects.get(preview.paneId) : null;
+  const destRect =
+    !isTabInTopbar && state.target?.kind === "pane" && preview && previewLayout
+      ? previewLayout.rects.get(preview.paneId)
+      : null;
 
   let destinationRect: WorkbenchRect | null = null;
   if (destRect && surfaceRect) {
@@ -1124,7 +1128,10 @@ export function WorkbenchDropOverlay() {
     <>
       <div
         ref={surfaceRef}
-        className="pointer-events-none absolute inset-0 z-40 bg-background/15"
+        className={
+          "pointer-events-none absolute inset-0 z-40 transition-colors duration-150 " +
+          (isTabInTopbar ? "bg-transparent" : "bg-background/15")
+        }
         data-workbench-drop-preview
         data-drop-phase={state.phase}
         data-drop-target-kind={state.target?.kind ?? "none"}
@@ -1166,40 +1173,42 @@ export function WorkbenchDropOverlay() {
                   }}
                 />
               )}
-              <div
-                data-workbench-drag-ghost
-                data-phase={state.phase}
-                data-valid={invalid ? "false" : "true"}
-                className={
-                  "pointer-events-none fixed z-[100] flex flex-col items-center justify-center overflow-hidden rounded-xl border p-2.5 shadow-2xl backdrop-blur-md will-change-transform " +
-                  "transition-[opacity,border-color] ease-out motion-reduce:transition-none " +
-                  (invalid
-                    ? "border-destructive/80 bg-destructive/15 text-destructive "
-                    : "border-border/80 bg-background/85 text-foreground ") +
-                  (state.phase === "canceling"
-                    ? "opacity-0 duration-180"
-                    : "opacity-100 duration-75")
-                }
-                style={{
-                  left: 0,
-                  top: 0,
-                  width: `${ghostRect.width}px`,
-                  height: `${ghostRect.height}px`,
-                  transform: `translate3d(${ghostRect.left}px, ${ghostRect.top}px, 0)`,
-                }}
-              >
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  {ghostInfo.icon}
+              {!isTabInTopbar && (
+                <div
+                  data-workbench-drag-ghost
+                  data-phase={state.phase}
+                  data-valid={invalid ? "false" : "true"}
+                  className={
+                    "pointer-events-none fixed z-[100] flex flex-col items-center justify-center overflow-hidden rounded-xl border p-2.5 shadow-2xl backdrop-blur-md will-change-transform " +
+                    "transition-[opacity,border-color] ease-out motion-reduce:transition-none " +
+                    (invalid
+                      ? "border-destructive/80 bg-destructive/15 text-destructive "
+                      : "border-border/80 bg-background/85 text-foreground ") +
+                    (state.phase === "canceling"
+                      ? "opacity-0 duration-180"
+                      : "opacity-100 duration-75")
+                  }
+                  style={{
+                    left: 0,
+                    top: 0,
+                    width: `${ghostRect.width}px`,
+                    height: `${ghostRect.height}px`,
+                    transform: `translate3d(${ghostRect.left}px, ${ghostRect.top}px, 0)`,
+                  }}
+                >
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    {ghostInfo.icon}
+                  </div>
+                  <div className="flex flex-col items-center min-w-0 max-w-full mt-1.5">
+                    <span className="truncate max-w-[136px] text-xs font-semibold text-foreground leading-tight text-center">
+                      {state.label}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground font-medium leading-tight mt-0.5 text-center">
+                      {ghostInfo.typeLabel}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex flex-col items-center min-w-0 max-w-full mt-1.5">
-                  <span className="truncate max-w-[136px] text-xs font-semibold text-foreground leading-tight text-center">
-                    {state.label}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground font-medium leading-tight mt-0.5 text-center">
-                    {ghostInfo.typeLabel}
-                  </span>
-                </div>
-              </div>
+              )}
             </>,
             document.body,
           )
