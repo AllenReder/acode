@@ -950,6 +950,7 @@ function WorkspaceAgentSessionRow({
   });
   const ProviderIcon = resolveAgentIcon(threadShell?.modelSelection?.instanceId);
   const statusAlert = isClosed ? "idle" : resolveAgentSessionStatusAlert(threadShell, { isFocused });
+  const stateKey = `${statusAlert}:${threadShell?.latestTurn?.turnId ?? ""}:${threadShell?.latestTurn?.state ?? ""}:${threadShell?.hasPendingApprovals}:${threadShell?.hasPendingUserInput}`;
 
   return (
     <SessionRow
@@ -961,6 +962,7 @@ function WorkspaceAgentSessionRow({
       isClosed={isClosed}
       sessionTitle={session.title}
       statusAlert={statusAlert}
+      stateKey={stateKey}
       target={{
         kind: "agentSession",
         environmentId: project.environmentId,
@@ -1019,6 +1021,7 @@ function WorkspaceTerminalSessionRow({
   const summary = terminalSession?.state.summary;
   const TerminalOrAgentIcon = resolveTerminalIcon(summary);
   const statusAlert = isClosed ? "idle" : resolveTerminalSessionStatusAlert(summary);
+  const stateKey = `${statusAlert}:${summary?.hasRunningSubprocess}:${summary?.label ?? ""}:${summary?.status}:${summary?.exitCode}`;
 
   return (
     <SessionRow
@@ -1030,6 +1033,7 @@ function WorkspaceTerminalSessionRow({
       isClosed={isClosed}
       sessionTitle={session.title}
       statusAlert={statusAlert}
+      stateKey={stateKey}
       target={{
         kind: "workspaceTerminal",
         environmentId: project.environmentId,

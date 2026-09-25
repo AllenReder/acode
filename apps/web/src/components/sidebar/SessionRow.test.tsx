@@ -437,6 +437,84 @@ it("renders the 14px Status Gutter with prioritized alert states", async () => {
   expect(gutters[4]!.props["data-status-alert"]).toBe("idle");
 });
 
+it("dismisses status alert on user focus until the next state change occurs", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const target = {
+    kind: "agentSession",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    agentSessionId: "dismiss_test_1" as AgentSessionId,
+  } as const;
+
+  // Unfocused session with alert "running:1"
+  await act(() => {
+    renderer = create(
+      <SessionRow target={target} statusAlert="running" stateKey="running:1">
+        Session
+      </SessionRow>,
+    );
+  });
+
+  let gutter = renderer!.root.find(
+    (node) => Boolean(node?.props && node.props["data-status-gutter"] === "true"),
+  );
+  expect(gutter.props["data-status-alert"]).toBe("running");
+  // Dot is size-1.5
+  const dot = gutter.children[0] as any;
+  expect(dot.props.className).toContain("size-1.5");
+
+  // Step 1: User focuses the session (click)
+  const row = renderer!.root.findByType("button");
+  await act(() => row.props.onClick({ altKey: false }));
+
+  // While focused, the alert is dismissed
+  gutter = renderer!.root.find(
+    (node) => Boolean(node?.props && node.props["data-status-gutter"] === "true"),
+  );
+  expect(gutter.props["data-status-alert"]).toBe("idle");
+
+  // Step 2: Another session is opened and focused (our session loses focus)
+  const otherTarget = {
+    kind: "agentSession",
+    environmentId: "local" as EnvironmentId,
+    workspaceId: "workspace" as WorkspaceId,
+    agentSessionId: "other_session" as AgentSessionId,
+  } as const;
+  await act(() => {
+    useWorkbenchStore.getState().openTarget(otherTarget);
+  });
+
+  // Re-render our session with the same stateKey "running:1"
+  await act(() => {
+    renderer.update(
+      <SessionRow target={target} statusAlert="running" stateKey="running:1">
+        Session
+      </SessionRow>,
+    );
+  });
+
+  // Because the state has not changed, the alert remains dismissed
+  gutter = renderer!.root.find(
+    (node) => Boolean(node?.props && node.props["data-status-gutter"] === "true"),
+  );
+  expect(gutter.props["data-status-alert"]).toBe("idle");
+
+  // Step 3: State changes to error (new stateKey "error:2")
+  await act(() => {
+    renderer.update(
+      <SessionRow target={target} statusAlert="error" stateKey="error:2">
+        Session
+      </SessionRow>,
+    );
+  });
+
+  // The alert reappears for the new state change!
+  gutter = renderer!.root.find(
+    (node) => Boolean(node?.props && node.props["data-status-gutter"] === "true"),
+  );
+  expect(gutter.props["data-status-alert"]).toBe("error");
+});
+
 it("marks closed sessions with data-session-closed and suppresses drag initiation on pointerdown", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const target = {

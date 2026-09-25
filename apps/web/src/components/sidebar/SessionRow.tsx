@@ -1,4 +1,4 @@
-import { useCallback, useState, type ComponentProps } from "react";
+import { useCallback, useEffect, useState, type ComponentProps } from "react";
 import { cn } from "../../lib/utils";
 import {
   getActiveTab,
@@ -12,6 +12,7 @@ import { useSessionActionMenu } from "../../hooks/useSessionActionMenu";
 import { useWorkbenchDragSource, useWorkbenchDragState } from "../../workbench/workbenchDrag";
 import { FLUID_MOTION_DURATION_MS, getPrefersReducedMotion } from "../../workbench/workbenchMotion";
 import type { WillCloseRevert } from "../../hooks/useSessionCommands";
+import { useSessionAlertStore } from "./sessionAlertStore";
 
 export type SessionTarget = Extract<ViewTarget, { kind: "agentSession" | "workspaceTerminal" }>;
 export type SessionTabState = SessionRowTabState;
@@ -23,10 +24,10 @@ export type SessionStatusAlert =
   | "idle";
 
 const ALERT_DOT_CLASS: Record<Exclude<SessionStatusAlert, "idle">, string> = {
-  "action-required": "size-2 rounded-full bg-amber-500",
-  error: "size-2 rounded-full bg-destructive",
-  running: "size-2 rounded-full bg-sky-500 animate-pulse",
-  "completed-unread": "size-2 rounded-full bg-emerald-500",
+  "action-required": "size-1.5 rounded-full bg-amber-500",
+  error: "size-1.5 rounded-full bg-destructive",
+  running: "size-1.5 rounded-full bg-sky-500 animate-pulse",
+  "completed-unread": "size-1.5 rounded-full bg-emerald-500",
 };
 
 export interface SessionRowProps extends ComponentProps<"button"> {
@@ -36,6 +37,7 @@ export interface SessionRowProps extends ComponentProps<"button"> {
   readonly onWillClose?: () => Promise<WillCloseRevert | void> | WillCloseRevert | void;
   readonly sessionTitle?: string;
   readonly statusAlert?: SessionStatusAlert;
+  readonly stateKey?: string;
   readonly onStartRename?: () => void;
   readonly navigateTo?: (input: {
     readonly to: string;
@@ -52,6 +54,7 @@ export function SessionRow({
   onWillClose,
   sessionTitle,
   statusAlert = "idle",
+  stateKey,
   onStartRename,
   navigateTo,
   onClick,
@@ -72,6 +75,19 @@ export function SessionRow({
   const workspaceKey = `${target.environmentId}:${target.workspaceId}`;
   const sessionId =
     target.kind === "agentSession" ? target.agentSessionId : target.terminalSessionId;
+
+  const dismissedKey = useSessionAlertStore((state) => state.dismissedKeys[sessionId]);
+  const dismissAlert = useSessionAlertStore((state) => state.dismissAlert);
+  const currentStateKey = stateKey ?? (statusAlert !== "idle" ? statusAlert : null);
+
+  useEffect(() => {
+    if (isFocused && currentStateKey) {
+      dismissAlert(sessionId, currentStateKey);
+    }
+  }, [isFocused, sessionId, currentStateKey, dismissAlert]);
+
+  const isDismissed = isFocused || (currentStateKey !== null && dismissedKey === currentStateKey);
+  const visibleAlert = isDismissed ? "idle" : statusAlert;
 
   const dragState = useWorkbenchDragState();
   const draggedTarget = dragState?.source.kind === "sidebar" ? dragState.source.target : null;
@@ -223,10 +239,10 @@ export function SessionRow({
       <span
         aria-hidden="true"
         data-status-gutter="true"
-        data-status-alert={statusAlert}
+        data-status-alert={visibleAlert}
         className="pointer-events-none flex size-3.5 shrink-0 items-center justify-center"
       >
-        {statusAlert !== "idle" ? <span className={ALERT_DOT_CLASS[statusAlert]} /> : null}
+        {visibleAlert !== "idle" ? <span className={ALERT_DOT_CLASS[visibleAlert]} /> : null}
       </span>
       {tabState === "active-unfocused" ? (
         <span
