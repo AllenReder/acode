@@ -24,6 +24,11 @@ import {
 import type { SidebarThreadSummary, Thread } from "../types";
 import { cn, randomUUID } from "../lib/utils";
 import { isLatestTurnSettled } from "../session-logic";
+import {
+  resolveAgentSessionStatus,
+  type AgentSessionStatusInput,
+  type SessionStatus,
+} from "./sidebar/sidebarSessionPresentation";
 
 export function shouldNavigateAfterThreadPark(input: {
   readonly threadKey: string;
@@ -802,19 +807,13 @@ export function resolveThreadRowClassName(input: {
 }
 
 // ── Sidebar thread status model ─────────────────────────────────────
-// Five visual states, three colors: color is reserved for "act now"
-// (approval), "in motion" (working), and "broken" (failed). Ready is the
-// unlabeled resting state — the agent stopped and is waiting on the user,
-// whether it finished, asked a question, or proposed a plan.
-// Unread completion is tracked separately: it describes whether a ready
+// Seven visual states, five colors: color is reserved for "act now"
+// (approval, input, plan), "in motion" (working, monitoring), and "broken"
+// (failed). Ready is the unlabeled resting state — the agent stopped and is
+// waiting on the user, whether it finished, asked a question, or proposed a
+// plan. Unread completion is tracked separately: it describes whether a ready
 // thread needs attention, not what the thread is currently doing.
-export type SidebarThreadStatus =
-  | "approval"
-  | "input"
-  | "working"
-  | "monitoring"
-  | "failed"
-  | "ready";
+export type SidebarThreadStatus = SessionStatus;
 
 export function shouldRecedeSidebarThread(input: {
   status: SidebarThreadStatus;
@@ -831,35 +830,10 @@ export function shouldRecedeSidebarThread(input: {
   return false;
 }
 
-type SidebarThreadStatusInput = Pick<
-  SidebarThreadSummary,
-  "hasPendingApprovals" | "hasPendingUserInput" | "session" | "backgroundLiveness"
->;
+type SidebarThreadStatusInput = AgentSessionStatusInput;
 
 export function resolveSidebarThreadStatus(thread: SidebarThreadStatusInput): SidebarThreadStatus {
-  if (thread.hasPendingApprovals) {
-    return "approval";
-  }
-  if (thread.hasPendingUserInput) {
-    return "input";
-  }
-  if (thread.session?.status === "running" || thread.session?.status === "starting") {
-    return "working";
-  }
-  // A failed session outranks lingering background liveness: the user must
-  // see the failure, not a stale Working (review finding).
-  if (thread.session?.status === "error") {
-    return "failed";
-  }
-  // Background work outlives the turn: fleets read as working; monitoring
-  // only when watch loops are the sole live work.
-  if (thread.backgroundLiveness === "working") {
-    return "working";
-  }
-  if (thread.backgroundLiveness === "monitoring") {
-    return "monitoring";
-  }
-  return "ready";
+  return resolveAgentSessionStatus(thread);
 }
 
 /** First VALID timestamp wins: `a ?? b` falls through on null, but a present-

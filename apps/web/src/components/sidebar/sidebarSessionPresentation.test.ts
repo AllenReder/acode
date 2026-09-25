@@ -2,13 +2,34 @@ import { describe, expect, it } from "vite-plus/test";
 import { ProviderDriverKind } from "@awen/contracts";
 import {
   detectAgentDriverFromCommand,
+  isUnreadCompletion,
   resolveAgentIcon,
-  resolveAgentSessionStatusAlert,
+  resolveAgentSessionStatus,
   resolveTerminalIcon,
-  resolveTerminalSessionStatusAlert,
+  resolveTerminalSessionStatus,
 } from "./sidebarSessionPresentation";
 import { ClaudeAI, CursorIcon, OpenAI, OpenCodeIcon } from "../Icons";
 import { SparklesIcon, TerminalIcon } from "lucide-react";
+
+const agent = (overrides: Record<string, unknown> = {}) =>
+  ({
+    hasPendingApprovals: false,
+    hasPendingUserInput: false,
+    hasActionableProposedPlan: false,
+    interactionMode: "default",
+    latestTurn: null,
+    session: null,
+    backgroundLiveness: null,
+    ...overrides,
+  }) as never;
+
+const runningSession = { status: "running" } as never;
+const settledTurn = {
+  turnId: "t1",
+  state: "completed",
+  startedAt: "2026-03-09T10:00:00.000Z",
+  completedAt: "2026-03-09T10:05:00.000Z",
+} as never;
 
 describe("sidebarSessionPresentation", () => {
   describe("detectAgentDriverFromCommand", () => {
@@ -30,114 +51,157 @@ describe("sidebarSessionPresentation", () => {
     });
   });
 
-  describe("resolveAgentSessionStatusAlert", () => {
-    it("prioritizes action-required over errors and running turns", () => {
+  describe("resolveAgentSessionStatus", () => {
+    it("prioritizes approval over input and running work", () => {
       expect(
-        resolveAgentSessionStatusAlert({
-          hasPendingUserInput: true,
-          hasPendingApprovals: false,
-          latestTurn: { state: "error" } as never,
-        }),
-      ).toBe("action-required");
-
-      expect(
-        resolveAgentSessionStatusAlert({
-          hasPendingUserInput: false,
-          hasPendingApprovals: true,
-          latestTurn: { state: "running" } as never,
-        }),
-      ).toBe("action-required");
+        resolveAgentSessionStatus(
+          agent({ hasPendingApprovals: true, hasPendingUserInput: true, session: runningSession }),
+        ),
+      ).toBe("approval");
     });
 
-    it("resolves error and running states", () => {
+    it("prioritizes awaiting input over running work", () => {
       expect(
-        resolveAgentSessionStatusAlert({
-          hasPendingUserInput: false,
-          hasPendingApprovals: false,
-          latestTurn: { state: "error" } as never,
-        }),
-      ).toBe("error");
+        resolveAgentSessionStatus(agent({ hasPendingUserInput: true, session: runningSession })),
+      ).toBe("input");
+    });
 
-      expect(
-        resolveAgentSessionStatusAlert({
-          hasPendingUserInput: false,
-          hasPendingApprovals: false,
-          latestTurn: { state: "running" } as never,
-        }),
-      ).toBe("running");
+    it("reports working for running and starting sessions, and for background liveness", () => {
+      expect(resolveAgentSessionStatus(agent({ session: runningSession }))).toBe("working");
+      expect(resolveAgentSessionStatus(agent({ session: { status: "starting" } }))).toBe("working");
+      expect(resolveAgentSessionStatus(agent({ backgroundLiveness: "working" }))).toBe("working");
+    });
 
+    it("reports failed whenever the session status is error", () => {
+      expect(resolveAgentSessionStatus(agent({ session: { status: "error" } }))).toBe("failed");
+      // A failed session outranks lingering background liveness.
       expect(
-        resolveAgentSessionStatusAlert({
-          hasPendingUserInput: false,
-          hasPendingApprovals: false,
-          latestTurn: { state: "completed" } as never,
-        }),
-      ).toBe("idle");
+        resolveAgentSessionStatus(agent({ session: { status: "error" }, backgroundLiveness: "working" })),
+      ).toBe("failed");
+    });
 
+    it("falls back to a failed latest turn when the session is absent", () => {
       expect(
-        resolveAgentSessionStatusAlert(
-          {
-            hasPendingUserInput: false,
-            hasPendingApprovals: false,
-            latestTurn: { state: "completed" } as never,
-          },
-          { isFocused: false },
+        resolveAgentSessionStatus(agent({ session: null, latestTurn: { state: "error" } as never })),
+      ).toBe("failed");
+    });
+
+    it("reports plan for a settled plan-mode turn with an actionable plan", () => {
+      expect(
+        resolveAgentSessionStatus(
+          agent({
+            interactionMode: "plan",
+            hasActionableProposedPlan: true,
+            latestTurn: settledTurn,
+          }),
         ),
-      ).toBe("completed-unread");
+      ).toBe("plan");
+    });
 
-      expect(resolveAgentSessionStatusAlert(null)).toBe("idle");
+    it("never reports plan on an error turn or an unsettled turn", () => {
+      expect(
+        resolveAgentSessionStatus(
+          agent({
+            interactionMode: "plan",
+            hasActionableProposedPlan: true,
+            latestTurn: { state: "error", startedAt: "x", completedAt: "y" } as never,
+          }),
+        ),
+      ).toBe("failed");
+      expect(
+        resolveAgentSessionStatus(
+          agent({
+            interactionMode: "plan",
+            hasActionableProposedPlan: true,
+            latestTurn: { state: "completed", startedAt: "x", completedAt: null } as never,
+          }),
+        ),
+      ).toBe("ready");
+    });
+
+    it("reports monitoring for watch-loop liveness and ready otherwise", () => {
+      expect(resolveAgentSessionStatus(agent({ backgroundLiveness: "monitoring" }))).toBe(
+        "monitoring",
+      );
+      expect(resolveAgentSessionStatus(agent())).toBe("ready");
+      expect(resolveAgentSessionStatus(null)).toBe("ready");
+      expect(resolveAgentSessionStatus(undefined)).toBe("ready");
     });
   });
 
-  describe("resolveTerminalSessionStatusAlert", () => {
-    it("prioritizes error over running subprocess", () => {
+  describe("resolveTerminalSessionStatus", () => {
+    it("reports working while a foreground subprocess runs", () => {
       expect(
-        resolveTerminalSessionStatusAlert({
-          hasRunningSubprocess: true,
-          status: "error",
-          exitCode: 1,
-        }),
-      ).toBe("error");
+        resolveTerminalSessionStatus({ hasRunningSubprocess: true, status: "running" }),
+      ).toBe("working");
     });
 
-    it("resolves running when subprocess is active without errors", () => {
+    it("reports failed on an error status or a non-zero exit code", () => {
       expect(
-        resolveTerminalSessionStatusAlert({
-          hasRunningSubprocess: true,
-          status: "running",
-          exitCode: null,
-        }),
-      ).toBe("running");
+        resolveTerminalSessionStatus({ hasRunningSubprocess: false, status: "error", exitCode: 1 }),
+      ).toBe("failed");
+      expect(
+        resolveTerminalSessionStatus({ hasRunningSubprocess: false, status: "exited", exitCode: 1 }),
+      ).toBe("failed");
     });
 
-    it("resolves error on error status or non-zero exit code", () => {
+    it("reports ready for a clean exit or an idle shell", () => {
       expect(
-        resolveTerminalSessionStatusAlert({
-          hasRunningSubprocess: false,
-          status: "error",
-          exitCode: null,
-        }),
-      ).toBe("error");
+        resolveTerminalSessionStatus({ hasRunningSubprocess: false, status: "running", exitCode: 0 }),
+      ).toBe("ready");
+      expect(resolveTerminalSessionStatus(null)).toBe("ready");
+    });
+  });
 
+  describe("isUnreadCompletion", () => {
+    const completedTurn = { state: "completed", completedAt: "2026-03-09T10:05:00.000Z" };
+
+    it("is unread for a completed ready session with no visit marker", () => {
       expect(
-        resolveTerminalSessionStatusAlert({
-          hasRunningSubprocess: false,
-          status: "exited",
-          exitCode: 1,
-        }),
-      ).toBe("error");
+        isUnreadCompletion({ status: "ready", latestTurn: completedTurn, lastVisitedAt: undefined }),
+      ).toBe(true);
     });
 
-    it("resolves idle for clean exits or idle shells", () => {
+    it("is unread when the completion postdates the last visit", () => {
       expect(
-        resolveTerminalSessionStatusAlert({
-          hasRunningSubprocess: false,
-          status: "running",
-          exitCode: 0,
+        isUnreadCompletion({
+          status: "ready",
+          latestTurn: completedTurn,
+          lastVisitedAt: "2026-03-09T10:04:00.000Z",
         }),
-      ).toBe("idle");
+      ).toBe(true);
+    });
 
-      expect(resolveTerminalSessionStatusAlert(null)).toBe("idle");
+    it("is read once the visit reaches the completion", () => {
+      expect(
+        isUnreadCompletion({
+          status: "ready",
+          latestTurn: completedTurn,
+          lastVisitedAt: "2026-03-09T10:05:00.000Z",
+        }),
+      ).toBe(false);
+    });
+
+    it("is never unread for a non-ready session or a non-completed turn", () => {
+      expect(
+        isUnreadCompletion({ status: "working", latestTurn: completedTurn, lastVisitedAt: undefined }),
+      ).toBe(false);
+      expect(
+        isUnreadCompletion({
+          status: "ready",
+          latestTurn: { state: "error", completedAt: "2026-03-09T10:05:00.000Z" },
+          lastVisitedAt: undefined,
+        }),
+      ).toBe(false);
+      expect(
+        isUnreadCompletion({ status: "ready", latestTurn: { state: "completed" }, lastVisitedAt: undefined }),
+      ).toBe(false);
+    });
+
+    it("treats a malformed visit marker as never visited", () => {
+      expect(
+        isUnreadCompletion({ status: "ready", latestTurn: completedTurn, lastVisitedAt: "not-a-date" }),
+      ).toBe(true);
     });
   });
 

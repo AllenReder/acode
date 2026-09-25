@@ -1,34 +1,31 @@
-import { useCallback, useEffect, useState, type ComponentProps } from "react";
+import { useCallback, useState, type ComponentProps } from "react";
 import { cn } from "../../lib/utils";
 import {
-  getActiveTab,
   getSessionRowTabState,
   type SessionRowTabState,
 } from "../../workbench/workbenchState";
 import { useWorkbenchStore } from "../../workbench/workbenchStore";
-import { targetsEqual, type ViewTarget } from "../../workbench/viewRegistry";
+import type { ViewTarget } from "../../workbench/viewRegistry";
 import { sessionRouteForTarget } from "../../workbench/deepLinks";
 import { useSessionActionMenu } from "../../hooks/useSessionActionMenu";
 import { useWorkbenchDragSource, useWorkbenchDragState } from "../../workbench/workbenchDrag";
 import { FLUID_MOTION_DURATION_MS, getPrefersReducedMotion } from "../../workbench/workbenchMotion";
 import type { WillCloseRevert } from "../../hooks/useSessionCommands";
-import { useSessionAlertStore } from "./sessionAlertStore";
+import type { SessionStatus } from "./sidebarSessionPresentation";
 
 export type SessionTarget = Extract<ViewTarget, { kind: "agentSession" | "workspaceTerminal" }>;
 export type SessionTabState = SessionRowTabState;
-export type SessionStatusAlert =
-  | "action-required"
-  | "error"
-  | "running"
-  | "completed-unread"
-  | "idle";
 
-const ALERT_DOT_CLASS: Record<Exclude<SessionStatusAlert, "idle">, string> = {
-  "action-required": "size-1.5 rounded-full bg-amber-500",
-  error: "size-1.5 rounded-full bg-destructive",
-  running: "size-1.5 rounded-full bg-sky-500 animate-pulse",
-  "completed-unread": "size-1.5 rounded-full bg-emerald-500",
+const STATUS_DOT_CLASS: Record<Exclude<SessionStatus, "ready">, string> = {
+  approval: "size-1.5 rounded-full bg-amber-500",
+  input: "size-1.5 rounded-full bg-indigo-500",
+  plan: "size-1.5 rounded-full bg-violet-500",
+  working: "size-1.5 rounded-full bg-sky-500 animate-pulse",
+  monitoring: "size-1.5 rounded-full bg-sky-500",
+  failed: "size-1.5 rounded-full bg-destructive",
 };
+
+const UNREAD_COMPLETION_DOT_CLASS = "size-1.5 rounded-full bg-emerald-500";
 
 export interface SessionRowProps extends ComponentProps<"button"> {
   readonly target: SessionTarget;
@@ -36,8 +33,8 @@ export interface SessionRowProps extends ComponentProps<"button"> {
   readonly isClosing?: boolean;
   readonly onWillClose?: () => Promise<WillCloseRevert | void> | WillCloseRevert | void;
   readonly sessionTitle?: string;
-  readonly statusAlert?: SessionStatusAlert;
-  readonly stateKey?: string;
+  readonly status?: SessionStatus;
+  readonly isUnread?: boolean;
   readonly onStartRename?: () => void;
   readonly navigateTo?: (input: {
     readonly to: string;
@@ -53,8 +50,8 @@ export function SessionRow({
   isClosing = false,
   onWillClose,
   sessionTitle,
-  statusAlert = "idle",
-  stateKey,
+  status = "ready",
+  isUnread = false,
   onStartRename,
   navigateTo,
   onClick,
@@ -76,18 +73,12 @@ export function SessionRow({
   const sessionId =
     target.kind === "agentSession" ? target.agentSessionId : target.terminalSessionId;
 
-  const dismissedKey = useSessionAlertStore((state) => state.dismissedKeys[sessionId]);
-  const dismissAlert = useSessionAlertStore((state) => state.dismissAlert);
-  const currentStateKey = stateKey ?? (statusAlert !== "idle" ? statusAlert : null);
-
-  useEffect(() => {
-    if (isFocused && currentStateKey) {
-      dismissAlert(sessionId, currentStateKey);
-    }
-  }, [isFocused, sessionId, currentStateKey, dismissAlert]);
-
-  const isDismissed = isFocused || (currentStateKey !== null && dismissedKey === currentStateKey);
-  const visibleAlert = isDismissed ? "idle" : statusAlert;
+  const dotClass =
+    status === "ready"
+      ? isUnread
+        ? UNREAD_COMPLETION_DOT_CLASS
+        : null
+      : STATUS_DOT_CLASS[status];
 
   const dragState = useWorkbenchDragState();
   const draggedTarget = dragState?.source.kind === "sidebar" ? dragState.source.target : null;
@@ -239,10 +230,11 @@ export function SessionRow({
       <span
         aria-hidden="true"
         data-status-gutter="true"
-        data-status-alert={visibleAlert}
+        data-session-status={status}
+        data-session-unread={isUnread ? "true" : "false"}
         className="pointer-events-none flex size-3.5 shrink-0 items-center justify-center"
       >
-        {visibleAlert !== "idle" ? <span className={ALERT_DOT_CLASS[visibleAlert]} /> : null}
+        {dotClass !== null ? <span className={dotClass} /> : null}
       </span>
       {tabState === "active-unfocused" ? (
         <span

@@ -48,14 +48,15 @@ import { projectEnvironment, workspaceEnvironment } from "../state/projects";
 import { terminalEnvironment } from "../state/terminal";
 import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
-import { scopeProjectRef, scopeThreadRef } from "@awen/client-runtime/environment";
+import { scopeProjectRef, scopeThreadRef, scopedThreadKey } from "@awen/client-runtime/environment";
 import { useKnownTerminalSessions } from "../state/terminalSessions";
 import { SessionRow } from "./sidebar/SessionRow";
 import {
+  isUnreadCompletion,
   resolveAgentIcon,
-  resolveAgentSessionStatusAlert,
+  resolveAgentSessionStatus,
   resolveTerminalIcon,
-  resolveTerminalSessionStatusAlert,
+  resolveTerminalSessionStatus,
 } from "./sidebar/sidebarSessionPresentation";
 import { AddWorkspaceDialog, NewWorkspaceDialog } from "./sidebar/WorkspaceDialogs";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
@@ -66,8 +67,7 @@ import { SidebarContent, SidebarGroup } from "./ui/sidebar";
 import { sessionRouteForTarget } from "../workbench/deepLinks";
 import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { runtimeTerminalIdForTarget, terminalTargetForRuntime } from "../workbench/sessionTarget";
-import { targetsEqual, type ViewTarget } from "../workbench/viewRegistry";
-import { getActiveTab } from "../workbench/workbenchState";
+import type { ViewTarget } from "../workbench/viewRegistry";
 import { useWorkbenchDragController, useWorkbenchDragState } from "../workbench/workbenchDrag";
 import { NO_PROVIDER_MODEL_SELECTION } from "../providerInstances";
 import { useWorkbenchStore } from "../workbench/workbenchStore";
@@ -935,22 +935,17 @@ function WorkspaceAgentSessionRow({
     [project.environmentId, session.threadId],
   );
   const threadShell = useThreadShell(threadRef);
-  const isFocused = useWorkbenchStore((state) => {
-    const activeTab = getActiveTab(state);
-    const focused = activeTab.panes.get(activeTab.focusedPaneId);
-    return (
-      focused !== undefined &&
-      targetsEqual(focused.target, {
-        kind: "agentSession",
-        environmentId: project.environmentId,
-        workspaceId: workspace.id,
-        agentSessionId: session.id as AgentSessionId,
-      })
-    );
-  });
+  const threadKey = scopedThreadKey(threadRef);
+  const lastVisitedAt = useUiStateStore((state) => state.threadLastVisitedAtById[threadKey]);
   const ProviderIcon = resolveAgentIcon(threadShell?.modelSelection?.instanceId);
-  const statusAlert = isClosed ? "idle" : resolveAgentSessionStatusAlert(threadShell, { isFocused });
-  const stateKey = `${statusAlert}:${threadShell?.latestTurn?.turnId ?? ""}:${threadShell?.latestTurn?.state ?? ""}:${threadShell?.hasPendingApprovals}:${threadShell?.hasPendingUserInput}`;
+  const status = isClosed ? "ready" : resolveAgentSessionStatus(threadShell);
+  const isUnread =
+    !isClosed &&
+    isUnreadCompletion({
+      status,
+      latestTurn: threadShell?.latestTurn,
+      lastVisitedAt,
+    });
 
   return (
     <SessionRow
@@ -961,8 +956,8 @@ function WorkspaceAgentSessionRow({
       data-session-closed={isClosed ? "true" : undefined}
       isClosed={isClosed}
       sessionTitle={session.title}
-      statusAlert={statusAlert}
-      stateKey={stateKey}
+      status={status}
+      isUnread={isUnread}
       target={{
         kind: "agentSession",
         environmentId: project.environmentId,
@@ -1020,8 +1015,7 @@ function WorkspaceTerminalSessionRow({
   );
   const summary = terminalSession?.state.summary;
   const TerminalOrAgentIcon = resolveTerminalIcon(summary);
-  const statusAlert = isClosed ? "idle" : resolveTerminalSessionStatusAlert(summary);
-  const stateKey = `${statusAlert}:${summary?.hasRunningSubprocess}:${summary?.label ?? ""}:${summary?.status}:${summary?.exitCode}`;
+  const status = isClosed ? "ready" : resolveTerminalSessionStatus(summary);
 
   return (
     <SessionRow
@@ -1032,8 +1026,7 @@ function WorkspaceTerminalSessionRow({
       data-session-closed={isClosed ? "true" : undefined}
       isClosed={isClosed}
       sessionTitle={session.title}
-      statusAlert={statusAlert}
-      stateKey={stateKey}
+      status={status}
       target={{
         kind: "workspaceTerminal",
         environmentId: project.environmentId,

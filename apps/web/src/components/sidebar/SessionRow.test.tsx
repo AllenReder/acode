@@ -405,114 +405,99 @@ it("tracks and differentiates all four Session Row Tab States: active-focused, a
   expect(backgroundDots.length).toBeGreaterThanOrEqual(2);
 });
 
-it("renders the 14px Status Gutter with prioritized alert states", async () => {
+it("renders one Session Status dot per row and the Unread Completion dot on a ready row", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const target = {
     kind: "agentSession",
     environmentId: "local" as EnvironmentId,
     workspaceId: "workspace" as WorkspaceId,
-    agentSessionId: "alert_s1" as AgentSessionId,
+    agentSessionId: "status_s1" as AgentSessionId,
   } as const;
 
   await act(() => {
     renderer = create(
       <>
-        <SessionRow target={target} statusAlert="action-required">Action Required</SessionRow>
-        <SessionRow target={target} statusAlert="error">Error</SessionRow>
-        <SessionRow target={target} statusAlert="running">Running</SessionRow>
-        <SessionRow target={target} statusAlert="completed-unread">Completed</SessionRow>
-        <SessionRow target={target}>Idle</SessionRow>
+        <SessionRow target={target} status="approval">Approval</SessionRow>
+        <SessionRow target={target} status="input">Input</SessionRow>
+        <SessionRow target={target} status="plan">Plan</SessionRow>
+        <SessionRow target={target} status="working">Working</SessionRow>
+        <SessionRow target={target} status="monitoring">Monitoring</SessionRow>
+        <SessionRow target={target} status="failed">Failed</SessionRow>
+        <SessionRow target={target} status="ready" isUnread>Unread</SessionRow>
+        <SessionRow target={target}>Ready</SessionRow>
       </>,
     );
   });
 
-  const gutters = renderer!.root.findAll(
-    (node) => Boolean(node?.props && node.props["data-status-gutter"] === "true"),
-  );
-  expect(gutters).toHaveLength(5);
-  expect(gutters[0]!.props["data-status-alert"]).toBe("action-required");
-  expect(gutters[1]!.props["data-status-alert"]).toBe("error");
-  expect(gutters[2]!.props["data-status-alert"]).toBe("running");
-  expect(gutters[3]!.props["data-status-alert"]).toBe("completed-unread");
-  expect(gutters[4]!.props["data-status-alert"]).toBe("idle");
+  const gutters = renderer!.root.findAllByProps({ "data-status-gutter": "true" });
+  expect(gutters).toHaveLength(8);
+  expect(gutters.map((gutter) => gutter.props["data-session-status"])).toEqual([
+    "approval",
+    "input",
+    "plan",
+    "working",
+    "monitoring",
+    "failed",
+    "ready",
+    "ready",
+  ]);
+  expect(gutters.map((gutter) => gutter.props["data-session-unread"])).toEqual([
+    "false",
+    "false",
+    "false",
+    "false",
+    "false",
+    "false",
+    "true",
+    "false",
+  ]);
+
+  const dotCount = (className: string) =>
+    renderer!.root.findAll(
+      (node) =>
+        typeof node.props?.className === "string" && node.props.className.includes(className),
+    ).length;
+  expect(dotCount("bg-amber-500")).toBe(1);
+  expect(dotCount("bg-indigo-500")).toBe(1);
+  expect(dotCount("bg-violet-500")).toBe(1);
+  expect(dotCount("animate-pulse")).toBe(1);
+  expect(dotCount("bg-sky-500")).toBe(2);
+  expect(dotCount("bg-destructive")).toBe(1);
+  expect(dotCount("bg-emerald-500")).toBe(1);
 });
 
-it("dismisses status alert on user focus until the next state change occurs", async () => {
+it("keeps a failure dot visible while the row is focused and after focus moves away", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const target = {
     kind: "agentSession",
     environmentId: "local" as EnvironmentId,
     workspaceId: "workspace" as WorkspaceId,
-    agentSessionId: "dismiss_test_1" as AgentSessionId,
+    agentSessionId: "focus_status_1" as AgentSessionId,
+  } as const;
+  const other = {
+    ...target,
+    agentSessionId: "focus_status_2" as AgentSessionId,
   } as const;
 
-  // Unfocused session with alert "running:1"
   await act(() => {
     renderer = create(
-      <SessionRow target={target} statusAlert="running" stateKey="running:1">
-        Session
-      </SessionRow>,
+      <>
+        <SessionRow target={target} status="failed">Failed</SessionRow>
+        <SessionRow target={other}>Other</SessionRow>
+      </>,
     );
   });
+  const [failedRow, otherRow] = renderer!.root.findAllByType("button");
 
-  let gutter = renderer!.root.find(
-    (node) => Boolean(node?.props && node.props["data-status-gutter"] === "true"),
-  );
-  expect(gutter.props["data-status-alert"]).toBe("running");
-  // Dot is size-1.5
-  const dot = gutter.children[0] as any;
-  expect(dot.props.className).toContain("size-1.5");
+  // Focusing the failing session must not hide its dot.
+  await act(() => failedRow!.props.onClick({ altKey: false }));
+  let gutter = renderer!.root.findAllByProps({ "data-status-gutter": "true" })[0]!;
+  expect(gutter.props["data-session-status"]).toBe("failed");
 
-  // Step 1: User focuses the session (click)
-  const row = renderer!.root.findByType("button");
-  await act(() => row.props.onClick({ altKey: false }));
-
-  // While focused, the alert is dismissed
-  gutter = renderer!.root.find(
-    (node) => Boolean(node?.props && node.props["data-status-gutter"] === "true"),
-  );
-  expect(gutter.props["data-status-alert"]).toBe("idle");
-
-  // Step 2: Another session is opened and focused (our session loses focus)
-  const otherTarget = {
-    kind: "agentSession",
-    environmentId: "local" as EnvironmentId,
-    workspaceId: "workspace" as WorkspaceId,
-    agentSessionId: "other_session" as AgentSessionId,
-  } as const;
-  await act(() => {
-    useWorkbenchStore.getState().openTarget(otherTarget);
-  });
-
-  // Re-render our session with the same stateKey "running:1"
-  await act(() => {
-    renderer.update(
-      <SessionRow target={target} statusAlert="running" stateKey="running:1">
-        Session
-      </SessionRow>,
-    );
-  });
-
-  // Because the state has not changed, the alert remains dismissed
-  gutter = renderer!.root.find(
-    (node) => Boolean(node?.props && node.props["data-status-gutter"] === "true"),
-  );
-  expect(gutter.props["data-status-alert"]).toBe("idle");
-
-  // Step 3: State changes to error (new stateKey "error:2")
-  await act(() => {
-    renderer.update(
-      <SessionRow target={target} statusAlert="error" stateKey="error:2">
-        Session
-      </SessionRow>,
-    );
-  });
-
-  // The alert reappears for the new state change!
-  gutter = renderer!.root.find(
-    (node) => Boolean(node?.props && node.props["data-status-gutter"] === "true"),
-  );
-  expect(gutter.props["data-status-alert"]).toBe("error");
+  // Moving focus elsewhere must not change it either.
+  await act(() => otherRow!.props.onClick({ altKey: false }));
+  gutter = renderer!.root.findAllByProps({ "data-status-gutter": "true" })[0]!;
+  expect(gutter.props["data-session-status"]).toBe("failed");
 });
 
 it("marks closed sessions with data-session-closed and suppresses drag initiation on pointerdown", async () => {
