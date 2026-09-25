@@ -40,7 +40,7 @@ describe("orchestration protocol compatibility", () => {
     if (Number(ORCHESTRATION_PROTOCOL_VERSION) === 1) {
       expect(error).toBeNull();
     } else {
-      expect(error).toMatchObject({ reason: "unsupported" });
+      expect(error).toMatchObject({ reason: "unsupported", failureCode: "protocol-mismatch" });
     }
   });
 
@@ -48,7 +48,7 @@ describe("orchestration protocol compatibility", () => {
     const error = orchestrationProtocolCompatibilityError(
       descriptor(ORCHESTRATION_PROTOCOL_VERSION + 1),
     );
-    expect(error).toMatchObject({ reason: "unsupported" });
+    expect(error).toMatchObject({ reason: "unsupported", failureCode: "protocol-mismatch" });
     expect(error?.message).toContain("This client is not supported");
   });
 });

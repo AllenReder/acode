@@ -184,10 +184,12 @@ describe("ssh tunnel scripts", () => {
     assert.include(script, 'AWEN_RUNTIME_DIR="$AWEN_HOME/runtime/versions/$AWEN_ARCHIVE_VERSION"');
     assert.include(script, 'AWEN_ARCHIVE="awen-server-$AWEN_ARCHIVE_VERSION-linux-x64.tar.gz"');
     assert.include(script, "SHA256SUMS");
+    assert.include(script, "AWEN_ERROR install-download-checksum Checksum mismatch for %s.");
     assert.include(script, 'exec "$AWEN_RUNTIME_DIR/bin/awen" "$@"');
     assert.include(script, 'if [ "$(uname -s)" != "Linux" ]; then');
     assert.include(script, "x86_64 | amd64");
     assert.include(script, "if ! command -v git >/dev/null 2>&1; then");
+    assert.include(script, "AWEN_ERROR prerequisite-missing Remote host is missing Git on PATH.");
     assert.include(script, "if ! ensure_remote_node_path; then");
     assert.notInclude(script, "npx");
     assert.notInclude(script, "npm exec");
@@ -343,6 +345,7 @@ describe("ssh tunnel scripts", () => {
     assert.include(launch, '--base-dir "$DEFAULT_SERVER_HOME"');
     assert.notInclude(launch, "server-home");
     assert.include(launch, "Remote Awen daemon did not become ready");
+    assert.include(launch, "AWEN_ERROR daemon-start Remote Awen daemon did not become ready");
     assert.include(launch, 'wait_ready "60000"');
     assert.include(launch, 'if [ -s "$LOG_FILE" ]; then');
     assert.include(launch, "It wrote nothing to %s");
@@ -350,6 +353,10 @@ describe("ssh tunnel scripts", () => {
     assert.include(
       buildRemotePairingScript(target, ARCHIVE),
       '"$RUNNER_FILE" auth pairing create --base-dir "$PAIRING_BASE_DIR" --json',
+    );
+    assert.include(
+      buildRemotePairingScript(target, ARCHIVE),
+      "AWEN_ERROR daemon-authentication Failed to create an authorized pairing credential",
     );
     assert.include(
       buildRemotePairingScript(target, ARCHIVE),
@@ -780,6 +787,59 @@ describe("ssh tunnel scripts", () => {
         assert.include(result.failure.message, "Permission denied");
       }
       // No 70 MB download and no SCP upload may precede the auth signal.
+      assert.equal(scpUploads, 0);
+      assert.deepEqual(httpUrls, []);
+    }).pipe(Effect.provide(layer), Effect.scoped);
+  });
+
+  it.effect("skips the local package fallback when a remote prerequisite is missing", () => {
+    const target = {
+      alias: "devbox",
+      hostname: "devbox.example.com",
+      username: "julius",
+      port: 2222,
+    } as const;
+    let scpUploads = 0;
+    const httpUrls: string[] = [];
+    const spawner = ChildProcessSpawner.make((command) =>
+      Effect.sync(() => {
+        const args = commandArgs(command);
+        if (commandName(command).startsWith("scp")) {
+          scpUploads += 1;
+          return makeSuccessfulProcess("");
+        }
+        if (args.includes("--")) {
+          return {
+            ...makeSuccessfulProcess(""),
+            exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(1)),
+            stderr: Stream.make(
+              new TextEncoder().encode(
+                "AWEN_ERROR prerequisite-missing Remote host is missing Git on PATH.\n",
+              ),
+            ),
+          };
+        }
+        return makeSuccessfulProcess("\n");
+      }),
+    );
+    const recordingHttpClient = HttpClient.make((request) => {
+      httpUrls.push(request.url);
+      return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("", { status: 200 })));
+    });
+    const layer = Layer.mergeAll(
+      NodeServices.layer,
+      Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Layer.succeed(HttpClient.HttpClient, recordingHttpClient),
+      Layer.succeed(NetService.NetService, testNetService),
+      SshPasswordPrompt.disabledLayer,
+      SshEnvironmentManager.layer({ resolveCliRunner: Effect.succeed(ARCHIVE) }),
+    );
+
+    return Effect.gen(function* () {
+      const manager = yield* SshEnvironmentManager;
+      const result = yield* Effect.result(manager.ensureEnvironment(target));
+
+      assert.isTrue(Result.isFailure(result));
       assert.equal(scpUploads, 0);
       assert.deepEqual(httpUrls, []);
     }).pipe(Effect.provide(layer), Effect.scoped);

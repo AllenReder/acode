@@ -13,18 +13,22 @@ import {
   DesktopSshEnvironmentTargetSchema,
   DesktopSshPasswordPromptCancelledType,
   DesktopSshPasswordPromptResolutionInputSchema,
+  type ConnectionFailureCode,
   EnvironmentAuthInvalidError,
   EnvironmentInternalError,
+  EnvironmentOperationForbiddenError,
+  EnvironmentRequestInvalidError,
+  EnvironmentResourceNotFoundError,
   EnvironmentScopeRequiredError,
 } from "@awen/contracts";
 import {
+  classifySshFailure,
   SshCommandError,
   SshHostDiscoveryError,
   SshHttpBridgeError,
   SshInvalidTargetError,
   SshLaunchError,
   SshPairingError,
-  SshPasswordPromptError,
   SshReadinessError,
 } from "@awen/ssh/errors";
 import { resolveLoopbackSshHttpBaseUrl } from "@awen/ssh/tunnel";
@@ -94,6 +98,7 @@ export class DesktopSshEnvironmentRequestError extends Data.TaggedError(
   readonly operation: DesktopSshEnvironmentRequestOperation;
   readonly cause: DesktopSshEnvironmentRequestCause;
   readonly sshHttpStatus: number | null;
+  readonly failureCode: ConnectionFailureCode;
 }> {
   override get message() {
     const prefix = this.sshHttpStatus === null ? "" : `[ssh_http:${this.sshHttpStatus}] `;
@@ -108,31 +113,70 @@ const decodeJsonBody = <A>(schema: Schema.Schema<A>) =>
     return yield* Schema.decodeUnknownEffect(schema)(body);
   });
 
-const sshErrorStatus = (error: unknown): number => {
+export const sshErrorStatus = (error: unknown): number => {
   if (error instanceof SshInvalidTargetError) return 400;
-  if (error instanceof SshPasswordPromptError) return 401;
-  if (error instanceof SshCommandError) return 502;
-  if (error instanceof SshHostDiscoveryError) return 502;
-  if (
-    error instanceof SshLaunchError ||
-    error instanceof SshPairingError ||
-    error instanceof SshReadinessError ||
-    error instanceof NetService.NetError
-  ) {
-    return 502;
+  const failureCode = classifySshFailure(error).code;
+  switch (failureCode) {
+    case "ssh-authentication":
+    case "daemon-authentication":
+      return 401;
+    case "host-key-change":
+    case "protocol-mismatch":
+      return 409;
+    case "prerequisite-missing":
+      return 422;
+    case "install-download-checksum":
+    case "daemon-start":
+    case "unreachable":
+      return 502;
+    case "unknown":
+      return error instanceof SshCommandError ||
+        error instanceof SshHostDiscoveryError ||
+        error instanceof SshLaunchError ||
+        error instanceof SshPairingError ||
+        error instanceof SshReadinessError ||
+        error instanceof NetService.NetError
+        ? 502
+        : 500;
   }
-  return 500;
 };
 
-const sshErrorResponse = (error: unknown) =>
-  HttpServerResponse.jsonUnsafe(
+const sshErrorResponse = (error: unknown) => {
+  const failure = classifySshFailure(error);
+  return HttpServerResponse.jsonUnsafe(
     {
       error: {
-        message: error instanceof Error ? error.message : String(error),
+        code: failure.code,
+        message: failure.detail,
       },
     },
     { status: sshErrorStatus(error) },
   );
+};
+
+export const remoteRequestFailureCode = (
+  operation: DesktopSshEnvironmentRequestOperation,
+  cause: DesktopSshEnvironmentRequestCause,
+  status: number | null,
+): ConnectionFailureCode => {
+  if (
+    Schema.is(EnvironmentAuthInvalidError)(cause) ||
+    Schema.is(EnvironmentScopeRequiredError)(cause) ||
+    Schema.is(EnvironmentOperationForbiddenError)(cause)
+  ) {
+    return "daemon-authentication";
+  }
+  if (status === 401 || status === 403) return "daemon-authentication";
+  if (
+    operation === "fetch-environment-descriptor" &&
+    (status === 404 ||
+      Schema.is(EnvironmentRequestInvalidError)(cause) ||
+      Schema.is(EnvironmentResourceNotFoundError)(cause))
+  ) {
+    return "protocol-mismatch";
+  }
+  return "daemon-start";
+};
 
 const readSshHttpStatus = (cause: DesktopSshEnvironmentRequestCause): number | null => {
   if (
@@ -158,16 +202,20 @@ const withLoopbackSshApi =
             operation,
             cause,
             sshHttpStatus: readSshHttpStatus(cause),
+            failureCode: remoteRequestFailureCode(operation, cause, readSshHttpStatus(cause)),
           }),
       ),
     );
 
-const sshRequestErrorStatus = (error: DesktopSshEnvironmentRequestError): number =>
-  error.sshHttpStatus ?? 502;
+export const sshRequestErrorStatus = (error: DesktopSshEnvironmentRequestError): number => {
+  if (error.failureCode === "daemon-authentication") return 401;
+  if (error.failureCode === "protocol-mismatch") return 409;
+  return error.sshHttpStatus ?? 502;
+};
 
 const sshRequestErrorResponse = (error: DesktopSshEnvironmentRequestError) =>
   HttpServerResponse.jsonUnsafe(
-    { error: { message: error.message } },
+    { error: { code: error.failureCode, message: error.message } },
     { status: sshRequestErrorStatus(error) },
   );
 

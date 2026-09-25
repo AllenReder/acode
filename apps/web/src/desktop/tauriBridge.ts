@@ -4,12 +4,14 @@ import { bootstrapRemoteBearerSession } from "@awen/client-runtime/authorization
 import { remoteHttpClientLayer } from "@awen/client-runtime/rpc";
 import {
   AuthStandardClientScopes,
+  ConnectionFailureCodeSchema,
   DesktopSshPasswordPromptCancelledType,
   type AdvertisedEndpoint,
   type AuthBearerSessionResult,
   type AuthSessionState,
   type AuthWebSocketTicketResult,
   type ClientSettings,
+  type ConnectionFailureCode,
   type ContextMenuItem,
   type DesktopAppBranding,
   type DesktopBridge,
@@ -31,10 +33,11 @@ import {
   type PickFolderOptions,
 } from "@awen/contracts";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 import { readBrowserClientSettings, writeBrowserClientSettings } from "../clientPersistenceStorage";
 import { showContextMenuFallback } from "../contextMenuFallback";
-import { SshPasswordPromptCancelledError } from "./sshErrors";
+import { DesktopSshRequestError, SshPasswordPromptCancelledError } from "./sshErrors";
 import { isTauri } from "../env";
 
 interface TauriRuntimeConfig {
@@ -82,32 +85,53 @@ export function createDesktopSshApiClient(options: DesktopSshApiClientOptions) {
     request: async <T>(path: string, requestOptions: DesktopSshApiRequestOptions = {}) => {
       const baseUrl = options.getBaseUrl();
       if (!baseUrl) {
-        throw new Error("The local daemon endpoint is unavailable.");
+        throw new DesktopSshRequestError(
+          "unreachable",
+          "The local daemon endpoint is unavailable.",
+        );
       }
       const token = await options.getBearerToken();
-      const response = await fetchFn(new URL(path, baseUrl), {
-        method: requestOptions.method ?? "GET",
-        ...(requestOptions.signal ? { signal: requestOptions.signal } : {}),
-        headers: {
-          authorization: `Bearer ${token}`,
-          ...(requestOptions.body === undefined ? {} : { "content-type": "application/json" }),
-        },
-        ...(requestOptions.body === undefined ? {} : { body: JSON.stringify(requestOptions.body) }),
-      });
+      let response: Response;
+      try {
+        response = await fetchFn(new URL(path, baseUrl), {
+          method: requestOptions.method ?? "GET",
+          ...(requestOptions.signal ? { signal: requestOptions.signal } : {}),
+          headers: {
+            authorization: `Bearer ${token}`,
+            ...(requestOptions.body === undefined ? {} : { "content-type": "application/json" }),
+          },
+          ...(requestOptions.body === undefined
+            ? {}
+            : { body: JSON.stringify(requestOptions.body) }),
+        });
+      } catch (cause) {
+        if (requestOptions.signal?.aborted) throw cause;
+        throw new DesktopSshRequestError(
+          "unreachable",
+          cause instanceof Error ? cause.message : "The local daemon is unreachable.",
+        );
+      }
 
       if (!response.ok) {
         let message = `Local daemon SSH request failed with HTTP ${response.status}.`;
+        let code: ConnectionFailureCode = "unknown";
         try {
           const body = (await response.clone().json()) as {
-            readonly error?: { readonly message?: string };
+            readonly error?: { readonly code?: unknown; readonly message?: unknown };
           };
-          if (body.error?.message) {
+          if (typeof body.error?.message === "string" && body.error.message.length > 0) {
             message = body.error.message;
+          }
+          if (
+            typeof body.error?.code === "string" &&
+            Schema.is(ConnectionFailureCodeSchema)(body.error.code)
+          ) {
+            code = body.error.code;
           }
         } catch {
           // Keep the HTTP status fallback when the daemon returns no JSON body.
         }
-        throw new Error(message);
+        throw new DesktopSshRequestError(code, message, response.status);
       }
       if (response.status === 204) {
         return undefined as T;

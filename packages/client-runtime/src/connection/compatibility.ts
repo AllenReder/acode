@@ -16,6 +16,7 @@ export function orchestrationProtocolCompatibilityError(
   }
   return new ConnectionBlockedError({
     reason: "unsupported",
+    failureCode: "protocol-mismatch",
     detail:
       serverProtocolVersion > ORCHESTRATION_PROTOCOL_VERSION
         ? `This client is not supported by this server. Update your app or use a compatible release to connect to ${descriptor.label}.`

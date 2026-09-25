@@ -468,6 +468,30 @@ export const DesktopSshEnvironmentTargetSchema = Schema.Struct({
 });
 export type DesktopSshEnvironmentTarget = typeof DesktopSshEnvironmentTargetSchema.Type;
 
+/**
+ * Stable failure categories surfaced by connection onboarding. They are kept
+ * separate from an error message so the desktop can choose presentation and
+ * recovery without parsing backend text.
+ */
+export const ConnectionFailureCodeSchema = Schema.Literals([
+  "unreachable",
+  "ssh-authentication",
+  "host-key-change",
+  "prerequisite-missing",
+  "install-download-checksum",
+  "daemon-start",
+  "daemon-authentication",
+  "protocol-mismatch",
+  "unknown",
+]);
+export type ConnectionFailureCode = typeof ConnectionFailureCodeSchema.Type;
+
+export const DesktopSshErrorPayloadSchema = Schema.Struct({
+  code: ConnectionFailureCodeSchema,
+  message: Schema.String,
+});
+export type DesktopSshErrorPayload = typeof DesktopSshErrorPayloadSchema.Type;
+
 export type DesktopSshHostSource = "ssh-config" | "known-hosts";
 export const DesktopSshHostSourceSchema = Schema.Literals(["ssh-config", "known-hosts"]);
 
