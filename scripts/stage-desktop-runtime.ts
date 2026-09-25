@@ -270,6 +270,46 @@ async function stageTargetNode(target: DesktopRuntimeTarget, destination: string
   console.log(`[awen] staged Node ${version} for ${target.triple}`);
 }
 
+/**
+ * Remove the `node_modules/.bin` shims a deploy writes for package binaries.
+ * Nothing in the packaged runtime executes a shim: the desktop shell starts the
+ * daemon with `dist/bin.mjs` through the embedded Node binary. On POSIX those
+ * shims are symlinks, which the installer cannot carry, so drop them before the
+ * link check rather than shipping a tree that cannot be copied faithfully.
+ */
+export function removeNodeModulesBinShims(runtimeDir: string): void {
+  NodeFS.rmSync(NodePath.join(runtimeDir, "node_modules", ".bin"), {
+    recursive: true,
+    force: true,
+  });
+}
+
+/**
+ * Refuse to stage a runtime that resolves anything through a symlink or a
+ * junction. Tauri's resource copy drops those entries, so a linked tree ships
+ * an installer whose daemon cannot resolve its dependencies; failing here names
+ * the mechanism instead of leaving it to a user-visible crash.
+ */
+export function assertLinkFreeRuntime(runtimeDir: string): void {
+  const offenders: string[] = [];
+  const walk = (directory: string): void => {
+    for (const entry of NodeFS.readdirSync(directory, { withFileTypes: true })) {
+      const entryPath = NodePath.join(directory, entry.name);
+      if (NodeFS.lstatSync(entryPath).isSymbolicLink()) {
+        offenders.push(NodePath.relative(runtimeDir, entryPath));
+        continue;
+      }
+      if (entry.isDirectory()) walk(entryPath);
+    }
+  };
+  walk(runtimeDir);
+  if (offenders.length > 0) {
+    throw new Error(
+      `The staged desktop runtime resolves ${offenders.length} path(s) through symlinks or junctions, which the installer cannot copy: ${offenders.slice(0, 3).join(", ")}`,
+    );
+  }
+}
+
 export async function stageDesktopRuntime({ target }: StageRuntimeArguments = {}): Promise<void> {
   const hostPlatform = Effect.runSync(HostProcessPlatform);
   const runtimeTarget = target === undefined ? undefined : resolveDesktopRuntimeTarget(target);
@@ -283,8 +323,16 @@ export async function stageDesktopRuntime({ target }: StageRuntimeArguments = {}
 
   runPnpm(["build"]);
   NodeFS.rmSync(STAGE, { recursive: true, force: true });
+  // Stage the hoisted layout. Tauri copies this tree into the installer as
+  // desktop resources, and that copy keeps real files and directories only:
+  // symlinks and junctions never reach the installed app. The isolated layout
+  // resolves every dependency through exactly those links, so the packaged
+  // daemon could not load its first import (`@ff-labs/fff-node`), the shell
+  // reported a failed local runtime config, and the client fell back to the
+  // window origin instead of the daemon.
   runPnpm([
     "--config.confirmModulesPurge=false",
+    "--config.node-linker=hoisted",
     "--filter=@awen/server",
     "deploy",
     "--legacy",
@@ -305,6 +353,8 @@ export async function stageDesktopRuntime({ target }: StageRuntimeArguments = {}
   if (!NodeFS.existsSync(NodePath.join(STAGE, "dist/bin.mjs"))) {
     throw new Error("The staged desktop runtime is missing dist/bin.mjs.");
   }
+  removeNodeModulesBinShims(STAGE);
+  assertLinkFreeRuntime(STAGE);
   console.log(`[awen] staged desktop daemon and Node runtime in ${STAGE}`);
 }
 

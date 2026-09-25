@@ -11,10 +11,10 @@ import {
   applyMoveInColumn,
   applyCreateTab,
   applyMoveTab,
-  applyDuplicateToNewTab,
   applyActivateTab,
   applyCloseTab,
   applyClosePane,
+  applyDedupeSessionViews,
   applyRemoveSessionViews,
   applyReplacePaneTarget,
   applyRenameTab,
@@ -31,7 +31,6 @@ import {
   type ViewDragSource,
   type ViewDropTarget,
   type ViewDropResult,
-  type ViewDuplicateSource,
   type WorkbenchSnapshot,
 } from "./workbenchState";
 import type { SplitDir } from "./layout";
@@ -59,7 +58,6 @@ export interface WorkbenchStore extends WorkbenchSnapshot {
   replaceTarget: (paneId: string, target: ViewTarget) => void;
   previewDrop: (source: ViewDragSource, target: ViewDropTarget) => ViewDropResult | null;
   commitDrop: (result: ViewDropResult) => void;
-  duplicateToNewTab: (source: ViewDuplicateSource) => void;
   openTarget: (target: ViewTarget) => void;
   openDeepLinkTarget: (target: ViewTarget) => void;
   pruneWorkspaceViews: (
@@ -91,8 +89,11 @@ export interface WorkbenchStoreOptions {
 export function createWorkbenchStore(options: WorkbenchStoreOptions = {}) {
   const generateId = options.generateId ?? defaultGenerateId;
   const persist = options.persist ?? ((snapshot) => writeWorkbenchSnapshot(snapshot));
-  const initialSnapshot = applyRemoveWorkspaceViews(
-    options.initialSnapshot ?? readWorkbenchSnapshot() ?? emptyWorkbenchSnapshot(generateId),
+  const initialSnapshot = applyDedupeSessionViews(
+    applyRemoveWorkspaceViews(
+      options.initialSnapshot ?? readWorkbenchSnapshot() ?? emptyWorkbenchSnapshot(generateId),
+      generateId,
+    ),
     generateId,
   );
   const previews = new WeakMap<ViewDropResult, WorkbenchSnapshot>();
@@ -170,7 +171,7 @@ export function createWorkbenchStore(options: WorkbenchStoreOptions = {}) {
     removeSessionViews: (target) =>
       set((snapshot) => applyRemoveSessionViews(snapshot, target, generateId)),
     replaceTarget: (paneId, target) =>
-      set((snapshot) => applyReplacePaneTarget(snapshot, paneId, target)),
+      set((snapshot) => applyReplacePaneTarget(snapshot, paneId, target, generateId)),
     previewDrop: (source, target) => {
       const base = get();
       const result = applyViewDrop(base, source, target, generateId);
@@ -184,15 +185,6 @@ export function createWorkbenchStore(options: WorkbenchStoreOptions = {}) {
         if (!base || base.tabs !== snapshot.tabs || base.activeTabId !== snapshot.activeTabId)
           return snapshot;
         return { ...result.snapshot, focusRequestId: snapshot.focusRequestId + 1 };
-      }),
-    duplicateToNewTab: (source) =>
-      set((snapshot) => {
-        const sourceIndex = snapshot.tabs.findIndex((tab) => tab.id === source.tabId);
-        const index = sourceIndex < 0 ? snapshot.tabs.length : sourceIndex + 1;
-        const result = applyDuplicateToNewTab(snapshot, source, index, generateId);
-        return result === null
-          ? snapshot
-          : { ...result.snapshot, focusRequestId: snapshot.focusRequestId + 1 };
       }),
     openTarget: (target) =>
       set((snapshot) => ({

@@ -972,6 +972,101 @@ describe("OrchestrationEngine", () => {
     await system.dispose();
   });
 
+  it("returns the accepted result for a repeated operation identity", async () => {
+    const createdAt = now();
+    const operationId = CommandId.make("cmd-operation-result-turn");
+    const system = await createOrchestrationSystem();
+    const { engine } = system;
+
+    try {
+      await system.run(
+        engine.dispatch({
+          type: "project.create",
+          commandId: CommandId.make("cmd-operation-result-project"),
+          projectId: asProjectId("project-operation-result"),
+          title: "Operation result",
+          workspaceRoot: "/tmp/project-operation-result",
+          defaultModelSelection: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: "gpt-5-codex",
+          },
+          createdAt,
+        }),
+      );
+      await system.run(
+        engine.dispatch({
+          type: "thread.create",
+          commandId: CommandId.make("cmd-operation-result-thread"),
+          threadId: ThreadId.make("thread-operation-result"),
+          projectId: asProjectId("project-operation-result"),
+          title: "Operation result",
+          modelSelection: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: "gpt-5-codex",
+          },
+          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+          runtimeMode: "approval-required",
+          branch: null,
+          worktreePath: null,
+          createdAt,
+        }),
+      );
+
+      const turnCommand = {
+        type: "thread.turn.start" as const,
+        commandId: operationId,
+        threadId: ThreadId.make("thread-operation-result"),
+        message: {
+          messageId: asMessageId("msg-operation-result"),
+          role: "user" as const,
+          text: "hello",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required" as const,
+        createdAt,
+      };
+      const first = await system.run(engine.dispatch(turnCommand));
+      const replay = await system.run(engine.dispatch(turnCommand));
+      expect(replay).toEqual(first);
+      const getOperationResult = engine.getOperationResult;
+      if (!getOperationResult) {
+        throw new Error("OrchestrationEngine.getOperationResult was not wired");
+      }
+      expect(await system.run(getOperationResult(operationId))).toEqual({
+        _tag: "accepted",
+        operationId,
+        sequence: first.sequence,
+      });
+      expect(await system.run(getOperationResult(CommandId.make("cmd-never-seen")))).toEqual({
+        _tag: "unknown",
+        operationId: CommandId.make("cmd-never-seen"),
+      });
+
+      const second = await system.run(
+        engine.dispatch({
+          ...turnCommand,
+          commandId: CommandId.make("cmd-operation-result-second-turn"),
+          message: {
+            ...turnCommand.message,
+            messageId: asMessageId("msg-operation-result-second"),
+            text: "hello again",
+          },
+          createdAt: "2026-01-01T00:00:01.000Z",
+        }),
+      );
+      expect(second.sequence).toBeGreaterThan(first.sequence);
+
+      const readModel = await system.readModel();
+      const thread = readModel.threads.find(
+        (entry) => entry.id === ThreadId.make("thread-operation-result"),
+      );
+      expect(thread?.messages.filter((message) => message.role === "user")).toHaveLength(2);
+    } finally {
+      await system.dispose();
+    }
+  });
+
   it("archives and unarchives threads through orchestration commands", async () => {
     const system = await createOrchestrationSystem();
     const { engine } = system;

@@ -1,7 +1,7 @@
 import {
   MessageSquarePlusIcon,
   TerminalIcon,
-  CopyPlusIcon,
+  MoveIcon,
   FolderIcon,
   GitBranchIcon,
 } from "lucide-react";
@@ -997,7 +997,7 @@ function ghostInfoForView(
     };
   }
   return {
-    icon: <CopyPlusIcon className="size-5 text-primary" />,
+    icon: <MoveIcon className="size-5 text-primary" />,
     typeLabel: "View",
   };
 }
@@ -1025,12 +1025,13 @@ function dragGhostInfo(source: ViewDragSource): {
       }
     }
     return {
-      icon: <CopyPlusIcon className="size-5 text-primary" />,
+      icon: <MoveIcon className="size-5 text-primary" />,
       typeLabel: "Tab",
     };
   }
   return {
-    icon: <CopyPlusIcon className="size-5 text-primary" />,
+    // ADR-0010: dragging a View moves it; no drag gesture copies one.
+    icon: <MoveIcon className="size-5 text-primary" />,
     typeLabel: "View",
   };
 }

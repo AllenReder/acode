@@ -260,6 +260,53 @@ const make = Effect.gen(function* () {
   >();
   const stoppingThreadIds = new Set<ThreadId>();
 
+  const appendApprovalAlreadyHandledActivity = (input: {
+    readonly threadId: ThreadId;
+    readonly requestId: string;
+    readonly effectiveDecision:
+      | "accept"
+      | "acceptForSession"
+      | "acceptAlways"
+      | "decline"
+      | "cancel"
+      | null;
+    readonly attemptedDecision:
+      | "accept"
+      | "acceptForSession"
+      | "acceptAlways"
+      | "decline"
+      | "cancel";
+    readonly turnId: TurnId | null;
+    readonly createdAt: string;
+  }) =>
+    Effect.all({
+      commandId: serverCommandId("approval-already-handled-activity"),
+      eventId: serverEventId(),
+    }).pipe(
+      Effect.flatMap(({ commandId, eventId }) =>
+        orchestrationEngine.dispatch({
+          type: "thread.activity.append",
+          commandId,
+          threadId: input.threadId,
+          activity: {
+            id: eventId,
+            tone: "approval",
+            kind: "approval.respond.already-resolved",
+            summary: "Approval already handled",
+            payload: {
+              requestId: input.requestId,
+              decision: input.effectiveDecision,
+              attemptedDecision: input.attemptedDecision,
+            },
+            turnId: input.turnId,
+            createdAt: input.createdAt,
+          },
+          createdAt: input.createdAt,
+        }),
+      ),
+      Effect.asVoid,
+    );
+
   const appendProviderFailureActivity = (input: {
     readonly threadId: ThreadId;
     readonly kind:
@@ -557,6 +604,7 @@ const make = Effect.gen(function* () {
     options?: {
       readonly modelSelection?: ModelSelection;
       readonly pendingTurnStart?: boolean;
+      readonly previewHost?: boolean;
     },
   ) {
     const thread = yield* resolveThreadShell(threadId);
@@ -700,16 +748,20 @@ const make = Effect.gen(function* () {
       readonly provider?: ProviderDriverKind;
     }) =>
       providerService
-        .startSession(threadId, {
+        .startSession(
           threadId,
-          ...(preferredProvider ? { provider: preferredProvider } : {}),
-          providerInstanceId: desiredInstanceId,
-          ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
-          ...(thread.title ? { title: thread.title } : {}),
-          modelSelection: desiredModelSelection,
-          ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
-          runtimeMode: desiredRuntimeMode,
-        })
+          {
+            threadId,
+            ...(preferredProvider ? { provider: preferredProvider } : {}),
+            providerInstanceId: desiredInstanceId,
+            ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
+            ...(thread.title ? { title: thread.title } : {}),
+            modelSelection: desiredModelSelection,
+            ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
+            runtimeMode: desiredRuntimeMode,
+          },
+          options?.previewHost === undefined ? undefined : { previewHost: options.previewHost },
+        )
         .pipe(Effect.tap(() => refreshWorkspaceSnapshot));
 
     const bindSessionToThread = (session: ProviderSession) =>
@@ -821,6 +873,7 @@ const make = Effect.gen(function* () {
     readonly modelSelection?: ModelSelection;
     readonly interactionMode?: "default" | "plan";
     readonly createdAt: string;
+    readonly previewHost?: boolean;
   }) {
     const thread = yield* resolveThreadShell(input.threadId);
     if (!thread) {
@@ -830,6 +883,7 @@ const make = Effect.gen(function* () {
     }
     yield* ensureSessionForThread(input.threadId, input.createdAt, {
       ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
+      ...(input.previewHost !== undefined ? { previewHost: input.previewHost } : {}),
       pendingTurnStart: true,
     });
     if (input.modelSelection !== undefined) {
@@ -1422,13 +1476,15 @@ const make = Effect.gen(function* () {
         () => void compactingThreadIds.delete(event.payload.threadId),
       );
       yield* Effect.gen(function* () {
-        yield* ensureSessionForThread(
-          event.payload.threadId,
-          event.payload.createdAt,
-          event.payload.modelSelection !== undefined
-            ? { modelSelection: event.payload.modelSelection, pendingTurnStart: true }
-            : { pendingTurnStart: true },
-        );
+        yield* ensureSessionForThread(event.payload.threadId, event.payload.createdAt, {
+          ...(event.payload.modelSelection !== undefined
+            ? { modelSelection: event.payload.modelSelection }
+            : {}),
+          ...(event.metadata.origin?.previewHost !== undefined
+            ? { previewHost: event.metadata.origin.previewHost }
+            : {}),
+          pendingTurnStart: true,
+        });
         compactionSessionEnsured = true;
         if (event.payload.modelSelection !== undefined) {
           threadModelSelections.set(event.payload.threadId, event.payload.modelSelection);
@@ -1479,6 +1535,9 @@ const make = Effect.gen(function* () {
         : {}),
       interactionMode: event.payload.interactionMode,
       createdAt: event.payload.createdAt,
+      ...(event.metadata.origin?.previewHost !== undefined
+        ? { previewHost: event.metadata.origin.previewHost }
+        : {}),
     }).pipe(
       Effect.map(Option.some),
       Effect.catchCause((cause) => handleTurnStartFailure(cause).pipe(Effect.as(Option.none()))),
@@ -1601,6 +1660,34 @@ const make = Effect.gen(function* () {
   const processApprovalResponseRequested = Effect.fn("processApprovalResponseRequested")(function* (
     event: Extract<ProviderIntentEvent, { type: "thread.approval-response-requested" }>,
   ) {
+    const getPendingApproval = projectionSnapshotQuery.getPendingApproval;
+    const pendingApproval = getPendingApproval
+      ? yield* getPendingApproval({ requestId: event.payload.requestId })
+      : Option.none();
+    if (Option.isNone(pendingApproval)) {
+      return yield* appendProviderFailureActivity({
+        threadId: event.payload.threadId,
+        kind: "provider.approval.respond.failed",
+        summary: "Provider approval response failed",
+        detail: stalePendingRequestDetail("approval", event.payload.requestId),
+        turnId: null,
+        createdAt: event.payload.createdAt,
+        requestId: event.payload.requestId,
+      });
+    }
+
+    const approval = pendingApproval.value;
+    if (approval.status === "resolved" && approval.responseCommandId !== event.commandId) {
+      return yield* appendApprovalAlreadyHandledActivity({
+        threadId: approval.threadId,
+        requestId: event.payload.requestId,
+        effectiveDecision: approval.decision,
+        attemptedDecision: event.payload.decision,
+        turnId: approval.turnId,
+        createdAt: event.payload.createdAt,
+      });
+    }
+
     const thread = yield* resolveThreadShell(event.payload.threadId);
     if (!thread) {
       return;
@@ -1784,11 +1871,12 @@ const make = Effect.gen(function* () {
           return;
         }
         const cachedModelSelection = threadModelSelections.get(event.payload.threadId);
-        yield* ensureSessionForThread(
-          event.payload.threadId,
-          event.occurredAt,
-          cachedModelSelection !== undefined ? { modelSelection: cachedModelSelection } : {},
-        );
+        yield* ensureSessionForThread(event.payload.threadId, event.occurredAt, {
+          ...(cachedModelSelection !== undefined ? { modelSelection: cachedModelSelection } : {}),
+          ...(event.metadata.origin?.previewHost !== undefined
+            ? { previewHost: event.metadata.origin.previewHost }
+            : {}),
+        });
         return;
       }
       case "thread.turn-start-requested":

@@ -8,9 +8,11 @@ A `ViewTarget` contains an Awen Project, Workspace, Agent Session, or Terminal
 Session identity, scoped to an environment. Welcome has no work target.
 `definitionId` optionally selects a registered renderer; otherwise the target
 kind selects the built-in definition. Project and Workspace definitions can
-coexist for the same target. Session uniqueness still applies per Tab across
-all definitions: opening an already displayed Session focuses its existing
-View, rather than replacing its renderer or creating a second Session View.
+coexist for the same target. Session uniqueness applies across the whole
+Workbench and only to Session Views: opening an already displayed Session
+focuses its existing View, and an explicit split or drop moves that View
+rather than replacing a renderer or creating a second Session View. File, Git,
+and Project Views keep their own per-Tab coexistence rules (ADR-0008).
 
 A `ViewDefinition<Target, Data, Capabilities>` provides:
 

@@ -3095,6 +3095,18 @@ export default function ChatView(props: ChatViewProps) {
     hasComposerAttachments: composerHasAttachments,
   });
   const activePendingApproval = pendingApprovals[0] ?? null;
+  const activePendingApprovalUnsupportedReason = useMemo(() => {
+    const supportedKinds = activeProviderStatus?.approvalRequestKinds;
+    if (!activePendingApproval || !supportedKinds) {
+      return null;
+    }
+    if (supportedKinds.includes(activePendingApproval.requestKind)) {
+      return null;
+    }
+    const providerName =
+      activeProviderStatus.displayName ?? activeProviderStatus.driver ?? "This provider";
+    return `${providerName} does not support ${activePendingApproval.requestKind} approval requests.`;
+  }, [activePendingApproval, activeProviderStatus]);
   // The open /usage-limits panel for this thread, model and turn. Only the open
   // moment is stored: the rows read live provider data, so a redeemed reset
   // credit or refreshed probe shows through. Anything that spends quota closes
@@ -7180,6 +7192,7 @@ export default function ChatView(props: ChatViewProps) {
           : await startThreadTurn({
               environmentId,
               input: {
+                operationId: messageId,
                 threadId,
                 message: { messageId, role: "user", text: "/compact", attachments: [] },
                 modelSelection: context.selectedModelSelection,
@@ -8056,6 +8069,7 @@ export default function ChatView(props: ChatViewProps) {
       const startPromise = startThreadTurn({
         environmentId,
         input: {
+          operationId: messageIdForSend,
           threadId: threadIdForSend,
           message: {
             messageId: messageIdForSend,
@@ -8359,6 +8373,7 @@ export default function ChatView(props: ChatViewProps) {
       const result = await respondToThreadApproval({
         environmentId,
         input: {
+          operationId: `approval:${activeThreadId}:${requestId}:${decision}`,
           threadId: activeThreadId,
           requestId,
           decision,
@@ -9755,6 +9770,9 @@ export default function ChatView(props: ChatViewProps) {
                             }
                             environmentUnavailable={activeEnvironmentUnavailableState}
                             activePendingApproval={activePendingApproval}
+                            activePendingApprovalUnsupportedReason={
+                              activePendingApprovalUnsupportedReason
+                            }
                             pendingApprovals={pendingApprovals}
                             pendingUserInputs={pendingUserInputs}
                             activePendingProgress={activePendingProgress}

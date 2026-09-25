@@ -71,6 +71,25 @@ describe("ComposerPendingApprovalPanel", () => {
     expect(markup).toContain("Allow ChatGPT to use Safari?");
   });
 
+  it("shows a capability limitation for an unsupported request kind", () => {
+    const reason = "Claude does not support mcp-elicitation approval requests.";
+    const markup = renderToStaticMarkup(
+      <ComposerPendingApprovalPanel
+        approval={{
+          requestId: ApprovalRequestId.make("approval-unsupported"),
+          requestKind: "mcp-elicitation",
+          createdAt: "2026-08-24T00:00:00.000Z",
+          detail: "Allow an app request",
+        }}
+        pendingCount={1}
+        unsupportedReason={reason}
+      />,
+    );
+
+    expect(markup).toContain('data-approval-unsupported="true"');
+    expect(markup).toContain(reason);
+  });
+
   it("limits long app names so the complete approval message stays readable", () => {
     const appName = "A".repeat(200);
     const detail = "Allow ChatGPT to access the selected application?";

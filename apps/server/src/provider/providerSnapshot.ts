@@ -2,6 +2,7 @@ import type {
   CustomModelSetting,
   ProviderDriverKind,
   ModelCapabilities,
+  ProviderRequestKind,
   ServerProvider,
   ServerProviderAuth,
   ServerProviderSkill,
@@ -67,6 +68,7 @@ export interface ServerProviderPresentation {
   readonly reportsContextWindow?: boolean;
   readonly requiresNewThreadForModelChange?: boolean;
   readonly supportsConversationRollback?: boolean;
+  readonly approvalRequestKinds?: ReadonlyArray<ProviderRequestKind>;
 }
 
 export type ServerProviderDraft = Omit<ServerProvider, "instanceId" | "driver">;
@@ -218,6 +220,9 @@ export function buildServerProvider(input: {
     displayName: input.presentation.displayName,
     ...(typeof input.presentation.supportsConversationRollback === "boolean"
       ? { supportsConversationRollback: input.presentation.supportsConversationRollback }
+      : {}),
+    ...(input.presentation.approvalRequestKinds
+      ? { approvalRequestKinds: [...input.presentation.approvalRequestKinds] }
       : {}),
     ...(input.presentation.badgeLabel ? { badgeLabel: input.presentation.badgeLabel } : {}),
     ...(typeof input.presentation.showInteractionModeToggle === "boolean"

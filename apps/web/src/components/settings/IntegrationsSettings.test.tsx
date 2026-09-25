@@ -20,7 +20,7 @@ const { listBrowserImportSources } = vi.hoisted(() => ({
 vi.mock("../preview/previewBridge", () => ({
   previewBridge: { listBrowserImportSources },
 }));
-vi.mock("../../env", () => ({ isDesktop: true, isElectron: true }));
+vi.mock("../../env", () => ({ isDesktop: true, isElectron: true, isTauri: false }));
 vi.mock("../../state/environments", () => ({
   useEnvironments: () => ({ environments: [], isReady: true }),
   usePrimaryEnvironment: () => null,

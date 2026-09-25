@@ -21,6 +21,7 @@ import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { GROK_APPROVAL_REQUEST_KINDS } from "../approvalRequestCapabilities.ts";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
@@ -2159,7 +2160,11 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
 
     return {
       provider: PROVIDER,
-      capabilities: { sessionModelSwitch: "in-session", supportsConversationRollback: false },
+      capabilities: {
+        sessionModelSwitch: "in-session",
+        supportsConversationRollback: false,
+        approvalRequestKinds: GROK_APPROVAL_REQUEST_KINDS,
+      },
       compaction: { type: "slash-command", command: "/compact" },
       startSession,
       sendTurn,

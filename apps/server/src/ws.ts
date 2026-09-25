@@ -42,6 +42,7 @@ import {
   type OrchestrationShellStreamEvent,
   type OrchestrationShellStreamItem,
   OrchestrationGetFullThreadDiffError,
+  OrchestrationGetOperationResultError,
   OrchestrationGetSnapshotError,
   OrchestrationSearchThreadsError,
   OrchestrationGetTurnDiffError,
@@ -447,11 +448,17 @@ function readClientConnectionOrigin(
   }
   const surface = url.value.searchParams.get("clientSurface");
   const appVersion = url.value.searchParams.get("clientAppVersion")?.trim() ?? "";
+  const previewHost = url.value.searchParams.get("clientPreviewHost");
   return {
     ...(isClientSurface(surface) ? { surface } : {}),
     ...(appVersion !== "" && appVersion.length <= MAX_CLIENT_APP_VERSION_LENGTH
       ? { appVersion }
       : {}),
+    ...(previewHost === "1"
+      ? { previewHost: true }
+      : previewHost === "0"
+        ? { previewHost: false }
+        : {}),
   };
 }
 
@@ -580,7 +587,9 @@ const makeWsRpcLayer = (
         // client's origin, including server-generated bootstrap sub-commands:
         // the client's request caused them.
         const hasClientOrigin =
-          clientOrigin.surface !== undefined || clientOrigin.appVersion !== undefined;
+          clientOrigin.surface !== undefined ||
+          clientOrigin.appVersion !== undefined ||
+          clientOrigin.previewHost !== undefined;
         const dispatchFromClient: OrchestrationEngine.OrchestrationEngineShape["dispatch"] = (
           command,
         ) =>
@@ -2010,6 +2019,26 @@ const makeWsRpcLayer = (
                         message: "Failed to dispatch orchestration command",
                         cause,
                       }),
+                ),
+              ),
+              { "rpc.aggregate": "orchestration" },
+            ),
+          [ORCHESTRATION_WS_METHODS.getOperationResult]: (input) =>
+            observeRpcEffect(
+              ORCHESTRATION_WS_METHODS.getOperationResult,
+              (
+                orchestrationEngine.getOperationResult?.(input.operationId) ??
+                Effect.succeed({
+                  _tag: "unknown" as const,
+                  operationId: input.operationId,
+                })
+              ).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new OrchestrationGetOperationResultError({
+                      message: "Failed to read the operation result",
+                      cause,
+                    }),
                 ),
               ),
               { "rpc.aggregate": "orchestration" },

@@ -1,4 +1,4 @@
-import { EnvironmentId } from "@awen/contracts";
+import { ConnectionFailureCodeSchema, EnvironmentId } from "@awen/contracts";
 import * as Schema from "effect/Schema";
 
 const ConnectionTargetBase = {
@@ -71,6 +71,7 @@ export class ConnectionTransientError extends Schema.TaggedError<ConnectionTrans
     reason: ConnectionTransientReason,
     detail: Schema.String,
     traceId: Schema.optionalKey(Schema.String),
+    failureCode: Schema.optionalKey(ConnectionFailureCodeSchema),
   },
 ) {
   override get message(): string {
@@ -84,6 +85,7 @@ export class ConnectionBlockedError extends Schema.TaggedError<ConnectionBlocked
     reason: ConnectionBlockedReason,
     detail: Schema.String,
     traceId: Schema.optionalKey(Schema.String),
+    failureCode: Schema.optionalKey(ConnectionFailureCodeSchema),
   },
 ) {
   override get message(): string {

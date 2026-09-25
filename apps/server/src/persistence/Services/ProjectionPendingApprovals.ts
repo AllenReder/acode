@@ -8,6 +8,7 @@
  */
 import {
   ApprovalRequestId,
+  CommandId,
   IsoDateTime,
   ProjectionPendingApprovalDecision,
   ProjectionPendingApprovalStatus,
@@ -27,6 +28,8 @@ export const ProjectionPendingApproval = Schema.Struct({
   turnId: Schema.NullOr(TurnId),
   status: ProjectionPendingApprovalStatus,
   decision: ProjectionPendingApprovalDecision,
+  /** First client command accepted for this request; null until a response is requested. */
+  responseCommandId: Schema.NullOr(CommandId),
   createdAt: IsoDateTime,
   resolvedAt: Schema.NullOr(IsoDateTime),
 });

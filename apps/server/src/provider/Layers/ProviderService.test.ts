@@ -4945,7 +4945,7 @@ describe("agent browser access", () => {
     access: boolean | { readonly browser: boolean; readonly device: boolean },
     threadId: ThreadId,
     projectOverride?: boolean | { readonly browser?: boolean; readonly device?: boolean },
-    options?: { readonly withoutOrchestration?: boolean },
+    options?: { readonly withoutOrchestration?: boolean; readonly previewHost?: boolean },
   ) =>
     Effect.gen(function* () {
       const enableAgentBrowserAccess = typeof access === "boolean" ? access : access.browser;
@@ -5054,12 +5054,16 @@ describe("agent browser access", () => {
 
       yield* Effect.gen(function* () {
         const provider = yield* ProviderService.ProviderService;
-        return yield* provider.startSession(threadId, {
-          provider: CODEX_DRIVER,
-          providerInstanceId: codexInstanceId,
+        return yield* provider.startSession(
           threadId,
-          runtimeMode: "full-access",
-        });
+          {
+            provider: CODEX_DRIVER,
+            providerInstanceId: codexInstanceId,
+            threadId,
+            runtimeMode: "full-access",
+          },
+          options?.previewHost === undefined ? undefined : { previewHost: options.previewHost },
+        );
       }).pipe(Effect.provide(providerLayer));
 
       return issued;
@@ -5087,6 +5091,16 @@ describe("agent browser access", () => {
       assert.deepEqual(issued, [
         { threadId, capabilities: ["device", "preview", "pull-requests"] },
       ]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("withholds preview when the starting client cannot host preview", () =>
+    Effect.gen(function* () {
+      const threadId = asThreadId("thread-browser-no-preview-host");
+
+      const issued = yield* startSessionWith(true, threadId, undefined, { previewHost: false });
+
+      assert.deepEqual(issued, [{ threadId, capabilities: ["device", "pull-requests"] }]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 

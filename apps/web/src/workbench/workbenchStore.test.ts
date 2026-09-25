@@ -2,6 +2,7 @@ import { expect, it } from "vite-plus/test";
 import type { AgentSessionId, EnvironmentId, WorkspaceId } from "@awen/contracts";
 
 import type { ViewTarget } from "./viewRegistry";
+import { newTab } from "./layout";
 import {
   applyCreateTab,
   applyOpenTarget,
@@ -65,22 +66,35 @@ it("opens a deep link without replacing restored layout", () => {
   expect(store.getState().activeTabId).toBe(store.getState().tabs[0]?.id);
 });
 
-it("duplicates presentation into a new Tab without mutating the source", () => {
+it("repairs a restored layout that mirrored one Session into two Tabs", () => {
   const ids = makeIds();
-  const initial = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids);
-  const sourceTab = getActiveTab(initial);
+  const opened = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids);
+  const sourceTab = getActiveTab(opened);
   const sourcePaneId = sourceTab.focusedPaneId;
   const sourceView = sourceTab.panes.get(sourcePaneId)!;
-  const store = createWorkbenchStore({ initialSnapshot: initial, generateId: ids });
+  // The pre-ADR-0010 model could persist this mirror; the store must repair
+  // it on load instead of rejecting the whole snapshot.
+  const mirrored: WorkbenchSnapshot = {
+    tabs: [
+      sourceTab,
+      {
+        ...newTab("restored-pane"),
+        id: "restored-tab",
+        panes: new Map([["restored-pane", sourceView]]),
+        titleMode: "auto",
+        titleOverride: null,
+      },
+    ],
+    activeTabId: sourceTab.id,
+  };
 
-  store.getState().duplicateToNewTab({ kind: "pane", tabId: sourceTab.id, paneId: sourcePaneId });
+  const store = createWorkbenchStore({ initialSnapshot: mirrored, generateId: ids });
 
   expect(store.getState().tabs).toHaveLength(2);
   expect(store.getState().tabs[0]?.panes.get(sourcePaneId)).toBe(sourceView);
-  const duplicate = store.getState().tabs[1]!;
-  expect(duplicate.panes.size).toBe(1);
-  expect([...duplicate.panes.values()][0]?.id).not.toBe(sourceView.id);
-  expect([...duplicate.panes.values()][0]?.target).toEqual(agent());
+  const restored = store.getState().tabs[1]!;
+  expect(restored.panes.size).toBe(1);
+  expect([...restored.panes.values()][0]?.target).toEqual({ kind: "welcome" });
 });
 
 it("keeps drag preview out of persisted Workbench state until the exact result is committed", () => {

@@ -44,6 +44,7 @@ import { ScreenRotationIcon } from "~/browser/ScreenRotationIcon";
 import { AnimatedHeight } from "~/components/AnimatedHeight";
 import { resolveEnvironmentOptionLabel } from "~/components/BranchToolbar.logic";
 import { previewBridge } from "~/components/preview/previewBridge";
+import { isPreviewSupportedInRuntime } from "~/previewStateStore";
 import { cn, randomUUID } from "~/lib/utils";
 import { useEnvironments, usePrimaryEnvironment } from "~/state/environments";
 import { deviceEnvironment, useDeviceState } from "~/state/device";
@@ -56,7 +57,7 @@ import {
   deviceHubDescription,
   agentDeviceDescription,
 } from "~/components/device/DeviceSetup";
-import { isElectron } from "../../env";
+import { isTauri } from "../../env";
 
 import { Badge } from "../ui/badge";
 import {
@@ -1318,7 +1319,10 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
 
 export function IntegrationsSettingsPanel() {
   // Client-local preview defaults are editable only where the preview exists.
-  const previewDefaultsDisabled = !isElectron;
+  const previewDefaultsDisabled = !isPreviewSupportedInRuntime();
+  const previewDefaultsUnavailableMessage = isTauri
+    ? "Browser preview is not available in the Tauri desktop build yet. Agents started here do not receive Browser tools."
+    : "Only available in the Electron desktop app.";
   const previewDefaults = (
     <>
       <BrowserProfilesSetting disabled={previewDefaultsDisabled} />
@@ -1338,7 +1342,7 @@ export function IntegrationsSettingsPanel() {
       <ProjectDefaultsSettings category="integrations" />
       <SettingsSection id="browser" title="Browser">
         {previewDefaultsDisabled ? (
-          <SettingsUnavailableGroup message="Only available in the desktop app.">
+          <SettingsUnavailableGroup message={previewDefaultsUnavailableMessage}>
             {previewDefaults}
           </SettingsUnavailableGroup>
         ) : (

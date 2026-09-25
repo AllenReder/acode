@@ -1,4 +1,4 @@
-import type { ServerConfig } from "@awen/contracts";
+import type { ConnectionFailureCode, ServerConfig } from "@awen/contracts";
 import * as Option from "effect/Option";
 
 import type { ConnectionCatalogEntry } from "./catalog.ts";
@@ -17,6 +17,7 @@ export interface EnvironmentConnectionPresentation {
   readonly phase: EnvironmentConnectionPhase;
   readonly error: string | null;
   readonly traceId: string | null;
+  readonly failureCode: ConnectionFailureCode | null;
 }
 
 export interface EnvironmentPresentation {
@@ -28,30 +29,35 @@ export interface EnvironmentPresentation {
 export function presentConnectionState(
   state: SupervisorConnectionState,
 ): EnvironmentConnectionPresentation {
+  const failure = state.lastFailure;
+  const failureCode = failure?.failureCode ?? null;
   switch (state.phase) {
     case "available":
-      return { phase: "available", error: null, traceId: null };
+      return { phase: "available", error: null, traceId: null, failureCode: null };
     case "offline":
-      return { phase: "offline", error: null, traceId: null };
+      return { phase: "offline", error: null, traceId: null, failureCode: null };
     case "connecting":
       return {
-        phase: state.attempt <= 1 && state.lastFailure === null ? "connecting" : "reconnecting",
-        error: state.lastFailure?.message ?? null,
-        traceId: state.lastFailure?.traceId ?? null,
+        phase: state.attempt <= 1 && failure === null ? "connecting" : "reconnecting",
+        error: failure?.message ?? null,
+        traceId: failure?.traceId ?? null,
+        failureCode,
       };
     case "connected":
-      return { phase: "connected", error: null, traceId: null };
+      return { phase: "connected", error: null, traceId: null, failureCode: null };
     case "backoff":
       return {
         phase: "reconnecting",
-        error: state.lastFailure?.message ?? null,
-        traceId: state.lastFailure?.traceId ?? null,
+        error: failure?.message ?? null,
+        traceId: failure?.traceId ?? null,
+        failureCode,
       };
     case "blocked":
       return {
-        phase: state.lastFailure?.reason === "unsupported" ? "unsupported" : "error",
-        error: state.lastFailure?.message ?? null,
-        traceId: state.lastFailure?.traceId ?? null,
+        phase: failure?.reason === "unsupported" ? "unsupported" : "error",
+        error: failure?.message ?? null,
+        traceId: failure?.traceId ?? null,
+        failureCode,
       };
   }
 }

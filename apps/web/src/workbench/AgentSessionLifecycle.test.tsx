@@ -66,19 +66,8 @@ afterEach(async () => {
   useComposerDraftStore.setState(useComposerDraftStore.getInitialState());
   vi.unstubAllGlobals();
 });
-it("deletes an untouched Session only when its final Pane closes", async () => {
+it("deletes an untouched Session when its Pane closes", async () => {
   const tab = getActiveTab(useWorkbenchStore.getState());
-  await act(() =>
-    useWorkbenchStore
-      .getState()
-      .duplicateToNewTab({ kind: "pane", tabId: tab.id, paneId: tab.focusedPaneId }),
-  );
-  const duplicate = getActiveTab(useWorkbenchStore.getState());
-  await act(async () => {
-    await useWorkbenchStore.getState().requestClosePane(duplicate.focusedPaneId);
-  });
-  expect(remove).not.toHaveBeenCalled();
-  await act(() => useWorkbenchStore.getState().activateTab(tab.id));
   await act(async () => {
     await useWorkbenchStore.getState().requestClosePane(tab.focusedPaneId);
   });

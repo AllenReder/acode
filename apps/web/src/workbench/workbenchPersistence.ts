@@ -10,6 +10,7 @@ import {
 import { leafIds, type LayoutNode } from "./layout";
 import { targetKey, type ViewTarget } from "./viewRegistry";
 import type { ViewInstance, WorkbenchSnapshot, WorkbenchTab } from "./workbenchState";
+import { isSessionViewTarget } from "./workbenchState";
 
 export const WORKBENCH_PERSISTENCE_KEY = "awen:workbench:v1";
 export const WORKBENCH_PERSISTENCE_BACKUP_KEY = "awen:workbench:v1.backup";
@@ -130,14 +131,18 @@ function decodeWorkbenchTab(value: unknown): WorkbenchTab | null {
     return null;
   }
   const panes = new Map<string, ViewInstance>();
-  const sessionTargetKeys = new Set<string>();
+  const perTabTargetKeys = new Set<string>();
   for (const entry of value.panes) {
     if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== "string") return null;
     if (!isViewInstance(entry[1]) || panes.has(entry[0])) return null;
-    if (entry[1].target.kind !== "welcome" && entry[1].target.kind !== "project") {
-      const key = targetKey(entry[1].target);
-      if (sessionTargetKeys.has(key)) return null;
-      sessionTargetKeys.add(key);
+    const target = entry[1].target;
+    // A Session View is repaired to one View after decoding (ADR-0010), so a
+    // legacy snapshot may legitimately list the same Session twice. Other
+    // targets must still be unique inside one Tab.
+    if (target.kind !== "welcome" && target.kind !== "project" && !isSessionViewTarget(target)) {
+      const key = targetKey(target);
+      if (perTabTargetKeys.has(key)) return null;
+      perTabTargetKeys.add(key);
     }
     panes.set(entry[0], entry[1]);
   }

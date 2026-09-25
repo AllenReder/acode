@@ -156,6 +156,7 @@ function shouldRefreshThreadShellSummary(event: OrchestrationEvent): boolean {
   switch (event.payload.activity.kind) {
     case "approval.requested":
     case "approval.resolved":
+    case "approval.respond.already-resolved":
     case "provider.approval.respond.failed":
     case "user-input.requested":
     case "user-input.resolved":
@@ -1911,6 +1912,9 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
                 : event.payload.activity.turnId,
               status: "resolved",
               decision: resolvedDecision,
+              responseCommandId: Option.isSome(existingRow)
+                ? existingRow.value.responseCommandId
+                : null,
               createdAt: Option.isSome(existingRow)
                 ? existingRow.value.createdAt
                 : event.payload.activity.createdAt,
@@ -1939,6 +1943,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
                 turnId: existingRow.value.turnId,
                 status: "resolved",
                 decision: null,
+                responseCommandId: null,
                 createdAt: existingRow.value.createdAt,
                 resolvedAt: event.payload.activity.createdAt,
               });
@@ -1979,6 +1984,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
                 ...existingRow.value,
                 status: "pending",
                 decision: null,
+                responseCommandId: null,
                 resolvedAt: null,
               });
             }
@@ -2001,6 +2007,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             turnId: event.payload.activity.turnId,
             status: "pending",
             decision: null,
+            responseCommandId: null,
             createdAt: Option.isSome(existingRow)
               ? existingRow.value.createdAt
               : event.payload.activity.createdAt,
@@ -2013,17 +2020,24 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           const existingRow = yield* projectionPendingApprovalRepository.getByRequestId({
             requestId: event.payload.requestId,
           });
+          // A response event for a request this projection never saw is stale,
+          // not a request worth manufacturing a row for. The reactor reports it.
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          // The first accepted response owns the projection. A concurrent
+          // second response must not replace its decision or timestamp.
+          if (existingRow.value.status === "resolved") {
+            return;
+          }
           yield* projectionPendingApprovalRepository.upsert({
             requestId: event.payload.requestId,
-            threadId: Option.isSome(existingRow)
-              ? existingRow.value.threadId
-              : event.payload.threadId,
-            turnId: Option.isSome(existingRow) ? existingRow.value.turnId : null,
+            threadId: existingRow.value.threadId,
+            turnId: existingRow.value.turnId,
             status: "resolved",
             decision: event.payload.decision,
-            createdAt: Option.isSome(existingRow)
-              ? existingRow.value.createdAt
-              : event.payload.createdAt,
+            responseCommandId: event.commandId,
+            createdAt: existingRow.value.createdAt,
             resolvedAt: event.payload.createdAt,
           });
           return;

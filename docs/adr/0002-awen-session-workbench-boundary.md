@@ -1,6 +1,6 @@
 # Make Awen Session and View the workbench boundary
 
-**Status: accepted**
+**Status: accepted; Session View uniqueness is superseded by ADR-0010**
 
 Awen uses Project → Workspace → Session as its durable work model, with Agent
 Session and Terminal Session as the current Session kinds. The Workbench owns
@@ -24,8 +24,8 @@ behind typed adapters rather than product-level navigation identities.
   must not depend on an Agent Session, a Thread, or the thread-scoped right
   panel.
 - A Tab is independent of Project and Workspace. A Pane is a layout leaf that
-  contains exactly one View instance. A Session View may occur once per Tab and
-  may occur in multiple Tabs.
+  contains exactly one View instance. A Session View occurs at most once in the
+  whole Workbench (ADR-0010 supersedes the earlier per-Tab-with-mirrors rule).
 - The default Tab contains a Welcome View. Opening a first target replaces that
   View; closing the last real View restores it. Empty Panes are not a product
   state.

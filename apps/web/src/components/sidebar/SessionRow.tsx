@@ -68,6 +68,7 @@ export function SessionRow({
 
   const isFocused = tabState === "active-focused";
   const isOpenInActiveTab = isFocused || tabState === "active-unfocused";
+  const isOpenInWorkbench = tabState !== "unopened";
 
   const workspaceKey = `${target.environmentId}:${target.workspaceId}`;
   const sessionId =
@@ -163,7 +164,7 @@ export function SessionRow({
       aria-current={isFocused ? "page" : isOpenInActiveTab ? "true" : undefined}
       data-session-tab-state={tabState}
       data-session-focused={isFocused ? "true" : "false"}
-      data-session-open-in-tab={isOpenInActiveTab ? "true" : "false"}
+      data-session-open={isOpenInWorkbench ? "true" : "false"}
       aria-description="Open Session (Alt/Option: split right; Alt/Option+Shift: split down)"
       onClick={(event) => {
         const commands = useWorkbenchStore.getState();

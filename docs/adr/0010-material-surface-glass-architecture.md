@@ -7,7 +7,11 @@ window-wide desktop blur, explicit Sidebar, Topbar, Workbench, and Overlay
 Material Surfaces own tint, blur, saturation, and edge treatment, and View or
 Pane content layers render transparent base backgrounds. Overlay surfaces use
 web backdrop filtering because the native stage cannot blur content beneath a
-dialog or menu inside the web view. This replaces the awen-derived practice
+dialog or menu inside the web view. A transparent DWM window prevents WebView2
+from sampling in-page content, so Windows substitutes a denser acrylic-style
+Overlay tint with grain, an explicit edge, and shadow while keeping the
+window-level Acrylic stage; macOS and browser fallbacks remain unchanged. This
+replaces the awen-derived practice
 of opaque component backgrounds and selector-specific transparency overrides;
 custom and imported themes continue to provide colors only, not Material
 parameters. The legacy glass settings migrate once into a Material settings

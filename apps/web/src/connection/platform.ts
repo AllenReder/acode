@@ -42,7 +42,7 @@ import { FetchHttpClient } from "effect/unstable/http";
 
 import { APP_VERSION } from "../branding";
 import { readDesktopPrimaryBearerToken } from "../environments/primary/desktopAuth";
-import { SshPasswordPromptCancelledError } from "../desktop/sshErrors";
+import { DesktopSshRequestError, SshPasswordPromptCancelledError } from "../desktop/sshErrors";
 import { primaryEnvironmentHttpLayer } from "../environments/primary/httpLayer";
 import {
   readPrimaryEnvironmentTarget,
@@ -122,13 +122,72 @@ function clientMetadata() {
   });
 }
 
-function sshPreparationError(cause: unknown) {
+export function mapDesktopSshPreparationError(cause: unknown) {
   const message = cause instanceof Error ? cause.message : String(cause);
   if (cause instanceof SshPasswordPromptCancelledError) {
     return new ConnectionBlockedError({
       reason: "authentication",
+      failureCode: "ssh-authentication",
       detail: message,
     });
+  }
+  if (cause instanceof DesktopSshRequestError) {
+    switch (cause.code) {
+      case "unreachable":
+        return new ConnectionTransientError({
+          reason: "network",
+          failureCode: cause.code,
+          detail: message,
+        });
+      case "ssh-authentication":
+        return new ConnectionBlockedError({
+          reason: "authentication",
+          failureCode: cause.code,
+          detail: message,
+        });
+      case "host-key-change":
+        return new ConnectionBlockedError({
+          reason: "unsupported",
+          failureCode: cause.code,
+          detail: message,
+        });
+      case "prerequisite-missing":
+        return new ConnectionBlockedError({
+          reason: "configuration",
+          failureCode: cause.code,
+          detail: message,
+        });
+      case "install-download-checksum":
+        return new ConnectionTransientError({
+          reason: "endpoint-unavailable",
+          failureCode: cause.code,
+          detail: message,
+        });
+      case "daemon-start":
+        return new ConnectionTransientError({
+          reason: "remote-unavailable",
+          failureCode: cause.code,
+          detail: message,
+        });
+      case "daemon-authentication":
+        return new ConnectionBlockedError({
+          reason: "authentication",
+          failureCode: cause.code,
+          detail: message,
+        });
+      case "protocol-mismatch":
+        return new ConnectionBlockedError({
+          reason: "unsupported",
+          failureCode: cause.code,
+          detail: message,
+        });
+      case "unknown":
+        return new ConnectionTransientError({
+          reason: "remote-unavailable",
+          failureCode: cause.code,
+          detail: message,
+        });
+    }
   }
   return new ConnectionTransientError({
     reason: "remote-unavailable",
@@ -151,11 +210,12 @@ const assertSshHostTrusted = Effect.fn("web.connectionPlatform.ssh.assertTrusted
   }
   const trust = yield* Effect.tryPromise({
     try: () => bridge.inspectSshHostTrust!(target),
-    catch: sshPreparationError,
+    catch: mapDesktopSshPreparationError,
   });
   if (trust.status === "changed") {
     return yield* new ConnectionBlockedError({
       reason: "unsupported",
+      failureCode: "host-key-change",
       detail:
         "The SSH host key changed for this target. Awen blocks the connection; verify the key outside the app and remove the old known_hosts entry to trust a new key.",
     });
@@ -185,7 +245,7 @@ const ensureTrustedSshEnvironment = Effect.fn("web.connectionPlatform.ssh.ensure
           ...(operationId ? { operationId } : {}),
           ...(signal ? { signal } : {}),
         }),
-      catch: sshPreparationError,
+      catch: mapDesktopSshPreparationError,
     });
     if (bootstrap.pairingToken === null) {
       return yield* new ConnectionBlockedError({
@@ -203,7 +263,7 @@ const exchangeSshPairingCredential = Effect.fn("web.connectionPlatform.ssh.excha
       try: () =>
         // The null check lives in ensureTrustedSshEnvironment.
         bridge.bootstrapSshBearerSession(bootstrap.httpBaseUrl, bootstrap.pairingToken!),
-      catch: sshPreparationError,
+      catch: mapDesktopSshPreparationError,
     });
     return access.token;
   },
@@ -223,7 +283,7 @@ export const provisionDesktopSshEnvironment = Effect.fn(
   // pairing credential is consumed.
   const descriptor = yield* Effect.tryPromise({
     try: () => bridge.fetchSshEnvironmentDescriptor(bootstrap.httpBaseUrl),
-    catch: sshPreparationError,
+    catch: mapDesktopSshPreparationError,
   });
   if (signal?.aborted) return yield* Effect.interrupt;
   const bearerToken = yield* exchangeSshPairingCredential(bridge, bootstrap);

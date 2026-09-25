@@ -85,7 +85,7 @@ it("opens, splits and focuses Agent Sessions by Awen identity, including reopeni
   expect(reopened.panes.get(reopened.focusedPaneId)?.target).toEqual(target);
 });
 
-it("mixes Agent and Terminal Views, splits down and reopens the same Terminal Session once per Tab", async () => {
+it("mixes Agent and Terminal Views, splits down and reopens the same Terminal Session in its existing Tab", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const { terminalTargetForRuntime } = await import("../../workbench/sessionTarget");
   const target = terminalTargetForRuntime({
@@ -325,12 +325,19 @@ it("distinguishes the focused Session from other opened and unopened Sessions", 
   expect(row2!.props["aria-current"]).toBe("page");
 
   expect(row1!.props["data-session-focused"]).toBe("false");
-  expect(row1!.props["data-session-open-in-tab"]).toBe("true");
+  expect(row1!.props["data-session-open"]).toBe("true");
   expect(row1!.props["aria-current"]).toBe("true");
 
   expect(row3!.props["data-session-focused"]).toBe("false");
-  expect(row3!.props["data-session-open-in-tab"]).toBe("false");
+  expect(row3!.props["data-session-open"]).toBe("false");
   expect(row3!.props["aria-current"]).toBeUndefined();
+
+  // ADR-0010: the row reports open wherever the Session's one View lives, not
+  // only while that View sits in the active Tab.
+  await act(() => useWorkbenchStore.getState().createTab());
+  expect(row1!.props["data-session-open"]).toBe("true");
+  expect(row2!.props["data-session-open"]).toBe("true");
+  expect(row2!.props["data-session-focused"]).toBe("false");
 });
 
 it("tracks and differentiates all four Session Row Tab States: active-focused, active-unfocused, background-tab, and unopened", async () => {

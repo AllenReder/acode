@@ -82,6 +82,8 @@ import type {
   ClientOrchestrationCommand,
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetFullThreadDiffResult,
+  OrchestrationGetOperationResultInput,
+  OrchestrationOperationResult,
   OrchestrationGetTurnDiffInput,
   OrchestrationGetTurnDiffResult,
   OrchestrationShellSnapshot,
@@ -475,6 +477,30 @@ export const DesktopSshEnvironmentTargetSchema = Schema.Struct({
   port: Schema.NullOr(Schema.Number),
 });
 export type DesktopSshEnvironmentTarget = typeof DesktopSshEnvironmentTargetSchema.Type;
+
+/**
+ * Stable failure categories surfaced by connection onboarding. They are kept
+ * separate from an error message so the desktop can choose presentation and
+ * recovery without parsing backend text.
+ */
+export const ConnectionFailureCodeSchema = Schema.Literals([
+  "unreachable",
+  "ssh-authentication",
+  "host-key-change",
+  "prerequisite-missing",
+  "install-download-checksum",
+  "daemon-start",
+  "daemon-authentication",
+  "protocol-mismatch",
+  "unknown",
+]);
+export type ConnectionFailureCode = typeof ConnectionFailureCodeSchema.Type;
+
+export const DesktopSshErrorPayloadSchema = Schema.Struct({
+  code: ConnectionFailureCodeSchema,
+  message: Schema.String,
+});
+export type DesktopSshErrorPayload = typeof DesktopSshErrorPayloadSchema.Type;
 
 export type DesktopSshHostSource = "ssh-config" | "known-hosts";
 export const DesktopSshHostSourceSchema = Schema.Literals(["ssh-config", "known-hosts"]);
@@ -1634,6 +1660,9 @@ export interface EnvironmentApi {
   };
   orchestration: {
     dispatchCommand: (command: ClientOrchestrationCommand) => Promise<{ sequence: number }>;
+    getOperationResult: (
+      input: OrchestrationGetOperationResultInput,
+    ) => Promise<OrchestrationOperationResult>;
     getTurnDiff: (input: OrchestrationGetTurnDiffInput) => Promise<OrchestrationGetTurnDiffResult>;
     getFullThreadDiff: (
       input: OrchestrationGetFullThreadDiffInput,

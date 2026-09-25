@@ -64,6 +64,7 @@ import { ProjectionThreadMessage } from "../../persistence/Services/ProjectionTh
 import { ProjectionThreadProposedPlan } from "../../persistence/Services/ProjectionThreadProposedPlans.ts";
 import { ProjectionThreadPullRequest } from "../../persistence/ProjectionThreadPullRequests.ts";
 import { ProjectionThreadSession } from "../../persistence/Services/ProjectionThreadSessions.ts";
+import { ProjectionPendingApproval } from "../../persistence/Services/ProjectionPendingApprovals.ts";
 import { ProjectionThread } from "../../persistence/Services/ProjectionThreads.ts";
 import {
   decodeThreadDetailPageCursor,
@@ -1449,6 +1450,34 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         toPersistenceSqlOrDecodeError(
           "ProjectionSnapshotQuery.getUserInputActivity:query",
           "ProjectionSnapshotQuery.getUserInputActivity:decodeRow",
+        ),
+      ),
+    );
+
+  const getPendingApprovalRow = SqlSchema.findOneOption({
+    Request: Schema.Struct({ requestId: ApprovalRequestId }),
+    Result: ProjectionPendingApproval,
+    execute: ({ requestId }) => sql`
+      SELECT
+        request_id AS "requestId",
+        thread_id AS "threadId",
+        turn_id AS "turnId",
+        status,
+        decision,
+        response_command_id AS "responseCommandId",
+        created_at AS "createdAt",
+        resolved_at AS "resolvedAt"
+      FROM projection_pending_approvals
+      WHERE request_id = ${requestId}
+    `,
+  });
+
+  const getPendingApproval: ProjectionSnapshotQueryShape["getPendingApproval"] = (input) =>
+    getPendingApprovalRow(input).pipe(
+      Effect.mapError(
+        toPersistenceSqlOrDecodeError(
+          "ProjectionSnapshotQuery.getPendingApproval:query",
+          "ProjectionSnapshotQuery.getPendingApproval:decodeRow",
         ),
       ),
     );
@@ -3745,6 +3774,7 @@ pending_approval_requests AS (
   return {
     getCommandReadModel,
     getUserInputActivity,
+    getPendingApproval,
     listActivitiesByKind,
     getSnapshot,
     getShellSnapshot,

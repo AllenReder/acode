@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import {
   canRetainCachedPlatformRegistrationAfterRefreshFailure,
   canReuseCachedPlatformRegistration,
+  mapDesktopSshPreparationError,
   primaryRegistrationToRetainAfterTopologyRead,
   provisionDesktopSshEnvironment,
   readPrimaryEnvironmentTargetResult,
@@ -18,7 +19,7 @@ import {
   secondaryBearerExpiresAtEpochMs,
   secondaryBearerRefreshAtEpochMs,
 } from "./platform.ts";
-import { SshPasswordPromptCancelledError } from "../desktop/sshErrors.ts";
+import { DesktopSshRequestError, SshPasswordPromptCancelledError } from "../desktop/sshErrors.ts";
 
 const TARGET: DesktopSshEnvironmentTarget = {
   alias: "devbox",
@@ -274,5 +275,29 @@ describe("primary topology cache", () => {
         target: null,
       }),
     ).toBeUndefined();
+  });
+});
+
+describe("desktop SSH failure mapping", () => {
+  it.each([
+    ["unreachable", "ConnectionTransientError", "network"],
+    ["ssh-authentication", "ConnectionBlockedError", "authentication"],
+    ["host-key-change", "ConnectionBlockedError", "unsupported"],
+    ["prerequisite-missing", "ConnectionBlockedError", "configuration"],
+    ["install-download-checksum", "ConnectionTransientError", "endpoint-unavailable"],
+    ["daemon-start", "ConnectionTransientError", "remote-unavailable"],
+    ["daemon-authentication", "ConnectionBlockedError", "authentication"],
+    ["protocol-mismatch", "ConnectionBlockedError", "unsupported"],
+  ] as const)("preserves %s as a structured failure", (failureCode, tag, reason) => {
+    const mapped = mapDesktopSshPreparationError(
+      new DesktopSshRequestError(failureCode, `${failureCode} detail`, 502),
+    );
+
+    expect(mapped).toMatchObject({
+      _tag: tag,
+      reason,
+      failureCode,
+      detail: `${failureCode} detail`,
+    });
   });
 });

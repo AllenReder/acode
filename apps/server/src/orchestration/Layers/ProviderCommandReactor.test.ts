@@ -205,7 +205,7 @@ describe("ProviderCommandReactor", () => {
       model: "gpt-5-codex",
     };
     const startSessionEffect = input?.startSessionEffect;
-    const startSession = vi.fn((_: unknown, input: unknown) => {
+    const startSession = vi.fn((_: unknown, input: unknown, _constraints?: unknown) => {
       const sessionIndex = nextSessionIndex++;
       const resumeCursor =
         typeof input === "object" && input !== null && "resumeCursor" in input
@@ -426,7 +426,7 @@ describe("ProviderCommandReactor", () => {
           readEvents: engine.readEvents,
           readThreadEvents: engine.readThreadEvents,
           getThreadReplayStats: engine.getThreadReplayStats,
-          dispatch: (command) => {
+          dispatch: (command, options) => {
             if (command.type === "thread.title.regeneration.complete") {
               titleRegenerationCompletionDispatchAttempts += 1;
               if (
@@ -446,7 +446,7 @@ describe("ProviderCommandReactor", () => {
                   ? input?.beforeTurnStartDispatch
                   : undefined;
             return (before?.() ?? Effect.void).pipe(
-              Effect.andThen(engine.dispatch(command)),
+              Effect.andThen(engine.dispatch(command, options)),
               Effect.tap(() =>
                 isReplay ? (input?.afterTurnStartDispatch?.() ?? Effect.void) : Effect.void,
               ),
@@ -854,20 +854,23 @@ describe("ProviderCommandReactor", () => {
     const now = "2026-01-01T00:00:00.000Z";
 
     await Effect.runPromise(
-      harness.engine.dispatch({
-        type: "thread.turn.start",
-        commandId: CommandId.make("cmd-turn-start-1"),
-        threadId: ThreadId.make("thread-1"),
-        message: {
-          messageId: asMessageId("user-message-1"),
-          role: "user",
-          text: "hello reactor",
-          attachments: [],
+      harness.engine.dispatch(
+        {
+          type: "thread.turn.start",
+          commandId: CommandId.make("cmd-turn-start-1"),
+          threadId: ThreadId.make("thread-1"),
+          message: {
+            messageId: asMessageId("user-message-1"),
+            role: "user",
+            text: "hello reactor",
+            attachments: [],
+          },
+          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+          runtimeMode: "approval-required",
+          createdAt: now,
         },
-        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-        runtimeMode: "approval-required",
-        createdAt: now,
-      }),
+        { origin: { surface: "desktop", previewHost: false } },
+      ),
     );
 
     await waitFor(() => harness.startSession.mock.calls.length === 1);
@@ -881,6 +884,7 @@ describe("ProviderCommandReactor", () => {
       },
       runtimeMode: "approval-required",
     });
+    expect(harness.startSession.mock.calls[0]?.[2]).toEqual({ previewHost: false });
 
     const readModel = await harness.readModel();
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
@@ -3987,6 +3991,27 @@ describe("ProviderCommandReactor", () => {
 
     await Effect.runPromise(
       harness.engine.dispatch({
+        type: "thread.activity.append",
+        commandId: CommandId.make("cmd-approval-requested"),
+        threadId: ThreadId.make("thread-1"),
+        activity: {
+          id: EventId.make("activity-approval-requested"),
+          tone: "approval",
+          kind: "approval.requested",
+          summary: "Command approval requested",
+          payload: {
+            requestId: "approval-request-1",
+            requestKind: "command",
+          },
+          turnId: null,
+          createdAt: now,
+        },
+        createdAt: now,
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
         type: "thread.approval.respond",
         commandId: CommandId.make("cmd-approval-respond"),
         threadId: ThreadId.make("thread-1"),
@@ -4003,6 +4028,87 @@ describe("ProviderCommandReactor", () => {
       decision: "accept",
     });
   });
+
+  effectIt.effect(
+    "accepts only the first decision when clients answer the same approval concurrently",
+    () =>
+      Effect.gen(function* () {
+        const harness = yield* Effect.promise(() => createHarness());
+        const now = "2026-01-01T00:00:00.000Z";
+        const requestId = asApprovalRequestId("approval-request-concurrent");
+
+        yield* harness.engine.dispatch({
+          type: "thread.session.set",
+          commandId: CommandId.make("cmd-session-set-for-concurrent-approval"),
+          threadId: ThreadId.make("thread-1"),
+          session: {
+            threadId: ThreadId.make("thread-1"),
+            status: "running",
+            providerName: "codex",
+            runtimeMode: "approval-required",
+            activeTurnId: null,
+            lastError: null,
+            updatedAt: now,
+          },
+          createdAt: now,
+        });
+        yield* harness.engine.dispatch({
+          type: "thread.activity.append",
+          commandId: CommandId.make("cmd-concurrent-approval-requested"),
+          threadId: ThreadId.make("thread-1"),
+          activity: {
+            id: EventId.make("activity-concurrent-approval-requested"),
+            tone: "approval",
+            kind: "approval.requested",
+            summary: "Command approval requested",
+            payload: {
+              requestId,
+              requestKind: "command",
+            },
+            turnId: null,
+            createdAt: now,
+          },
+          createdAt: now,
+        });
+
+        yield* Effect.all(
+          [
+            harness.engine.dispatch({
+              type: "thread.approval.respond",
+              commandId: CommandId.make("cmd-concurrent-approval-accept"),
+              threadId: ThreadId.make("thread-1"),
+              requestId,
+              decision: "accept",
+              createdAt: now,
+            }),
+            harness.engine.dispatch({
+              type: "thread.approval.respond",
+              commandId: CommandId.make("cmd-concurrent-approval-decline"),
+              threadId: ThreadId.make("thread-1"),
+              requestId,
+              decision: "decline",
+              createdAt: "2026-01-01T00:00:00.001Z",
+            }),
+          ],
+          { concurrency: "unbounded" },
+        );
+        yield* Effect.promise(() => harness.drain());
+
+        expect(harness.respondToRequest.mock.calls).toHaveLength(1);
+        const effectiveDecision = harness.respondToRequest.mock.calls[0]?.[0].decision;
+        expect(effectiveDecision).toBeOneOf(["accept", "decline"]);
+
+        const readModel = yield* Effect.promise(() => harness.readModel());
+        const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
+        const handled = thread?.activities.find(
+          (activity) => activity.kind === "approval.respond.already-resolved",
+        );
+        expect(handled?.payload).toMatchObject({
+          requestId,
+          decision: effectiveDecision,
+        });
+      }),
+  );
 
   it("forwards user input answers without reading unrelated message bodies", async () => {
     const harness = await createHarness({ unreadableHistory: true });

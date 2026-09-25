@@ -11,6 +11,7 @@ import { causeErrorTag } from "@awen/shared/observability";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import { GROK_APPROVAL_REQUEST_KINDS } from "../approvalRequestCapabilities.ts";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
@@ -47,6 +48,7 @@ const GROK_PRESENTATION = {
   supportsConversationRollback: false,
   badgeLabel: "Early Access",
   showInteractionModeToggle: false,
+  approvalRequestKinds: GROK_APPROVAL_REQUEST_KINDS,
 } as const;
 const EMPTY_CAPABILITIES: ModelCapabilities = createModelCapabilities({
   optionDescriptors: [],

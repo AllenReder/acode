@@ -7,8 +7,9 @@ import * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import { chromium } from "playwright";
-import { nodeEntryInvocation, withNodeModulesBin } from "./lib/spawn-command.ts";
+import { requestDevRunnerStop } from "./lib/dev-runner-stop.ts";
 import { createProcessTreePort, stopProcessTree } from "./lib/process-tree.ts";
+import { nodeEntryInvocation, withNodeModulesBin } from "./lib/spawn-command.ts";
 import { removePathWithRetry, runTeardownSteps } from "./lib/teardown-steps.ts";
 import { verifyWorkbenchAppearance } from "./workbench-appearance-checks.mjs";
 
@@ -17,6 +18,7 @@ import { verifyWorkbenchAppearance } from "./workbench-appearance-checks.mjs";
 // most, and reject gpt-6-astra before sending.
 const repositoryRoot = NodePath.resolve(import.meta.dirname, "..");
 const timeoutMs = Number(process.env.WORKBENCH_E2E_TIMEOUT_MS ?? "120000");
+const stopRequestTimeoutMs = 10_000;
 const keepTemporary = process.env.WORKBENCH_E2E_KEEP_TEMP === "1";
 
 function stripAnsi(value) {
@@ -50,14 +52,37 @@ async function readOpenTerminalTarget(page) {
   });
 }
 
-async function openTerminalInSecondTab(page, target) {
+/**
+ * ADR-0010: re-opening an open Session must focus its existing Session View
+ * instead of creating a second one. Creates an empty Tab first so a duplicate
+ * Session View would be observable.
+ */
+async function reopenTerminalFromNewTab(page, target) {
   return page.evaluate(async (terminalTarget) => {
     const { useWorkbenchStore } = await import("/src/workbench/workbenchStore.ts");
-    const store = useWorkbenchStore.getState();
-    const firstTabId = store.activeTabId;
-    store.createTab();
+    const before = useWorkbenchStore.getState();
+    const firstTabId = before.activeTabId;
+    const tabsBefore = before.tabs.length;
+    before.createTab();
     useWorkbenchStore.getState().openTarget(terminalTarget);
-    return { firstTabId };
+    const after = useWorkbenchStore.getState();
+    const terminalTabs = after.tabs.filter((tab) =>
+      [...tab.panes.values()].some((view) => view.target.kind === "workspaceTerminal"),
+    );
+    const terminalViewCount = after.tabs.reduce(
+      (count, tab) =>
+        count +
+        [...tab.panes.values()].filter((view) => view.target.kind === "workspaceTerminal").length,
+      0,
+    );
+    return {
+      firstTabId,
+      tabsBefore,
+      tabsAfter: after.tabs.length,
+      terminalViewCount,
+      terminalTabId: terminalTabs[0]?.id,
+      activeTabId: after.activeTabId,
+    };
   }, target);
 }
 
@@ -164,17 +189,61 @@ function waitForChildExit(child) {
   return new Promise((resolve) => child.once("exit", () => resolve()));
 }
 
+function waitForChildExitWithin(child, timeoutMs) {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (exited) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.off("exit", onExit);
+      resolve(exited);
+    };
+    const onExit = () => finish(true);
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    child.once("exit", onExit);
+    if (child.exitCode !== null || child.signalCode !== null) onExit();
+  });
+}
+
 /**
  * Terminate the isolated daemon, not just the runner that launched it.
  *
  * `scripts/dev-runner.ts` resolves `vp`, which starts a Vite+ core process,
  * which runs `node --watch src/bin.ts`, which runs the daemon holding this
- * run's SQLite database. Windows has neither process groups nor signal
- * handlers there, so `child.kill` used to reach only the runner while the four
- * processes beneath it kept the temporary home busy.
+ * run of the temporary home.
+ *
+ * Ask the runner through its pid-scoped stop file first. That lets the runner
+ * unwind its Effect scope while `vp` is still alive, so the child-process
+ * finalizer can use `taskkill /T /F` instead of orphaning the descendants.
+ * The process-tree sweep remains the fallback for an early crash or a runner
+ * that does not answer the request.
  */
-async function stopDaemonProcessTree(child) {
+async function stopDaemonProcessTree(child, home) {
   if (typeof child.pid !== "number") return;
+
+  // oxlint-disable-next-line awen/no-global-process-runtime -- Standalone browser harness owns native child process groups.
+  if (NodeOS.platform() === "win32" && child.exitCode === null && child.signalCode === null) {
+    let requestPath = null;
+    try {
+      requestPath = await requestDevRunnerStop(home, child.pid);
+      if (await waitForChildExitWithin(child, stopRequestTimeoutMs)) {
+        console.log(
+          `workbench: dev runner drained its process tree (stop request: ${requestPath})`,
+        );
+        return;
+      }
+      console.error(
+        `workbench: dev runner did not exit within ${String(stopRequestTimeoutMs)}ms after stop request ${requestPath}; falling back to force teardown`,
+      );
+    } catch (error) {
+      console.error(
+        `workbench: could not request the dev-runner stop: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   const port = createProcessTreePort({
     hasRootExited: () => child.exitCode !== null || child.signalCode !== null,
     // oxlint-disable-next-line awen/no-global-process-runtime -- Standalone browser harness owns native child process groups.
@@ -457,15 +526,25 @@ async function main() {
       timeout: timeoutMs,
     });
 
-    const { firstTabId } = await openTerminalInSecondTab(page, terminalTarget);
+    const reopened = await reopenTerminalFromNewTab(page, terminalTarget);
     await page.locator('[data-pane-target-kind="workspaceTerminal"]').waitFor({
       state: "visible",
       timeout: timeoutMs,
     });
-    NodeAssert.deepEqual(
-      (await terminalViewCountsByTab(page)).map((tab) => tab.terminalViews),
-      [1, 1],
-      "The same Terminal Session should be open once in each internal Tab.",
+    NodeAssert.equal(
+      reopened.terminalViewCount,
+      1,
+      "ADR-0010: re-opening the same Terminal Session must not create a second Session View.",
+    );
+    NodeAssert.equal(
+      reopened.activeTabId,
+      reopened.terminalTabId,
+      "Re-opening an already open Session focuses the Tab that shows it.",
+    );
+    NodeAssert.equal(
+      reopened.tabsAfter,
+      reopened.tabsBefore + 1,
+      "Only the empty Tab created by this check should be new.",
     );
 
     const mergeTabIds = await page.evaluate(async () => {
@@ -604,20 +683,85 @@ async function main() {
     });
     NodeAssert.deepEqual(await paneKinds(page), ["agentSession", "newAgentSession"]);
 
-    const tabsBeforeDuplicate = await page.locator('[role="tab"]').count();
-    await page
-      .locator('[data-pane-target-kind="agentSession"]')
-      .first()
-      .getByRole("button", { name: "Duplicate pane", exact: true })
-      .click();
+    // ADR-0010 replaced the Duplicate-pane action: there is no copy entry, and
+    // re-opening a Session focuses its one View instead of adding a Tab.
+    const tabsBeforeReopen = await page.locator('[role="tab"]').count();
+    const agentPaneCount = await page.locator('[data-pane-target-kind="agentSession"]').count();
+    NodeAssert.equal(
+      await page
+        .locator('[data-pane-target-kind="agentSession"]')
+        .first()
+        .getByRole("button", { name: "Duplicate pane", exact: true })
+        .count(),
+      0,
+      "Pane headers must not offer a Duplicate pane action.",
+    );
+    const reopenAgent = await page.evaluate(async () => {
+      const { useWorkbenchStore } = await import("/src/workbench/workbenchStore.ts");
+      const state = useWorkbenchStore.getState();
+      const agentView = state.tabs
+        .flatMap((tab) => [...tab.panes.values()])
+        .find((view) => view.target.kind === "agentSession");
+      state.openTarget(agentView.target);
+      const after = useWorkbenchStore.getState();
+      return {
+        tabs: after.tabs.length,
+        agentViews: after.tabs.reduce(
+          (count, tab) =>
+            count +
+            [...tab.panes.values()].filter((view) => view.target.kind === "agentSession").length,
+          0,
+        ),
+      };
+    });
     await page.waitForTimeout(250);
-    NodeAssert.equal(await page.locator('[role="tab"]').count(), tabsBeforeDuplicate + 1);
-    await page
-      .locator('[role="tab"][aria-selected="true"]')
-      .getByRole("button", { name: /^Close / })
-      .click();
-    await page.waitForTimeout(250);
-    NodeAssert.equal(await page.locator('[role="tab"]').count(), tabsBeforeDuplicate);
+    NodeAssert.equal(await page.locator('[role="tab"]').count(), tabsBeforeReopen);
+    NodeAssert.equal(reopenAgent.tabs, tabsBeforeReopen);
+    NodeAssert.equal(reopenAgent.agentViews, agentPaneCount);
+
+    // An explicit split is a layout intent: it moves the Session's one View and
+    // closes the Pane it came from.
+    const moved = await page.evaluate(async () => {
+      const { useWorkbenchStore } = await import("/src/workbench/workbenchStore.ts");
+      const state = useWorkbenchStore.getState();
+      const entries = state.tabs.flatMap((tab) =>
+        [...tab.panes.entries()].map(([paneId, view]) => ({ paneId, view })),
+      );
+      const agentView = entries.find((entry) => entry.view.target.kind === "agentSession");
+      const anchor = entries.find((entry) => entry.view.target.kind === "newAgentSession");
+      const tabsBefore = state.tabs.length;
+      const panesBefore = state.tabs.reduce((count, tab) => count + tab.panes.size, 0);
+      state.setFocused(anchor.paneId);
+      state.splitFocused(agentView.view.target, "down");
+      const after = useWorkbenchStore.getState();
+      return {
+        tabsBefore,
+        tabsAfter: after.tabs.length,
+        panesBefore,
+        panesAfter: after.tabs.reduce((count, tab) => count + tab.panes.size, 0),
+        agentViews: after.tabs.reduce(
+          (count, tab) =>
+            count +
+            [...tab.panes.values()].filter((view) => view.target.kind === "agentSession").length,
+          0,
+        ),
+        previousPaneHoldsAgent: after.tabs.some(
+          (tab) => tab.panes.get(agentView.paneId)?.target.kind === "agentSession",
+        ),
+      };
+    });
+    NodeAssert.equal(
+      moved.agentViews,
+      1,
+      "ADR-0010: an explicit split must move the Session's one View.",
+    );
+    NodeAssert.equal(moved.tabsAfter, moved.tabsBefore);
+    NodeAssert.equal(moved.panesAfter, moved.panesBefore);
+    NodeAssert.equal(
+      moved.previousPaneHoldsAgent,
+      false,
+      "Moving a Session View closes the Pane it came from.",
+    );
     await page.evaluate(async (tabId) => {
       const { useWorkbenchStore } = await import("/src/workbench/workbenchStore.ts");
       useWorkbenchStore.getState().activateTab(tabId);
@@ -796,7 +940,7 @@ async function main() {
           await browser?.close();
         },
       },
-      { label: "terminate the daemon process tree", run: () => stopDaemonProcessTree(child) },
+      { label: "terminate the daemon process tree", run: () => stopDaemonProcessTree(child, home) },
       {
         label: keepTemporary ? "retain the temporary home" : "remove the temporary home",
         run: () => finishTemporaryHome(temporaryRoot, keepTemporary),

@@ -27,6 +27,7 @@ const makeProjectionPendingApprovalRepository = Effect.gen(function* () {
           turn_id,
           status,
           decision,
+          response_command_id,
           created_at,
           resolved_at
         )
@@ -36,6 +37,7 @@ const makeProjectionPendingApprovalRepository = Effect.gen(function* () {
           ${row.turnId},
           ${row.status},
           ${row.decision},
+          ${row.responseCommandId},
           ${row.createdAt},
           ${row.resolvedAt}
         )
@@ -45,6 +47,7 @@ const makeProjectionPendingApprovalRepository = Effect.gen(function* () {
           turn_id = excluded.turn_id,
           status = excluded.status,
           decision = excluded.decision,
+          response_command_id = excluded.response_command_id,
           created_at = excluded.created_at,
           resolved_at = excluded.resolved_at
       `,
@@ -61,6 +64,7 @@ const makeProjectionPendingApprovalRepository = Effect.gen(function* () {
           turn_id AS "turnId",
           status,
           decision,
+          response_command_id AS "responseCommandId",
           created_at AS "createdAt",
           resolved_at AS "resolvedAt"
         FROM projection_pending_approvals
@@ -90,6 +94,7 @@ const makeProjectionPendingApprovalRepository = Effect.gen(function* () {
           turn_id AS "turnId",
           status,
           decision,
+          response_command_id AS "responseCommandId",
           created_at AS "createdAt",
           resolved_at AS "resolvedAt"
         FROM projection_pending_approvals
