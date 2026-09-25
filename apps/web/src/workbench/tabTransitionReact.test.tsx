@@ -24,7 +24,7 @@ function seedTwoTabs() {
   return useWorkbenchStore.getState().tabs;
 }
 
-it("starts a Stacked Tab switch for a plain activation", async () => {
+it("starts a Sliding Tab switch for a plain activation", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const tabs = seedTwoTabs();
   const [first, second] = tabs;

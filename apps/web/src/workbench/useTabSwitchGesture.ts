@@ -48,7 +48,7 @@ function estimateVelocity(session: RightDragSession): number {
 }
 
 /**
- * Right-button Layout pan and Stacked Tab switch (ADR-0019). Horizontal-only:
+ * Right-button Layout pan and Sliding Tab switch (ADR-0019). Horizontal-only:
  * Phase 1 pans a Scrolling layout 1:1, and the travel it cannot consume becomes
  * Tab switch progress, which resolves to a commit or a cancel on release. A
  * right press that never crosses the threshold opens the Pane header menu.

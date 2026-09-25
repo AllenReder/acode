@@ -1,11 +1,11 @@
-import { appleEaseOut } from "./scrollingAnimation";
-import { FLUID_MOTION_DURATION_MS, getPrefersReducedMotion } from "./workbenchMotion";
+import { settleEaseOut } from "./scrollingAnimation";
+import { getPrefersReducedMotion } from "./workbenchMotion";
 
-/** How far a Workbench card recedes at the midpoint of a Stacked Tab switch. */
-export const TAB_TRANSITION_SCALE_DIP = 0.06;
-/** Pointer progress required to commit a Stacked Tab switch on release. */
+/** Time the strip takes to settle from its release position to 0 or 1. */
+export const TAB_SETTLE_DURATION_MS = 340;
+/** Pointer progress required to commit a Sliding Tab switch on release. */
 export const TAB_SWITCH_COMMIT_PROGRESS = 0.5;
-/** Release velocity (px/ms) that commits a Stacked Tab switch regardless of progress. */
+/** Release velocity (px/ms) that commits a Sliding Tab switch regardless of progress. */
 export const TAB_SWITCH_FLICK_VELOCITY = 0.35;
 
 export interface TabTransitionState {
@@ -26,15 +26,6 @@ export function clampProgress(value: number): number {
   if (value <= 0) return 0;
   if (value >= 1) return 1;
   return value;
-}
-
-/**
- * Shared card scale across a Stacked Tab switch: full size at both ends, dipped
- * at the midpoint so the Workbench surface shows through.
- */
-export function stackedTabScale(progress: number): number {
-  const p = clampProgress(progress);
-  return 1 - TAB_TRANSITION_SCALE_DIP * (1 - Math.abs(2 * p - 1));
 }
 
 /**
@@ -207,8 +198,8 @@ export function animateTabTransitionTo(target: 0 | 1): () => void {
   let cancelled = false;
   const step = () => {
     if (cancelled) return;
-    const elapsed = Math.min(1, (now() - startTime) / FLUID_MOTION_DURATION_MS);
-    setTabTransitionProgress(start + (target - start) * appleEaseOut(elapsed));
+    const elapsed = Math.min(1, (now() - startTime) / TAB_SETTLE_DURATION_MS);
+    setTabTransitionProgress(start + (target - start) * settleEaseOut(elapsed));
     if (elapsed < 1) {
       frameId = requestFrame(step);
     } else {

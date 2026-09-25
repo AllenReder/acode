@@ -1,6 +1,6 @@
 /**
  * Pure decision helpers for the right-button Layout pan and the wheel-driven
- * Stacked Tab switch. DOM-free so they can be exercised directly.
+ * Sliding Tab switch. DOM-free so they can be exercised directly.
  */
 
 export interface PanPhaseInput {

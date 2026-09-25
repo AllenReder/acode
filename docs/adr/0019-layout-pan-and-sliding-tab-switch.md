@@ -1,14 +1,14 @@
-# Right-button layout pan and stacked Tab switch
+# Right-button layout pan and sliding Tab switch
 
 **Status: accepted**
 
 The Workbench gains a unified horizontal navigation gesture built on the right mouse
 button: a right-drag inside the Workbench canvas pans a Scrolling layout, and — once
-the layout cannot pan any further (always, in a BSP layout) — continues into a stacked
-Tab switch that slides a rigid two-Tab strip under a non-linear scale dip. Shift+wheel
-and horizontal trackpad/wheel deltas drive the same Tab switch. Every user-initiated
-Tab switch (click, keyboard, gesture) now plays that stacked transition, and the Topbar
-expresses the active Tab with a moving theme-color underbar instead of bold text.
+the layout cannot pan any further (always, in a BSP layout) — continues into a Sliding
+Tab switch that moves a rigid two-Tab strip. Shift+wheel and horizontal trackpad/wheel
+deltas drive the same Tab switch. Every user-initiated Tab switch (click, keyboard,
+gesture) now plays that sliding transition, and the Topbar expresses the active Tab with
+a moving theme-color underbar instead of bold text.
 
 ## Context
 
@@ -24,6 +24,11 @@ A first draft of this interaction (Grill session on Issue #108) considered an el
 Tab indicator that stretched across two Tabs while dragging. We rejected the stretch:
 it made the indicator's width carry gesture state and read as a second animation.
 
+The Tab cards were also first drafted with a non-linear scale dip at the midpoint. That
+was removed after visual QA: scaling a card that contains `backdrop-filter` glass makes
+the browser build a render surface that drops the glass's mask, and a flat slide reads
+more cleanly anyway.
+
 ## Decision
 
 - **Right-drag is horizontal-only and lives on the Workbench stage.** A right-pointer
@@ -33,16 +38,15 @@ it made the indicator's width carry gesture state and read as a second animation
 - **Two sequential phases, one gesture.**
   - **Phase 1 — Layout pan** (Scrolling layout only): the pointer delta maps 1:1 onto
     `viewport.scrollLeft`, clamped to `[0, maxScrollLeft]`.
-  - **Phase 2 — Stacked Tab switch**: the first pixel of pointer travel that the layout
+  - **Phase 2 — Sliding Tab switch**: the first pixel of pointer travel that the layout
     cannot consume becomes Tab-switch progress. BSP layouts have no Phase 1 and enter
     Phase 2 directly; a Scrolling layout whose content does not overflow behaves the
     same way.
-- **Rigid strip, dip scaling.** The outgoing and incoming Tabs are laid out as two
-  full-size cards, one viewport width apart. Progress `p` translates both cards as a
-  rigid strip by one viewport width in the switch direction while applying the same
-  scale to both, `s(p) = 1 - 0.06 * (1 - |2p - 1|)`: full size at the ends, 94% at the
-  midpoint. Cards never change opacity; the gaps opened by the scale reveal the
-  Workbench Material Surface behind them, producing the stacked-card depth.
+- **Flat rigid strip.** The outgoing and incoming Tabs are laid out as two full-size
+  cards, one viewport width apart, and progress `p` translates both cards as one rigid
+  strip by exactly one viewport width in the switch direction. The cards keep their full
+  size and opacity, so a switch reads as a horizontal page slide with the two Tabs tiled
+  edge to edge — no scale, fade, or depth.
 - **The moving cards stay compositing-neutral.** The transition wrapper and cards must
   not introduce `will-change`, `backface-visibility`, `border-radius`, `overflow`, or
   `box-shadow`. Any of these makes the browser build a render surface around the moving
@@ -59,7 +63,7 @@ it made the indicator's width carry gesture state and read as a second animation
   gesture and dismisses any open menu. Native `contextmenu` is always suppressed on the
   Workbench stage; menus over Pane content are intentionally not offered.
 - **Shift+wheel and horizontal wheel deltas switch Tabs.** Each discrete notch commits
-  one full stacked switch; notches during a switch are queued and played in turn.
+  one full sliding switch; notches during a switch are queued and played in turn.
   Before a wheel gesture is promoted to a Tab switch, every horizontal scroller between
   the wheel target and the Workbench stage — including a Scrolling layout viewport that
   still has room in that direction — is given the gesture. `shiftKey + deltaY` is
@@ -68,14 +72,16 @@ it made the indicator's width carry gesture state and read as a second animation
   switches Tabs.
 - **All user-initiated switches share the transition.** Clicking a Tab, pressing the
   Tablist arrow keys, focusing an already-open Tab from the Sidebar, a right-drag commit,
-  and a wheel notch all play the same 220ms stacked transition with the Apple fluid
-  easing (`cubic-bezier(0.22, 1, 0.36, 1)`, `FLUID_MOTION_EASING`). Switches caused by
-  creating or closing a Tab stay instant, preserving ADR-0013's zero-latency close
-  behaviour; only the Tab indicator animates for those.
+  and a wheel notch all play the same sliding transition: `TAB_SETTLE_DURATION_MS`
+  (340ms) with `settleEaseOut`, `cubic-bezier(0.4, 0, 0.2, 1)`. That curve starts from
+  rest, so continuing a paused gesture on release does not snap forward the way the
+  front-loaded Apple curve did. Switches caused by creating or closing a Tab stay
+  instant, preserving ADR-0013's zero-latency close behaviour; only the Tab indicator
+  animates for those.
 - **Commit and cancel.** The gesture commits when progress reaches 50% or the release
   velocity exceeds the flick threshold, and otherwise animates back to 0. Interactive
   progress is linear in pointer travel; the settle to 0 or 1, and the discrete-switch
-  ramp, use the Apple easing.
+  ramp, use the settle easing above.
 - **Tab indicator replaces bold text.** The active Tab keeps its `bg-foreground/5`
   background but is no longer `font-medium`. A single shared underbar, 2px tall and
   colored `--primary`, is pinned to the bottom edge of the Topbar. Its width tracks the
@@ -89,8 +95,8 @@ it made the indicator's width carry gesture state and read as a second animation
 
 ## Consequences
 
-- The Workbench reads as one continuous surface: Tabs are cards in a stack, and every
-  path to a different Tab shares one motion language.
+- The Workbench reads as one continuous surface: Tabs are tiled cards, and every path to
+  a different Tab shares one motion language.
 - Right-button interaction never collides with text selection, terminal input, or Pane
   dragging, all of which remain on the left button.
 - Suppressing the native context menu across the Workbench stage is deliberate: Pane
@@ -98,5 +104,5 @@ it made the indicator's width carry gesture state and read as a second animation
   displacement threshold). Any future content that needs a context menu must claim it
   explicitly rather than inheriting the browser menu.
 - The transition keeps every Tab's viewport mounted (ADR "keep-alive"), showing exactly
-  two of them during a switch. Scale is a compositor transform, so terminal and editor
-  content is not re-laid-out mid-transition.
+  two of them during a switch. The strip translate is a compositor transform, so terminal
+  and editor content is not re-laid-out mid-transition.

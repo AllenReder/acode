@@ -34,7 +34,6 @@ import { useTabSwitchWheel } from "./useTabSwitchWheel";
 import {
   computeCardOffset,
   getTabTransitionFrame,
-  stackedTabScale,
   subscribeTabTransitionFrame,
   type TabTransitionFrame,
 } from "./tabTransition";
@@ -67,7 +66,7 @@ function resolvePaneBoxShadow(paneGap: number, paneShadow: PaneShadow): string {
   }
 }
 
-/** Write one card's slot transform for the current Stacked Tab switch frame. */
+/** Write one card's slot transform for the current Sliding Tab switch frame. */
 function writeTransitionCardTransform(
   element: HTMLElement,
   role: "to" | "from",
@@ -81,12 +80,12 @@ function writeTransitionCardTransform(
   }
   const slot = role === "to" ? 0 : -frame.dir;
   const offset = computeCardOffset(slot, frame.dir, frame.progress);
-  style.transform = `translate3d(${(offset * 100).toFixed(4)}%, 0, 0) scale(${stackedTabScale(frame.progress).toFixed(5)})`;
+  style.transform = `translate3d(${(offset * 100).toFixed(4)}%, 0, 0)`;
 }
 
 /**
  * Workbench canvas host that maintains Keep-Alive viewports across all tabs.
- * At rest only the active Tab is shown; during a Stacked Tab switch the source
+ * At rest only the active Tab is shown; during a Sliding Tab switch the source
  * and target Tabs are laid out as two cards and driven by transition progress.
  */
 export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps) {

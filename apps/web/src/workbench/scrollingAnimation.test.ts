@@ -3,6 +3,7 @@ import {
   appleEaseOut,
   computeScrollingRevealTarget,
   animateScrollTo,
+  settleEaseOut,
   type ScrollRevealInput,
 } from "./scrollingAnimation";
 
@@ -23,6 +24,21 @@ describe("appleEaseOut", () => {
     }
     // High initial acceleration: at t=0.5 it should cover over 80% of the distance
     expect(appleEaseOut(0.5)).toBeGreaterThan(0.8);
+  });
+});
+
+describe("settleEaseOut", () => {
+  it("starts at 0 and ends at 1", () => {
+    expect(settleEaseOut(0)).toBe(0);
+    expect(settleEaseOut(1)).toBe(1);
+  });
+
+  it("starts from rest, unlike the front-loaded Apple curve", () => {
+    // cubic-bezier(0.4, 0, 0.2, 1) barely moves at the very start, so a paused
+    // release does not snap forward the way the Apple curve does.
+    expect(settleEaseOut(0.1)).toBeLessThan(0.1);
+    expect(settleEaseOut(0.1)).toBeLessThan(appleEaseOut(0.1));
+    expect(settleEaseOut(0.5)).toBeLessThan(appleEaseOut(0.5));
   });
 });
 

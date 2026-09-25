@@ -13,13 +13,13 @@ import {
 import { getPrefersReducedMotion } from "./workbenchMotion";
 import { useWorkbenchStore } from "./workbenchStore";
 
-/** Subscribe to the low-frequency shape of the in-flight Stacked Tab switch. */
+/** Subscribe to the low-frequency shape of the in-flight Sliding Tab switch. */
 export function useTabTransition(): TabTransitionState | null {
   return useSyncExternalStore(subscribeTabTransition, getTabTransition, getTabTransition);
 }
 
 /**
- * Watches `activeTabId` and drives the Stacked Tab switch for every user-navigated
+ * Watches `activeTabId` and drives the Sliding Tab switch for every user-navigated
  * Tab change. Structural changes (creating or closing a Tab) and reduced motion land
  * instantly, per ADR-0019.
  */

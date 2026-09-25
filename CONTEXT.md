@@ -162,15 +162,15 @@ strip. A BSP layout has no Layout pan because its content does not overflow the
 Viewport.
 _Avoid_: Canvas drag, map pan, scroll bar
 
-**Stacked Tab switch**:
+**Sliding Tab switch**:
 The animated presentation of a Tab change in which the outgoing and incoming Tab
-are shown as full-size cards one Viewport apart, translating as one strip while
-both briefly recede in scale to reveal the Workbench surface behind them. It is a
-presentation of a Tab change, not a change to Tab or Session identity.
-_Avoid_: Carousel, page flip, split slide
+are tiled side by side, one Viewport apart, and slide as one rigid strip by a
+single Viewport width. It is a presentation of a Tab change, not a change to Tab
+or Session identity.
+_Avoid_: Stacked switch, carousel, page flip, split slide
 
 **Tab switch progress**:
-The continuous 0–1 measure of a Stacked Tab switch, advanced by pointer travel
+The continuous 0–1 measure of a Sliding Tab switch, advanced by pointer travel
 past a layout's horizontal limit or in discrete steps by a wheel notch. It drives
 both the Tab cards and the Tab indicator.
 _Avoid_: Scroll offset, swipe amount
@@ -393,8 +393,8 @@ _Avoid_: Chat wallpaper, Session background, View background
 - Splitting within an active Tab is explicit through keyboard modifiers or drag-and-drop.
 - The Workbench Viewport never scrolls vertically; vertical scrolling belongs strictly to the Content Layer of individual Panes.
 - In a Scrolling layout, the Viewport scrolls purely horizontally, and the Trailing Canvas Area beyond the rightmost Column is a valid drop target that appends a new Column at the far right.
-- A user-navigated Tab change (click, keyboard, Layout pan, or wheel notch) presents a Stacked Tab switch; a Tab change caused by creating or closing a Tab lands instantly.
-- A Layout pan is unavailable in a BSP layout; a horizontal gesture a layout cannot consume promotes to a Stacked Tab switch instead.
+- A user-navigated Tab change (click, keyboard, Layout pan, or wheel notch) presents a Sliding Tab switch; a Tab change caused by creating or closing a Tab lands instantly.
+- A Layout pan is unavailable in a BSP layout; a horizontal gesture a layout cannot consume promotes to a Sliding Tab switch instead.
 - The Tab indicator tracks the active Tab and any Tab switch progress and never spans more than one Tab's width.
 - Runtime and provider implementation details must not define Awen domain
   identity.

@@ -13,29 +13,14 @@ import {
   resetTabTransitionForTest,
   resolveSwitchCommit,
   setTabTransitionProgress,
-  stackedTabScale,
   subscribeTabTransition,
   subscribeTabTransitionFrame,
   tabIdsKey,
-  TAB_TRANSITION_SCALE_DIP,
 } from "./tabTransition";
 
 afterEach(() => {
   resetTabTransitionForTest();
   vi.unstubAllGlobals();
-});
-
-describe("stackedTabScale", () => {
-  it("is full size at both ends and dipped at the midpoint", () => {
-    expect(stackedTabScale(0)).toBe(1);
-    expect(stackedTabScale(1)).toBe(1);
-    expect(stackedTabScale(0.5)).toBeCloseTo(1 - TAB_TRANSITION_SCALE_DIP, 6);
-  });
-
-  it("clamps out-of-range progress", () => {
-    expect(stackedTabScale(-1)).toBe(1);
-    expect(stackedTabScale(2)).toBe(1);
-  });
 });
 
 describe("computeCardOffset", () => {

@@ -11,7 +11,7 @@ import { useWorkbenchStore } from "./workbenchStore";
 const WHEEL_SWITCH_SAFETY_MS = 800;
 
 /**
- * Wheel-driven Stacked Tab switching (ADR-0019). Each horizontal notch commits
+ * Wheel-driven Sliding Tab switching (ADR-0019). Each horizontal notch commits
  * one full switch and notches are queued while a switch settles. Any horizontal
  * scroller between the wheel target and the Workbench stage — including a
  * Scrolling layout with room — consumes the gesture first.

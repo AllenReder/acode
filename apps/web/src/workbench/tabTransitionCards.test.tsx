@@ -16,7 +16,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it("renders the source and target Tabs as two cards during a Stacked Tab switch", async () => {
+it("renders the source and target Tabs as two cards during a Sliding Tab switch", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal(
     "ResizeObserver",

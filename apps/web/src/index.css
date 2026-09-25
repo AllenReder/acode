@@ -2326,7 +2326,7 @@ html[data-workbench-window-chrome] {
 .workbench-viewport[data-layout-mode="bsp"] {
   overflow: hidden;
 }
-/* Stacked Tab switch (ADR-0019): the source and target Tabs become two cards.
+/* Sliding Tab switch (ADR-0019): the source and target Tabs become two cards.
    Keep this rule to positioning only. `will-change`, `backface-visibility`,
    `border-radius`, and `overflow` all make the browser create a render surface
    (backdrop root) around the card, which drops the `mask`/`clip-path` on
