@@ -7,6 +7,7 @@ import { useEnvironmentCatalogSnapshot } from "../state/environmentCatalogSnapsh
 import { useEnvironments } from "../state/environments";
 import { PaneTree } from "./PaneTree";
 import { TabTransitionController } from "./tabTransitionReact";
+import { installTabSwitchProfiler } from "./transitionProfiler";
 import { WorkbenchWindowChrome } from "./WorkbenchWindowChrome";
 import { MaterialSurface } from "../components/MaterialSurface";
 import { WorkbenchDropOverlay } from "./workbenchDrag";
@@ -21,6 +22,9 @@ import {
 import { targetKey, type ViewTarget } from "./viewRegistry";
 import "./viewDefinitions";
 import { useWorkbenchStore } from "./workbenchStore";
+
+// Opt-in tab-switch profiler; no-op unless `?profileTabSwitch` or the localStorage flag is set.
+installTabSwitchProfiler();
 
 interface WorkbenchProps {
   readonly navigate?: (input: {
