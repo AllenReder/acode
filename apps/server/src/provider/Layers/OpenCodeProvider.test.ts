@@ -42,6 +42,7 @@ const runtimeMock = {
     runVersionPending: false,
     versionStdout: DEFAULT_VERSION_STDOUT,
     inventoryError: null as Error | null,
+    inventoryEmptyCalls: 0,
     connectionError: null as Error | null,
     closeCalls: 0,
     sdkClientInputs: [] as Array<{
@@ -61,6 +62,7 @@ const runtimeMock = {
     this.state.runVersionPending = false;
     this.state.versionStdout = DEFAULT_VERSION_STDOUT;
     this.state.inventoryError = null;
+    this.state.inventoryEmptyCalls = 0;
     this.state.connectionError = null;
     this.state.closeCalls = 0;
     this.state.sdkClientInputs.length = 0;
@@ -137,16 +139,28 @@ const OpenCodeRuntimeTestDouble: OpenCodeRuntimeShape = {
     runtimeMock.state.sdkClientInputs.push(input);
     return {} as unknown as ReturnType<OpenCodeRuntimeShape["createOpenCodeSdkClient"]>;
   },
-  loadOpenCodeInventory: () =>
-    runtimeMock.state.inventoryError
-      ? Effect.fail(
-          new OpenCodeRuntimeError({
-            operation: "loadOpenCodeInventory",
-            detail: runtimeMock.state.inventoryError.message,
-            cause: runtimeMock.state.inventoryError,
-          }),
-        )
-      : Effect.succeed(runtimeMock.state.inventory as OpenCodeInventory),
+  loadOpenCodeInventory: () => {
+    if (runtimeMock.state.inventoryError) {
+      return Effect.fail(
+        new OpenCodeRuntimeError({
+          operation: "loadOpenCodeInventory",
+          detail: runtimeMock.state.inventoryError.message,
+          cause: runtimeMock.state.inventoryError,
+        }),
+      );
+    }
+    if (runtimeMock.state.inventoryEmptyCalls > 0) {
+      runtimeMock.state.inventoryEmptyCalls -= 1;
+      return Effect.succeed({
+        providers: [],
+        models: [],
+        agents: [],
+        skills: [],
+        commands: [],
+      } as unknown as OpenCodeInventory);
+    }
+    return Effect.succeed(runtimeMock.state.inventory as OpenCodeInventory);
+  },
   loadOpenCodeSkills: () => Effect.succeed([]),
 };
 
@@ -293,6 +307,34 @@ it.layer(testLayer)("checkOpenCodeProviderStatus", (it) => {
         agentDescriptor.options.find((option) => option.isDefault === true)?.id,
         "review",
       );
+    }),
+  );
+
+  it.effect("waits for the v2 provider registry before reporting a warning", () =>
+    Effect.gen(function* () {
+      // OpenCode v2 prints its serve banner before providers load, so the first
+      // inventory probes can come back empty. The check must poll instead of
+      // caching a false "no upstream providers" warning.
+      runtimeMock.state.inventoryEmptyCalls = 2;
+      runtimeMock.state.inventory = {
+        providers: [{ id: "openai", name: "OpenAI", activation: "enabled" }],
+        models: [
+          {
+            id: "gpt-5.4",
+            modelID: "gpt-5.4",
+            providerID: "openai",
+            name: "GPT-5.4",
+            variants: [],
+          },
+        ],
+        agents: [],
+        skills: [],
+        commands: [],
+      };
+      const snapshot = yield* checkProvider(makeOpenCodeSettings());
+
+      NodeAssert.equal(snapshot.status, "ready");
+      NodeAssert.equal(snapshot.models.length, 1);
     }),
   );
 

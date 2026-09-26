@@ -1,3 +1,4 @@
+// @effect-diagnostics globalTimers:off -- The OpenCode v2 provider-registry warm-up polls on wall-clock time; an Effect clock would freeze it under a test clock.
 import {
   type ModelCapabilities,
   type OpenCodeSettings,
@@ -36,6 +37,18 @@ const OPENCODE_PRESENTATION = {
   approvalRequestKinds: OPENCODE_APPROVAL_REQUEST_KINDS,
 } as const;
 const OPENCODE_VERSION_PROBE_TIMEOUT = "4 seconds";
+// OpenCode v2 prints its serve banner before the provider registry finishes
+// loading, so `/api/provider` and `/api/model` can briefly report nothing. Poll
+// the inventory until it is populated (or the deadline passes) so a status
+// check at startup does not cache a false "no upstream providers" warning.
+const OPENCODE_INVENTORY_READY_ATTEMPTS = 8;
+const OPENCODE_INVENTORY_READY_POLL_MILLIS = 600;
+// Wall-clock delay rather than `Effect.sleep`: the inventory poll must advance
+// even when a caller provides a test clock, and it should not be able to stall
+// a status check indefinitely.
+const waitForInventoryPoll = Effect.promise(
+  () => new Promise<void>((resolve) => setTimeout(resolve, OPENCODE_INVENTORY_READY_POLL_MILLIS)),
+);
 
 class OpenCodeProbeError extends Data.TaggedError("OpenCodeProbeError")<{
   readonly cause?: unknown;
@@ -487,15 +500,20 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
     readonly serverPassword?: string;
     readonly version: string;
   }) =>
-    openCodeRuntime
-      .loadOpenCodeInventory(
-        openCodeRuntime.createOpenCodeSdkClient({
-          baseUrl: server.url,
-          ...(server.serverPassword !== undefined ? { serverPassword: server.serverPassword } : {}),
-        }),
-        cwd,
-      )
-      .pipe(Effect.map((inventory) => ({ inventory, version: server.version })));
+    Effect.gen(function* () {
+      const client = openCodeRuntime.createOpenCodeSdkClient({
+        baseUrl: server.url,
+        ...(server.serverPassword !== undefined ? { serverPassword: server.serverPassword } : {}),
+      });
+      for (let attempt = 1; ; attempt += 1) {
+        const inventory = yield* openCodeRuntime.loadOpenCodeInventory(client, cwd);
+        const ready = inventory.providers.length > 0 && inventory.models.length > 0;
+        if (ready || attempt >= OPENCODE_INVENTORY_READY_ATTEMPTS) {
+          return { inventory, version: server.version };
+        }
+        yield* waitForInventoryPoll;
+      }
+    });
   const inventoryEffect = isExternalServer
     ? openCodeRuntime
         .connectToOpenCodeServer({
