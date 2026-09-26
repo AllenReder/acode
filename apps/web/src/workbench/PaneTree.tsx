@@ -82,6 +82,11 @@ function writeTransitionCardTransform(
   style.transform = `translate(${(offset * 100).toFixed(4)}%, 0)`;
 }
 
+/** Whether a Tab is one of the two cards a Sliding Tab switch is driving. */
+function isSwitchParticipant(role: TabTransitionRole): role is "to" | "from" {
+  return role === "to" || role === "from";
+}
+
 /**
  * Workbench canvas host that maintains Keep-Alive viewports across all tabs.
  * At rest only the active Tab is shown; during a Sliding Tab switch the source
@@ -177,6 +182,13 @@ const TabPaneTree = memo(
 
     useLayoutEffect(() => {
       if (!isActive || scrolling) return;
+      // A Sliding Tab switch keeps this card mounted but drives it with the
+      // strip's own transform, so a rect read here reports the transient strip
+      // position rather than a layout change. Measuring it would mistake the
+      // switch offset for a FLIP delta and snap the Pane content. Skip while
+      // this card is a switch participant; the effect re-runs with clean
+      // geometry once the switch settles and the transform is cleared.
+      if (isSwitchParticipant(transitionRole)) return;
       const viewport = viewportRef.current;
       if (!viewport?.querySelectorAll) return;
       const frames = viewport.querySelectorAll<HTMLElement>(".workbench-pane-frame");
@@ -209,7 +221,7 @@ const TabPaneTree = memo(
         }
       }
       previousRects.current = next;
-    }, [isActive, scrolling, tab.layout]);
+    }, [isActive, scrolling, tab.layout, transitionRole]);
 
     useEffect(() => {
       const element = viewportRef.current;
@@ -345,7 +357,7 @@ const TabPaneTree = memo(
     }, [isActive, tab.focusedPaneId]);
 
     useLayoutEffect(() => {
-      if (transitionRole !== "to" && transitionRole !== "from") return;
+      if (!isSwitchParticipant(transitionRole)) return;
       const viewport = viewportRef.current;
       if (viewport === null) return;
       const role = transitionRole;
