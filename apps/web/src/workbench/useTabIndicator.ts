@@ -10,9 +10,11 @@ import {
   getTabTransition,
   getTabTransitionFrame,
   subscribeTabTransitionFrame,
-  type TabIndicatorGeometry,
 } from "./tabTransition";
+import type { TabIndicatorGeometry } from "./tabTransition";
 import { useTabTransition } from "./tabTransitionReact";
+import { getViewportMetrics, subscribeViewportMetrics } from "./viewportTracking";
+import { resolveViewportIndicatorGeometry, type ViewportMetrics } from "./viewportMetrics";
 
 function escapeSelector(value: string): string {
   if (typeof CSS !== "undefined" && typeof CSS.escape === "function") return CSS.escape(value);
@@ -53,6 +55,20 @@ function writeWidth(style: CSSStyleDeclaration, width: number): void {
   style.width = `${width}px`;
 }
 
+/**
+ * Replace a Tab's resting geometry with its Viewport's share of the Scrolling
+ * canvas (ADR-0025). A Tab whose Viewport does not overflow — BSP, an empty
+ * Tab, or a strip narrower than the Viewport — keeps spanning the whole Tab.
+ */
+function applyViewportGeometry(
+  tabId: string,
+  geometry: TabIndicatorGeometry,
+  metrics: ViewportMetrics | null,
+): TabIndicatorGeometry {
+  if (metrics === null || metrics.tabId !== tabId) return geometry;
+  return resolveViewportIndicatorGeometry(geometry, metrics) ?? geometry;
+}
+
 export interface TabIndicatorOptions {
   readonly stripRef: React.RefObject<HTMLElement | null>;
   readonly activeTabId: string;
@@ -68,6 +84,8 @@ export interface TabIndicatorOptions {
 /**
  * Positions the shared Topbar Tab underbar (ADR-0019). It follows Tab switch
  * progress directly and animates with Apple fluid easing on ordinary changes.
+ * For a Scrolling Tab it also carries the Viewport's position and width
+ * (ADR-0025), driven by the metrics the Viewport owner publishes.
  *
  * Reading layout (`getBoundingClientRect`) is what stalls a switch: the cards have
  * just been repositioned, so any read forces a synchronous reflow of the whole
@@ -144,42 +162,64 @@ export function useTabIndicator(
       return geometry;
     };
 
-    if (transition === null) {
-      const geometry = geometryFor(activeTabId);
-      if (geometry !== null) {
-        if (dragging || wasTransitioningRef.current) {
-          cancelIndicatorAnimation();
-          write(geometry);
-        } else animateTo(geometry);
-      }
-      wasTransitioningRef.current = false;
-      return;
+    // Only the active Tab trades its full span for the Viewport's share of the
+    // Scrolling canvas; every other Tab's card keeps its own width.
+    const restingGeometryFor = (tabId: string): TabIndicatorGeometry | null => {
+      const geometry = geometryFor(tabId);
+      if (geometry === null || tabId !== activeTabId) return geometry;
+      return applyViewportGeometry(tabId, geometry, getViewportMetrics());
+    };
+
+    // The bar follows every Viewport reading in the frame it happens rather
+    // than easing to it: a pan is pointer-driven, and a resize moves the Pane
+    // rects directly too, so easing here would tear the bar away from the
+    // geometry it describes.
+    const followViewport = () => {
+      const geometry = restingGeometryFor(activeTabId);
+      if (geometry === null) return;
+      cancelIndicatorAnimation();
+      write(geometry);
+    };
+
+    if (transition !== null) {
+      wasTransitioningRef.current = true;
+      // Gesture progress drives the underbar directly; drop any in-flight ease.
+      cancelIndicatorAnimation();
+      const applyFrame = () => {
+        const frame = getTabTransitionFrame();
+        if (frame === null) return;
+        const ordered = [...frame.cards].sort((a, b) => a.slot - b.slot);
+        const rightIndex = ordered.findIndex((card) => card.slot >= frame.position);
+        const right = ordered[Math.max(0, rightIndex < 0 ? ordered.length - 1 : rightIndex)];
+        const left = ordered[Math.max(0, (rightIndex < 0 ? ordered.length - 1 : rightIndex) - 1)];
+        if (!left || !right) return;
+        // Both endpoints are whole Tab cards, so the bar travels the strip in
+        // Tab geometry while holding its width (ADR-0019: it never stretches).
+        const first = geometryFor(left.tabId);
+        const second = geometryFor(right.tabId);
+        if (first === null || second === null) return;
+        const progress =
+          left.slot === right.slot ? 0 : (frame.position - left.slot) / (right.slot - left.slot);
+        const width = lastGeometryRef.current?.width ?? first.width;
+        if (lastGeometryRef.current === null) writeWidth(indicatorStyle, width);
+        const geometry = { left: first.left + (second.left - first.left) * progress, width };
+        writeTransform(indicatorStyle, geometry.left);
+        lastGeometryRef.current = geometry;
+      };
+      applyFrame();
+      return subscribeTabTransitionFrame(applyFrame);
     }
 
-    wasTransitioningRef.current = true;
-    // Gesture progress drives the underbar directly; drop any in-flight ease.
-    cancelIndicatorAnimation();
-    const applyFrame = () => {
-      const frame = getTabTransitionFrame();
-      if (frame === null) return;
-      const ordered = [...frame.cards].sort((a, b) => a.slot - b.slot);
-      const rightIndex = ordered.findIndex((card) => card.slot >= frame.position);
-      const right = ordered[Math.max(0, rightIndex < 0 ? ordered.length - 1 : rightIndex)];
-      const left = ordered[Math.max(0, (rightIndex < 0 ? ordered.length - 1 : rightIndex) - 1)];
-      if (!left || !right) return;
-      const first = geometryFor(left.tabId);
-      const second = geometryFor(right.tabId);
-      if (first === null || second === null) return;
-      const progress =
-        left.slot === right.slot ? 0 : (frame.position - left.slot) / (right.slot - left.slot);
-      const width = lastGeometryRef.current?.width ?? first.width;
-      if (lastGeometryRef.current === null) writeWidth(indicatorStyle, width);
-      const geometry = { left: first.left + (second.left - first.left) * progress, width };
-      writeTransform(indicatorStyle, geometry.left);
-      lastGeometryRef.current = geometry;
-    };
-    applyFrame();
-    return subscribeTabTransitionFrame(applyFrame);
+    const wasTransitioning = wasTransitioningRef.current;
+    wasTransitioningRef.current = false;
+    const geometry = restingGeometryFor(activeTabId);
+    if (geometry !== null) {
+      if (dragging || wasTransitioning) {
+        cancelIndicatorAnimation();
+        write(geometry);
+      } else animateTo(geometry);
+    }
+    return subscribeViewportMetrics(followViewport);
   }, [stripRef, activeTabId, revision, dragging, transition]);
 
   useEffect(
@@ -199,8 +239,9 @@ export function useTabIndicator(
       const indicator = indicatorRef.current;
       const indicatorStyle = (indicator as { style?: CSSStyleDeclaration } | null)?.style;
       if (indicator === null || !indicatorStyle) return;
-      const geometry = measureTabGeometry(strip, activeTabId);
-      if (geometry === null) return;
+      const measured = measureTabGeometry(strip, activeTabId);
+      if (measured === null) return;
+      const geometry = applyViewportGeometry(activeTabId, measured, getViewportMetrics());
       writeTransform(indicatorStyle, geometry.left);
       writeWidth(indicatorStyle, geometry.width);
       lastGeometryRef.current = geometry;

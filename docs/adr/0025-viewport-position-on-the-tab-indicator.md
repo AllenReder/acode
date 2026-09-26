@@ -1,0 +1,72 @@
+---
+status: accepted
+---
+
+# Viewport position on the Tab indicator
+
+A Scrolling Tab's horizontal scroll position is shown by the Topbar Tab
+indicator instead of a native scrollbar. The Workbench Viewport hides its
+native horizontal bar unconditionally; the active Tab's underbar narrows to the
+Viewport's share of the Scrolling canvas and travels the active Tab's box as the
+Viewport scrolls. For issue #148.
+
+## Context
+
+A Scrolling layout renders Columns into a canvas that can overflow its Viewport,
+so the Viewport needs horizontal navigation: Layout pan, wheel, trackpad,
+keyboard, focus reveal, and edge auto-scrolling during a drag (ADR-0015,
+ADR-0019). It also had a native horizontal scrollbar at the bottom of the
+Workbench, which carried no information the Tab indicator does not already have
+a home for — the indicator already expresses which Tab is active and the
+progress of a Sliding Tab switch (ADR-0019).
+
+Two independent affordances describing one horizontal axis read as clutter, and
+the native bar sat below the Workbench canvas rather than in the chrome that
+already owns Workbench presentation state.
+
+## Decision
+
+- **The Viewport's native horizontal scrollbar is hidden unconditionally.**
+  Hiding it conditionally on overflow would feed back on itself: a classic
+  scrollbar consumes layout width, so hiding it widens the Viewport, and the
+  canvas width derives from the Viewport, which flips the overflow state back.
+  The Viewport stays `overflow-x: auto` — only the painted bar is removed.
+- **The active Tab's underbar expresses the Viewport.** When the active Tab is a
+  Scrolling layout whose canvas overflows its Viewport, the underbar's width is
+  the visible share of the canvas (`tabWidth × clientWidth / scrollWidth`,
+  clamped to a visible minimum and to the Tab width) and it travels the active
+  Tab's box from the left edge at `scrollLeft = 0` to the right edge at the
+  horizontal limit.
+- **Nothing else changes shape.** A Tab whose canvas does not overflow — BSP,
+  an empty Tab, or a Scrolling strip narrower than its Viewport — keeps an
+  underbar spanning the whole active Tab. BSP is included by construction
+  because its Viewport cannot scroll.
+- **The Viewport owns the reading; the indicator consumes it.** The Viewport
+  publishes its `clientWidth`, `scrollWidth`, and `scrollLeft` for the active
+  Tab only. Only a `scrollLeft` change is frequent, so the scroll path reuses
+  the geometry captured at publish time and the indicator writes only
+  `transform` and `width` — the same discipline the Tab-geometry cache already
+  enforces, because reading layout per frame would force a synchronous reflow of
+  the pane subtree on every wheel tick.
+- **The underbar follows Viewport readings directly.** It tracks a pan in the
+  same frame without easing, because the pointer is already the animation
+  (ADR-0024). A Column or window resize moves the Pane rects directly too, so
+  the underbar follows that as well rather than easing away from the geometry it
+  describes.
+- **Sliding Tab switch semantics are unchanged.** Both endpoints of a switch are
+  whole Tab cards, so the underbar translates between them and holds its width
+  (ADR-0019: it never stretches between Tabs). Interpolating the width between
+  two participating Tabs would amend that rule and is a separate decision.
+
+## Consequences
+
+- One affordance describes the horizontal axis, in the chrome that already owns
+  Workbench presentation.
+- Horizontal navigation is entirely gestural: the scrollbar no longer advertises
+  that a Scrolling Tab can move. The Tab indicator communicates it instead, but
+  only for the active Tab.
+- The Viewport widens by the width of a classic scrollbar on platforms that
+  reserve one. Layout geometry already derives from `clientWidth`, so no
+  computation changes.
+- Keyboard and assistive-technology access to horizontal scrolling rests on the
+  scrolling container itself, not on the painted bar.

@@ -42,6 +42,7 @@ import {
   cancelActiveScrollAnimation,
   computeScrollingRevealTarget,
 } from "./scrollingAnimation";
+import { usePublishViewportMetrics } from "./viewportTracking";
 
 interface PaneTreeProps {
   readonly snapshot: WorkbenchSnapshot;
@@ -204,6 +205,15 @@ const TabPaneTree = memo(
     const isInitialMountRef = useRef(true);
 
     const layout = useMemo(() => computePaneLayoutRects(tab, size, paneGap), [tab, size, paneGap]);
+
+    // The Topbar Tab indicator expresses this Tab's Viewport position while the
+    // Tab is active (ADR-0025). Only a Scrolling layout has a scroll position to
+    // express; a BSP Viewport never overflows.
+    usePublishViewportMetrics({
+      ref: viewportRef,
+      tabId: tab.id,
+      active: isActive && scrolling,
+    });
 
     const previewLayout = useMemo(
       () => (previewTab ? computePaneLayoutRects(previewTab, size, paneGap) : undefined),
