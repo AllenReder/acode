@@ -13,7 +13,6 @@ import {
   getTabTransitionFrame,
   interruptTabSettle,
   nextTabIndex,
-  resolveSwitchCommit,
   retargetTabTransition,
   setTabTransitionPosition,
 } from "./tabTransition";
@@ -34,7 +33,7 @@ interface TrackpadSession {
   scrolled: boolean;
 }
 
-const TRACKPAD_SWITCH_TRAVEL = 200;
+const TRACKPAD_SWITCH_TRAVEL = 360;
 
 /** One stage listener routes horizontal intent from the innermost scroller to Tabs. */
 export function useTabSwitchWheel(stageRef: React.RefObject<HTMLElement | null>): void {
@@ -51,15 +50,7 @@ export function useTabSwitchWheel(stageRef: React.RefObject<HTMLElement | null>)
         const velocity = performance.now() - session.lastTime > 90 ? 0 : session.velocity;
         const releaseVelocity = (velocity * 1000) / TRACKPAD_SWITCH_TRAVEL;
         setTabTransitionPosition(frame.position, Math.max(-2, Math.min(2, releaseVelocity)));
-        finishTabSwitch(
-          !cancelled &&
-            (frame.progress >= 0.35 ||
-              resolveSwitchCommit({
-                progress: frame.progress,
-                velocity: -velocity,
-                dir: frame.dir,
-              })),
-        );
+        finishTabSwitch(!cancelled && frame.progress >= 0.5);
         session.phase = "momentum";
       } else if (session.scrolled) {
         session.phase = "momentum";

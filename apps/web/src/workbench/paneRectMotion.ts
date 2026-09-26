@@ -1,4 +1,5 @@
 import { cancelMotionFrame, requestMotionFrame, stepCriticallyDamped } from "./motionValue";
+import { getAnimationDurationScale } from "./workbenchMotion";
 
 export interface PaneRect {
   readonly left: number;
@@ -26,11 +27,24 @@ export function createPaneRectMotion(element: HTMLElement, initial: PaneRect) {
   };
   const step = (time: number) => {
     frame = null;
+    const durationScale = getAnimationDurationScale();
+    if (durationScale === 0) {
+      Object.assign(position, target);
+      for (const key of keys) velocity[key] = 0;
+      write();
+      return;
+    }
     const seconds = Math.max((time - previousTime) / 1000, 0);
     previousTime = time;
     let moving = false;
     for (const key of keys) {
-      const stepped = stepCriticallyDamped(position[key], velocity[key], target[key], seconds, 24);
+      const stepped = stepCriticallyDamped(
+        position[key],
+        velocity[key],
+        target[key],
+        seconds,
+        24 / durationScale,
+      );
       position[key] = stepped.value;
       velocity[key] = stepped.velocity;
       if (Math.abs(position[key] - target[key]) < 0.05 && Math.abs(velocity[key]) < 0.5) {

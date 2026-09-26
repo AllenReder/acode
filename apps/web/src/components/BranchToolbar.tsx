@@ -1,3 +1,4 @@
+import { scaledMotionDuration, skipAutomaticWorkbenchMotion } from "../workbench/workbenchMotion";
 import { scopeProjectRef, scopeThreadRef } from "@awen/client-runtime/environment";
 import type { EnvironmentId, ThreadId } from "@awen/contracts";
 import {
@@ -163,7 +164,7 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
       >
         <span
           data-composer-label-motion
-          className="block w-full min-w-0 max-w-[240px] truncate transition-opacity duration-180 ease-[cubic-bezier(0.32,0.72,0,1)] group-data-[compact]/composer-context:opacity-0 motion-reduce:transition-none"
+          className="block w-full min-w-0 max-w-[240px] truncate transition-opacity [transition-duration:calc(180ms*var(--motion-duration-scale,1))] ease-[cubic-bezier(0.32,0.72,0,1)] group-data-[compact]/composer-context:opacity-0 motion-reduce:transition-none"
         >
           {autoEnvironmentLabel ??
             (showEnvironmentIndicator ? (activeEnvironment?.label ?? "Run on") : workspaceLabel)}
@@ -397,7 +398,7 @@ function useLabelsOverflow(element: HTMLDivElement | null): boolean {
     }
     labelAnimationsRef.current.clear();
 
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (skipAutomaticWorkbenchMotion()) return;
 
     for (const [label, previousRect] of previousRects) {
       if (!label.isConnected) continue;
@@ -413,7 +414,7 @@ function useLabelsOverflow(element: HTMLDivElement | null): boolean {
           { width: `${nextWidth}px`, maxWidth: `${nextWidth}px` },
         ],
         {
-          duration: COMPOSER_CONTEXT_MOTION_DURATION_MS,
+          duration: scaledMotionDuration(COMPOSER_CONTEXT_MOTION_DURATION_MS),
           easing: COMPOSER_CONTEXT_MOTION_EASING,
           fill: "backwards",
         },

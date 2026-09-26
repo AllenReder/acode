@@ -18,6 +18,8 @@ import { SidebarTitlebarButton } from "./sidebar/SidebarTitlebarControl";
 import { SidebarActionControl } from "./sidebar/SidebarChrome";
 import { createSidebarPresentation } from "./sidebar/sidebarPresentation";
 import { getPrefersReducedMotion } from "../workbench/workbenchMotion";
+import { useClientSettings } from "../hooks/useSettings";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { isMacPlatform } from "../lib/utils";
 import { resolveWorkbenchTitlebarStyle } from "../lib/windowControlsOverlay";
 import { primaryServerKeybindingsAtom } from "../state/server";
@@ -164,6 +166,8 @@ function SidebarMotionController({
 }
 
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
+  const animationDurationScale = useClientSettings((settings) => settings.animationDurationScale);
+  const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const navigate = useNavigate();
   const canGoBack = useCanGoBack();
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
@@ -195,17 +199,24 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       ? getWindowFullscreenState()
       : false;
   });
-  const effectiveAnimationDurationMs =
-    panelAnimationDurationMs > 0 ? panelAnimationDurationMs : 200;
   const sidebarProviderStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
-    "--panel-animation-duration": `${effectiveAnimationDurationMs}ms`,
+    "--panel-animation-duration": `${panelAnimationDurationMs}ms`,
     ...resolveWorkbenchTitlebarStyle({
       hasDesktopBridge: window.desktopBridge !== undefined,
       platform: navigator.platform,
       fullscreen: isWindowFullscreen,
     }),
   } as CSSProperties;
+
+  useLayoutEffect(() => {
+    document.documentElement.style.setProperty(
+      "--motion-duration-scale",
+      String(animationDurationScale),
+    );
+    document.documentElement.dataset.motionOff =
+      animationDurationScale === 0 || prefersReducedMotion ? "true" : "false";
+  }, [animationDurationScale, prefersReducedMotion]);
 
   useEffect(() => {
     if (!isMacosDesktop) return;

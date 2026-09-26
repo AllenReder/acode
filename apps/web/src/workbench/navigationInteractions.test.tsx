@@ -308,10 +308,31 @@ it("lets a macOS trackpad preview reverse before release and swallows its moment
     wheel(80);
     wheel(-60);
   });
-  expect(getTabTransitionFrame()?.progress).toBeCloseTo(0.1);
+  expect(getTabTransitionFrame()?.progress).toBeCloseTo(20 / 360);
   nativePhase!({ payload: { phase: "ended", momentumPhase: "none" } });
   expect(useWorkbenchStore.getState().activeTabId).toBe(active);
   await actEvent(() => wheel(200));
+  expect(useWorkbenchStore.getState().activeTabId).toBe(active);
+});
+
+it("returns a short trackpad swipe to its source Tab on release", async () => {
+  Object.assign(windowEvents, { desktopBridge: {} });
+  vi.stubGlobal("navigator", { platform: "MacIntel" });
+  await mount(2);
+  const active = useWorkbenchStore.getState().activeTabId;
+  nativePhase!({ payload: { phase: "began", momentumPhase: "none" } });
+  await actEvent(() =>
+    event(stage, "wheel", {
+      target: stage,
+      deltaX: 100,
+      deltaY: 0,
+      deltaMode: 0,
+      shiftKey: false,
+      ctrlKey: false,
+    }),
+  );
+  expect(getTabTransitionFrame()?.progress).toBeCloseTo(100 / 360);
+  nativePhase!({ payload: { phase: "ended", momentumPhase: "none" } });
   expect(useWorkbenchStore.getState().activeTabId).toBe(active);
 });
 
@@ -331,7 +352,7 @@ it("commits one trackpad switch when direct input ends despite a long momentum t
     });
   nativePhase!({ payload: { phase: "began", momentumPhase: "none" } });
   await act(() => {
-    for (let index = 0; index < 5; index++) wheel();
+    for (let index = 0; index < 10; index++) wheel();
   });
   nativePhase!({ payload: { phase: "ended", momentumPhase: "none" } });
   expect(useWorkbenchStore.getState().activeTabId).toBe(tabs[0]!.id);
@@ -387,7 +408,7 @@ it("holds content scroll ownership at the boundary until the next trackpad gestu
   nativePhase!({ payload: { phase: "ended", momentumPhase: "none" } });
   nativePhase!({ payload: { phase: "began", momentumPhase: "none" } });
   await actEvent(() => wheel(50));
-  expect(getTabTransitionFrame()?.progress).toBeCloseTo(0.25);
+  expect(getTabTransitionFrame()?.progress).toBeCloseTo(50 / 360);
   await actEvent(() => wheel(-100));
   expect(getTabTransitionFrame()).toBeNull();
   expect(inner.scrollLeft).toBe(0);

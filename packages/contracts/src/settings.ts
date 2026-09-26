@@ -193,16 +193,17 @@ export const DEFAULT_PANE_RADIUS: PaneRadius = 0;
 export const PaneShadow = Schema.Literals(["none", "subtle", "medium", "elevated"]);
 export type PaneShadow = typeof PaneShadow.Type;
 export const DEFAULT_PANE_SHADOW: PaneShadow = "none";
-export const MIN_PANEL_ANIMATION_DURATION_MS = 0;
-export const MAX_PANEL_ANIMATION_DURATION_MS = 400;
-export const PanelAnimationDurationMs = Schema.Int.check(
+export const MIN_ANIMATION_DURATION_SCALE = 0;
+export const MAX_ANIMATION_DURATION_SCALE = 2;
+/** Zero disables automatic UI motion; one preserves each animation's base timing. */
+export const AnimationDurationScale = Schema.Finite.check(
   Schema.isBetween({
-    minimum: MIN_PANEL_ANIMATION_DURATION_MS,
-    maximum: MAX_PANEL_ANIMATION_DURATION_MS,
+    minimum: MIN_ANIMATION_DURATION_SCALE,
+    maximum: MAX_ANIMATION_DURATION_SCALE,
   }),
 );
-export type PanelAnimationDurationMs = typeof PanelAnimationDurationMs.Type;
-const DEFAULT_PANEL_ANIMATION_DURATION_MS: PanelAnimationDurationMs = 0;
+export type AnimationDurationScale = typeof AnimationDurationScale.Type;
+export const DEFAULT_ANIMATION_DURATION_SCALE: AnimationDurationScale = 1;
 /**
  * Font size preferences, in CSS pixels. The ranges are deliberately narrow:
  * the interface size scales every rem-based dimension in the app, so the
@@ -393,10 +394,8 @@ export const ClientSettingsSchema = Schema.Struct({
   paneGap: PaneGap.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_PANE_GAP))),
   paneRadius: PaneRadius.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_PANE_RADIUS))),
   paneShadow: PaneShadow.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_PANE_SHADOW))),
-  // Panel motion defaults to zero because width and height transitions cause
-  // layout work on every frame, which is noticeable on lower-power clients.
-  panelAnimationDurationMs: PanelAnimationDurationMs.pipe(
-    Schema.withDecodingDefault(Effect.succeed(DEFAULT_PANEL_ANIMATION_DURATION_MS)),
+  animationDurationScale: AnimationDurationScale.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_ANIMATION_DURATION_SCALE)),
   ),
   browserDefaultViewport: PreviewViewportSetting.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_VIEWPORT)),
@@ -1566,7 +1565,7 @@ export const ClientSettingsPatch = Schema.Struct({
   paneGap: Schema.optionalKey(PaneGap),
   paneRadius: Schema.optionalKey(PaneRadius),
   paneShadow: Schema.optionalKey(PaneShadow),
-  panelAnimationDurationMs: Schema.optionalKey(PanelAnimationDurationMs),
+  animationDurationScale: Schema.optionalKey(AnimationDurationScale),
   browserDefaultViewport: Schema.optionalKey(PreviewViewportSetting),
   browserDefaultZoomFactor: Schema.optionalKey(PreviewZoomFactor),
   browserDefaultAppearance: Schema.optionalKey(PreviewAppearancePreference),

@@ -1,3 +1,7 @@
+import {
+  scaledMotionDuration,
+  skipAutomaticWorkbenchMotion,
+} from "../../workbench/workbenchMotion";
 import { DESKTOP_PASTE_AS_TEXT_EVENT } from "../../lib/desktopPasteAsText";
 import { runtimeModeConfig, runtimeModeOptions } from "./runtimeModeConfig";
 import { useRightPanelStore } from "~/rightPanelStore";
@@ -376,7 +380,7 @@ function SnapShotAttachmentFrame({
       className={cn(
         animateArrival &&
           !animationId &&
-          "origin-center transition-[opacity,scale] duration-300 ease-[cubic-bezier(.2,.8,.2,1)] starting:scale-95 starting:opacity-0 motion-reduce:transition-none motion-reduce:starting:scale-100 motion-reduce:starting:opacity-100",
+          "origin-center transition-[opacity,scale] [transition-duration:calc(300ms*var(--motion-duration-scale,1))] ease-[cubic-bezier(.2,.8,.2,1)] starting:scale-95 starting:opacity-0 motion-reduce:transition-none motion-reduce:starting:scale-100 motion-reduce:starting:opacity-100",
         className,
       )}
       {...props}
@@ -529,17 +533,18 @@ function useComposerRestingTransition(
       if (
         shouldAnimate &&
         !prefersReducedMotion &&
+        !skipAutomaticWorkbenchMotion() &&
         previousHeight !== null &&
         Math.abs(previousHeight - nextHeight) >= 0.5
       ) {
         const remainingDuration =
           typeof interruptedDuration === "number" && interruptedCurrentTime !== null
             ? Math.max(1, interruptedDuration - interruptedCurrentTime)
-            : COMPOSER_RESTING_TRANSITION_DURATION_MS;
+            : scaledMotionDuration(COMPOSER_RESTING_TRANSITION_DURATION_MS);
         const duration =
           interruptedHeight !== null && !targetChanged
             ? remainingDuration
-            : COMPOSER_RESTING_TRANSITION_DURATION_MS;
+            : scaledMotionDuration(COMPOSER_RESTING_TRANSITION_DURATION_MS);
         element.style.overflow = "clip";
         surface.style.height = "100%";
 
@@ -6167,7 +6172,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             data-chat-composer-surface="true"
             data-chat-composer-mobile-collapsed={isComposerCollapsedMobile ? "true" : "false"}
             className={cn(
-              "rounded-[20px] transition-[background-color] duration-200",
+              "rounded-[20px] transition-[background-color] [transition-duration:calc(200ms*var(--motion-duration-scale,1))]",
               isDragOverComposer ? "bg-accent/45 ring-1 ring-primary/70" : null,
               projectSelectionRequired ? "opacity-75" : null,
               composerProviderState.composerSurfaceClassName,

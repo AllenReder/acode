@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { DEFAULT_CLIENT_SETTINGS } from "@awen/contracts/settings";
+import { __setClientSettingsForTests } from "../hooks/useSettings";
 
 import {
   animateTabTransitionTo,
@@ -21,6 +23,7 @@ import {
 
 afterEach(() => {
   resetTabTransitionForTest();
+  __setClientSettingsForTests(DEFAULT_CLIENT_SETTINGS);
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -141,7 +144,7 @@ describe("tab transition store", () => {
     expect(getTabTransition()).toBeNull();
   });
 
-  it("settles a released trackpad preview when panel animations are zero", () => {
+  it("settles a released trackpad preview at the default animation speed", () => {
     vi.stubGlobal("window", { matchMedia: () => ({ matches: false }) });
     vi.stubGlobal("document", {
       querySelector: () => ({ getAttribute: () => "false" }),
@@ -154,6 +157,34 @@ describe("tab transition store", () => {
     animateTabTransitionTo(1);
     expect(getTabTransitionFrame()?.position).toBeCloseTo(0.4);
     expect(requestFrame).toHaveBeenCalled();
+  });
+
+  it("settles a Tab more slowly at 2× than at 1×", () => {
+    let now = 0;
+    let handle = 0;
+    const frames = new Map<number, FrameRequestCallback>();
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    vi.stubGlobal("window", { matchMedia: () => ({ matches: false }) });
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.set(++handle, callback);
+      return handle;
+    });
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => frames.delete(id));
+    const positionAfter100ms = (animationDurationScale: number) => {
+      now = 0;
+      frames.clear();
+      __setClientSettingsForTests({ ...DEFAULT_CLIENT_SETTINGS, animationDurationScale });
+      beginTabTransition({ fromTabId: "a", toTabId: "b", fromIndex: 0, toIndex: 1, dir: 1 });
+      animateTabTransitionTo(1);
+      now = 100;
+      const pending = [...frames.values()];
+      frames.clear();
+      pending.forEach((callback) => callback(now));
+      const position = getTabTransitionFrame()?.position ?? 1;
+      endTabTransition();
+      return position;
+    };
+    expect(positionAfter100ms(1)).toBeGreaterThan(positionAfter100ms(2));
   });
 });
 

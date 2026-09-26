@@ -7,7 +7,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("makes a 25ms Sidebar setting visibly faster than 400ms", () => {
+it("moves the Sidebar visibly faster with a shorter scaled duration", () => {
   let now = 0;
   let handle = 0;
   const frames = new Map<number, FrameRequestCallback>();

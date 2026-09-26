@@ -45,7 +45,7 @@ export function FoldedSettingsSection({
             <ChevronRightIcon
               aria-hidden
               className={cn(
-                "size-4 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none",
+                "size-4 shrink-0 text-muted-foreground transition-transform [transition-duration:calc(150ms*var(--motion-duration-scale,1))] motion-reduce:transition-none",
                 open && "rotate-90",
               )}
             />

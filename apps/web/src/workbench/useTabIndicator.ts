@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import {
   FLUID_MOTION_DURATION_MS,
   FLUID_MOTION_EASING,
+  scaledMotionDuration,
   skipAutomaticWorkbenchMotion,
 } from "./workbenchMotion";
 import {
@@ -126,7 +127,7 @@ export function useTabIndicator(
           { transform: `translateX(${previous.left}px)`, width: `${previous.width}px` },
           { transform: `translateX(${geometry.left}px)`, width: `${geometry.width}px` },
         ],
-        { duration: FLUID_MOTION_DURATION_MS, easing: FLUID_MOTION_EASING },
+        { duration: scaledMotionDuration(FLUID_MOTION_DURATION_MS), easing: FLUID_MOTION_EASING },
       );
     };
 

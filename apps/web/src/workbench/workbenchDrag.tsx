@@ -1130,7 +1130,7 @@ export function WorkbenchDropOverlay() {
       <div
         ref={surfaceRef}
         className={
-          "pointer-events-none absolute inset-0 z-40 transition-colors duration-150 " +
+          "pointer-events-none absolute inset-0 z-40 transition-colors [transition-duration:calc(150ms*var(--motion-duration-scale,1))] " +
           (isTabInTopbar ? "bg-transparent" : "bg-background/15")
         }
         data-workbench-drop-preview
@@ -1186,8 +1186,8 @@ export function WorkbenchDropOverlay() {
                       ? "border-destructive/80 bg-destructive/15 text-destructive "
                       : "border-border/80 bg-background/85 text-foreground ") +
                     (state.phase === "canceling"
-                      ? "opacity-0 duration-180"
-                      : "opacity-100 duration-75")
+                      ? "opacity-0 [transition-duration:calc(180ms*var(--motion-duration-scale,1))]"
+                      : "opacity-100 [transition-duration:calc(75ms*var(--motion-duration-scale,1))]")
                   }
                   style={{
                     left: 0,

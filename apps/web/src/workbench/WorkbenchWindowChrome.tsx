@@ -364,7 +364,7 @@ function WorkbenchTabItem({
         tabStyle = {
           opacity: 0.4,
           pointerEvents: "none",
-          transition: "opacity 150ms ease",
+          transition: "opacity calc(150ms * var(--motion-duration-scale, 1)) ease",
         };
       } else {
         tabStyle = {
@@ -389,7 +389,8 @@ function WorkbenchTabItem({
       }
       tabStyle = {
         transform: shift !== 0 ? `translate3d(${shift}px, 0, 0)` : undefined,
-        transition: "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)",
+        transition:
+          "transform calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1)",
       };
     }
   } else if (settlingTab) {
@@ -405,7 +406,8 @@ function WorkbenchTabItem({
     }
   } else {
     tabStyle = {
-      transition: "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)",
+      transition:
+        "transform calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1)",
     };
   }
 
@@ -523,7 +525,7 @@ function WorkbenchTabItem({
         <button
           type="button"
           aria-label={`Close ${title}`}
-          className="opacity-0 group-hover:opacity-100 flex size-5 shrink-0 items-center justify-center rounded hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-opacity duration-150"
+          className="opacity-0 group-hover:opacity-100 flex size-5 shrink-0 items-center justify-center rounded hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-opacity [transition-duration:calc(150ms*var(--motion-duration-scale,1))]"
           onPointerDown={(event) => event.stopPropagation()}
           onMouseDown={(event) => event.stopPropagation()}
           onDoubleClick={(event) => event.stopPropagation()}

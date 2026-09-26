@@ -1,5 +1,21 @@
 @import "tailwindcss";
 
+:root {
+  --motion-duration-scale: 1;
+  --default-transition-duration: calc(150ms * var(--motion-duration-scale));
+  --animate-spin: spin calc(1s * var(--motion-duration-scale)) linear infinite;
+  --animate-pulse: pulse calc(2s * var(--motion-duration-scale)) cubic-bezier(0.4, 0, 0.6, 1)
+    infinite;
+}
+
+:root[data-motion-off="true"] *,
+:root[data-motion-off="true"] *::before,
+:root[data-motion-off="true"] *::after {
+  transition: none !important;
+  animation: none !important;
+  scroll-behavior: auto !important;
+}
+
 @custom-variant dark (&:is(.dark, .dark *));
 @custom-variant light (&:not(.dark, .dark *));
 /* Window Controls Overlay: active when Electron exposes native titlebar control geometry. */
@@ -13,7 +29,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-new(root) {
 }
 
 html[data-mobile-composer-route-transition="true"]::view-transition-group(awen-mobile-composer) {
-  animation-duration: 180ms;
+  animation-duration: calc(180ms * var(--motion-duration-scale, 1));
   animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -22,12 +38,12 @@ html[data-mobile-composer-route-transition="true"]::view-transition-image-pair(a
 }
 
 html[data-mobile-composer-route-transition="true"]::view-transition-old(awen-mobile-composer) {
-  animation: awen-mobile-composer-old 180ms linear both;
+  animation: awen-mobile-composer-old calc(180ms * var(--motion-duration-scale, 1)) linear both;
   mix-blend-mode: normal;
 }
 
 html[data-mobile-composer-route-transition="true"]::view-transition-new(awen-mobile-composer) {
-  animation: awen-mobile-composer-new 180ms linear both;
+  animation: awen-mobile-composer-new calc(180ms * var(--motion-duration-scale, 1)) linear both;
   mix-blend-mode: normal;
 }
 
@@ -57,11 +73,12 @@ html[data-mobile-composer-route-transition="true"]::view-transition-new(awen-mob
 }
 
 html[data-mobile-composer-route-transition="true"]::view-transition-group(awen-mobile-draft-headline) {
-  animation-duration: 130ms;
+  animation-duration: calc(130ms * var(--motion-duration-scale, 1));
 }
 
 html[data-mobile-composer-route-transition="true"]::view-transition-old(awen-mobile-draft-headline) {
-  animation: awen-mobile-draft-headline-exit 130ms cubic-bezier(0.4, 0, 1, 1) both;
+  animation: awen-mobile-draft-headline-exit calc(130ms * var(--motion-duration-scale, 1))
+    cubic-bezier(0.4, 0, 1, 1) both;
   mix-blend-mode: normal;
 }
 
@@ -149,11 +166,11 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(awen-mob
 
 @theme inline {
   --color-zinc-25: oklch(99.2% 0 0);
-  --animate-skeleton: skeleton 2.4s infinite;
+  --animate-skeleton: skeleton calc(2.4s * var(--motion-duration-scale, 1)) infinite;
   /* Duty-cycled indicator animations: long holds with stepped ramps, so the
      compositor updates discrete frames instead of every vsync. */
-  --animate-status-pulse: status-pulse 2s infinite;
-  --animate-status-ping: status-ping 2s infinite;
+  --animate-status-pulse: status-pulse calc(2s * var(--motion-duration-scale, 1)) infinite;
+  --animate-status-ping: status-ping calc(2s * var(--motion-duration-scale, 1)) infinite;
   --color-warning-foreground: var(--warning-foreground);
   --color-warning: var(--warning);
   --color-warning-surface: var(--warning-surface);
@@ -691,7 +708,7 @@ html.material-stage-opaque .material-surface-overlay {
       100% 100%;
     background-repeat: no-repeat;
     background-clip: text;
-    animation: live-tool-shine 2.2s steps(30) infinite;
+    animation: live-tool-shine calc(2.2s * var(--motion-duration-scale, 1)) steps(30) infinite;
     animation-play-state: var(--visible-animation-state, paused);
   }
 }
@@ -750,7 +767,7 @@ html.material-stage-opaque .material-surface-overlay {
     transparent 100%
   );
   mask-repeat: no-repeat;
-  animation: live-activity-focus 2.2s linear infinite;
+  animation: live-activity-focus calc(2.2s * var(--motion-duration-scale, 1)) linear infinite;
   animation-play-state: var(--visible-animation-state, paused);
   will-change: var(--visible-animation-will-change, auto);
 
@@ -763,7 +780,8 @@ html.material-stage-opaque .material-surface-overlay {
 
 @utility live-activity-focus-counter {
   width: 100%;
-  animation: live-activity-focus-counter 2.2s linear infinite;
+  animation: live-activity-focus-counter calc(2.2s * var(--motion-duration-scale, 1)) linear
+    infinite;
   animation-play-state: var(--visible-animation-state, paused);
   will-change: var(--visible-animation-will-change, auto);
 
@@ -1050,7 +1068,8 @@ html.material-stage-opaque .material-surface-overlay {
 
   [data-settings-page-scroll] div.settings-search-target-pulse,
   [data-settings-page-scroll] section.settings-search-target-pulse > div:first-child {
-    animation: settings-search-target-pulse 650ms ease-in-out 2;
+    animation: settings-search-target-pulse calc(650ms * var(--motion-duration-scale, 1))
+      ease-in-out 2;
     border-radius: 0.75rem;
   }
 
@@ -1107,8 +1126,8 @@ html.material-stage-opaque .material-surface-overlay {
     background: var(--background);
     box-shadow: 0 1px 2px color-mix(in srgb, var(--contrast-foreground) 12%, transparent);
     transition:
-      transform 120ms ease,
-      box-shadow 120ms ease;
+      transform calc(120ms * var(--motion-duration-scale, 1)) ease,
+      box-shadow calc(120ms * var(--motion-duration-scale, 1)) ease;
   }
 
   .settings-slider::-moz-range-thumb {
@@ -1119,8 +1138,8 @@ html.material-stage-opaque .material-surface-overlay {
     background: var(--background);
     box-shadow: 0 1px 2px color-mix(in srgb, var(--contrast-foreground) 12%, transparent);
     transition:
-      transform 120ms ease,
-      box-shadow 120ms ease;
+      transform calc(120ms * var(--motion-duration-scale, 1)) ease,
+      box-shadow calc(120ms * var(--motion-duration-scale, 1)) ease;
   }
 
   .settings-slider:hover::-webkit-slider-thumb {
@@ -2127,7 +2146,7 @@ html[data-workbench-window-chrome] {
 @media (prefers-reduced-motion: no-preference) {
   .chat-markdown[data-streaming] > *,
   .chat-markdown[data-streaming] .chat-markdown-shiki {
-    transition: opacity 600ms ease-out;
+    transition: opacity calc(600ms * var(--motion-duration-scale, 1)) ease-out;
 
     @starting-style {
       opacity: 0;
@@ -2313,13 +2332,15 @@ html[data-workbench-window-chrome] {
   opacity: 0;
   transform: scaleX(1);
   transition:
-    transform 150ms ease-out,
-    opacity 150ms ease-out 220ms;
+    transform calc(150ms * var(--motion-duration-scale, 1)) ease-out,
+    opacity calc(150ms * var(--motion-duration-scale, 1)) ease-out
+      calc(220ms * var(--motion-duration-scale, 1));
 }
 
 .preview-loading-progress[data-loading="true"] {
   opacity: 1;
-  animation: preview-loading-progress 5.3s cubic-bezier(0.1, 0.5, 0.2, 1) forwards;
+  animation: preview-loading-progress calc(5.3s * var(--motion-duration-scale, 1))
+    cubic-bezier(0.1, 0.5, 0.2, 1) forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2337,7 +2358,7 @@ html[data-workbench-window-chrome] {
 /* Let the sortable rows open label clearance before painting the dividers.
    This runs once per pickup; rows retain dnd-kit's normal 200ms transitions. */
 .sidebar-drag-boundary-label {
-  animation: sidebar-drag-label-reveal 200ms step-end;
+  animation: sidebar-drag-label-reveal calc(200ms * var(--motion-duration-scale, 1)) step-end;
 }
 
 @keyframes sidebar-drag-label-reveal {
@@ -2406,7 +2427,7 @@ html[data-workbench-window-chrome] {
   padding: 0;
 }
 html[data-workbench-dragging="active"] .workbench-tab-item {
-  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
 }
 .workbench-tab-indicator {
@@ -2434,16 +2455,16 @@ html[data-workbench-dragging="active"] .workbench-tab-item {
   pointer-events: none !important;
   overflow: hidden !important;
   transition:
-    max-width 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    min-width 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    width 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    padding 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    margin 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    border-width 220ms cubic-bezier(0.22, 1, 0.36, 1) !important;
+    max-width calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1),
+    min-width calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1),
+    width calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1),
+    padding calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1),
+    margin calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1),
+    opacity calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1),
+    border-width calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
 html[data-workbench-dragging="active"] .sidebar-session-row-item {
-  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
 }
 .sidebar-session-row-item[data-session-closing="true"] {
@@ -2458,12 +2479,12 @@ html[data-workbench-dragging="active"] .sidebar-session-row-item {
   pointer-events: none !important;
   overflow: hidden !important;
   transition:
-    max-height 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    min-height 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    height 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    padding 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    margin 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1) !important;
+    max-height calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1),
+    min-height calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1),
+    height calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1),
+    padding calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1),
+    margin calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1),
+    opacity calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
 @media (prefers-reduced-motion: reduce) {
   .workbench-tab-item[data-tab-closing="true"],
@@ -2477,7 +2498,7 @@ html[data-workbench-resizing] .workbench-pane-frame {
 html[data-workbench-dragging] .workbench-sash {
   opacity: 0;
   pointer-events: none;
-  transition: opacity 150ms ease;
+  transition: opacity calc(150ms * var(--motion-duration-scale, 1)) ease;
 }
 .workbench-drop-destination-indicator {
   position: absolute;
@@ -2488,11 +2509,11 @@ html[data-workbench-dragging] .workbench-sash {
     0 0 0 1px var(--primary),
     0 8px 24px -4px color-mix(in oklch, var(--primary) 25%, transparent);
   transition:
-    left 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    top 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    width 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    height 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 180ms ease-out;
+    left calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1),
+    top calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1),
+    width calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1),
+    height calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1),
+    opacity calc(180ms * var(--motion-duration-scale, 1)) ease-out;
   will-change: left, top, width, height;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2508,8 +2529,8 @@ html[data-workbench-dragging] .workbench-sash {
   background: transparent;
   box-shadow: var(--pane-shadow, none);
   transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease;
+    border-color calc(160ms * var(--motion-duration-scale, 1)) ease,
+    box-shadow calc(160ms * var(--motion-duration-scale, 1)) ease;
 }
 .workbench-pane[data-pane-focused="true"] {
   border-color: color-mix(in srgb, var(--ring) 22%, transparent);
@@ -2525,7 +2546,7 @@ html[data-workbench-dragging] .workbench-sash {
   z-index: 10;
   touch-action: none;
   background: transparent;
-  transition: background-color 150ms ease;
+  transition: background-color calc(150ms * var(--motion-duration-scale, 1)) ease;
 }
 .workbench-sash::after {
   content: "";
@@ -2537,7 +2558,7 @@ html[data-workbench-dragging] .workbench-sash {
   background: color-mix(in oklch, var(--ring) 55%, var(--foreground));
   opacity: 0;
   pointer-events: none;
-  transition: opacity 150ms ease;
+  transition: opacity calc(150ms * var(--motion-duration-scale, 1)) ease;
 }
 .workbench-sash[aria-orientation="vertical"]::after {
   width: 3px;
@@ -2575,7 +2596,7 @@ html[data-workbench-resizing] .workbench-sash:active::after {
   background: color-mix(in srgb, var(--foreground) 10%, transparent);
   box-shadow: 0 1px 3px #00000012;
   pointer-events: none;
-  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform calc(180ms * var(--motion-duration-scale, 1)) cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .workbench-layout-switch[data-layout="scrolling"]::before {
   transform: translateX(30px);
@@ -2594,9 +2615,9 @@ html[data-workbench-resizing] .workbench-sash:active::after {
   border-radius: 5px;
   color: var(--muted-foreground);
   transition:
-    background-color 160ms ease,
-    color 160ms ease,
-    box-shadow 160ms ease;
+    background-color calc(160ms * var(--motion-duration-scale, 1)) ease,
+    color calc(160ms * var(--motion-duration-scale, 1)) ease,
+    box-shadow calc(160ms * var(--motion-duration-scale, 1)) ease;
 }
 .workbench-layout-switch button[aria-pressed="true"] {
   color: var(--foreground);
@@ -2623,7 +2644,7 @@ html[data-workbench-resizing] .workbench-pane {
 .workbench-pane-preview {
   width: 100%;
   height: 100%;
-  transition: opacity 150ms ease;
+  transition: opacity calc(150ms * var(--motion-duration-scale, 1)) ease;
 }
 .workbench-pane-preview[data-previewing="true"] {
   pointer-events: none;

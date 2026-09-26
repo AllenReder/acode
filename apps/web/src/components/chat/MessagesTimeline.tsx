@@ -1237,7 +1237,7 @@ function TimelineMinimap({
         "group/minimap pointer-events-none absolute inset-y-0 left-0 z-40 hidden w-18 [@media(pointer:fine)]:block",
         hasPersistentGutter
           ? "opacity-100"
-          : "opacity-0 transition-opacity duration-150 hover:opacity-100 focus-within:opacity-100",
+          : "opacity-0 transition-opacity [transition-duration:calc(150ms*var(--motion-duration-scale,1))] hover:opacity-100 focus-within:opacity-100",
       )}
       data-testid="timeline-minimap"
       data-persistent-gutter={hasPersistentGutter ? "true" : "false"}
@@ -1317,7 +1317,7 @@ function TimelineMinimap({
                 <span
                   aria-hidden="true"
                   className={cn(
-                    "pointer-events-none absolute left-0 h-0.5 -translate-y-1/2 rounded-full bg-muted-foreground/35 transition-[background-color,width] duration-150 data-[in-view=true]:bg-foreground/90",
+                    "pointer-events-none absolute left-0 h-0.5 -translate-y-1/2 rounded-full bg-muted-foreground/35 transition-[background-color,width] [transition-duration:calc(150ms*var(--motion-duration-scale,1))] data-[in-view=true]:bg-foreground/90",
                     activeDistance === 0
                       ? "w-6 bg-muted-foreground/75"
                       : activeDistance === 1
@@ -1402,7 +1402,7 @@ function TimelineMinimapNavigationButton({
         render={
           <span
             className={cn(
-              "absolute left-1 z-10 inline-flex -translate-x-1/2 opacity-0 pointer-events-auto transition-opacity duration-150 hover:opacity-100 focus-within:opacity-100",
+              "absolute left-1 z-10 inline-flex -translate-x-1/2 opacity-0 pointer-events-auto transition-opacity [transition-duration:calc(150ms*var(--motion-duration-scale,1))] hover:opacity-100 focus-within:opacity-100",
               previous ? "bottom-[calc(100%+2px)]" : "top-[calc(100%+2px)]",
             )}
           />
@@ -1967,7 +1967,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
           />
         </div>
       </div>
-      <div className="flex w-full max-w-[80%] items-center justify-end pe-1 text-xs tabular-nums opacity-0 transition-opacity duration-200 pointer-coarse:opacity-100 focus-within:opacity-100 group-hover:opacity-100">
+      <div className="flex w-full max-w-[80%] items-center justify-end pe-1 text-xs tabular-nums opacity-0 transition-opacity [transition-duration:calc(200ms*var(--motion-duration-scale,1))] pointer-coarse:opacity-100 focus-within:opacity-100 group-hover:opacity-100">
         <div className="flex shrink-0 items-center gap-2">
           <Tooltip>
             <TooltipTrigger render={<p className="text-muted-foreground text-xs tabular-nums" />}>
@@ -2204,7 +2204,7 @@ function AssistantMessageMeta({
   return (
     <div
       className={cn(
-        "flex items-center gap-2 text-xs tabular-nums transition-opacity duration-200",
+        "flex items-center gap-2 text-xs tabular-nums transition-opacity [transition-duration:calc(200ms*var(--motion-duration-scale,1))]",
         alwaysVisible
           ? "opacity-100"
           : "opacity-0 pointer-coarse:opacity-100 focus-within:opacity-100 group-hover/assistant:opacity-100",
@@ -2809,7 +2809,7 @@ function WorkGroupToggleTimelineRow({
   return (
     <button
       type="button"
-      className="group/tool-group group/timeline-row relative flex min-h-6 w-full cursor-pointer items-center gap-1.5 rounded-md px-0.5 py-0.5 text-left text-sm leading-relaxed transition-colors duration-150 hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+      className="group/tool-group group/timeline-row relative flex min-h-6 w-full cursor-pointer items-center gap-1.5 rounded-md px-0.5 py-0.5 text-left text-sm leading-relaxed transition-colors [transition-duration:calc(150ms*var(--motion-duration-scale,1))] hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
       aria-label={row.hasFailure ? `${row.summary}, tool call failed` : undefined}
       aria-expanded={row.expanded}
       onClick={() => ctx.onToggleWorkGroup(row.groupId, row.id)}
@@ -4384,7 +4384,7 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
       )}
       {...rowToggleProps}
     >
-      <div className="flex select-none items-center gap-1.5 transition-[opacity,translate] duration-200">
+      <div className="flex select-none items-center gap-1.5 transition-[opacity,translate] [transition-duration:calc(200ms*var(--motion-duration-scale,1))]">
         <span
           className={iconWrapperClass}
           role={showFailedIndicator ? "img" : undefined}
@@ -4441,7 +4441,7 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
           >
             <ChevronRightIcon
               className={cn(
-                "size-3 shrink-0 text-icon-muted opacity-70 transition-transform duration-200",
+                "size-3 shrink-0 text-icon-muted opacity-70 transition-transform [transition-duration:calc(200ms*var(--motion-duration-scale,1))]",
                 expanded && "rotate-90",
               )}
             />

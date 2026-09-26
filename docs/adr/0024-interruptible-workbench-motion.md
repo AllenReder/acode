@@ -31,7 +31,9 @@ after crossing a distance threshold. A threshold informs the release decision;
 it does not irreversibly commit while the fingers are still moving. Settle should
 start when direct input ends rather than waiting for momentum to drain. Issue
 #122 is problem context; its early-commit wording is not a binding requirement
-for this redesign.
+for this redesign. A macOS two-finger preview uses a longer direct travel than
+the initial implementation, and release before its midpoint returns to the
+source Tab even after a brief flick.
 
 Once a trackpad gesture scrolls inner content or pans a Scrolling layout, it
 keeps that scroll ownership through the boundary. A new physical gesture that
@@ -93,9 +95,14 @@ not mean putting unrelated animations into one global progress value.
 Retain current cyclic Tab navigation, immediate main-content switching on Tab
 creation/closure, and concurrent close behavior. Reduced-motion preferences
 skip automatic Workbench transitions; direct manipulation still tracks input.
-The Panel animations setting controls Sidebar and panel motion, including the
-Sidebar spring's settle speed when enabled. It does not disable or retime Tab
-and Pane motion; its default 0ms value must not remove their transitions.
+The Animation speed setting scales automatic interface motion from 0× to 2×,
+defaulting to 1×. Zero disables automatic motion; direct manipulation still
+tracks input and native scrolling retains the platform's inertia. Each motion
+keeps its own base timing, with spring frequency scaled inversely and CSS/WAAPI
+durations scaled directly. The old Panel animations value is not carried into
+the new setting because its default 0ms disabled panels while leaving Tab and
+Pane motion active.
+
 ADR-0019's fixed-duration, two-card,
 and trackpad rules are amended; its flat live-card presentation and glass
 constraints remain relevant.

@@ -6,7 +6,7 @@ import type { ViewTarget } from "../../workbench/viewRegistry";
 import { sessionRouteForTarget } from "../../workbench/deepLinks";
 import { useSessionActionMenu } from "../../hooks/useSessionActionMenu";
 import { useWorkbenchDragSource, useWorkbenchDragState } from "../../workbench/workbenchDrag";
-import { FLUID_MOTION_DURATION_MS, getPrefersReducedMotion } from "../../workbench/workbenchMotion";
+import { FLUID_MOTION_DURATION_MS, scaledMotionDuration } from "../../workbench/workbenchMotion";
 import type { WillCloseRevert } from "../../hooks/useSessionCommands";
 import type { SessionStatus } from "./sidebarSessionPresentation";
 
@@ -90,8 +90,9 @@ export function SessionRow({
   const [selfClosing, setSelfClosing] = useState(false);
   const handleWillClose = useCallback(async () => {
     setSelfClosing(true);
-    if (!getPrefersReducedMotion()) {
-      await new Promise<void>((resolve) => setTimeout(resolve, FLUID_MOTION_DURATION_MS));
+    const duration = scaledMotionDuration(FLUID_MOTION_DURATION_MS);
+    if (duration > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, duration));
     }
     const outerRevert = await onWillClose?.();
     return () => {

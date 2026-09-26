@@ -539,19 +539,20 @@ describe("ClientSettings pane appearance", () => {
   });
 });
 
-describe("ClientSettings panel animations", () => {
-  it("defaults to instant changes", () => {
-    expect(decodeClientSettings({}).panelAnimationDurationMs).toBe(0);
+describe("ClientSettings animation speed", () => {
+  it("defaults to normal animation speed, including when an old panel preference is stored", () => {
+    expect(decodeClientSettings({}).animationDurationScale).toBe(1);
+    expect(decodeClientSettings({ panelAnimationDurationMs: 0 }).animationDurationScale).toBe(1);
   });
 
-  it.each([0, 400])("accepts a panel animation duration: %s", (value) => {
-    expect(decodeClientSettingsPatch({ panelAnimationDurationMs: value })).toEqual({
-      panelAnimationDurationMs: value,
+  it.each([0, 0.37, 1, 2])("accepts a continuous animation duration scale: %s", (value) => {
+    expect(decodeClientSettingsPatch({ animationDurationScale: value })).toEqual({
+      animationDurationScale: value,
     });
   });
 
-  it.each([-1, 401, 150.5])("rejects an invalid panel animation duration: %s", (value) => {
-    expect(() => decodeClientSettingsPatch({ panelAnimationDurationMs: value })).toThrow();
+  it.each([-0.01, 2.01, Infinity])("rejects an invalid animation duration scale: %s", (value) => {
+    expect(() => decodeClientSettingsPatch({ animationDurationScale: value })).toThrow();
   });
 });
 

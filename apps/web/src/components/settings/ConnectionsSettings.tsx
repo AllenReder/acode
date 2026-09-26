@@ -1068,7 +1068,7 @@ const ConnectedClientListRow = memo(function ConnectedClientListRow({
             <ConnectionStatusDot
               tooltipText={statusTooltip}
               dotClassName={isLive ? "bg-success" : "bg-muted-foreground/30"}
-              pingClassName={isLive ? "bg-success/60 duration-2000" : null}
+              pingClassName={isLive ? "bg-success/60" : null}
             />
             <h3 className="text-sm font-medium text-foreground">{primaryLabel}</h3>
             {clientSession.current ? (

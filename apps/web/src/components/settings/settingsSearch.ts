@@ -236,9 +236,10 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["red green blue orange additions deletions changes counts palette colorblind"],
   },
   {
-    id: "panel-animations",
-    title: "Panel animations",
+    id: "animation-speed",
+    title: "Animation speed",
     to: "/settings/appearance",
+    searchTerms: ["panel animations motion duration multiplier speed"],
   },
   {
     id: "environment-identification",

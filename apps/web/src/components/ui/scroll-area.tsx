@@ -78,7 +78,7 @@ function ScrollBar({
   return (
     <ScrollAreaPrimitive.Scrollbar
       className={cn(
-        "flex opacity-0 transition-opacity delay-300 data-[orientation=horizontal]:mx-1 data-[orientation=horizontal]:mb-px data-[orientation=horizontal]:h-1.5 data-[orientation=vertical]:my-1 data-[orientation=vertical]:mr-px data-[orientation=vertical]:w-1.5 data-[orientation=horizontal]:flex-col data-hovering:opacity-100 data-scrolling:opacity-100 data-hovering:delay-0 data-scrolling:delay-0 data-hovering:duration-100 data-scrolling:duration-100",
+        "flex opacity-0 transition-opacity [transition-delay:calc(300ms*var(--motion-duration-scale,1))] data-[orientation=horizontal]:mx-1 data-[orientation=horizontal]:mb-px data-[orientation=horizontal]:h-1.5 data-[orientation=vertical]:my-1 data-[orientation=vertical]:mr-px data-[orientation=vertical]:w-1.5 data-[orientation=horizontal]:flex-col data-hovering:opacity-100 data-scrolling:opacity-100 data-hovering:[transition-delay:calc(0ms*var(--motion-duration-scale,1))] data-scrolling:[transition-delay:calc(0ms*var(--motion-duration-scale,1))] data-hovering:[transition-duration:calc(100ms*var(--motion-duration-scale,1))] data-scrolling:[transition-duration:calc(100ms*var(--motion-duration-scale,1))]",
         className,
       )}
       data-slot="scroll-area-scrollbar"

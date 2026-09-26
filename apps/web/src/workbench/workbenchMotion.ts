@@ -1,5 +1,15 @@
+import { getClientSettings } from "../hooks/useSettings";
+
 export const FLUID_MOTION_DURATION_MS = 220;
 export const FLUID_MOTION_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
+
+export function getAnimationDurationScale(): number {
+  return getClientSettings().animationDurationScale;
+}
+
+export function scaledMotionDuration(baseMs: number): number {
+  return getPrefersReducedMotion() ? 0 : baseMs * getAnimationDurationScale();
+}
 
 export function getPrefersReducedMotion(): boolean {
   if (typeof window === "undefined" || !window.matchMedia) {
@@ -9,7 +19,5 @@ export function getPrefersReducedMotion(): boolean {
 }
 
 export function skipAutomaticWorkbenchMotion(): boolean {
-  // Panel animation duration is scoped to panels and the Sidebar. A zero
-  // setting must not turn Tab and Pane presentation into an instant jump.
-  return getPrefersReducedMotion();
+  return getPrefersReducedMotion() || getAnimationDurationScale() === 0;
 }

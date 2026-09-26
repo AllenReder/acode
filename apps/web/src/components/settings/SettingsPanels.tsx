@@ -38,7 +38,7 @@ import {
   MIN_CHAT_BACKGROUND_OPACITY,
   MAX_CHAT_BACKGROUND_OPACITY,
   MAX_INTERFACE_FONT_SIZE,
-  MAX_PANEL_ANIMATION_DURATION_MS,
+  MAX_ANIMATION_DURATION_SCALE,
   MAX_PROMPT_FONT_SIZE,
   MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
   MAX_TERMINAL_FONT_SIZE,
@@ -51,7 +51,7 @@ import {
   type PaneShadow,
   MIN_GLASS_OPACITY,
   MIN_INTERFACE_FONT_SIZE,
-  MIN_PANEL_ANIMATION_DURATION_MS,
+  MIN_ANIMATION_DURATION_SCALE,
   MIN_PROMPT_FONT_SIZE,
   MIN_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
   type ResponseStreamingMode,
@@ -185,7 +185,7 @@ import {
 } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 import { ProjectFavicon } from "../ProjectFavicon";
-import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
+import { AnimationSpeedPreview } from "./AnimationSpeedPreview";
 
 const ENVIRONMENT_IDENTIFICATION_LABELS: Record<EnvironmentIdentificationMode, string> = {
   artwork: "Artwork",
@@ -479,8 +479,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.diffColorScheme !== DEFAULT_UNIFIED_SETTINGS.diffColorScheme
         ? ["Diff colors"]
         : []),
-      ...(settings.panelAnimationDurationMs !== DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs
-        ? ["Panel animations"]
+      ...(settings.animationDurationScale !== DEFAULT_UNIFIED_SETTINGS.animationDurationScale
+        ? ["Animation speed"]
         : []),
       ...(settings.environmentIdentificationMode !==
       DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode
@@ -614,7 +614,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.workbenchOpacity,
       settings.backgroundMaskLightOpacity,
       settings.backgroundMaskDarkOpacity,
-      settings.panelAnimationDurationMs,
+      settings.animationDurationScale,
       settings.responseStreamingMode,
       settings.enableProviderUpdateChecks,
       settings.continueThreadsAfterServerUpdate,
@@ -722,7 +722,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       workbenchOpacity: DEFAULT_UNIFIED_SETTINGS.workbenchOpacity,
       backgroundMaskLightOpacity: DEFAULT_UNIFIED_SETTINGS.backgroundMaskLightOpacity,
       backgroundMaskDarkOpacity: DEFAULT_UNIFIED_SETTINGS.backgroundMaskDarkOpacity,
-      panelAnimationDurationMs: DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs,
+      animationDurationScale: DEFAULT_UNIFIED_SETTINGS.animationDurationScale,
       sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
       sidebarAutoSettleAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays,
@@ -1179,12 +1179,12 @@ export function AppearanceSettingsPanel() {
     "--settings-slider-progress": `${appearanceContrastRatio * 100}%`,
     "--settings-slider-fill-offset": `${0.5 - appearanceContrastRatio}rem`,
   } as CSSProperties;
-  const panelAnimationDurationRatio =
-    (settings.panelAnimationDurationMs - MIN_PANEL_ANIMATION_DURATION_MS) /
-    (MAX_PANEL_ANIMATION_DURATION_MS - MIN_PANEL_ANIMATION_DURATION_MS);
-  const panelAnimationDurationSliderStyle = {
-    "--settings-slider-progress": `${panelAnimationDurationRatio * 100}%`,
-    "--settings-slider-fill-offset": `${0.5 - panelAnimationDurationRatio}rem`,
+  const animationDurationRatio =
+    (settings.animationDurationScale - MIN_ANIMATION_DURATION_SCALE) /
+    (MAX_ANIMATION_DURATION_SCALE - MIN_ANIMATION_DURATION_SCALE);
+  const animationDurationSliderStyle = {
+    "--settings-slider-progress": `${animationDurationRatio * 100}%`,
+    "--settings-slider-fill-offset": `${0.5 - animationDurationRatio}rem`,
   } as CSSProperties;
 
   return (
@@ -1967,50 +1967,49 @@ export function AppearanceSettingsPanel() {
 
       <SettingsSection id="motion" title="Motion">
         <SettingsRow
-          {...searchableSetting("panel-animations")}
-          description="Set how fast the Sidebar and panels open and close. Tab switching has its own pace."
+          {...searchableSetting("animation-speed")}
+          description="Scale interface animations from off to twice their usual duration. Direct gestures and native scrolling follow your input."
           control={
             <div className="grid w-full grid-cols-[5rem_minmax(0,1fr)] items-center gap-3 sm:w-auto sm:grid-cols-[7rem_13rem] sm:gap-4">
-              <PanelAnimationsPreview durationMs={settings.panelAnimationDurationMs} />
+              <AnimationSpeedPreview durationMs={200 * settings.animationDurationScale} />
               <div className="flex w-full items-center gap-3">
                 <output
                   className="min-w-16 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
-                  htmlFor="panel-animation-duration"
+                  htmlFor="animation-duration-scale"
                 >
-                  {settings.panelAnimationDurationMs} ms
+                  {settings.animationDurationScale.toFixed(2).replace(/\.00$/, "")}×
                 </output>
                 <input
-                  aria-label="Panel animation duration"
+                  aria-label="Animation duration scale"
                   className="settings-slider min-w-0 flex-1"
-                  id="panel-animation-duration"
-                  max={MAX_PANEL_ANIMATION_DURATION_MS}
-                  min={MIN_PANEL_ANIMATION_DURATION_MS}
+                  id="animation-duration-scale"
+                  max={MAX_ANIMATION_DURATION_SCALE}
+                  min={MIN_ANIMATION_DURATION_SCALE}
                   onChange={(event) => {
-                    const panelAnimationDurationMs = Number(event.currentTarget.value);
+                    const animationDurationScale = Number(event.currentTarget.value);
                     if (
-                      Number.isInteger(panelAnimationDurationMs) &&
-                      panelAnimationDurationMs >= MIN_PANEL_ANIMATION_DURATION_MS &&
-                      panelAnimationDurationMs <= MAX_PANEL_ANIMATION_DURATION_MS
+                      Number.isFinite(animationDurationScale) &&
+                      animationDurationScale >= MIN_ANIMATION_DURATION_SCALE &&
+                      animationDurationScale <= MAX_ANIMATION_DURATION_SCALE
                     ) {
-                      updateSettings({ panelAnimationDurationMs });
+                      updateSettings({ animationDurationScale });
                     }
                   }}
-                  step={25}
-                  style={panelAnimationDurationSliderStyle}
+                  step={0.01}
+                  style={animationDurationSliderStyle}
                   type="range"
-                  value={settings.panelAnimationDurationMs}
+                  value={settings.animationDurationScale}
                 />
               </div>
             </div>
           }
           resetAction={
-            settings.panelAnimationDurationMs !==
-            DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs ? (
+            settings.animationDurationScale !== DEFAULT_UNIFIED_SETTINGS.animationDurationScale ? (
               <SettingResetButton
-                label="panel animations"
+                label="animation speed"
                 onClick={() =>
                   updateSettings({
-                    panelAnimationDurationMs: DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs,
+                    animationDurationScale: DEFAULT_UNIFIED_SETTINGS.animationDurationScale,
                   })
                 }
               />
@@ -2628,7 +2627,7 @@ function LegacyFeaturesSection() {
           <h2 className="text-sm font-normal tracking-[-0.005em] text-foreground/70 transition-colors group-hover:text-foreground">
             Legacy features
           </h2>
-          <ChevronRightIcon className="size-4 text-muted-foreground transition-transform duration-200 group-data-panel-open:rotate-90" />
+          <ChevronRightIcon className="size-4 text-muted-foreground transition-transform [transition-duration:calc(200ms*var(--motion-duration-scale,1))] group-data-panel-open:rotate-90" />
         </CollapsibleTrigger>
         <CollapsiblePanel>
           <div className="relative overflow-visible rounded-xl border border-border/60 bg-card/40 text-foreground shadow-xs/5 [&>*+*]:border-t [&>*+*]:border-border/50 [&>[data-slot=settings-row]]:rounded-none">

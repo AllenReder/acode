@@ -2,6 +2,7 @@ import { scopedThreadKey } from "@awen/client-runtime/environment";
 import type { ScopedThreadRef, SnapShotSource } from "@awen/contracts";
 
 import type { DraftId } from "../composerDraftStore";
+import { skipAutomaticWorkbenchMotion } from "../workbench/workbenchMotion";
 import { getDesktopSnapShotBridge } from "./desktopSnapShot";
 
 type SnapShotTarget = DraftId | ScopedThreadRef;
@@ -104,7 +105,7 @@ export function setSnapShotAnimationDestination(
   target: HTMLElement,
   source?: SnapShotSource,
 ): void {
-  if (!target.isConnected || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  if (!target.isConnected || skipAutomaticWorkbenchMotion()) {
     return;
   }
   const bridge = getDesktopSnapShotBridge();

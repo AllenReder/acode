@@ -25,7 +25,7 @@ export const ComposerStashBadge = memo(function ComposerStashBadge(props: {
       key={props.pulseKey}
       className={cn(
         props.pulsing
-          ? "animate-[prompt-stash-count-enter_180ms_ease-out_both] text-primary motion-reduce:animate-none"
+          ? "animate-[prompt-stash-count-enter_180ms_ease-out_both] [animation-duration:calc(180ms*var(--motion-duration-scale,1))] text-primary motion-reduce:animate-none"
           : "text-muted-foreground",
       )}
     >
@@ -46,7 +46,7 @@ export const ComposerStashBadge = memo(function ComposerStashBadge(props: {
         aria-label={`Stashed prompts: ${props.count}. Open stash.`}
         aria-expanded={props.menuOpen}
         className={cn(
-          "transition-colors duration-200",
+          "transition-colors [transition-duration:calc(200ms*var(--motion-duration-scale,1))]",
           props.menuOpen && "pointer-events-none",
           props.menuOpen || props.pulsing
             ? "text-foreground"

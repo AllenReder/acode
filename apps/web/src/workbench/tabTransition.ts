@@ -1,5 +1,5 @@
 import { createMotionValue } from "./motionValue";
-import { skipAutomaticWorkbenchMotion } from "./workbenchMotion";
+import { getAnimationDurationScale, skipAutomaticWorkbenchMotion } from "./workbenchMotion";
 
 /** Pointer progress required to commit a Sliding Tab switch on release. */
 export const TAB_SWITCH_COMMIT_PROGRESS = 0.5;
@@ -260,6 +260,7 @@ export function animateTabTransitionTo(target: 0 | 1): () => void {
     return () => {};
   }
   const targetTab = target === 1 ? transitionState.toTabId : transitionState.fromTabId;
+  motion.setFrequency(24 / getAnimationDurationScale());
   const destination =
     target === 1 ? destinationSlot : (cards.find((card) => card.tabId === targetTab)?.slot ?? 0);
   if (Math.abs(destination - motion.value) < 1e-4) {

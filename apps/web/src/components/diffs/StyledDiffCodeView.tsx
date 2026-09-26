@@ -223,8 +223,8 @@ const DIFF_VIEW_UNSAFE_CSS = `${DIFF_SURFACE_THEME_UNSAFE_CSS}
 [data-title] {
   cursor: pointer;
   transition:
-    color 120ms ease,
-    text-decoration-color 120ms ease;
+    color calc(120ms * var(--motion-duration-scale, 1)) ease,
+    text-decoration-color calc(120ms * var(--motion-duration-scale, 1)) ease;
   text-decoration: underline;
   text-decoration-color: transparent;
   text-underline-offset: 2px;
@@ -241,7 +241,7 @@ const DIFF_VIEW_UNSAFE_CSS = `${DIFF_SURFACE_THEME_UNSAFE_CSS}
    Departing content cuts, the same one-way rule the pull request chrome fold follows. */
 [data-diff],
 [data-file] {
-  transition: opacity 200ms ease-out;
+  transition: opacity calc(200ms * var(--motion-duration-scale, 1)) ease-out;
 }
 
 @starting-style {

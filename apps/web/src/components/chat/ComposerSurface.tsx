@@ -57,7 +57,7 @@ function Main({ className, ...props }: ComponentProps<"div">) {
     <div
       data-chat-composer-main-surface="true"
       className={cn(
-        "group relative z-10 rounded-[22px] p-px transition-colors duration-200",
+        "group relative z-10 rounded-[22px] p-px transition-colors [transition-duration:calc(200ms*var(--motion-duration-scale,1))]",
         outlineClasses,
         contextSeamClasses,
         "after:z-20 after:hidden group-has-data-[composer-banner-surface=attached]/composer-surface:after:block",

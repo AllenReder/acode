@@ -67,7 +67,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
         >
           <span
             data-composer-label-motion
-            className="block w-full min-w-0 max-w-[240px] truncate transition-opacity duration-180 ease-[cubic-bezier(0.32,0.72,0,1)] group-data-[compact]/composer-context:opacity-0 motion-reduce:transition-none"
+            className="block w-full min-w-0 max-w-[240px] truncate transition-opacity [transition-duration:calc(180ms*var(--motion-duration-scale,1))] ease-[cubic-bezier(0.32,0.72,0,1)] group-data-[compact]/composer-context:opacity-0 motion-reduce:transition-none"
           >
             {resolveLockedWorkspaceLabel(activeWorktreePath)}
           </span>
@@ -110,7 +110,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
         >
           <span
             data-composer-label-motion
-            className="block w-full min-w-0 max-w-[240px] truncate transition-opacity duration-180 ease-[cubic-bezier(0.32,0.72,0,1)] group-data-[compact]/composer-context:opacity-0 motion-reduce:transition-none"
+            className="block w-full min-w-0 max-w-[240px] truncate transition-opacity [transition-duration:calc(180ms*var(--motion-duration-scale,1))] ease-[cubic-bezier(0.32,0.72,0,1)] group-data-[compact]/composer-context:opacity-0 motion-reduce:transition-none"
           >
             <SelectValue />
           </span>
