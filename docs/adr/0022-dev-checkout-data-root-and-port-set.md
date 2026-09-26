@@ -23,7 +23,7 @@ In one checkout the two therefore targeted different ports while sharing
 
 That shared data root made the disagreement fatal rather than merely confusing.
 The web-mode server persists a `server-runtime.json` with no `daemonManaged`
-marker, so `parseLocalDaemonDiscovery` classifies it as `invalid` *before* any
+marker, so `parseLocalDaemonDiscovery` classifies it as `invalid` _before_ any
 liveness check. When the desktop launcher then asked to start a managed daemon in
 the same root, `startLocalDaemon` refused (`discovery-invalid`) instead of
 replacing the leftover descriptor, no daemon bound the port the window proxied
@@ -33,7 +33,7 @@ offset `0` and collided on 5733 / 13773.
 
 Port resolution had already drifted once before (issue #87, where the wrapper
 read only two of the four daemon-port keys and a developer's `AWEN_DAEMON_PORT`
-was shadowed). That fix unified the *keys* but left the checkout-path fallback
+was shadowed). That fix unified the _keys_ but left the checkout-path fallback
 outside the shared contract.
 
 ## Decision

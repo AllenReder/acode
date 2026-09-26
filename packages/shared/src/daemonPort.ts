@@ -99,8 +99,7 @@ function hashDevSeed(value: string): number {
   return (hash & 0xbfffffff) | ((hash >>> 1) & 0x40000000);
 }
 
-const hashedOffsetFor = (seed: string): number =>
-  ((hashDevSeed(seed) >>> 0) % MAX_HASH_OFFSET) + 1;
+const hashedOffsetFor = (seed: string): number => ((hashDevSeed(seed) >>> 0) % MAX_HASH_OFFSET) + 1;
 
 export type DevPortOffsetRequest =
   | { readonly _tag: "invalid"; readonly raw: string }

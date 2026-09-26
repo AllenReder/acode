@@ -38,7 +38,10 @@ import * as Schema from "effect/Schema";
 import { readBrowserClientSettings, writeBrowserClientSettings } from "../clientPersistenceStorage";
 import { showContextMenuFallback } from "../contextMenuFallback";
 import { DesktopSshRequestError, SshPasswordPromptCancelledError } from "./sshErrors";
-import { recordDesktopRuntimeConfigError, markDesktopRuntimeConfigSettled } from "./runtimeConfigError";
+import {
+  recordDesktopRuntimeConfigError,
+  markDesktopRuntimeConfigSettled,
+} from "./runtimeConfigError";
 import { isTauri } from "../env";
 
 interface TauriRuntimeConfig {
