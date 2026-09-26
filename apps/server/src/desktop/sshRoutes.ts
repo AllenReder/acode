@@ -2,6 +2,7 @@
 import {
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
+  AuthStandardClientScopes,
   DesktopDiscoveredSshHostSchema,
   DesktopSshBearerBootstrapInputSchema,
   DesktopSshBearerRequestInputSchema,
@@ -258,7 +259,7 @@ const bootstrapRemoteBearerSession = Effect.fn("desktop.ssh.bootstrapRemoteBeare
       client.bearerSession({
         payload: {
           credential: input.credential,
-          scopes: [AuthOrchestrationReadScope, AuthOrchestrationOperateScope],
+          scopes: [...AuthStandardClientScopes],
         },
       }),
     );
