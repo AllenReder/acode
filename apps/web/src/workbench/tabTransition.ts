@@ -1,8 +1,6 @@
-import { settleEaseOut } from "./scrollingAnimation";
-import { getPrefersReducedMotion } from "./workbenchMotion";
+import { createMotionValue } from "./motionValue";
+import { skipAutomaticWorkbenchMotion } from "./workbenchMotion";
 
-/** Time the strip takes to settle from its release position to 0 or 1. */
-export const TAB_SETTLE_DURATION_MS = 340;
 /** Pointer progress required to commit a Sliding Tab switch on release. */
 export const TAB_SWITCH_COMMIT_PROGRESS = 0.5;
 /** Release velocity (px/ms) that commits a Sliding Tab switch regardless of progress. */
@@ -19,6 +17,9 @@ export interface TabTransitionState {
 
 export interface TabTransitionFrame extends TabTransitionState {
   readonly progress: number;
+  readonly position: number;
+  readonly destinationSlot: number;
+  readonly cards: ReadonlyArray<{ readonly tabId: string; readonly slot: number }>;
 }
 
 export function clampProgress(value: number): number {
@@ -52,18 +53,6 @@ export interface TabIndicatorGeometry {
   readonly width: number;
 }
 
-export function interpolateIndicatorGeometry(
-  from: TabIndicatorGeometry,
-  to: TabIndicatorGeometry,
-  progress: number,
-): TabIndicatorGeometry {
-  const p = clampProgress(progress);
-  return {
-    left: from.left + (to.left - from.left) * p,
-    width: from.width + (to.width - from.width) * p,
-  };
-}
-
 export interface SwitchCommitInput {
   readonly progress: number;
   /** Signed pointer velocity in px/ms: positive means the pointer moved right. */
@@ -84,7 +73,12 @@ export function tabIdsKey(tabs: ReadonlyArray<{ readonly id: string }>): string 
 }
 
 let transitionState: TabTransitionState | null = null;
-let transitionProgress = 0;
+let cards: Array<{ tabId: string; slot: number }> = [];
+let destinationSlot = 0;
+// Move a cyclic target to the new edge only after both slots are offscreen,
+// preserving one live View instance per Tab.
+let pendingRelocation: { tabId: string; slot: number; midpoint: number; dir: -1 | 1 } | null = null;
+const motion = createMotionValue(0);
 let cancelSettle: (() => void) | null = null;
 
 function stopSettle(): void {
@@ -95,7 +89,15 @@ const stateListeners = new Set<(state: TabTransitionState | null) => void>();
 const frameListeners = new Set<(frame: TabTransitionFrame | null) => void>();
 
 function currentFrame(): TabTransitionFrame | null {
-  return transitionState === null ? null : { ...transitionState, progress: transitionProgress };
+  if (transitionState === null) return null;
+  const from = cards.find((card) => card.tabId === transitionState?.fromTabId)?.slot ?? 0;
+  return {
+    ...transitionState,
+    progress: clampProgress((motion.value - from) / (destinationSlot - from || 1)),
+    position: motion.value,
+    destinationSlot,
+    cards,
+  };
 }
 
 export function getTabTransition(): TabTransitionState | null {
@@ -129,6 +131,19 @@ function notifyState(): void {
 }
 
 function notifyFrame(): void {
+  if (
+    pendingRelocation !== null &&
+    (pendingRelocation.dir === 1
+      ? motion.value >= pendingRelocation.midpoint
+      : motion.value <= pendingRelocation.midpoint)
+  ) {
+    cards = cards.map((card) =>
+      card.tabId === pendingRelocation?.tabId
+        ? { tabId: card.tabId, slot: pendingRelocation.slot }
+        : card,
+    );
+    pendingRelocation = null;
+  }
   const frame = currentFrame();
   for (const listener of frameListeners) listener(frame);
 }
@@ -136,23 +151,86 @@ function notifyFrame(): void {
 export function beginTabTransition(state: TabTransitionState, initialProgress = 0): void {
   stopSettle();
   transitionState = state;
-  transitionProgress = clampProgress(initialProgress);
+  cards = [
+    { tabId: state.fromTabId, slot: 0 },
+    { tabId: state.toTabId, slot: state.dir },
+  ];
+  destinationSlot = state.dir;
+  pendingRelocation = null;
+  motion.setDirect(state.dir * clampProgress(initialProgress));
   notifyState();
+  notifyFrame();
+}
+
+/** Redirect the live card strip, preserving its visible position and velocity. */
+export function retargetTabTransition(state: TabTransitionState): void {
+  if (transitionState === null) {
+    beginTabTransition(state);
+    return;
+  }
+  stopSettle();
+  const existing = cards.find((card) => card.tabId === state.toTabId);
+  if (existing === undefined) {
+    const edge =
+      state.dir === 1
+        ? Math.max(...cards.map((card) => card.slot)) + 1
+        : Math.min(...cards.map((card) => card.slot)) - 1;
+    cards = [...cards, { tabId: state.toTabId, slot: edge }];
+    destinationSlot = edge;
+    pendingRelocation = null;
+  } else if (state.dir === 1 ? existing.slot <= motion.value : existing.slot >= motion.value) {
+    const edge =
+      state.dir === 1
+        ? Math.max(...cards.map((card) => card.slot)) + 1
+        : Math.min(...cards.map((card) => card.slot)) - 1;
+    destinationSlot = edge;
+    pendingRelocation = {
+      tabId: state.toTabId,
+      slot: edge,
+      midpoint: (existing.slot + edge) / 2,
+      dir: state.dir,
+    };
+  } else {
+    destinationSlot = existing.slot;
+    pendingRelocation = null;
+  }
+  transitionState = state;
+  notifyState();
+  notifyFrame();
+}
+
+export function getTabTransitionCards(): ReadonlyArray<{
+  readonly tabId: string;
+  readonly slot: number;
+}> {
+  return cards;
+}
+
+export function interruptTabSettle(): void {
+  stopSettle();
+}
+
+export function setTabTransitionPosition(position: number, velocity = 0): void {
+  if (transitionState === null) return;
+  motion.setDirect(position, velocity);
   notifyFrame();
 }
 
 export function setTabTransitionProgress(progress: number): void {
   if (transitionState === null) return;
   const clamped = clampProgress(progress);
-  if (Math.abs(clamped - transitionProgress) < 1e-4) return;
-  transitionProgress = clamped;
+  const from = cards.find((card) => card.tabId === transitionState?.fromTabId)?.slot ?? 0;
+  motion.setDirect(from + (destinationSlot - from) * clamped);
   notifyFrame();
 }
 
 export function endTabTransition(): void {
   stopSettle();
   transitionState = null;
-  transitionProgress = 0;
+  cards = [];
+  destinationSlot = 0;
+  pendingRelocation = null;
+  motion.setDirect(0);
   notifyState();
   notifyFrame();
 }
@@ -161,68 +239,43 @@ export function endTabTransition(): void {
 export function resetTabTransitionForTest(): void {
   stopSettle();
   transitionState = null;
-  transitionProgress = 0;
+  cards = [];
+  destinationSlot = 0;
+  pendingRelocation = null;
+  motion.setDirect(0);
   stateListeners.clear();
   frameListeners.clear();
 }
 
-function now(): number {
-  return typeof performance !== "undefined" ? performance.now() : Date.now();
-}
-
-const requestFrame = (callback: (time: number) => void): number => {
-  if (typeof globalThis.requestAnimationFrame === "function") {
-    return globalThis.requestAnimationFrame(callback);
-  }
-  return globalThis.setTimeout(() => callback(now()), 16) as unknown as number;
-};
-
-const cancelFrame = (handle: number): void => {
-  if (typeof globalThis.cancelAnimationFrame === "function") {
-    globalThis.cancelAnimationFrame(handle);
-    return;
-  }
-  globalThis.clearTimeout(handle as unknown as ReturnType<typeof globalThis.setTimeout>);
-};
-
 /**
- * Settle an active transition toward 0 (cancel) or 1 (commit) with Apple fluid
- * easing, then clear it. The module owns cancellation: starting another transition
- * or settle always stops the old RAF. The returned handle only cancels this settle.
+ * Settle an active transition toward source or target with a damped spring, then
+ * clear it. A new input may take over its live position and velocity.
  */
 export function animateTabTransitionTo(target: 0 | 1): () => void {
   stopSettle();
   if (transitionState === null) return () => {};
-  if (getPrefersReducedMotion()) {
+  if (skipAutomaticWorkbenchMotion()) {
     setTabTransitionProgress(target);
     endTabTransition();
     return () => {};
   }
-  const start = transitionProgress;
-  if (Math.abs(target - start) < 1e-4) {
-    setTabTransitionProgress(target);
+  const targetTab = target === 1 ? transitionState.toTabId : transitionState.fromTabId;
+  const destination =
+    target === 1 ? destinationSlot : (cards.find((card) => card.tabId === targetTab)?.slot ?? 0);
+  if (Math.abs(destination - motion.value) < 1e-4) {
+    motion.setDirect(destination);
     endTabTransition();
     return () => {};
   }
-  const startTime = now();
-  let frameId: number | null = null;
-  let cancelled = false;
-  const step = () => {
-    if (cancelled) return;
-    const elapsed = Math.min(1, (now() - startTime) / TAB_SETTLE_DURATION_MS);
-    setTabTransitionProgress(start + (target - start) * settleEaseOut(elapsed));
-    if (cancelled) return;
-    if (elapsed < 1) {
-      frameId = requestFrame(step);
-    } else {
-      endTabTransition();
-    }
-  };
+  const unsubscribe = motion.subscribe(() => {
+    notifyFrame();
+    if (motion.value === destination && transitionState !== null) endTabTransition();
+  });
   const cancel = () => {
-    cancelled = true;
-    if (frameId !== null) cancelFrame(frameId);
+    unsubscribe();
+    motion.stop();
   };
   cancelSettle = cancel;
-  frameId = requestFrame(step);
+  motion.setTarget(destination);
   return cancel;
 }

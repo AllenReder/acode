@@ -21,7 +21,10 @@ import { useResizeDrag } from "~/hooks/useResizeDrag";
 import { useIsMobile } from "~/hooks/useMediaQuery";
 import { getLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorage";
 import { resolveSidebarState, type ResponsiveSidebarState } from "./sidebarState";
-import { resolveSidebarMinimumWidth } from "../sidebar/sidebarGeometry";
+import {
+  EXPANDED_ACTION_RIGHT_OFFSET,
+  resolveSidebarMinimumWidth,
+} from "../sidebar/sidebarGeometry";
 import { isCurrentPlatformMac } from "~/lib/utils";
 import * as Schema from "effect/Schema";
 
@@ -308,6 +311,7 @@ function Sidebar({
             className,
           )}
           data-slot="sidebar-container"
+          inert={state === "collapsed" && collapsible === "offcanvas"}
           {...props}
         >
           <div
@@ -405,6 +409,7 @@ function SidebarRail({
       element.style.setProperty("transition-duration", "0ms");
     });
     wrapper.style.setProperty("--sidebar-width", `${width}px`);
+    wrapper.style.setProperty("--sidebar-exposed-width", `${width}px`);
 
     return {
       width,
@@ -424,6 +429,11 @@ function SidebarRail({
           }) ?? true;
         if (accepted) {
           wrapper.style.setProperty("--sidebar-width", `${nextWidth}px`);
+          wrapper.style.setProperty("--sidebar-exposed-width", `${nextWidth}px`);
+          wrapper.style.setProperty(
+            "--sidebar-motion-action-left",
+            `${nextWidth - EXPANDED_ACTION_RIGHT_OFFSET}px`,
+          );
           width = nextWidth;
         }
         return width;

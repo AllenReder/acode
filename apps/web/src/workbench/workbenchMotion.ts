@@ -7,3 +7,13 @@ export function getPrefersReducedMotion(): boolean {
   }
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
+
+export function skipAutomaticWorkbenchMotion(): boolean {
+  if (getPrefersReducedMotion()) return true;
+  if (typeof document === "undefined") return false;
+  return (
+    document
+      .querySelector?.("[data-slot='sidebar-wrapper']")
+      ?.getAttribute("data-panel-animations") === "false"
+  );
+}

@@ -2350,6 +2350,18 @@ html[data-workbench-window-chrome] {
 }
 
 /* Workbench: quiet materials, stable content, deliberate motion. */
+[data-slot="sidebar-wrapper"]:has([data-app-sidebar]) [data-slot="sidebar-gap"] {
+  width: var(--sidebar-exposed-width, var(--sidebar-width)) !important;
+  transition: none !important;
+}
+[data-app-sidebar][data-slot="sidebar-container"] {
+  left: 0 !important;
+  width: var(--sidebar-width) !important;
+  transform: translateX(
+    calc(var(--sidebar-exposed-width, var(--sidebar-width)) - var(--sidebar-width))
+  );
+  transition: none !important;
+}
 .workbench-viewport {
   position: relative;
   flex: 1;
@@ -2365,7 +2377,7 @@ html[data-workbench-window-chrome] {
 .workbench-viewport[data-layout-mode="bsp"] {
   overflow: hidden;
 }
-/* Sliding Tab switch (ADR-0019): the source and target Tabs become two cards.
+/* Sliding Tab switch (ADR-0019, ADR-0024): visible Tabs become live cards.
    Keep this rule to positioning only. `will-change`, `backface-visibility`,
    `border-radius`, and `overflow` all make the browser create a render surface
    (backdrop root) around the card, which drops the `mask`/`clip-path` on
@@ -2380,6 +2392,10 @@ html[data-workbench-window-chrome] {
   flex: none;
   pointer-events: none;
 }
+.workbench-viewport-container[data-tab-transition="true"]
+  .workbench-viewport[data-tab-active="true"] {
+  pointer-events: auto;
+}
 .workbench-canvas {
   position: relative;
   min-height: 100%;
@@ -2388,14 +2404,6 @@ html[data-workbench-window-chrome] {
 .workbench-pane-frame {
   position: absolute;
   padding: 0;
-}
-html[data-workbench-dragging] .workbench-pane-frame {
-  transition:
-    left 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    top 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    width 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    height 220ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: left, top, width, height;
 }
 html[data-workbench-dragging="active"] .workbench-tab-item {
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);

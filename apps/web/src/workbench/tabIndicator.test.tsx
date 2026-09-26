@@ -53,7 +53,7 @@ it("lands the underbar without replaying the animation when a gesture finishes",
   const indicator = { style: { transform: "", width: "" }, animate };
   const tabs = [0, 1].map((index) => ({
     dataset: { tabId: String(index) },
-    getBoundingClientRect: () => ({ left: index * 100, width: 100 }),
+    getBoundingClientRect: () => ({ left: index * 100, width: index === 0 ? 100 : 80 }),
   }));
   const strip = {
     scrollLeft: 0,
@@ -79,11 +79,13 @@ it("lands the underbar without replaying the animation when a gesture finishes",
   );
   await act(() => setTabTransitionProgress(0.5));
   expect(indicator.style.transform).toBe("translateX(50px)");
+  expect(indicator.style.width).toBe("100px");
   await act(() => renderer!.update(<Indicator active="1" />));
   await act(() => {
     setTabTransitionProgress(1);
     endTabTransition();
   });
   expect(indicator.style.transform).toBe("translateX(100px)");
+  expect(indicator.style.width).toBe("80px");
   expect(animate).not.toHaveBeenCalled();
 });

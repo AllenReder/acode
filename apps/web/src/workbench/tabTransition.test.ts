@@ -8,10 +8,11 @@ import {
   endTabTransition,
   getTabTransition,
   getTabTransitionFrame,
-  interpolateIndicatorGeometry,
   nextTabIndex,
   resetTabTransitionForTest,
+  retargetTabTransition,
   resolveSwitchCommit,
+  setTabTransitionPosition,
   setTabTransitionProgress,
   subscribeTabTransition,
   subscribeTabTransitionFrame,
@@ -62,20 +63,6 @@ describe("tab order helpers", () => {
   });
 });
 
-describe("interpolateIndicatorGeometry", () => {
-  it("moves and resizes between two Tab geometries", () => {
-    expect(
-      interpolateIndicatorGeometry({ left: 0, width: 100 }, { left: 200, width: 80 }, 0.5),
-    ).toEqual({ left: 100, width: 90 });
-  });
-
-  it("clamps progress", () => {
-    expect(
-      interpolateIndicatorGeometry({ left: 0, width: 100 }, { left: 200, width: 80 }, 5),
-    ).toEqual({ left: 200, width: 80 });
-  });
-});
-
 describe("resolveSwitchCommit", () => {
   it("commits past halfway regardless of velocity", () => {
     expect(resolveSwitchCommit({ progress: 0.6, velocity: 0, dir: 1 })).toBe(true);
@@ -92,6 +79,18 @@ describe("resolveSwitchCommit", () => {
 });
 
 describe("tab transition store", () => {
+  it("keeps next navigation moving forward when the Tab order wraps", () => {
+    beginTabTransition({ fromTabId: "a", toTabId: "b", fromIndex: 0, toIndex: 1, dir: 1 });
+    setTabTransitionPosition(0.4);
+    retargetTabTransition({ fromTabId: "b", toTabId: "c", fromIndex: 1, toIndex: 2, dir: 1 });
+    retargetTabTransition({ fromTabId: "c", toTabId: "a", fromIndex: 2, toIndex: 0, dir: 1 });
+    expect(getTabTransitionFrame()?.destinationSlot).toBe(3);
+    expect(getTabTransitionFrame()?.cards.find((card) => card.tabId === "a")?.slot).toBe(0);
+    setTabTransitionPosition(1.5);
+    expect(getTabTransitionFrame()?.cards.find((card) => card.tabId === "a")?.slot).toBe(3);
+    expect(getTabTransitionFrame()?.position).toBe(1.5);
+  });
+
   it("tracks state, progress, and notifies subscribers", () => {
     const states: Array<unknown> = [];
     const frames: Array<unknown> = [];

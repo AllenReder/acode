@@ -5,10 +5,13 @@ Columns horizontally with independent widths (320–2400 pixels, initially 560).
 Each Column owns a stable identity and ordered Pane references with normalized
 height shares. The canvas follows the viewport height; vertical scrolling belongs to Pane
 content, never the Workbench viewport (ADR-0015). Horizontal trackpad gestures
-are captured before terminal wheel handling; vertical gestures remain content
-scrolling. A shift-modified vertical wheel is treated as horizontal intent and,
-once the layout and any nested scroller are at their horizontal limit, advances
-the Workbench Tab switch instead of a Pane Column (ADR-0019).
+first use the nearest scroller or Scrolling canvas. Once a gesture scrolls
+content, it stops at the boundary and keeps native WebView momentum; a new
+physical gesture starting at that boundary may preview an adjacent Tab.
+Vertical gestures remain content scrolling. A shift-modified vertical wheel is
+treated as horizontal intent and, once the layout and any nested scroller are
+at their horizontal limit, advances the Workbench Tab switch (ADR-0019,
+ADR-0024).
 
 A Pane edge drop to the left/right creates a Column; top/bottom stacks into the
 target Column. Column controls reorder Columns and their Panes, and let users
@@ -33,9 +36,10 @@ Pane content is a flat sibling list keyed by View instance identity, with geomet
 computed separately. Layout mutations do not remount content. Terminal resize
 continues through the existing focused/visible View gate. The focused Column is
 revealed on focus, layout, and viewport changes. Manual scrolling does not change
-focus or stop work. Resize uses direct geometry; reordering uses a 220ms transform
-animation, disabled by the system's reduced-motion preference. Pointer resize
-listeners are removed on completion, cancellation, and unmount.
+focus or stop work. Resize uses direct geometry; automatic layout changes use
+interruptible spring-driven Pane rectangles without scaling content. The
+system's reduced-motion preference skips automatic layout motion. Pointer
+resize listeners are removed on completion, cancellation, and unmount.
 
 Drop previews are read-only. The store rejects previews whose source snapshot is
 stale; pointer release recomputes the command against current state. Escape or

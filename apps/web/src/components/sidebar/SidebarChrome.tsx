@@ -108,10 +108,10 @@ export function SidebarActionControl({
 
   return (
     <div
-      className="pointer-events-none fixed top-0 z-50 flex h-[var(--workbench-titlebar-height,36px)] items-center transition-[left] duration-200 ease-out in-data-[workbench-resizing]:transition-none in-data-[sidebar-resizing]:transition-none [-webkit-app-region:no-drag]"
+      className="pointer-events-none fixed top-0 z-50 flex h-[var(--workbench-titlebar-height,36px)] items-center [-webkit-app-region:no-drag]"
       data-sidebar-action-control=""
       style={{
-        left: open ? expandedLeft : dockLeft,
+        left: `var(--sidebar-motion-action-left, ${open ? expandedLeft : dockLeft})`,
       }}
     >
       {isOnSettings ? (

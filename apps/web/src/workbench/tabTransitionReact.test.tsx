@@ -1,7 +1,12 @@
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 
-import { getTabTransition, resetTabTransitionForTest } from "./tabTransition";
+import {
+  getTabTransition,
+  getTabTransitionFrame,
+  resetTabTransitionForTest,
+  setTabTransitionProgress,
+} from "./tabTransition";
 import { TabTransitionController } from "./tabTransitionReact";
 import { applyCreateTab, emptyWorkbenchSnapshot } from "./workbenchState";
 import { resetWorkbenchStore, useWorkbenchStore } from "./workbenchStore";
@@ -70,4 +75,28 @@ it("lands instantly under reduced motion", async () => {
     useWorkbenchStore.getState().activateTab(tabs[0]!.id);
   });
   expect(getTabTransition()).toBeNull();
+});
+
+it("keeps visible cards in place when a third Tab becomes the latest target", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  let n = 0;
+  const ids = () => `retarget-${++n}`;
+  const snapshot = applyCreateTab(applyCreateTab(emptyWorkbenchSnapshot(ids), ids), ids);
+  const [a, b, c] = snapshot.tabs;
+  useWorkbenchStore.setState({ ...snapshot, activeTabId: a!.id, focusRequestId: 0 });
+  await act(() => {
+    renderer = create(<TabTransitionController />);
+  });
+  await act(() => useWorkbenchStore.getState().activateTab(b!.id));
+  await act(() => setTabTransitionProgress(0.4));
+  const before = getTabTransitionFrame()!;
+  await act(() => useWorkbenchStore.getState().activateTab(c!.id));
+  const after = getTabTransitionFrame()!;
+  expect(after.toTabId).toBe(c!.id);
+  expect(after.position).toBeCloseTo(before.position);
+  expect(after.cards).toEqual([
+    { tabId: a!.id, slot: 0 },
+    { tabId: b!.id, slot: 1 },
+    { tabId: c!.id, slot: 2 },
+  ]);
 });

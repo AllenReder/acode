@@ -2,6 +2,8 @@ import { useAtomValue } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
 import {
   useEffect,
+  useLayoutEffect,
+  useRef,
   useState,
   useSyncExternalStore,
   type CSSProperties,
@@ -14,6 +16,16 @@ import { PanelLeftCloseIcon, PanelLeftIcon } from "lucide-react";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import { SidebarTitlebarButton } from "./sidebar/SidebarTitlebarControl";
 import { SidebarActionControl } from "./sidebar/SidebarChrome";
+import {
+  COLLAPSED_TABS_INSET_MAC,
+  COLLAPSED_TABS_INSET_WIN,
+  EXPANDED_TABS_INSET,
+  EXPANDED_ACTION_RIGHT_OFFSET,
+  DOCK_LEFT_MAC,
+  DOCK_LEFT_WIN,
+} from "./sidebar/sidebarGeometry";
+import { createMotionValue } from "../workbench/motionValue";
+import { getPrefersReducedMotion } from "../workbench/workbenchMotion";
 import { isMacPlatform } from "../lib/utils";
 import { resolveWorkbenchTitlebarStyle } from "../lib/windowControlsOverlay";
 import { primaryServerKeybindingsAtom } from "../state/server";
@@ -125,6 +137,51 @@ function SidebarControl() {
 function ProjectProjectionRetention() {
   useProjects();
   return null;
+}
+
+function SidebarMotionController({ enabled, width }: { enabled: boolean; width: number }) {
+  const open = useSidebarVisibility();
+  const marker = useRef<HTMLSpanElement>(null);
+  const motion = useRef<ReturnType<typeof createMotionValue> | null>(null);
+  if (motion.current === null) motion.current = createMotionValue(open ? 1 : 0);
+  useLayoutEffect(() => {
+    const wrapper = marker.current?.closest<HTMLElement>("[data-slot='sidebar-wrapper']");
+    if (!wrapper) return;
+    const spring = motion.current!;
+    const isMac = isMacPlatform(navigator.platform);
+    const collapsedInset = isMac ? COLLAPSED_TABS_INSET_MAC : COLLAPSED_TABS_INSET_WIN;
+    const dockLeft = isMac ? DOCK_LEFT_MAC : DOCK_LEFT_WIN;
+    const write = (fraction: number) => {
+      if (Math.abs(fraction - spring.target) > 0.001) {
+        document.documentElement.dataset.sidebarMotion = "true";
+      } else {
+        delete document.documentElement.dataset.sidebarMotion;
+      }
+      wrapper.style.setProperty("--sidebar-exposed-width", `${width * fraction}px`);
+      wrapper.style.setProperty("--sidebar-motion-progress", `${fraction}`);
+      wrapper.style.setProperty(
+        "--sidebar-motion-tabs-inset",
+        `${collapsedInset + (EXPANDED_TABS_INSET - collapsedInset) * fraction}px`,
+      );
+      wrapper.style.setProperty(
+        "--sidebar-motion-action-left",
+        `${dockLeft + (width - EXPANDED_ACTION_RIGHT_OFFSET - dockLeft) * fraction}px`,
+      );
+    };
+    write(spring.value);
+    const unsubscribe = spring.subscribe(write);
+    return () => {
+      unsubscribe();
+      delete document.documentElement.dataset.sidebarMotion;
+    };
+  }, [width]);
+  useLayoutEffect(() => {
+    const spring = motion.current!;
+    if (enabled && !getPrefersReducedMotion()) spring.setTarget(open ? 1 : 0);
+    else spring.setDirect(open ? 1 : 0);
+  }, [enabled, open]);
+  useEffect(() => () => motion.current?.stop(), []);
+  return <span ref={marker} hidden />;
 }
 
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
@@ -247,10 +304,11 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       <WorkbenchDragProvider>
         <SidebarProvider
           className="h-dvh! min-h-0!"
-          data-panel-animations={!panelAnimationsSuppressed ? "true" : "false"}
+          data-panel-animations={routePanelAnimationsActive ? "true" : "false"}
           defaultOpen
           style={sidebarProviderStyle}
         >
+          <SidebarMotionController enabled={routePanelAnimationsActive} width={sidebarWidth} />
           <ProjectProjectionRetention />
           <Sidebar
             side="left"
