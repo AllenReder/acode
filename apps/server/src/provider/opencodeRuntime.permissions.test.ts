@@ -151,4 +151,31 @@ describe("toOpenCodeQuestionAnswers", () => {
       "tags",
     ]);
   });
+
+  it("prefers native option values over labels across the whole option list", () => {
+    const request = {
+      id: "form_values",
+      sessionID: "session_123",
+      title: "Confirm",
+      fields: [
+        {
+          key: "choice",
+          type: "string",
+          options: [
+            { label: "yes", value: "affirmative" },
+            { label: "Confirm", value: "yes" },
+          ],
+        },
+      ],
+    } as unknown as FormInfo;
+
+    // "yes" is both the first option's label and the second option's native
+    // value; resolving by value first keeps the user's actual selection.
+    NodeAssert.deepEqual(toOpenCodeQuestionAnswers(request, { choice: "yes" }), {
+      choice: "yes",
+    });
+    NodeAssert.deepEqual(toOpenCodeQuestionAnswers(request, { choice: "affirmative" }), {
+      choice: "affirmative",
+    });
+  });
 });

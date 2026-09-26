@@ -37,8 +37,6 @@ import { HostProcessPlatform } from "@awen/shared/hostProcess";
 import { compareSemverVersions, parseSemver } from "@awen/shared/semver";
 import { resolveSpawnCommand } from "@awen/shared/shell";
 const encodeUnknownJsonStringExit = Schema.encodeUnknownExit(Schema.fromJsonString(Schema.Unknown));
-const OPENCODE_EMPTY_CONFIG_CONTENT = "{}";
-
 export const MINIMUM_OPENCODE_VERSION = "2.0.12";
 const OPENCODE_HEALTH_TIMEOUT = "5 seconds";
 
@@ -48,12 +46,8 @@ const decodeOpenCodeInfo = Schema.decodeUnknownEffect(OpenCodeInfoSchema);
 export function resolveOpenCodeConfigContent(
   inputEnvironment: Readonly<Record<string, string | undefined>> | undefined,
   inheritedEnvironment: Readonly<Record<string, string | undefined>> = process.env,
-): string {
-  return (
-    inputEnvironment?.OPENCODE_CONFIG_CONTENT ??
-    inheritedEnvironment.OPENCODE_CONFIG_CONTENT ??
-    OPENCODE_EMPTY_CONFIG_CONTENT
-  );
+): string | undefined {
+  return inputEnvironment?.OPENCODE_CONFIG_CONTENT ?? inheritedEnvironment.OPENCODE_CONFIG_CONTENT;
 }
 
 export function resolveOpenCodeServerPassword(
@@ -250,10 +244,28 @@ export interface OpenCodeRuntimeShape {
   ) => Effect.Effect<ReadonlyArray<SkillInfo>, OpenCodeRuntimeError>;
 }
 
-function parseServerUrlFromOutput(output: string): string | null {
-  for (const line of output.split("\n")) {
+function parseServerUrlFromOutput(output: string): {
+  readonly url: string;
+  /** Whether the readiness line was newline-terminated (definitely complete). */
+  readonly terminated: boolean;
+} | null {
+  // Accept the v2 `server listening on <url>` line (case-insensitive, matched
+  // anywhere on the line). Every line except the last is newline-terminated and
+  // therefore complete; the trailing fragment may be a complete readiness line
+  // that never got a newline, or a partial chunk still in flight — the caller
+  // keeps a trailing candidate pending until the output settles instead of
+  // resolving with a truncated URL.
+  const lines = output.split("\n");
+  for (const line of lines.slice(0, -1)) {
     const match = line.match(/server listening on\s+(https?:\/\/[^\s]+)/i);
-    if (match?.[1]) return match[1];
+    if (match?.[1]) {
+      return { url: match[1], terminated: true };
+    }
+  }
+  const trailing = lines[lines.length - 1] ?? "";
+  const match = trailing.match(/server listening on\s+(https?:\/\/[^\s]+)/i);
+  if (match?.[1]) {
+    return { url: match[1], terminated: false };
   }
   return null;
 }
@@ -398,8 +410,16 @@ export function toOpenCodeQuestionAnswers(
     const values = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
     if (values.length === 0 && !field.required) continue;
     const options = "options" in field ? field.options : undefined;
+    // Match the UI's submitted identifier: `normalizeOpenCodeForm` round-trips
+    // the native option `value` through `UserInputQuestionOption.value`, and
+    // the web client submits that value (`option.value ?? option.label`).
+    // Values win over labels across the whole option list so a duplicate
+    // label can never shadow another option's native value; labels remain a
+    // display fallback for answers authored by hand.
     const value = (item: unknown) =>
-      options?.find((option) => option.label === item)?.value ?? item;
+      options?.find((option) => option.value === item)?.value ??
+      options?.find((option) => option.label === item)?.value ??
+      item;
     const first = value(values[0]);
     if (field.type === "multiselect")
       result[field.key] = values
@@ -547,6 +567,7 @@ const makeOpenCodeRuntime = Effect.gen(function* () {
           ),
         ));
 
+      const resolvedConfigContent = resolveOpenCodeConfigContent(input.environment);
       const child = yield* spawner
         .spawn(
           ChildProcess.make(spawnCommand.command, spawnCommand.args, {
@@ -556,13 +577,14 @@ const makeOpenCodeRuntime = Effect.gen(function* () {
               ...input.environment,
               OPENCODE_PASSWORD: serverPassword,
               // Respect an OPENCODE_CONFIG_CONTENT provided by the caller or
-              // the inherited process environment, only falling back to the
-              // empty config when neither is set. Setting it unconditionally
-              // previously clobbered the user's opencode config, hiding their
-              // providers/models. The value is set explicitly (rather than
-              // relying on inheritance) because `extendEnv` is false whenever
-              // `input.environment` is provided.
-              OPENCODE_CONFIG_CONTENT: resolveOpenCodeConfigContent(input.environment),
+              // the inherited process environment. When neither is provided,
+              // do NOT set OPENCODE_CONFIG_CONTENT so OpenCode reads the user's
+              // default configuration (~/.config/opencode/opencode.json). Setting
+              // it unconditionally to "{}" previously clobbered the user's
+              // opencode config, hiding their providers/models.
+              ...(resolvedConfigContent !== undefined
+                ? { OPENCODE_CONFIG_CONTENT: resolvedConfigContent }
+                : {}),
             },
             extendEnv: input.environment === undefined,
           }),
@@ -614,9 +636,42 @@ const makeOpenCodeRuntime = Effect.gen(function* () {
           ] as const;
         }).pipe(
           Effect.flatMap((parsed) =>
-            parsed ? Deferred.succeed(readyDeferred, parsed).pipe(Effect.ignore) : Effect.void,
+            parsed === null
+              ? Effect.void
+              : parsed.terminated
+                ? Deferred.succeed(readyDeferred, parsed.url).pipe(Effect.ignore)
+                : confirmSettledReadyUrl(parsed.url).pipe(Effect.ignore),
           ),
         );
+
+      // An unterminated readiness candidate may be a partial chunk of a line
+      // still in flight. Give the output a moment to settle: if it grows,
+      // re-parse (the next chunk's handler also runs, so this just avoids
+      // resolving with a truncated URL when no further chunk ever arrives).
+      const confirmSettledReadyUrl = (candidate: string): Effect.Effect<void> =>
+        Effect.gen(function* () {
+          if (yield* Deferred.isDone(readyDeferred)) {
+            return;
+          }
+          const before = yield* Ref.get(stdoutRef);
+          yield* Effect.sleep("300 millis");
+          if (yield* Deferred.isDone(readyDeferred)) {
+            return;
+          }
+          const after = yield* Ref.get(stdoutRef);
+          if (after === null || after === before) {
+            yield* Deferred.succeed(readyDeferred, candidate).pipe(Effect.ignore);
+            return;
+          }
+          const reparsed = parseServerUrlFromOutput(after);
+          if (reparsed === null) {
+            yield* Deferred.succeed(readyDeferred, candidate).pipe(Effect.ignore);
+          } else if (reparsed.terminated) {
+            yield* Deferred.succeed(readyDeferred, reparsed.url).pipe(Effect.ignore);
+          } else {
+            yield* confirmSettledReadyUrl(reparsed.url);
+          }
+        });
 
       const stdoutFiber = yield* child.stdout.pipe(
         Stream.decodeText(),
