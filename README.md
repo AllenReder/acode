@@ -174,30 +174,6 @@ The local provider CLIs and their authentication are external prerequisites.
 checkout are only needed to rebuild the retained libghostty-vt WebAssembly, which
 the shipped client no longer loads.
 
-## Codex worktree hooks
-
-Codex can run the checked-in scripts when it creates and removes a worktree.
-The setup script installs the locked dependency graph in the new checkout. The
-cleanup script removes only checkout-local Awen state, generated files, and
-build output; it does not remove shared package caches or user-home data.
-
-For the default, macOS, or Linux command fields, use:
-
-```bash
-node "$CODEX_WORKTREE_PATH/scripts/codex-worktree-setup.mjs"
-node "$CODEX_WORKTREE_PATH/scripts/codex-worktree-cleanup.mjs"
-```
-
-For the Windows command fields, use:
-
-```bat
-node "%CODEX_WORKTREE_PATH%\scripts\codex-worktree-setup.mjs"
-node "%CODEX_WORKTREE_PATH%\scripts\codex-worktree-cleanup.mjs"
-```
-
-Both scripts fall back to the current directory when run manually from a
-checkout root.
-
 ## Source and license provenance
 
 See [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md) for upstream source

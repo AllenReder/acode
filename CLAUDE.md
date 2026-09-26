@@ -27,7 +27,6 @@ docs: record the token split
   crate names still exist.
 - The body states what changed and why. A fixed defect gets its own bullet
   naming the mechanism, so a later reader cannot reintroduce it.
-- Before every commit, check and maintain the Codex worktree setup and cleanup scripts as the repository changes.
 - A breaking change takes `!` before the colon, plus a `BREAKING CHANGE:`
   footer naming what callers must do.
 
