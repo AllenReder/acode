@@ -35,6 +35,7 @@ interface TrackpadSession {
 }
 
 const TRACKPAD_SWITCH_TRAVEL = 360;
+const TRACKPAD_SWITCH_COMMIT_PROGRESS = 0.2;
 
 /** One stage listener routes horizontal intent from the innermost scroller to Tabs. */
 export function useTabSwitchWheel(stageRef: React.RefObject<HTMLElement | null>): void {
@@ -53,7 +54,7 @@ export function useTabSwitchWheel(stageRef: React.RefObject<HTMLElement | null>)
         setTabTransitionPosition(frame.position, Math.max(-2, Math.min(2, releaseVelocity)));
         finishTabSwitch(
           !cancelled &&
-            (frame.progress >= 0.35 ||
+            (frame.progress >= TRACKPAD_SWITCH_COMMIT_PROGRESS ||
               resolveSwitchCommit({
                 progress: frame.progress,
                 velocity: -velocity,

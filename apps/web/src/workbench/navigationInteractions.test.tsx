@@ -315,7 +315,7 @@ it("lets a macOS trackpad preview reverse before release and swallows its moment
   expect(useWorkbenchStore.getState().activeTabId).toBe(active);
 });
 
-it("returns a short trackpad swipe to its source Tab on release", async () => {
+it("returns a paused trackpad swipe below 20% travel to its source Tab", async () => {
   Object.assign(windowEvents, { desktopBridge: {} });
   vi.stubGlobal("navigator", { platform: "MacIntel" });
   await mount(2);
@@ -325,17 +325,40 @@ it("returns a short trackpad swipe to its source Tab on release", async () => {
   await actEvent(() =>
     event(stage, "wheel", {
       target: stage,
-      deltaX: 100,
+      deltaX: 60,
       deltaY: 0,
       deltaMode: 0,
       shiftKey: false,
       ctrlKey: false,
     }),
   );
-  expect(getTabTransitionFrame()?.progress).toBeCloseTo(100 / 360);
+  expect(getTabTransitionFrame()?.progress).toBeCloseTo(60 / 360);
   now = 300;
   nativePhase!({ payload: { phase: "ended", momentumPhase: "none" } });
   expect(useWorkbenchStore.getState().activeTabId).toBe(active);
+});
+
+it("commits a paused trackpad swipe after 20% travel", async () => {
+  Object.assign(windowEvents, { desktopBridge: {} });
+  vi.stubGlobal("navigator", { platform: "MacIntel" });
+  await mount(2);
+  const target = useWorkbenchStore.getState().tabs[0]!.id;
+  nativePhase!({ payload: { phase: "began", momentumPhase: "none" } });
+  now = 10;
+  await actEvent(() =>
+    event(stage, "wheel", {
+      target: stage,
+      deltaX: 80,
+      deltaY: 0,
+      deltaMode: 0,
+      shiftKey: false,
+      ctrlKey: false,
+    }),
+  );
+  expect(getTabTransitionFrame()?.progress).toBeCloseTo(80 / 360);
+  now = 300;
+  nativePhase!({ payload: { phase: "ended", momentumPhase: "none" } });
+  expect(useWorkbenchStore.getState().activeTabId).toBe(target);
 });
 
 it("commits a short, fast directional trackpad flick before halfway", async () => {
@@ -348,14 +371,14 @@ it("commits a short, fast directional trackpad flick before halfway", async () =
   await actEvent(() =>
     event(stage, "wheel", {
       target: stage,
-      deltaX: 100,
+      deltaX: 40,
       deltaY: 0,
       deltaMode: 0,
       shiftKey: false,
       ctrlKey: false,
     }),
   );
-  expect(getTabTransitionFrame()?.progress).toBeCloseTo(100 / 360);
+  expect(getTabTransitionFrame()?.progress).toBeCloseTo(40 / 360);
   nativePhase!({ payload: { phase: "ended", momentumPhase: "none" } });
   expect(useWorkbenchStore.getState().activeTabId).toBe(target);
 });
