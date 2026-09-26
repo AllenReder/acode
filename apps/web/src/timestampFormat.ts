@@ -53,24 +53,31 @@ function readHostSystemLocale(): string | null {
 
 const timestampLocale = resolveTimestampLocale(readHostSystemLocale());
 
-const timestampFormatterCache = new Map<string, Intl.DateTimeFormat>();
+const dateFormatterCache = new Map<string, Intl.DateTimeFormat>();
 
-function getTimestampFormatter(
-  timestampFormat: TimestampFormat,
-  includeSeconds: boolean,
+// One cache keyed by locale plus resolved options, so a caller-injected locale
+// can never be served the module's host-resolved default formatter.
+function getCachedDateFormatter(
+  locale: string | undefined,
+  options: Intl.DateTimeFormatOptions,
 ): Intl.DateTimeFormat {
-  const cacheKey = `${timestampFormat}:${includeSeconds ? "seconds" : "minutes"}`;
-  const cachedFormatter = timestampFormatterCache.get(cacheKey);
+  const cacheKey = `${locale ?? ""}|${JSON.stringify(options)}`;
+  const cachedFormatter = dateFormatterCache.get(cacheKey);
   if (cachedFormatter) {
     return cachedFormatter;
   }
 
-  const formatter = new Intl.DateTimeFormat(
-    timestampLocale,
-    getTimestampFormatOptions(timestampFormat, includeSeconds),
-  );
-  timestampFormatterCache.set(cacheKey, formatter);
+  const formatter = new Intl.DateTimeFormat(locale, options);
+  dateFormatterCache.set(cacheKey, formatter);
   return formatter;
+}
+
+function getTimestampFormatter(
+  timestampFormat: TimestampFormat,
+  includeSeconds: boolean,
+  locale: string | undefined = timestampLocale,
+): Intl.DateTimeFormat {
+  return getCachedDateFormatter(locale, getTimestampFormatOptions(timestampFormat, includeSeconds));
 }
 
 export function parseTimestampDate(isoDate: string): Date | null {
@@ -115,10 +122,34 @@ export function formatChatTimestampTooltip(
   return `${time}, ${day}${ordinalSuffix(day)} ${month} ${year}`;
 }
 
-export function formatShortTimestamp(isoDate: string, timestampFormat: TimestampFormat): string {
+export function formatShortTimestamp(
+  isoDate: string,
+  timestampFormat: TimestampFormat,
+  locale: string | undefined = timestampLocale,
+): string {
   const date = parseTimestampDate(isoDate);
   if (!date) return "";
-  return getTimestampFormatter(timestampFormat, false).format(date);
+  return getTimestampFormatter(timestampFormat, false, locale).format(date);
+}
+
+/**
+ * Short weekday name (e.g. `Mon`) in the same resolved locale as
+ * {@link formatShortTimestamp}. Pair the two when composing one label so it
+ * never mixes a weekday localized one way with a time localized another.
+ */
+export function formatShortWeekday(
+  date: Date,
+  locale: string | undefined = timestampLocale,
+): string {
+  return getCachedDateFormatter(locale, { weekday: "short" }).format(date);
+}
+
+/** Short month and day (e.g. `Apr 20`) in the same resolved locale as the time. */
+export function formatShortMonthDay(
+  date: Date,
+  locale: string | undefined = timestampLocale,
+): string {
+  return getCachedDateFormatter(locale, { month: "short", day: "numeric" }).format(date);
 }
 
 const numericDateFormatter = new Intl.DateTimeFormat(timestampLocale, {
