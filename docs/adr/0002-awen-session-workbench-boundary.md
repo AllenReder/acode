@@ -1,6 +1,6 @@
 # Make Awen Session and View the workbench boundary
 
-**Status: accepted; Session View uniqueness is superseded by ADR-0010**
+**Status: accepted; Session View uniqueness is superseded by ADR-0010, and the final-View restore rule is narrowed by ADR-0023**
 
 Awen uses Project → Workspace → Session as its durable work model, with Agent
 Session and Terminal Session as the current Session kinds. The Workbench owns
@@ -27,8 +27,9 @@ behind typed adapters rather than product-level navigation identities.
   contains exactly one View instance. A Session View occurs at most once in the
   whole Workbench (ADR-0010 supersedes the earlier per-Tab-with-mirrors rule).
 - The default Tab contains a Welcome View. Opening a first target replaces that
-  View; closing the last real View restores it. Empty Panes are not a product
-  state.
+  View; the final Tab recovers it when its last real View closes, while an
+  explicit close that empties a non-final Tab closes that Tab (ADR-0023).
+  Empty Panes are not a product state.
 - Sidebar actions issue Workbench commands (`open`, `focus`, `split`, and
   `closeView`); URLs are Awen-identity deep links and are not the Workbench's
   sole state authority. Legacy Thread URLs are compatibility inputs only.

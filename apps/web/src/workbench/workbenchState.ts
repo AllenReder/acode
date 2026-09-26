@@ -601,10 +601,18 @@ export function applyClosePane(
   generateId: () => string,
 ): WorkbenchSnapshot | null {
   const tab = getActiveTab(snapshot);
-  if (!tab.panes.has(paneId)) return null;
+  const view = tab.panes.get(paneId);
+  if (view === undefined) return null;
   const next = closeLeaf(tab, paneId);
   if (next === null) {
-    return updateTab(snapshot, clearedTab(tab, generateId));
+    // Closing a sole Welcome Pane is a no-op, and the Workbench always keeps at
+    // least one Tab (ADR-0013): the final Tab recovers Welcome instead of
+    // closing.
+    if (view.target.kind === "welcome" || snapshot.tabs.length <= 1) {
+      return updateTab(snapshot, clearedTab(tab, generateId));
+    }
+    // An explicit Pane close that empties its Tab closes the Tab (ADR-0023).
+    return applyCloseTab(snapshot, tab.id);
   }
   const panes = new Map(tab.panes);
   panes.delete(paneId);
@@ -1103,8 +1111,29 @@ export function applyCloseTab(snapshot: WorkbenchSnapshot, tabId: string): Workb
   if (closingIndex < 0) return snapshot;
   const tabs = snapshot.tabs.filter((tab) => tab.id !== tabId);
   if (snapshot.activeTabId !== tabId) return { ...snapshot, tabs };
-  const nextActive = tabs[Math.min(closingIndex, tabs.length - 1)];
-  return nextActive === undefined ? snapshot : { tabs, activeTabId: nextActive.id };
+  return {
+    ...snapshot,
+    tabs,
+    activeTabId: activeTabIdAfterClose(snapshot, tabs, new Set([tabId])),
+  };
+}
+
+/**
+ * Pick the active Tab after some Tabs are removed.
+ *
+ * Prefers the survivor at the closed active Tab's index, else the last
+ * survivor. Shared by the direct Tab close and by bulk close that empties
+ * Tabs, so both honour one rule. Assumes at least one survivor.
+ */
+function activeTabIdAfterClose(
+  snapshot: WorkbenchSnapshot,
+  survivors: ReadonlyArray<WorkbenchTab>,
+  closedTabIds: ReadonlySet<string>,
+): string {
+  if (!closedTabIds.has(snapshot.activeTabId)) return snapshot.activeTabId;
+  const closingIndex = snapshot.tabs.findIndex((tab) => tab.id === snapshot.activeTabId);
+  const nextActive = survivors[Math.min(Math.max(closingIndex, 0), survivors.length - 1)];
+  return nextActive?.id ?? survivors[0]!.id;
 }
 
 export function applyMoveTab(
@@ -1147,13 +1176,25 @@ export function isSameSessionTarget(a: ViewTarget, b: ViewTarget): boolean {
   return false;
 }
 
-/** Close the given Panes per Tab, recovering Welcome and focus like closeView. */
+/** How a Tab that loses its last Pane via bulk removal should be recovered. */
+type EmptiedTabPolicy = "welcome" | "close";
+
+/**
+ * Close the given Panes per Tab, recovering Welcome and focus like closeView.
+ *
+ * `emptiedTabPolicy` selects what happens when a Tab loses every Pane:
+ * background reconciliation (`"welcome"`, the default) keeps the Tab as
+ * Welcome, while an explicit close (`"close"`) closes the Tab, still keeping at
+ * least one Tab. Callers that pass `"close"` must not match Welcome Views.
+ */
 function removePaneIdsFromTabs(
   snapshot: WorkbenchSnapshot,
   removals: ReadonlyMap<string, ReadonlySet<string>>,
   generateId: () => string,
+  emptiedTabPolicy: EmptiedTabPolicy = "welcome",
 ): WorkbenchSnapshot {
   if (removals.size === 0) return snapshot;
+  const emptiedTabIds = new Set<string>();
   const tabs = snapshot.tabs.map((tab) => {
     const paneIds = removals.get(tab.id);
     if (paneIds === undefined || paneIds.size === 0) return tab;
@@ -1166,6 +1207,7 @@ function removePaneIdsFromTabs(
       }
     }
     if (currentTab === null) {
+      emptiedTabIds.add(tab.id);
       return clearedTab(tab, generateId);
     }
     const validFocus = leafIds(currentTab.layout).includes(currentTab.focusedPaneId)
@@ -1178,7 +1220,23 @@ function removePaneIdsFromTabs(
       panes,
     });
   });
-  return { ...snapshot, tabs };
+
+  if (emptiedTabPolicy === "welcome" || emptiedTabIds.size === 0) {
+    return { ...snapshot, tabs };
+  }
+
+  // Explicit close: a Tab that lost its last View is closed (ADR-0023), but the
+  // Workbench always keeps at least one Tab (ADR-0013).
+  const survivors = tabs.filter((tab) => !emptiedTabIds.has(tab.id));
+  if (survivors.length === 0) {
+    const keeper = tabs.find((tab) => tab.id === snapshot.activeTabId) ?? tabs[0]!;
+    return { ...snapshot, tabs: [keeper], activeTabId: keeper.id };
+  }
+  return {
+    ...snapshot,
+    tabs: survivors,
+    activeTabId: activeTabIdAfterClose(snapshot, survivors, emptiedTabIds),
+  };
 }
 
 /** Collect the Pane ids to close, grouped by Tab, for one match predicate. */
@@ -1202,15 +1260,21 @@ function applyRemoveMatchingViews(
   snapshot: WorkbenchSnapshot,
   matches: (target: ViewTarget) => boolean,
   generateId: () => string,
+  emptiedTabPolicy: EmptiedTabPolicy = "welcome",
 ): WorkbenchSnapshot {
-  return removePaneIdsFromTabs(snapshot, paneIdsMatching(snapshot, matches), generateId);
+  return removePaneIdsFromTabs(
+    snapshot,
+    paneIdsMatching(snapshot, matches),
+    generateId,
+    emptiedTabPolicy,
+  );
 }
 
 /**
  * Remove every ViewInstance displaying this Session from every Tab.
  *
- * Preserves Tab IDs, activeTabId, and other ViewInstance identities.
- * Cleared Tabs recover Welcome.
+ * Preserves the surviving Tabs and their Views. A Tab that held only this
+ * Session's View is closed (ADR-0023); the final Tab recovers Welcome.
  */
 export function applyRemoveSessionViews(
   snapshot: WorkbenchSnapshot,
@@ -1221,6 +1285,7 @@ export function applyRemoveSessionViews(
     snapshot,
     (candidate) => isSameSessionTarget(candidate, target),
     generateId,
+    "close",
   );
 }
 

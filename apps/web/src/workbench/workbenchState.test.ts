@@ -470,6 +470,39 @@ describe("applyClosePane", () => {
     expect(getActiveTab(snap).panes.size).toBe(1);
   });
 
+  it("closes the Tab when its final non-Welcome Pane closes and another Tab exists", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const firstTabId = snap.activeTabId;
+    snap = applyCreateTab(snap, ids);
+    snap = applyOpenTarget(snap, terminal("term-1"), ids);
+    const closedTabId = snap.activeTabId;
+    const onlyPane = getActiveTab(snap).focusedPaneId;
+
+    const after = applyClosePane(snap, onlyPane, ids);
+
+    expect(after).not.toBeNull();
+    if (after === null) return;
+    expect(after.tabs.map((tab) => tab.id)).toEqual([firstTabId]);
+    expect(after.activeTabId).toBe(firstTabId);
+    expect(getActiveTab(after).id).toBe(firstTabId);
+    expect([...getActiveTab(after).panes.values()][0]?.target).toEqual(agent(AGENT_X));
+    expect(after.tabs.some((tab) => tab.id === closedTabId)).toBe(false);
+  });
+
+  it("keeps a Tab when only its Welcome Pane closes", () => {
+    const ids = makeIds();
+    const snap = applyCreateTab(emptyWorkbenchSnapshot(ids), ids);
+    const welcomePane = getActiveTab(snap).focusedPaneId;
+
+    const after = applyClosePane(snap, welcomePane, ids);
+
+    expect(after).not.toBeNull();
+    if (after === null) return;
+    expect(after.tabs).toHaveLength(2);
+    expect([...getActiveTab(after).panes.values()][0]?.target).toEqual({ kind: "welcome" });
+  });
+
   it("returns null when there is nothing to close", () => {
     const ids = makeIds();
     const snap = emptyWorkbenchSnapshot(ids);
@@ -555,7 +588,7 @@ it("replaces Welcome when the first command is split", () => {
   expect([...getActiveTab(snap).panes.values()][0]?.target).toEqual(terminal("first"));
 });
 
-it("keeps each Tab's Views and closeView local to that Tab", () => {
+it("keeps each Tab's Views and closes a Tab when closeView empties it", () => {
   const ids = makeIds();
   let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
   const firstTab = getActiveTab(snap);
@@ -567,12 +600,10 @@ it("keeps each Tab's Views and closeView local to that Tab", () => {
     firstTab.panes.get(firstTab.focusedPaneId)?.id,
   );
   snap = applyClosePane(snap, secondTab.focusedPaneId, ids)!;
-  expect(getActiveTab(snap).id).toBe(secondTab.id);
-  expect(getActiveTab(snap).panes.get(getActiveTab(snap).focusedPaneId)?.definitionId).toBe(
-    "welcome",
-  );
-  snap = applyActivateTab(snap, firstTab.id);
-  expect(getActiveTab(snap)).toBe(firstTab);
+  // Closing the second Tab's final Pane closes that Tab and focuses the first.
+  expect(snap.tabs.map((tab) => tab.id)).toEqual([firstTab.id]);
+  expect(getActiveTab(snap).id).toBe(firstTab.id);
+  expect([...getActiveTab(snap).panes.values()][0]?.target).toEqual(agent(AGENT_X));
   snap = applySplitFocused(snap, agent(AGENT_X), "down", ids);
   expect(getActiveTab(snap).panes.size).toBe(1);
   expect(applyActivateTab(snap, "unknown")).toBe(snap);
@@ -633,7 +664,7 @@ describe("applyRemoveSessionViews", () => {
     expect(after.activeTabId).toBe(snap.activeTabId);
   });
 
-  it("restores Welcome in a Tab that loses its only View", () => {
+  it("closes a Tab that loses its only View", () => {
     const ids = makeIds();
     let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
     const tab1Id = snap.activeTabId;
@@ -644,15 +675,42 @@ describe("applyRemoveSessionViews", () => {
 
     const after = applyRemoveSessionViews(snap, agent(AGENT_X), ids);
 
-    // The Tab that loses its only View recovers Welcome and keeps its identity
-    const tab1After = after.tabs.find((tab) => tab.id === tab1Id)!;
-    expect(tab1After.id).toBe(tab1Id);
-    expect(tab1After.panes.size).toBe(1);
-    expect([...tab1After.panes.values()][0]?.target).toEqual({ kind: "welcome" });
-
-    // The unrelated Tab keeps its View
+    // The Tab whose only View was removed is closed, not reset to Welcome.
+    expect(after.tabs.some((tab) => tab.id === tab1Id)).toBe(false);
+    expect(after.tabs).toHaveLength(1);
+    // The unrelated Tab keeps its View and stays active.
+    expect(after.activeTabId).toBe(tab2Id);
     const tab2After = after.tabs.find((tab) => tab.id === tab2Id)!;
     expect([...tab2After.panes.values()][0]?.target).toEqual(terminal("term-1"));
+  });
+
+  it("activates a neighboring Tab when the active Tab loses its only View", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), terminal("term-1"), ids);
+    const firstTabId = snap.activeTabId;
+
+    snap = applyCreateTab(snap, ids);
+    snap = applyOpenTarget(snap, agent(AGENT_X), ids);
+    const closedTabId = snap.activeTabId;
+
+    const after = applyRemoveSessionViews(snap, agent(AGENT_X), ids);
+
+    expect(after.tabs.map((tab) => tab.id)).toEqual([firstTabId]);
+    expect(after.activeTabId).toBe(firstTabId);
+    expect(after.tabs.some((tab) => tab.id === closedTabId)).toBe(false);
+  });
+
+  it("keeps a single Welcome Tab when the only Tab loses its only View", () => {
+    const ids = makeIds();
+    const snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(AGENT_X), ids);
+    const tabId = snap.activeTabId;
+
+    const after = applyRemoveSessionViews(snap, agent(AGENT_X), ids);
+
+    expect(after.tabs.map((tab) => tab.id)).toEqual([tabId]);
+    expect(after.activeTabId).toBe(tabId);
+    expect(after.tabs[0]!.panes.size).toBe(1);
+    expect([...after.tabs[0]!.panes.values()][0]?.target).toEqual({ kind: "welcome" });
   });
 
   it("does not remove sessions with the same id in different environment or workspace", () => {
@@ -1232,6 +1290,22 @@ describe("applyPruneWorkspaceViews", () => {
     const tab = getActiveTab(snap);
     expect(tab.panes.size).toBe(1);
     expect(tab.panes.get(tab.focusedPaneId)?.target.kind).toBe("welcome");
+  });
+
+  it("restores Welcome instead of closing the Tab when a background prune empties it", () => {
+    const ids = makeIds();
+    let snap = applyOpenTarget(emptyWorkbenchSnapshot(ids), workspaceFile(), ids);
+    const prunedTabId = snap.activeTabId;
+    snap = applyCreateTab(snap, ids);
+    snap = applyOpenTarget(snap, terminal("term-1"), ids);
+    const activeId = snap.activeTabId;
+
+    const after = applyPruneWorkspaceViews(snap, [], ids, [ENV_A]);
+
+    // Background reconciliation keeps the Tab and recovers Welcome.
+    expect(after.tabs.map((tab) => tab.id)).toEqual([prunedTabId, activeId]);
+    expect(after.activeTabId).toBe(activeId);
+    expect([...after.tabs[0]!.panes.values()][0]?.target).toEqual({ kind: "welcome" });
   });
 
   it("keeps Views when their Environment is temporarily unavailable", () => {
