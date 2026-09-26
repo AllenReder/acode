@@ -39,3 +39,5 @@ miss-clicks during rapid successive closures.
 - Layout flow remains mathematically sound and resilient across variable screen widths and
   tab counts without complex JavaScript coordinate tracking.
 - Rapid tab cleanup workflows feel responsive and fluid.
+- The single-Tab invariant only binds the final Tab: an explicit Pane or Session
+  close that empties a non-final Tab closes it (ADR-0023).

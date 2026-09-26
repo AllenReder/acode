@@ -390,7 +390,9 @@ _Avoid_: Chat wallpaper, Session background, View background
 - A Workbench may contain multiple Tabs; each Tab owns its own Panes, and a
   Session View is unique across the whole Workbench rather than per Tab.
 - A Workbench with no opened Session shows a Welcome View rather than an empty
-  Pane.
+  Pane. An explicit close that removes a Tab's last non-Welcome Pane closes that
+  Tab; when it is the Workbench's only Tab, it recovers Welcome in place
+  (ADR-0023).
 - An Agent session is created eagerly with durable Awen identity (AgentSessionId and ThreadId) and appears in the Sidebar under its Workspace immediately, even before its first turn is sent.
 - A Workspace may contain multiple zero-turn Agent sessions.
 - An untouched zero-turn Agent session (empty transcript and no unsent draft payload) is permanently deleted upon closing rather than archived to History.

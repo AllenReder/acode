@@ -169,8 +169,9 @@ it("renders closed read-only status banner when viewing a closed Agent Session f
     .join(" ");
   expect(text).toContain("This Agent Session is closed and preserved in Workspace History.");
 });
-it("detaches only the current View on closeView and removes the Session's View on removeSessionViews", async () => {
+it("detaches only the current View on closeView and closes the emptied Tab on removeSessionViews", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  resetWorkbenchStore();
   const targetA = {
     kind: "agentSession",
     environmentId,
@@ -183,36 +184,40 @@ it("detaches only the current View on closeView and removes the Session's View o
     workspaceId,
     agentSessionId: "two" as AgentSessionId,
   } as const;
+  const terminalTarget = terminalTargetForRuntime({
+    environmentId,
+    workspaceId,
+    terminalId: "shell",
+  });
 
   const store = useWorkbenchStore.getState();
   store.openTarget(targetA);
   const tab1Id = getActiveTab(useWorkbenchStore.getState()).id;
 
-  // A second Tab holds a different Session: ADR-0010 gives each Session one View.
+  // A second Tab holds a different Session plus a Terminal: ADR-0010 gives each Session one View.
   store.openTarget(targetB);
   const tab2Id = getActiveTab(useWorkbenchStore.getState()).id;
   expect(tab2Id).not.toBe(tab1Id);
+  store.splitFocused(terminalTarget, "right");
+  expect(getActiveTab(useWorkbenchStore.getState()).panes.size).toBe(2);
   expect(useWorkbenchStore.getState().tabs).toHaveLength(2);
 
-  // 1. closeView on Tab 2 detaches only that ViewInstance
-  const tab2PaneId = getActiveTab(useWorkbenchStore.getState()).focusedPaneId;
+  // 1. closeView on Tab 2 detaches only that ViewInstance; the Tab keeps its Terminal
+  const tab2PaneId = [...getActiveTab(useWorkbenchStore.getState()).panes.entries()].find(
+    ([, view]) => view.target.kind === "agentSession",
+  )![0];
   store.closeView(tab2PaneId);
   const tab2 = getActiveTab(useWorkbenchStore.getState());
-  expect(tab2.panes.get(tab2.focusedPaneId)?.target.kind).toBe("welcome");
+  expect(useWorkbenchStore.getState().tabs).toHaveLength(2);
+  expect(tab2.panes.size).toBe(1);
+  expect([...tab2.panes.values()][0]?.target.kind).toBe("workspaceTerminal");
 
-  // Tab 1 still holds targetA
+  // 2. removeSessionViews closes Tab 1 once its only View is removed
   store.activateTab(tab1Id);
-  expect(getActiveTab(useWorkbenchStore.getState()).panes.size).toBe(1);
-  expect([...getActiveTab(useWorkbenchStore.getState()).panes.values()][0]?.target).toEqual(
-    targetA,
-  );
-
-  // 2. removeSessionViews removes targetA's View and leaves the other Tab alone
   useWorkbenchStore.getState().removeSessionViews(targetA);
-  const tab1Panes = getActiveTab(useWorkbenchStore.getState()).panes;
-  expect(tab1Panes.size).toBe(1);
-  expect([...tab1Panes.values()][0]?.target.kind).toBe("welcome");
-  expect(useWorkbenchStore.getState().tabs.find((tab) => tab.id === tab2Id)).toBeDefined();
+  expect(useWorkbenchStore.getState().tabs.map((tab) => tab.id)).toEqual([tab2Id]);
+  expect(useWorkbenchStore.getState().activeTabId).toBe(tab2Id);
+  expect(useWorkbenchStore.getState().tabs[0]!.panes.size).toBe(1);
 });
 
 it("binds workspace actions (browse files, new terminal) from AgentView to ChatView", async () => {
