@@ -321,6 +321,30 @@ it("returns a short trackpad swipe to its source Tab on release", async () => {
   await mount(2);
   const active = useWorkbenchStore.getState().activeTabId;
   nativePhase!({ payload: { phase: "began", momentumPhase: "none" } });
+  now = 10;
+  await actEvent(() =>
+    event(stage, "wheel", {
+      target: stage,
+      deltaX: 100,
+      deltaY: 0,
+      deltaMode: 0,
+      shiftKey: false,
+      ctrlKey: false,
+    }),
+  );
+  expect(getTabTransitionFrame()?.progress).toBeCloseTo(100 / 360);
+  now = 300;
+  nativePhase!({ payload: { phase: "ended", momentumPhase: "none" } });
+  expect(useWorkbenchStore.getState().activeTabId).toBe(active);
+});
+
+it("commits a short, fast directional trackpad flick before halfway", async () => {
+  Object.assign(windowEvents, { desktopBridge: {} });
+  vi.stubGlobal("navigator", { platform: "MacIntel" });
+  await mount(2);
+  const target = useWorkbenchStore.getState().tabs[0]!.id;
+  nativePhase!({ payload: { phase: "began", momentumPhase: "none" } });
+  now = 10;
   await actEvent(() =>
     event(stage, "wheel", {
       target: stage,
@@ -333,7 +357,7 @@ it("returns a short trackpad swipe to its source Tab on release", async () => {
   );
   expect(getTabTransitionFrame()?.progress).toBeCloseTo(100 / 360);
   nativePhase!({ payload: { phase: "ended", momentumPhase: "none" } });
-  expect(useWorkbenchStore.getState().activeTabId).toBe(active);
+  expect(useWorkbenchStore.getState().activeTabId).toBe(target);
 });
 
 it("commits one trackpad switch when direct input ends despite a long momentum tail", async () => {

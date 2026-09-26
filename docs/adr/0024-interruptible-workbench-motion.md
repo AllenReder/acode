@@ -32,8 +32,8 @@ it does not irreversibly commit while the fingers are still moving. Settle shoul
 start when direct input ends rather than waiting for momentum to drain. Issue
 #122 is problem context; its early-commit wording is not a binding requirement
 for this redesign. A macOS two-finger preview uses a longer direct travel than
-the initial implementation, and release before its midpoint returns to the
-source Tab even after a brief flick.
+the initial implementation. A short, fast directional flick can still commit
+on release, while a short slow movement returns to the source Tab.
 
 Once a trackpad gesture scrolls inner content or pans a Scrolling layout, it
 keeps that scroll ownership through the boundary. A new physical gesture that

@@ -13,6 +13,7 @@ import {
   getTabTransitionFrame,
   interruptTabSettle,
   nextTabIndex,
+  resolveSwitchCommit,
   retargetTabTransition,
   setTabTransitionPosition,
 } from "./tabTransition";
@@ -50,7 +51,15 @@ export function useTabSwitchWheel(stageRef: React.RefObject<HTMLElement | null>)
         const velocity = performance.now() - session.lastTime > 90 ? 0 : session.velocity;
         const releaseVelocity = (velocity * 1000) / TRACKPAD_SWITCH_TRAVEL;
         setTabTransitionPosition(frame.position, Math.max(-2, Math.min(2, releaseVelocity)));
-        finishTabSwitch(!cancelled && frame.progress >= 0.5);
+        finishTabSwitch(
+          !cancelled &&
+            (frame.progress >= 0.35 ||
+              resolveSwitchCommit({
+                progress: frame.progress,
+                velocity: -velocity,
+                dir: frame.dir,
+              })),
+        );
         session.phase = "momentum";
       } else if (session.scrolled) {
         session.phase = "momentum";
