@@ -41,22 +41,31 @@ already owns Workbench presentation state.
   an empty Tab, or a Scrolling strip narrower than its Viewport — keeps an
   underbar spanning the whole active Tab. BSP is included by construction
   because its Viewport cannot scroll.
-- **The Viewport owns the reading; the indicator consumes it.** The Viewport
-  publishes its `clientWidth`, `scrollWidth`, and `scrollLeft` for the active
-  Tab only. Only a `scrollLeft` change is frequent, so the scroll path reuses
-  the geometry captured at publish time and the indicator writes only
-  `transform` and `width` — the same discipline the Tab-geometry cache already
-  enforces, because reading layout per frame would force a synchronous reflow of
-  the pane subtree on every wheel tick.
+- **The Viewport owns the reading; the indicator consumes it.** Every mounted
+  Scrolling Tab publishes its `clientWidth`, `scrollWidth`, and `scrollLeft`,
+  keyed by Tab — not only the active one, because a switch needs the incoming
+  Tab's reading before it becomes active. Only a `scrollLeft` change is
+  frequent, so the scroll path re-reads nothing but the offset and the indicator
+  writes only `transform` and `width` — the same discipline the Tab-geometry
+  cache already enforces, because reading layout per frame would force a
+  synchronous reflow of the pane subtree on every wheel tick. A Tab that is not
+  laid out reports a zero-width box and keeps its last real reading.
 - **The underbar follows Viewport readings directly.** It tracks a pan in the
   same frame without easing, because the pointer is already the animation
   (ADR-0024). A Column or window resize moves the Pane rects directly too, so
   the underbar follows that as well rather than easing away from the geometry it
   describes.
-- **Sliding Tab switch semantics are unchanged.** Both endpoints of a switch are
-  whole Tab cards, so the underbar translates between them and holds its width
-  (ADR-0019: it never stretches between Tabs). Interpolating the width between
-  two participating Tabs would amend that rule and is a separate decision.
+- **A switch interpolates both endpoints' resting geometry.** The underbar
+  travels from where the source Tab's bar rests to where the target Tab's bar
+  rests, interpolating position and width together. That is a pure translation
+  when both Tabs rest at full width, preserving ADR-0019's behaviour for
+  BSP-to-BSP; where a Scrolling Tab is involved, the bar grows out of or shrinks
+  into its narrowing instead of starting at the Tab's edge and snapping its
+  width on landing. This generalizes ADR-0019's rule rather than contradicting
+  it: the width is still not gesture state, and an endpoint's width is a fact
+  about that Tab, not about the drag. A switch to a Scrolling Tab lands on that
+  Tab's actual Viewport position, including a mid-canvas one — it does not snap
+  the Viewport to an edge to make the bar settle somewhere tidier.
 
 ## Consequences
 
@@ -70,3 +79,6 @@ already owns Workbench presentation state.
   computation changes.
 - Keyboard and assistive-technology access to horizontal scrolling rests on the
   scrolling container itself, not on the painted bar.
+- Every Scrolling Tab holds a live reading, so the indicator depends on all
+  Scrolling Tabs being mounted (which the Workbench's Keep-Alive viewports
+  already guarantee).

@@ -61,11 +61,10 @@ function writeWidth(style: CSSStyleDeclaration, width: number): void {
  * Tab, or a strip narrower than the Viewport — keeps spanning the whole Tab.
  */
 function applyViewportGeometry(
-  tabId: string,
   geometry: TabIndicatorGeometry,
   metrics: ViewportMetrics | null,
 ): TabIndicatorGeometry {
-  if (metrics === null || metrics.tabId !== tabId) return geometry;
+  if (metrics === null) return geometry;
   return resolveViewportIndicatorGeometry(geometry, metrics) ?? geometry;
 }
 
@@ -162,12 +161,14 @@ export function useTabIndicator(
       return geometry;
     };
 
-    // Only the active Tab trades its full span for the Viewport's share of the
-    // Scrolling canvas; every other Tab's card keeps its own width.
+    // A Tab's resting geometry is what the underbar shows for it at rest: its
+    // full box, narrowed to its Viewport's share in a Scrolling layout. Both
+    // ends of a switch use this, so the underbar follows the geometry it is
+    // actually travelling between.
     const restingGeometryFor = (tabId: string): TabIndicatorGeometry | null => {
       const geometry = geometryFor(tabId);
-      if (geometry === null || tabId !== activeTabId) return geometry;
-      return applyViewportGeometry(tabId, geometry, getViewportMetrics());
+      if (geometry === null) return geometry;
+      return applyViewportGeometry(geometry, getViewportMetrics(tabId));
     };
 
     // The bar follows every Viewport reading in the frame it happens rather
@@ -193,18 +194,19 @@ export function useTabIndicator(
         const right = ordered[Math.max(0, rightIndex < 0 ? ordered.length - 1 : rightIndex)];
         const left = ordered[Math.max(0, (rightIndex < 0 ? ordered.length - 1 : rightIndex) - 1)];
         if (!left || !right) return;
-        // Both endpoints are whole Tab cards, so the bar travels the strip in
-        // Tab geometry while holding its width (ADR-0019: it never stretches).
-        const first = geometryFor(left.tabId);
-        const second = geometryFor(right.tabId);
-        if (first === null || second === null) return;
+        // Interpolate the two Tabs' resting geometry — position and width
+        // together. A Scrolling Tab's bar is narrower than its box and sits
+        // where its Viewport was scrolled to, so travelling whole Tab boxes
+        // would start the bar at the wrong edge and snap its width on landing.
+        const from = restingGeometryFor(left.tabId);
+        const to = restingGeometryFor(right.tabId);
+        if (from === null || to === null) return;
         const progress =
           left.slot === right.slot ? 0 : (frame.position - left.slot) / (right.slot - left.slot);
-        const width = lastGeometryRef.current?.width ?? first.width;
-        if (lastGeometryRef.current === null) writeWidth(indicatorStyle, width);
-        const geometry = { left: first.left + (second.left - first.left) * progress, width };
-        writeTransform(indicatorStyle, geometry.left);
-        lastGeometryRef.current = geometry;
+        write({
+          left: from.left + (to.left - from.left) * progress,
+          width: from.width + (to.width - from.width) * progress,
+        });
       };
       applyFrame();
       return subscribeTabTransitionFrame(applyFrame);
@@ -241,7 +243,7 @@ export function useTabIndicator(
       if (indicator === null || !indicatorStyle) return;
       const measured = measureTabGeometry(strip, activeTabId);
       if (measured === null) return;
-      const geometry = applyViewportGeometry(activeTabId, measured, getViewportMetrics());
+      const geometry = applyViewportGeometry(measured, getViewportMetrics(activeTabId));
       writeTransform(indicatorStyle, geometry.left);
       writeWidth(indicatorStyle, geometry.width);
       lastGeometryRef.current = geometry;

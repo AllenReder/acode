@@ -206,14 +206,12 @@ const TabPaneTree = memo(
 
     const layout = useMemo(() => computePaneLayoutRects(tab, size, paneGap), [tab, size, paneGap]);
 
-    // The Topbar Tab indicator expresses this Tab's Viewport position while the
-    // Tab is active (ADR-0025). Only a Scrolling layout has a scroll position to
-    // express; a BSP Viewport never overflows.
-    usePublishViewportMetrics({
-      ref: viewportRef,
-      tabId: tab.id,
-      active: isActive && scrolling,
-    });
+    // The Topbar Tab indicator expresses this Tab's Viewport position
+    // (ADR-0025). Every Scrolling Tab publishes, not just the active one: a
+    // switch interpolates the underbar toward the incoming Tab's resting
+    // position, which is its Viewport's scroll position. A BSP Viewport never
+    // overflows, so it has nothing to publish.
+    usePublishViewportMetrics({ ref: viewportRef, tabId: tab.id, enabled: scrolling });
 
     const previewLayout = useMemo(
       () => (previewTab ? computePaneLayoutRects(previewTab, size, paneGap) : undefined),

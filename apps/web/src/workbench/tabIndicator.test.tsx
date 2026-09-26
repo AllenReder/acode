@@ -81,7 +81,9 @@ it("lands the underbar without replaying the animation when a gesture finishes",
   );
   await act(() => setTabTransitionProgress(0.5));
   expect(indicator.style.transform).toBe("translateX(50px)");
-  expect(indicator.style.width).toBe("100px");
+  // Width interpolates between the two endpoints' own widths (100 -> 80), so a
+  // switch onto a narrower resting bar grows or shrinks into it.
+  expect(indicator.style.width).toBe("90px");
   await act(() => renderer!.update(<Indicator active="1" />));
   await act(() => {
     setTabTransitionProgress(1);
@@ -107,13 +109,13 @@ function viewportStrip() {
 }
 
 /** Drive the real indicator hook against one fixed 200px Tab. */
-function viewportIndicator(strip: unknown) {
+function viewportIndicator(strip: unknown, activeTabId = "a") {
   const ref = { current: strip as HTMLElement };
-  function Indicator() {
+  function Indicator({ active = activeTabId }: { active?: string }) {
     const indicatorRef = useTabIndicator({
       stripRef: ref,
-      activeTabId: "a",
-      revision: "a",
+      activeTabId: active,
+      revision: "a,b,s",
       dragging: false,
     });
     return <span ref={indicatorRef} />;
@@ -125,7 +127,7 @@ it("spans the whole active Tab when the Scrolling canvas does not overflow", asy
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("window", { matchMedia: () => ({ matches: false }) });
   const indicator = { style: { transform: "", width: "" } };
-  publishViewportMetrics({ tabId: "a", clientWidth: 800, scrollWidth: 800, scrollLeft: 0 });
+  publishViewportMetrics("a", { clientWidth: 800, scrollWidth: 800, scrollLeft: 0 });
   const { Indicator } = viewportIndicator(viewportStrip());
   await act(() => {
     renderer = create(<Indicator />, { createNodeMock: () => indicator });
@@ -138,7 +140,7 @@ it("narrows the active Tab's underbar to the Viewport's share of the canvas", as
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("window", { matchMedia: () => ({ matches: false }) });
   const indicator = { style: { transform: "", width: "" } };
-  publishViewportMetrics({ tabId: "a", clientWidth: 500, scrollWidth: 1000, scrollLeft: 0 });
+  publishViewportMetrics("a", { clientWidth: 500, scrollWidth: 1000, scrollLeft: 0 });
   const { Indicator } = viewportIndicator(viewportStrip());
   await act(() => {
     renderer = create(<Indicator />, { createNodeMock: () => indicator });
@@ -152,13 +154,13 @@ it("travels the underbar across the active Tab as the Viewport scrolls", async (
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("window", { matchMedia: () => ({ matches: false }) });
   const indicator = { style: { transform: "", width: "" } };
-  publishViewportMetrics({ tabId: "a", clientWidth: 500, scrollWidth: 1000, scrollLeft: 0 });
+  publishViewportMetrics("a", { clientWidth: 500, scrollWidth: 1000, scrollLeft: 0 });
   const { Indicator } = viewportIndicator(viewportStrip());
   await act(() => {
     renderer = create(<Indicator />, { createNodeMock: () => indicator });
   });
   await act(() =>
-    publishViewportMetrics({ tabId: "a", clientWidth: 500, scrollWidth: 1000, scrollLeft: 500 }),
+    publishViewportMetrics("a", { clientWidth: 500, scrollWidth: 1000, scrollLeft: 500 }),
   );
   // Fully scrolled right: the 100px bar ends flush with the Tab's right edge.
   expect(indicator.style.transform).toBe("translateX(140px)");
@@ -169,11 +171,100 @@ it("ignores metrics published by a different Tab", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("window", { matchMedia: () => ({ matches: false }) });
   const indicator = { style: { transform: "", width: "" } };
-  publishViewportMetrics({ tabId: "other", clientWidth: 500, scrollWidth: 1000, scrollLeft: 0 });
+  publishViewportMetrics("other", { clientWidth: 500, scrollWidth: 1000, scrollLeft: 0 });
   const { Indicator } = viewportIndicator(viewportStrip());
   await act(() => {
     renderer = create(<Indicator />, { createNodeMock: () => indicator });
   });
   expect(indicator.style.transform).toBe("translateX(40px)");
   expect(indicator.style.width).toBe("200px");
+});
+
+/**
+ * A strip of two 200px Tabs: "s" at offset 0 is Scrolling and scrolled to its
+ * right end, "b" at offset 200 is BSP. So "s" rests as a 100px bar at x=100 and
+ * "b" rests as its full 200px box.
+ */
+function mixedLayoutStrip() {
+  const elements = [
+    { dataset: { tabId: "s" }, getBoundingClientRect: () => ({ left: 0, width: 200 }) },
+    { dataset: { tabId: "b" }, getBoundingClientRect: () => ({ left: 200, width: 200 }) },
+  ];
+  return {
+    scrollLeft: 0,
+    getBoundingClientRect: () => ({ left: 0 }),
+    querySelectorAll: () => elements,
+    querySelector: (selector: string) => elements[selector.includes('"s"') ? 0 : 1],
+  };
+}
+
+function publishScrolledToEnd() {
+  publishViewportMetrics("s", { clientWidth: 500, scrollWidth: 1000, scrollLeft: 500 });
+}
+
+it("grows the bar out of the Scrolling Tab's resting position when switching to BSP", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal("window", { matchMedia: () => ({ matches: false }) });
+  const indicator = { style: { transform: "", width: "" } };
+  publishScrolledToEnd();
+  const { Indicator } = viewportIndicator(mixedLayoutStrip(), "s");
+  await act(() => {
+    renderer = create(<Indicator active="s" />, { createNodeMock: () => indicator });
+  });
+  // At rest on the Scrolling Tab: the short bar sits at its right edge.
+  expect(indicator.style.transform).toBe("translateX(100px)");
+  expect(indicator.style.width).toBe("100px");
+
+  await act(() =>
+    beginTabTransition({ fromTabId: "s", toTabId: "b", fromIndex: 0, toIndex: 1, dir: 1 }),
+  );
+  // The switch must start where the bar actually is, not snap to the Tab's
+  // left edge (the bug this covers).
+  expect(indicator.style.transform).toBe("translateX(100px)");
+  expect(indicator.style.width).toBe("100px");
+
+  await act(() => setTabTransitionProgress(0.5));
+  // Halfway: partway right and grown to 150px.
+  expect(indicator.style.transform).toBe("translateX(150px)");
+  expect(indicator.style.width).toBe("150px");
+
+  await act(() => renderer!.update(<Indicator active="b" />));
+  await act(() => {
+    setTabTransitionProgress(1);
+    endTabTransition();
+  });
+  // Lands exactly on the BSP Tab's full box, with no width snap.
+  expect(indicator.style.transform).toBe("translateX(200px)");
+  expect(indicator.style.width).toBe("200px");
+});
+
+it("shrinks the bar into the Scrolling Tab's resting position when switching from BSP", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal("window", { matchMedia: () => ({ matches: false }) });
+  const indicator = { style: { transform: "", width: "" } };
+  publishScrolledToEnd();
+  const { Indicator } = viewportIndicator(mixedLayoutStrip(), "b");
+  await act(() => {
+    renderer = create(<Indicator active="b" />, { createNodeMock: () => indicator });
+  });
+  // At rest on the BSP Tab: the full box.
+  expect(indicator.style.transform).toBe("translateX(200px)");
+  expect(indicator.style.width).toBe("200px");
+
+  await act(() =>
+    beginTabTransition({ fromTabId: "b", toTabId: "s", fromIndex: 1, toIndex: 0, dir: -1 }),
+  );
+  await act(() => setTabTransitionProgress(0.5));
+  // Halfway left: already shrinking toward the 100px resting bar.
+  expect(indicator.style.transform).toBe("translateX(150px)");
+  expect(indicator.style.width).toBe("150px");
+
+  await act(() => renderer!.update(<Indicator active="s" />));
+  await act(() => {
+    setTabTransitionProgress(1);
+    endTabTransition();
+  });
+  // Ends as the short bar at the Scrolling Tab's right edge, not its left.
+  expect(indicator.style.transform).toBe("translateX(100px)");
+  expect(indicator.style.width).toBe("100px");
 });

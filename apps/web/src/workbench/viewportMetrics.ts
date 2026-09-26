@@ -7,11 +7,10 @@ import type { TabIndicatorGeometry } from "./tabTransition";
 export const MIN_VIEWPORT_BAR_WIDTH = 12;
 
 /**
- * Physical scroll readings and identity of one Scrolling Tab's Workbench
- * Viewport. Published by the Viewport owner; consumed by the Tab indicator.
+ * Physical scroll readings of one Scrolling Tab's Workbench Viewport. Published
+ * by the Viewport owner and consumed by the Tab indicator.
  */
 export interface ViewportMetrics {
-  readonly tabId: string;
   readonly clientWidth: number;
   readonly scrollWidth: number;
   readonly scrollLeft: number;
