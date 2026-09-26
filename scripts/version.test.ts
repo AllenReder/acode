@@ -78,6 +78,20 @@ describe("product version", () => {
     });
   });
 
+  // `formatJson` expands compact arrays. Rewriting an unchanged manifest turned
+  // that into formatting churn that failed `vp fmt --check` in CI.
+  it("leaves a manifest whose value did not change byte-for-byte intact", () => {
+    withVersionFixture((rootDir) => {
+      const tauriConfigPath = NodePath.join(rootDir, "apps/desktop/src-tauri/tauri.conf.json");
+      const original = NodeFS.readFileSync(tauriConfigPath, "utf8");
+      expect(original).toContain('"scope": ["$RESOURCE/**"]');
+
+      setVersion("1.2.3-rc.1", rootDir);
+
+      expect(NodeFS.readFileSync(tauriConfigPath, "utf8")).toBe(original);
+    });
+  });
+
   it("reports drift and rejects an invalid version before editing", () => {
     withVersionFixture((rootDir) => {
       const webPackagePath = NodePath.join(rootDir, "apps/web/package.json");

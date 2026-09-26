@@ -126,17 +126,26 @@ export function setVersion(version: string, rootDir = REPO_ROOT): void {
   }
 
   const updates = new Map<string, string>();
+  // `formatJson` expands compact arrays, so rewriting a manifest whose value did
+  // not change silently reformats it: bumping the version used to expand the
+  // arrays in `tauri.conf.json` and fail `vp fmt --check` in CI. Only record a
+  // manifest when its parsed value actually differs from what is on disk.
+  const recordManifest = (relativePath: string, value: Record<string, unknown>): void => {
+    const next = formatJson(value);
+    if (next === formatJson(readJson(NodePath.join(rootDir, relativePath)))) return;
+    updates.set(relativePath, next);
+  };
   for (const relativePath of PACKAGE_FILES) {
     const packageJson = readJson(NodePath.join(rootDir, relativePath));
     if (typeof packageJson.version !== "string") {
       throw new Error(`${relativePath} must already declare a version.`);
     }
     packageJson.version = version;
-    updates.set(relativePath, formatJson(packageJson));
+    recordManifest(relativePath, packageJson);
   }
   const tauriConfig = readJson(NodePath.join(rootDir, TAURI_CONFIG));
   tauriConfig.version = TAURI_VERSION_SOURCE;
-  updates.set(TAURI_CONFIG, formatJson(tauriConfig));
+  recordManifest(TAURI_CONFIG, tauriConfig);
   const currentProductVersion = readJson(NodePath.join(rootDir, "package.json")).version;
   const macosConfig = readJson(NodePath.join(rootDir, TAURI_MACOS_CONFIG));
   macosConfig.version = macOSNativeVersion(version);
@@ -146,7 +155,7 @@ export function setVersion(version: string, rootDir = REPO_ROOT): void {
     macOSConfigBundle.bundleVersion = incrementMacOSBundleVersion(macOSConfigBundle.bundleVersion);
   }
   macosConfig.bundle = { ...macOSBundle, macOS: macOSConfigBundle };
-  updates.set(TAURI_MACOS_CONFIG, formatJson(macosConfig));
+  recordManifest(TAURI_MACOS_CONFIG, macosConfig);
   for (const [relativePath, heading] of [
     [CARGO_MANIFEST, '[package]\nname = "awen-desktop"'],
     [CARGO_LOCK, '[[package]]\nname = "awen-desktop"'],
