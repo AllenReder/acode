@@ -1,0 +1,80 @@
+name: Bug report
+description: Something is broken. Report it so we can reproduce and fix it.
+title: "fix: "
+labels:
+  - bug
+  - needs-triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Please [search existing
+        issues](https://github.com/AllenReder/awen/issues?q=is%3Aissue) first —
+        a confirmed duplicate with fresh evidence is more useful than a second thread.
+
+        **Redact secrets.** Remove API keys, tokens, pairing credentials, and your
+        home directory path from anything you paste below.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: A clear description of the bug, in your own words.
+      placeholder: When I do X, Awen does Y instead of Z.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected to happen
+      description: What should have happened instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal, deterministic steps. The best bug reports can be reproduced from these alone.
+      placeholder: |
+        1. Run `awen serve`
+        2. Open ...
+        3. See error
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Awen version
+      description: Run `awen --version` (or `npx awen --version`).
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node version, and how you run Awen (npx, background service, desktop app).
+      placeholder: macOS 15.3, Node 22, npx awen serve
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or errors
+      description: The most relevant lines only, redacted. Both server console output and browser/devtools errors help.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, related issues, or anything else that might help.
+    validations:
+      required: false
