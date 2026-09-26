@@ -50,11 +50,24 @@ Tab's last View, the Tab had no remaining work to present.
   Tabs. Only the Session-View removal path (`applyRemoveSessionViews`) and the
   explicit Pane close close Tabs; the emptied-Tab policy is an argument to the
   shared removal helper, defaulting to the old Welcome behavior.
-- **Tab/Pane close animation is unchanged.** A Tab removed as a side effect of
-  a Pane/Session close unmounts on the state change; the 220ms Topbar
-  contraction stays the domain of the direct Tab-close gesture (ADR-0013).
-  Per the Workbench invariant, a Tab change caused by closing a Tab lands
-  instantly on the canvas.
+- **Every explicit Tab removal shares the Topbar close animation.** The
+  `closingTabIds` set now lives on the Workbench store rather than in the Topbar
+  component, so a Tab closed by a direct Tab gesture, a Pane close that empties
+  its Tab, a Sidebar Session close/delete, or the Session-vanish observer all
+  collapse with the same 220ms fluid motion (ADR-0013) before the Tab is
+  removed from `tabs`. During the collapse the emptied Tab is cleared to
+  Welcome in place, so no dead Session View keeps rendering; an emptied Tab
+  that is the Workbench's only Tab still recovers Welcome synchronously and
+  never animates.
+- **The active context switches at the start of the collapse.** Marking a Tab
+  closing immediately activates its survivor (the same `activeTabIdAfterClose`
+  rule as `applyCloseTab`), so the canvas switches at 0ms while the Topbar
+  chrome contracts. Per the Workbench invariant, a Tab change caused by
+  closing a Tab still lands instantly on the canvas.
+- **The Workbench still keeps at least one Tab under concurrent closes.** A
+  burst of closes may mark several Tabs closing at once; removal is
+  unconditional, and when the last Tab would otherwise disappear it recovers
+  Welcome in place instead of leaving an empty Workbench.
 
 ## Consequences
 

@@ -171,6 +171,7 @@ it("renders closed read-only status banner when viewing a closed Agent Session f
 });
 it("detaches only the current View on closeView and closes the emptied Tab on removeSessionViews", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.useFakeTimers();
   resetWorkbenchStore();
   const targetA = {
     kind: "agentSession",
@@ -212,12 +213,23 @@ it("detaches only the current View on closeView and closes the emptied Tab on re
   expect(tab2.panes.size).toBe(1);
   expect([...tab2.panes.values()][0]?.target.kind).toBe("workspaceTerminal");
 
-  // 2. removeSessionViews closes Tab 1 once its only View is removed
+  // 2. removeSessionViews closes Tab 1 once its only View is removed. The Tab
+  // first enters its closing animation (ADR-0013) and is removed once the
+  // 220ms collapse has settled.
   store.activateTab(tab1Id);
   useWorkbenchStore.getState().removeSessionViews(targetA);
+  expect(useWorkbenchStore.getState().closingTabIds.has(tab1Id)).toBe(true);
+  expect(useWorkbenchStore.getState().tabs.map((tab) => tab.id)).toEqual([tab1Id, tab2Id]);
+  expect(useWorkbenchStore.getState().activeTabId).toBe(tab2Id);
+
+  act(() => {
+    vi.advanceTimersByTime(220);
+  });
+  expect(useWorkbenchStore.getState().closingTabIds.size).toBe(0);
   expect(useWorkbenchStore.getState().tabs.map((tab) => tab.id)).toEqual([tab2Id]);
   expect(useWorkbenchStore.getState().activeTabId).toBe(tab2Id);
   expect(useWorkbenchStore.getState().tabs[0]!.panes.size).toBe(1);
+  vi.useRealTimers();
 });
 
 it("binds workspace actions (browse files, new terminal) from AgentView to ChatView", async () => {

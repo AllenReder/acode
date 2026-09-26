@@ -310,7 +310,7 @@ export function applyMoveInColumn(
     : snapshot;
 }
 
-function clearedTab(tab: WorkbenchTab, generateId: () => string): WorkbenchTab {
+export function clearedTab(tab: WorkbenchTab, generateId: () => string): WorkbenchTab {
   return reconcileTab({
     ...welcomeTab(generateId),
     id: tab.id,
@@ -1125,7 +1125,7 @@ export function applyCloseTab(snapshot: WorkbenchSnapshot, tabId: string): Workb
  * survivor. Shared by the direct Tab close and by bulk close that empties
  * Tabs, so both honour one rule. Assumes at least one survivor.
  */
-function activeTabIdAfterClose(
+export function activeTabIdAfterClose(
   snapshot: WorkbenchSnapshot,
   survivors: ReadonlyArray<WorkbenchTab>,
   closedTabIds: ReadonlySet<string>,
