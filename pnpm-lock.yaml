@@ -76,6 +76,7 @@ patchedDependencies:
   '@ff-labs/fff-node@0.9.4': c4e3cc2420ceb9dc650f9d189e9c24baf7e83f342998bacda5f459a4ce7927a8
   '@legendapp/list@3.3.5': 680cc6a5c5b4a4032e467e7b3fde22f89a84c0ee2e6eac6fda737d6277cc0806
   '@pierre/diffs@1.3.0-beta.10': 0ccee155b93b63d810e2c1a40c1fd676fb6fbcfa72cf6430dcedf1a3ae475ab4
+  '@xterm/addon-webgl@0.19.0': b8564d5d3cdaae3986151af6ee203053b86f4ff2be48dfc79d88d625a6c17ec3
   effect@4.0.0-rc.112: 8bef799f35729cf3465eb428196f617b434a7c9f658d56acb2874d74b21b98b2
 
 importers:
@@ -252,8 +253,8 @@ importers:
         specifier: ^0.12.0
         version: 0.12.0
       '@xterm/addon-webgl':
-        specifier: ^0.19.0
-        version: 0.19.0
+        specifier: 0.19.0
+        version: 0.19.0(patch_hash=b8564d5d3cdaae3986151af6ee203053b86f4ff2be48dfc79d88d625a6c17ec3)
       '@xterm/xterm':
         specifier: ^6.0.0
         version: 6.0.0
@@ -6779,7 +6780,7 @@ snapshots:
 
   '@xterm/addon-web-links@0.12.0': {}
 
-  '@xterm/addon-webgl@0.19.0': {}
+  '@xterm/addon-webgl@0.19.0(patch_hash=b8564d5d3cdaae3986151af6ee203053b86f4ff2be48dfc79d88d625a6c17ec3)': {}
 
   '@xterm/xterm@6.0.0': {}
 

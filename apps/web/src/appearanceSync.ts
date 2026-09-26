@@ -1,5 +1,6 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { isTauri } from "./env";
+import { resolveClientPlatform } from "./platformSignals";
 
 export interface ChatBackgroundSettings {
   readonly path: string | null;
@@ -28,10 +29,11 @@ function resolveNativeGlassPlatform(): NativeGlassPlatform | null {
   if (!isTauri && !(window as any).isTauri && !(window as any).__TAURI_INTERNALS__) return null;
   if (typeof navigator === "undefined") return null;
 
-  const isMac = /Mac|iPhone|iPad/i.test(navigator.platform) || /Mac/i.test(navigator.userAgent);
-  if (isMac) return "darwin";
-  const isWin = /Win/i.test(navigator.platform) || /Windows/i.test(navigator.userAgent);
-  return isWin ? "win32" : null;
+  const platform = resolveClientPlatform({
+    navigatorPlatform: navigator.platform,
+    userAgent: navigator.userAgent,
+  });
+  return platform === "darwin" || platform === "win32" ? platform : null;
 }
 
 export function isNativeGlassPlatform(): boolean {
