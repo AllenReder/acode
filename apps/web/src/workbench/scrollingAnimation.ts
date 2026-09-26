@@ -15,6 +15,14 @@ export interface ScrollRevealInput {
   readonly viewportHeight: number;
   readonly currentScrollLeft: number;
   readonly currentScrollTop: number;
+  /**
+   * Set on the commit that makes this Tab active, to the direction the incoming
+   * Tab sits in: `+1` arriving from a Tab on the left, `-1` from one on the
+   * right. The Viewport then enters at the edge the user was travelling away
+   * from, so the strip reads as continuing rather than jumping inward to the
+   * focused Pane. Absent everywhere else, leaving ordinary reveal in charge.
+   */
+  readonly entryDir?: -1 | 1;
 }
 
 export interface ScrollRevealTarget {
@@ -99,24 +107,29 @@ function computeEdgeRevealTarget(
 
 /**
  * Compute the ideal scroll position to reveal the focused pane:
+ * - Entering an incoming Tab: the edge the user was travelling away from.
  * - Single column: horizontally centered within the viewport when smaller than viewport.
  * - Multiple columns: edge reveal with exact paneGap padding on left/right.
  * - Vertical axis: reveals stacked panes when canvas overflows vertically.
  */
 export function computeScrollingRevealTarget(input: ScrollRevealInput): ScrollRevealTarget {
-  const {
-    isSingleColumn,
-    rect,
-    paneGap,
-    canvasWidth,
-    canvasHeight,
-    viewportWidth,
-    viewportHeight,
-    currentScrollLeft,
-    currentScrollTop,
-  } = input;
+  const { isSingleColumn, rect, paneGap, canvasWidth, viewportWidth, entryDir } = input;
+  const { currentScrollLeft } = input;
 
   const maxScrollLeft = Math.max(0, canvasWidth - viewportWidth);
+
+  // Entering a Tab takes priority over revealing its focused Pane: the Viewport
+  // starts at the edge matching the travel direction, so a Tab entered from the
+  // left shows its leftmost Columns first.
+  const targetTop = 0;
+  if (entryDir !== undefined) {
+    const entryLeft = entryDir === 1 ? 0 : maxScrollLeft;
+    return {
+      targetLeft: entryLeft,
+      targetTop,
+      needsScroll: Math.abs(entryLeft - currentScrollLeft) >= 1,
+    };
+  }
 
   let targetLeft = currentScrollLeft;
 
@@ -140,8 +153,7 @@ export function computeScrollingRevealTarget(input: ScrollRevealInput): ScrollRe
     );
   }
 
-  // Viewport never scrolls vertically (ADR 0015)
-  const targetTop = 0;
+  // Viewport never scrolls vertically (ADR 0015), hence the constant targetTop.
   const needsScroll = Math.abs(targetLeft - currentScrollLeft) >= 1;
 
   return {
@@ -270,4 +282,53 @@ export function animateScrollTo(
 
   frameId = requestAnimationFrame(step);
   return cancel;
+}
+
+/**
+ * One Tab's live entry, holding it at the edge it was entered from.
+ * `focusedPaneId` is the Pane focused when the entry began, and `settledAt` the
+ * Viewport offset the entry last wrote: the entry ends when the user focuses a
+ * different Pane or scrolls the Viewport away from where it was left.
+ */
+export interface TabEntry {
+  readonly dir: -1 | 1;
+  readonly focusedPaneId: string;
+  readonly settledAt: number;
+}
+
+/**
+ * Advance a Tab's entry state for one reveal pass (ADR-0025).
+ *
+ * `entryDir` is present only on the commit that activates the Tab, but the
+ * entry must outlive that commit: the Tab re-runs reveal as it gains its real
+ * size and as its Columns change, and each of those would otherwise pull the
+ * Viewport inward to the focused Pane.
+ */
+export function resolveTabEntry(
+  current: TabEntry | null,
+  entryDir: -1 | 1 | undefined,
+  focusedPaneId: string,
+  scrollLeft: number,
+): TabEntry | null {
+  if (entryDir !== undefined) return { dir: entryDir, focusedPaneId, settledAt: scrollLeft };
+  if (current !== null && current.focusedPaneId !== focusedPaneId) return null;
+  return current;
+}
+
+/**
+ * Whether an entry still owns the Viewport, so its edge survives the reveals
+ * that follow activation.
+ *
+ * The entry speaks only for the focused-Pane reveal, which it exists to
+ * suppress. A Viewport that has left where the entry put it is the user
+ * scrolling, and direct manipulation outranks the entry: it yields, so the
+ * next reveal passes through instead of dragging the Viewport back.
+ */
+export function shouldHoldTabEntry(
+  entry: TabEntry | null,
+  focusedPaneId: string,
+  scrollLeft: number,
+): boolean {
+  if (entry === null || entry.focusedPaneId !== focusedPaneId) return false;
+  return Math.abs(scrollLeft - entry.settledAt) < 1;
 }

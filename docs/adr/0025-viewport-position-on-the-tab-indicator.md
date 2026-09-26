@@ -63,9 +63,25 @@ already owns Workbench presentation state.
   into its narrowing instead of starting at the Tab's edge and snapping its
   width on landing. This generalizes ADR-0019's rule rather than contradicting
   it: the width is still not gesture state, and an endpoint's width is a fact
-  about that Tab, not about the drag. A switch to a Scrolling Tab lands on that
-  Tab's actual Viewport position, including a mid-canvas one — it does not snap
-  the Viewport to an edge to make the bar settle somewhere tidier.
+  about that Tab, not about the drag.
+- **A Scrolling Tab is entered at the edge matching the travel direction.** A
+  switch whose incoming Tab is a Scrolling layout moves that Tab's Viewport to
+  the edge the user was travelling away from — the left edge arriving from a Tab
+  on the left, the right edge from one on the right — so the strip reads as
+  continuing rather than jumping inward to the incoming Tab's focused Pane. This
+  supersedes the focused-Pane reveal for that one commit.
+- **The entry holds until the user picks a Pane or scrolls.** The Tab re-runs
+  reveal as it gains its real size and as its Columns change, and each of those
+  would pull the Viewport inward again, so the entry persists past the commit
+  that activated it. It speaks only for the focused-Pane reveal it exists to
+  suppress: focusing a different Pane ends it, and so does the Viewport moving
+  away from where the entry left it, because that is the user scrolling and
+  direct manipulation outranks the entry. Without that second condition the
+  entry keeps writing the edge back over the user's scroll.
+- **Structural activation is not navigation.** Creating a Tab, or a Tab closing
+  onto another, ends any switch rather than running one, so it carries no
+  direction and keeps ordinary focused-Pane reveal. Only a Sliding Tab switch
+  has a travel direction to enter by.
 - **A switch re-places the bar when a reading moves.** An endpoint can move with
   no transition frame behind it: committing a switch reveals the incoming Tab's
   focused Pane, which scrolls that Tab's Viewport. Both endpoints are re-read per
