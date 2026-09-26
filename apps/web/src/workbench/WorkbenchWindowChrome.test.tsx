@@ -109,6 +109,11 @@ function createTestSnapshot() {
   return applyOpenTarget(snapshot, terminalTarget, ids);
 }
 
+// Capture the real store actions at module evaluation time, before any
+// beforeEach hook replaces them with mocks. Tests that need the real closing
+// lifecycle re-install this reference.
+const realCloseTab = useWorkbenchStore.getState().closeTab;
+
 it("renders the selected compact Topbar Surface with real titles and a new-tab action", () => {
   const snapshot = createTestSnapshot();
 
@@ -302,9 +307,13 @@ it("renders tabs with workbench-tab-item class and will-change-transform for smo
 it("initiates fluid collapse animation on close, switching active tab immediately and committing close after 220ms", async () => {
   vi.useFakeTimers();
   const snapshot = createTestSnapshot();
-  const activateTab = vi.fn();
-  const closeTab = vi.fn();
-  useWorkbenchStore.setState({ activateTab, closeTab });
+  useWorkbenchStore.setState({ closeTab: realCloseTab });
+  // Seed the store with the same Tabs the chrome renders, so the real
+  // closeTab action can drive its closing lifecycle.
+  useWorkbenchStore.setState({
+    tabs: snapshot.tabs,
+    activeTabId: snapshot.activeTabId,
+  });
 
   const { create, act } = await import("react-test-renderer");
   let renderer: any;
@@ -331,21 +340,63 @@ it("initiates fluid collapse animation on close, switching active tab immediatel
   });
 
   // Active tab shifts immediately (0ms) to the adjacent tab (Tab 0)
-  expect(activateTab).toHaveBeenCalledWith(snapshot.tabs[0]!.id);
+  expect(useWorkbenchStore.getState().activeTabId).toBe(snapshot.tabs[0]!.id);
 
   // The closed tab enters closing state with data-tab-closing="true" (governed by CSS fluid collapse)
-  expect(activeTabElement.props["data-tab-closing"]).toBe("true");
-
-  // Before 220ms, closeTab has not yet been committed to store
-  expect(closeTab).not.toHaveBeenCalled();
+  expect(renderer.root.findAllByProps({ role: "tab" })[1].props["data-tab-closing"]).toBe("true");
+  expect(useWorkbenchStore.getState().closingTabIds.has(snapshot.tabs[1]!.id)).toBe(true);
+  expect(useWorkbenchStore.getState().tabs).toHaveLength(2);
 
   // Fast forward past the 220ms animation duration
   await act(async () => {
     vi.advanceTimersByTime(220);
   });
 
-  // Store closeTab is now called to formally unmount
-  expect(closeTab).toHaveBeenCalledWith(snapshot.tabs[1]!.id);
+  // The store has now formally removed the Tab and cleared its closing state.
+  expect(useWorkbenchStore.getState().closingTabIds.size).toBe(0);
+  expect(useWorkbenchStore.getState().tabs.map((tab) => tab.id)).toEqual([snapshot.tabs[0]!.id]);
+
+  vi.useRealTimers();
+});
+
+it("renders the closing attribute while a Session close animates its emptied Tab away", async () => {
+  vi.useFakeTimers();
+  // Agent Session lives in Tab 0; the Terminal Tab is active.
+  const snapshot = createTestSnapshot();
+  useWorkbenchStore.setState({
+    tabs: snapshot.tabs,
+    activeTabId: snapshot.activeTabId,
+  });
+
+  const { create, act } = await import("react-test-renderer");
+  let renderer: any;
+  await act(async () => {
+    renderer = create(
+      <SidebarProvider defaultOpen>
+        <WorkbenchWindowChrome snapshot={snapshot} projects={projects} />
+      </SidebarProvider>,
+    );
+  });
+
+  expect(renderer.root.findAllByProps({ role: "tab" })).toHaveLength(2);
+
+  // A Sidebar Session close removes the Session View through the store.
+  await act(async () => {
+    useWorkbenchStore.getState().removeSessionViews(agentTarget);
+  });
+
+  const closingTabs = renderer.root
+    .findAllByProps({ role: "tab" })
+    .filter((node: any) => node.props["data-tab-closing"] === "true");
+  expect(closingTabs).toHaveLength(1);
+  expect(closingTabs[0].props["data-tab-id"]).toBe(snapshot.tabs[0]!.id);
+  expect(useWorkbenchStore.getState().closingTabIds.has(snapshot.tabs[0]!.id)).toBe(true);
+
+  await act(async () => {
+    vi.advanceTimersByTime(220);
+  });
+  expect(useWorkbenchStore.getState().tabs.map((tab) => tab.id)).toEqual([snapshot.tabs[1]!.id]);
+  expect(useWorkbenchStore.getState().closingTabIds.size).toBe(0);
 
   vi.useRealTimers();
 });
@@ -388,8 +439,11 @@ it("supports concurrent closing animations without blocking", async () => {
   snapshot = applyCreateTab(snapshot, ids);
 
   const activateTab = vi.fn();
-  const closeTab = vi.fn();
-  useWorkbenchStore.setState({ activateTab, closeTab });
+  useWorkbenchStore.setState({ activateTab, closeTab: realCloseTab });
+  useWorkbenchStore.setState({
+    tabs: snapshot.tabs,
+    activeTabId: snapshot.activeTabId,
+  });
 
   const { create, act } = await import("react-test-renderer");
   let renderer: any;
@@ -412,15 +466,16 @@ it("supports concurrent closing animations without blocking", async () => {
     closeBtn2?.props.onClick({ stopPropagation: () => {} });
   });
 
-  expect(tabElements[1].props["data-tab-closing"]).toBe("true");
-  expect(tabElements[2].props["data-tab-closing"]).toBe("true");
+  const closingTabs = renderer.root.findAllByProps({ role: "tab" });
+  expect(closingTabs[1].props["data-tab-closing"]).toBe("true");
+  expect(closingTabs[2].props["data-tab-closing"]).toBe("true");
 
   await act(async () => {
     vi.advanceTimersByTime(220);
   });
 
-  expect(closeTab).toHaveBeenCalledWith(snapshot.tabs[1]!.id);
-  expect(closeTab).toHaveBeenCalledWith(snapshot.tabs[2]!.id);
+  expect(useWorkbenchStore.getState().closingTabIds.size).toBe(0);
+  expect(useWorkbenchStore.getState().tabs.map((tab) => tab.id)).toEqual([snapshot.tabs[0]!.id]);
 
   vi.useRealTimers();
 });
@@ -453,8 +508,11 @@ it("closes a tab when middle-clicked with button 1", async () => {
   expect(snapshot.activeTabId).toBe(snapshot.tabs[1]!.id);
 
   const activateTab = vi.fn();
-  const closeTab = vi.fn();
-  useWorkbenchStore.setState({ activateTab, closeTab });
+  useWorkbenchStore.setState({ activateTab, closeTab: realCloseTab });
+  useWorkbenchStore.setState({
+    tabs: snapshot.tabs,
+    activeTabId: snapshot.activeTabId,
+  });
 
   const { create, act } = await import("react-test-renderer");
   let renderer: any;
@@ -496,7 +554,7 @@ it("closes a tab when middle-clicked with button 1", async () => {
     });
   });
 
-  expect(tabElements[0].props["data-tab-closing"]).toBe("true");
+  expect(renderer.root.findAllByProps({ role: "tab" })[0].props["data-tab-closing"]).toBe("true");
   // Middle clicking an inactive tab should not switch active tab
   expect(activateTab).not.toHaveBeenCalled();
 
@@ -504,7 +562,8 @@ it("closes a tab when middle-clicked with button 1", async () => {
     vi.advanceTimersByTime(220);
   });
 
-  expect(closeTab).toHaveBeenCalledWith(snapshot.tabs[0]!.id);
+  expect(useWorkbenchStore.getState().closingTabIds.size).toBe(0);
+  expect(useWorkbenchStore.getState().tabs.map((tab) => tab.id)).toEqual([snapshot.tabs[1]!.id]);
   vi.useRealTimers();
 });
 

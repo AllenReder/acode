@@ -1,7 +1,7 @@
-import { expect, it } from "vite-plus/test";
+import { afterEach, expect, it, vi } from "vite-plus/test";
 import type { AgentSessionId, EnvironmentId, WorkspaceId } from "@awen/contracts";
 
-import type { ViewTarget } from "./viewRegistry";
+import { targetKey, type ViewTarget } from "./viewRegistry";
 import { newTab } from "./layout";
 import {
   applyCreateTab,
@@ -26,10 +26,23 @@ function agent(): Extract<ViewTarget, { kind: "agentSession" }> {
   };
 }
 
+function agentB(): Extract<ViewTarget, { kind: "agentSession" }> {
+  return {
+    kind: "agentSession",
+    environmentId: ENV_A,
+    workspaceId: WS_A,
+    agentSessionId: "agent-b" as AgentSessionId,
+  };
+}
+
 function makeIds(): () => string {
   let n = 100;
   return () => `id-${++n}`;
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 it("restores a snapshot and persists later Tab transitions", () => {
   const ids = makeIds();
@@ -287,4 +300,171 @@ it("previews and commits a Tab drop to reorder tabs", () => {
   store.getState().commitDrop(preview!);
   expect(store.getState().tabs.map((t) => t.id)).toEqual([tab1Id, tab2Id, tab0Id]);
   expect(writes).toHaveLength(1);
+});
+
+/** Two Tabs, each the sole View of a different Agent Session. */
+function twoTabStore() {
+  const ids = makeIds();
+  let initial = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids);
+  const firstTabId = getActiveTab(initial).id;
+  initial = applyOpenTarget(initial, agentB(), ids);
+  const secondTabId = getActiveTab(initial).id;
+  const writes: WorkbenchSnapshot[] = [];
+  const store = createWorkbenchStore({
+    initialSnapshot: initial,
+    generateId: ids,
+    persist: (snapshot) => writes.push(snapshot),
+  });
+  return { store, ids, firstTabId, secondTabId, writes };
+}
+
+it("closeTab marks the Tab closing, switches its survivor immediately, and removes it after the collapse", () => {
+  vi.useFakeTimers();
+  const { store, firstTabId, secondTabId } = twoTabStore();
+  store.getState().activateTab(firstTabId);
+
+  store.getState().closeTab(firstTabId);
+
+  // The Tab is still present, marked as closing, and the active context has
+  // already moved to its survivor (ADR-0013 zero-latency switch).
+  expect(store.getState().closingTabIds.has(firstTabId)).toBe(true);
+  expect(store.getState().tabs.map((tab) => tab.id)).toEqual([firstTabId, secondTabId]);
+  expect(store.getState().activeTabId).toBe(secondTabId);
+
+  vi.advanceTimersByTime(219);
+  expect(store.getState().tabs).toHaveLength(2);
+
+  vi.advanceTimersByTime(1);
+  expect(store.getState().closingTabIds.size).toBe(0);
+  expect(store.getState().tabs.map((tab) => tab.id)).toEqual([secondTabId]);
+  expect(store.getState().activeTabId).toBe(secondTabId);
+});
+
+it("closeTab on the sole Tab is a no-op and never schedules a removal", () => {
+  vi.useFakeTimers();
+  const ids = makeIds();
+  const store = createWorkbenchStore({
+    initialSnapshot: applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids),
+    generateId: ids,
+  });
+  const soleTabId = getActiveTab(store.getState()).id;
+
+  store.getState().closeTab(soleTabId);
+
+  expect(store.getState().closingTabIds.size).toBe(0);
+  expect(store.getState().tabs.map((tab) => tab.id)).toEqual([soleTabId]);
+  vi.advanceTimersByTime(220);
+  expect(store.getState().tabs.map((tab) => tab.id)).toEqual([soleTabId]);
+});
+
+it("removeSessionViews animates the emptied Tab away and keeps the Workbench's other Tabs", () => {
+  vi.useFakeTimers();
+  const { store, firstTabId, secondTabId } = twoTabStore();
+  store.getState().activateTab(firstTabId);
+
+  store.getState().removeSessionViews(agent());
+
+  // Immediate active switch, but the Tab holds on for its collapse.
+  expect(store.getState().activeTabId).toBe(secondTabId);
+  expect(store.getState().closingTabIds.has(firstTabId)).toBe(true);
+  expect(store.getState().tabs.map((tab) => tab.id)).toEqual([firstTabId, secondTabId]);
+
+  vi.advanceTimersByTime(220);
+  expect(store.getState().closingTabIds.size).toBe(0);
+  expect(store.getState().tabs.map((tab) => tab.id)).toEqual([secondTabId]);
+  expect(store.getState().tabs[0]!.panes.size).toBe(1);
+});
+
+it("removeSessionViews recovers Welcome in place without animating when the Tab is the only one", () => {
+  vi.useFakeTimers();
+  const ids = makeIds();
+  const store = createWorkbenchStore({
+    initialSnapshot: applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids),
+    generateId: ids,
+  });
+  const soleTabId = getActiveTab(store.getState()).id;
+
+  store.getState().removeSessionViews(agent());
+
+  // The final Tab recovers Welcome (ADR-0023); there is no Tab removal to animate.
+  expect(store.getState().closingTabIds.size).toBe(0);
+  expect(store.getState().tabs.map((tab) => tab.id)).toEqual([soleTabId]);
+  expect([...getActiveTab(store.getState()).panes.values()][0]?.target.kind).toBe("welcome");
+});
+
+it("closeView animates an emptied non-final Tab but recovers the sole Tab in place", () => {
+  vi.useFakeTimers();
+  const { store, firstTabId, secondTabId } = twoTabStore();
+  store.getState().activateTab(firstTabId);
+  const paneId = getActiveTab(store.getState()).focusedPaneId;
+
+  store.getState().closeView(paneId);
+  expect(store.getState().closingTabIds.has(firstTabId)).toBe(true);
+  expect(store.getState().tabs).toHaveLength(2);
+
+  vi.advanceTimersByTime(220);
+  expect(store.getState().tabs.map((tab) => tab.id)).toEqual([secondTabId]);
+
+  // Closing the sole Tab's last Pane recovers Welcome synchronously.
+  const solePaneId = getActiveTab(store.getState()).focusedPaneId;
+  store.getState().closeView(solePaneId);
+  expect(store.getState().closingTabIds.size).toBe(0);
+  expect([...getActiveTab(store.getState()).panes.values()][0]?.target.kind).toBe("welcome");
+});
+
+it("animates concurrent closes without ever emptying the Workbench", () => {
+  vi.useFakeTimers();
+  const ids = makeIds();
+  let initial = applyOpenTarget(emptyWorkbenchSnapshot(ids), agent(), ids);
+  const tab0 = getActiveTab(initial).id;
+  initial = applyOpenTarget(initial, agentB(), ids);
+  const tab1 = getActiveTab(initial).id;
+  initial = applyCreateTab(initial, ids);
+  const tab2 = getActiveTab(initial).id;
+  const store = createWorkbenchStore({ initialSnapshot: initial, generateId: ids });
+
+  store.getState().closeTab(tab0);
+  store.getState().closeTab(tab1);
+  store.getState().closeTab(tab2); // refused: only one non-closing Tab would remain
+
+  expect([...store.getState().closingTabIds].sort()).toEqual([tab0, tab1].sort());
+  expect(store.getState().tabs).toHaveLength(3);
+
+  vi.advanceTimersByTime(220);
+  expect(store.getState().closingTabIds.size).toBe(0);
+  expect(store.getState().tabs.map((tab) => tab.id)).toEqual([tab2]);
+});
+
+it("notifies a closed Tab's View closure only when the Tab is actually removed", () => {
+  vi.useFakeTimers();
+  const { store, firstTabId } = twoTabStore();
+  store.getState().activateTab(firstTabId);
+  const closed: string[][] = [];
+  const unsubscribe = store.getState().subscribeViewClosures((targets) => {
+    closed.push(targets.map((target) => targetKey(target)));
+  });
+
+  store.getState().closeTab(firstTabId);
+  // The View stays mounted for the collapse, so its closure is not reported yet.
+  expect(closed).toEqual([]);
+
+  vi.advanceTimersByTime(220);
+  expect(closed).toHaveLength(1);
+  unsubscribe();
+});
+
+it("notifies a View closure as soon as an explicit close clears it", () => {
+  vi.useFakeTimers();
+  const { store, firstTabId } = twoTabStore();
+  store.getState().activateTab(firstTabId);
+  const closed: string[][] = [];
+  store.getState().subscribeViewClosures((targets) => {
+    closed.push(targets.map((target) => targetKey(target)));
+  });
+
+  store.getState().closeView(getActiveTab(store.getState()).focusedPaneId);
+  // The emptied Tab is cleared to Welcome immediately, so the View is gone now.
+  expect(closed).toHaveLength(1);
+  vi.advanceTimersByTime(220);
+  expect(closed).toHaveLength(1);
 });

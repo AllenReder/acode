@@ -75,10 +75,18 @@ it("deletes an untouched Session when its Pane closes", async () => {
   expect(archive).not.toHaveBeenCalled();
 });
 it("closing a Tab uses the same final-View cleanup", async () => {
+  vi.useFakeTimers();
   const tab = getActiveTab(useWorkbenchStore.getState());
   useWorkbenchStore.getState().createTab();
   await act(() => useWorkbenchStore.getState().closeTab(tab.id));
+  expect(useWorkbenchStore.getState().closingTabIds.has(tab.id)).toBe(true);
+  expect(remove).not.toHaveBeenCalled();
+  await act(() => {
+    vi.advanceTimersByTime(220);
+  });
+  expect(useWorkbenchStore.getState().closingTabIds.has(tab.id)).toBe(false);
   expect(remove).toHaveBeenCalledTimes(1);
+  vi.useRealTimers();
 });
 it.each(["prompt", "transcript", "running", "submission"])(
   "preserves %s work when its final View closes",
@@ -112,7 +120,12 @@ it("resolves an eager draft and canonical Session as the same work", async () =>
     .getState()
     .openTarget({ kind: "newAgentSession", environmentId, workspaceId, draftId });
   const draftTab = getActiveTab(useWorkbenchStore.getState());
+  vi.useFakeTimers();
   await act(() => useWorkbenchStore.getState().closeTab(draftTab.id));
+  await act(() => {
+    vi.advanceTimersByTime(220);
+  });
+  vi.useRealTimers();
   expect(remove).not.toHaveBeenCalled();
   useComposerDraftStore.getState().setPrompt(draftId, "draft payload");
   const agentTab = getActiveTab(useWorkbenchStore.getState());

@@ -23,7 +23,6 @@ import { useWorkbenchDragSource, useWorkbenchDragState } from "./workbenchDrag";
 import { useWorkbenchStore } from "./workbenchStore";
 import { useTabIndicator } from "./useTabIndicator";
 import { tabIdsKey } from "./tabTransition";
-import { FLUID_MOTION_DURATION_MS, getPrefersReducedMotion } from "./workbenchMotion";
 import { resolveTargetContext, resolveTargetTitle } from "./workbenchTitles";
 
 interface WorkbenchWindowChromeProps {
@@ -50,12 +49,12 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
   const activateTab = useWorkbenchStore((state) => state.activateTab);
   const closeTab = useWorkbenchStore((state) => state.closeTab);
   const canCloseTab = useWorkbenchStore((state) => state.canCloseTab);
+  const closingTabIds = useWorkbenchStore((state) => state.closingTabIds);
   const renameTab = useWorkbenchStore((state) => state.renameTab);
   const dragState = useWorkbenchDragState();
   const stripRef = useRef<HTMLDivElement>(null);
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
-  const [closingTabIds, setClosingTabIds] = useState<ReadonlySet<string>>(() => new Set());
   const remainingTabsCount = snapshot.tabs.length - closingTabIds.size;
 
   const handleCloseTab = useCallback(
@@ -66,29 +65,12 @@ export function WorkbenchWindowChrome({ snapshot, projects }: WorkbenchWindowChr
       const canClose = canCloseTab ? await canCloseTab(tabId) : true;
       if (!canClose) return;
 
-      if (tabId === snapshot.activeTabId) {
-        const closingIndex = snapshot.tabs.findIndex((tab) => tab.id === tabId);
-        const survivingTabs = snapshot.tabs.filter(
-          (tab) => tab.id !== tabId && !closingTabIds.has(tab.id),
-        );
-        const nextActive = survivingTabs[Math.min(closingIndex, survivingTabs.length - 1)];
-        if (nextActive) {
-          activateTab(nextActive.id);
-        }
-      }
-
-      setClosingTabIds((prev) => new Set([...prev, tabId]));
-      const delay = getPrefersReducedMotion() ? 0 : FLUID_MOTION_DURATION_MS;
-      setTimeout(() => {
-        closeTab(tabId);
-        setClosingTabIds((prev) => {
-          const next = new Set(prev);
-          next.delete(tabId);
-          return next;
-        });
-      }, delay);
+      // The store owns the full close lifecycle: it marks the Tab as closing,
+      // switches the active context immediately, and removes the Tab once the
+      // fluid collapse has settled (ADR-0013).
+      closeTab(tabId);
     },
-    [activateTab, canCloseTab, closeTab, closingTabIds, snapshot.activeTabId, snapshot.tabs],
+    [canCloseTab, closeTab, closingTabIds, snapshot.tabs],
   );
 
   const isAnyTabDragged = dragState?.phase === "dragging" && dragState.source.kind === "tab";
