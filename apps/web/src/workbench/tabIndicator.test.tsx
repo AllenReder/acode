@@ -268,3 +268,44 @@ it("shrinks the bar into the Scrolling Tab's resting position when switching fro
   expect(indicator.style.transform).toBe("translateX(100px)");
   expect(indicator.style.width).toBe("100px");
 });
+
+it("re-places the bar when the incoming Tab's Viewport scrolls mid-switch", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal("window", { matchMedia: () => ({ matches: false }) });
+  const indicator = { style: { transform: "", width: "" } };
+  // The Scrolling Tab's Viewport starts at the left of its canvas, so its
+  // resting bar is the short one at its left edge.
+  publishViewportMetrics("s", { clientWidth: 500, scrollWidth: 1000, scrollLeft: 0 });
+  const { Indicator } = viewportIndicator(mixedLayoutStrip(), "b");
+  await act(() => {
+    renderer = create(<Indicator active="b" />, { createNodeMock: () => indicator });
+  });
+
+  await act(() =>
+    beginTabTransition({ fromTabId: "b", toTabId: "s", fromIndex: 1, toIndex: 0, dir: -1 }),
+  );
+  await act(() => setTabTransitionProgress(0.5));
+  // Halfway between the Scrolling Tab's bar at x=0 and the BSP Tab's at x=200.
+  expect(indicator.style.transform).toBe("translateX(100px)");
+  expect(indicator.style.width).toBe("150px");
+
+  // Committing the switch reveals the incoming Tab's focused Pane, scrolling
+  // its Viewport. That publish arrives on its own, with no transition frame
+  // behind it, so a bar subscribed only to frames keeps the stale endpoint and
+  // then jumps when the switch settles.
+  await act(() =>
+    publishViewportMetrics("s", { clientWidth: 500, scrollWidth: 1000, scrollLeft: 500 }),
+  );
+  // The Scrolling Tab's bar now rests at x=100, so halfway is x=150.
+  expect(indicator.style.transform).toBe("translateX(150px)");
+  expect(indicator.style.width).toBe("150px");
+
+  await act(() => renderer!.update(<Indicator active="s" />));
+  await act(() => {
+    setTabTransitionProgress(1);
+    endTabTransition();
+  });
+  // Settles on the moved reading, with no second jump.
+  expect(indicator.style.transform).toBe("translateX(100px)");
+  expect(indicator.style.width).toBe("100px");
+});

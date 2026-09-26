@@ -209,7 +209,17 @@ export function useTabIndicator(
         });
       };
       applyFrame();
-      return subscribeTabTransitionFrame(applyFrame);
+      // An endpoint can move without a frame behind it: committing a switch
+      // reveals the incoming Tab's focused Pane, which scrolls its Viewport.
+      // Both endpoints are re-read per frame, so a reading change mid-switch
+      // must re-place the bar rather than leave it on the stale endpoint and
+      // jump when the switch settles.
+      const stopViewport = subscribeViewportMetrics(applyFrame);
+      const stopFrame = subscribeTabTransitionFrame(applyFrame);
+      return () => {
+        stopFrame();
+        stopViewport();
+      };
     }
 
     const wasTransitioning = wasTransitioningRef.current;

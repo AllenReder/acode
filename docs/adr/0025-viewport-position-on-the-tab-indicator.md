@@ -66,6 +66,12 @@ already owns Workbench presentation state.
   about that Tab, not about the drag. A switch to a Scrolling Tab lands on that
   Tab's actual Viewport position, including a mid-canvas one — it does not snap
   the Viewport to an edge to make the bar settle somewhere tidier.
+- **A switch re-places the bar when a reading moves.** An endpoint can move with
+  no transition frame behind it: committing a switch reveals the incoming Tab's
+  focused Pane, which scrolls that Tab's Viewport. Both endpoints are re-read per
+  frame, so the underbar listens for reading changes for the whole switch as well
+  as for frames. Subscribing to frames alone leaves the bar on the stale endpoint
+  until the switch settles, which reads as a jump at the end of the switch.
 
 ## Consequences
 
