@@ -16,15 +16,7 @@ import { PanelLeftCloseIcon, PanelLeftIcon } from "lucide-react";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import { SidebarTitlebarButton } from "./sidebar/SidebarTitlebarControl";
 import { SidebarActionControl } from "./sidebar/SidebarChrome";
-import {
-  COLLAPSED_TABS_INSET_MAC,
-  COLLAPSED_TABS_INSET_WIN,
-  EXPANDED_TABS_INSET,
-  EXPANDED_ACTION_RIGHT_OFFSET,
-  DOCK_LEFT_MAC,
-  DOCK_LEFT_WIN,
-} from "./sidebar/sidebarGeometry";
-import { createMotionValue } from "../workbench/motionValue";
+import { createSidebarPresentation } from "./sidebar/sidebarPresentation";
 import { getPrefersReducedMotion } from "../workbench/workbenchMotion";
 import { isMacPlatform } from "../lib/utils";
 import { resolveWorkbenchTitlebarStyle } from "../lib/windowControlsOverlay";
@@ -139,48 +131,35 @@ function ProjectProjectionRetention() {
   return null;
 }
 
-function SidebarMotionController({ enabled, width }: { enabled: boolean; width: number }) {
+function SidebarMotionController({
+  enabled,
+  width,
+  durationMs,
+}: {
+  enabled: boolean;
+  width: number;
+  durationMs: number;
+}) {
   const open = useSidebarVisibility();
   const marker = useRef<HTMLSpanElement>(null);
-  const motion = useRef<ReturnType<typeof createMotionValue> | null>(null);
-  if (motion.current === null) motion.current = createMotionValue(open ? 1 : 0);
+  const motion = useRef<ReturnType<typeof createSidebarPresentation> | null>(null);
   useLayoutEffect(() => {
     const wrapper = marker.current?.closest<HTMLElement>("[data-slot='sidebar-wrapper']");
     if (!wrapper) return;
-    const spring = motion.current!;
-    const isMac = isMacPlatform(navigator.platform);
-    const collapsedInset = isMac ? COLLAPSED_TABS_INSET_MAC : COLLAPSED_TABS_INSET_WIN;
-    const dockLeft = isMac ? DOCK_LEFT_MAC : DOCK_LEFT_WIN;
-    const write = (fraction: number) => {
-      if (Math.abs(fraction - spring.target) > 0.001) {
-        document.documentElement.dataset.sidebarMotion = "true";
-      } else {
-        delete document.documentElement.dataset.sidebarMotion;
-      }
-      wrapper.style.setProperty("--sidebar-exposed-width", `${width * fraction}px`);
-      wrapper.style.setProperty("--sidebar-motion-progress", `${fraction}`);
-      wrapper.style.setProperty(
-        "--sidebar-motion-tabs-inset",
-        `${collapsedInset + (EXPANDED_TABS_INSET - collapsedInset) * fraction}px`,
-      );
-      wrapper.style.setProperty(
-        "--sidebar-motion-action-left",
-        `${dockLeft + (width - EXPANDED_ACTION_RIGHT_OFFSET - dockLeft) * fraction}px`,
-      );
-    };
-    write(spring.value);
-    const unsubscribe = spring.subscribe(write);
+    motion.current = createSidebarPresentation(wrapper, isMacPlatform(navigator.platform), open);
     return () => {
-      unsubscribe();
-      delete document.documentElement.dataset.sidebarMotion;
+      motion.current?.dispose();
+      motion.current = null;
     };
-  }, [width]);
+  }, []);
   useLayoutEffect(() => {
-    const spring = motion.current!;
-    if (enabled && !getPrefersReducedMotion()) spring.setTarget(open ? 1 : 0);
-    else spring.setDirect(open ? 1 : 0);
-  }, [enabled, open]);
-  useEffect(() => () => motion.current?.stop(), []);
+    motion.current?.update({
+      open,
+      enabled: enabled && !getPrefersReducedMotion(),
+      width,
+      durationMs,
+    });
+  }, [durationMs, enabled, open, width]);
   return <span ref={marker} hidden />;
 }
 
@@ -308,7 +287,11 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
           defaultOpen
           style={sidebarProviderStyle}
         >
-          <SidebarMotionController enabled={routePanelAnimationsActive} width={sidebarWidth} />
+          <SidebarMotionController
+            enabled={routePanelAnimationsActive}
+            width={sidebarWidth}
+            durationMs={panelAnimationDurationMs}
+          />
           <ProjectProjectionRetention />
           <Sidebar
             side="left"

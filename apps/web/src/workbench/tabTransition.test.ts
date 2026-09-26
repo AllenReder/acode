@@ -140,6 +140,21 @@ describe("tab transition store", () => {
     animateTabTransitionTo(1);
     expect(getTabTransition()).toBeNull();
   });
+
+  it("settles a released trackpad preview when panel animations are zero", () => {
+    vi.stubGlobal("window", { matchMedia: () => ({ matches: false }) });
+    vi.stubGlobal("document", {
+      querySelector: () => ({ getAttribute: () => "false" }),
+    });
+    const requestFrame = vi.fn(() => 1);
+    vi.stubGlobal("requestAnimationFrame", requestFrame);
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    beginTabTransition({ fromTabId: "a", toTabId: "b", fromIndex: 0, toIndex: 1, dir: 1 });
+    setTabTransitionProgress(0.4);
+    animateTabTransitionTo(1);
+    expect(getTabTransitionFrame()?.position).toBeCloseTo(0.4);
+    expect(requestFrame).toHaveBeenCalled();
+  });
 });
 
 it("a new gesture cancels the previous settle even when its caller keeps no handle", () => {

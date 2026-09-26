@@ -1968,7 +1968,7 @@ export function AppearanceSettingsPanel() {
       <SettingsSection id="motion" title="Motion">
         <SettingsRow
           {...searchableSetting("panel-animations")}
-          description="Set how fast panels open and close."
+          description="Set how fast the Sidebar and panels open and close. Tab switching has its own pace."
           control={
             <div className="grid w-full grid-cols-[5rem_minmax(0,1fr)] items-center gap-3 sm:w-auto sm:grid-cols-[7rem_13rem] sm:gap-4">
               <PanelAnimationsPreview durationMs={settings.panelAnimationDurationMs} />

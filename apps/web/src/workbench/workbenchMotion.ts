@@ -9,11 +9,7 @@ export function getPrefersReducedMotion(): boolean {
 }
 
 export function skipAutomaticWorkbenchMotion(): boolean {
-  if (getPrefersReducedMotion()) return true;
-  if (typeof document === "undefined") return false;
-  return (
-    document
-      .querySelector?.("[data-slot='sidebar-wrapper']")
-      ?.getAttribute("data-panel-animations") === "false"
-  );
+  // Panel animation duration is scoped to panels and the Sidebar. A zero
+  // setting must not turn Tab and Pane presentation into an instant jump.
+  return getPrefersReducedMotion();
 }

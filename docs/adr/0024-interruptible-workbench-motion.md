@@ -91,9 +91,12 @@ not mean putting unrelated animations into one global progress value.
   routing before relying on this adapter for the production gesture.
 
 Retain current cyclic Tab navigation, immediate main-content switching on Tab
-creation/closure, and concurrent close behavior. Reduced-motion preferences and
-the existing animation toggle should consistently skip automatic transitions;
-direct manipulation still tracks input. ADR-0019's fixed-duration, two-card,
+creation/closure, and concurrent close behavior. Reduced-motion preferences
+skip automatic Workbench transitions; direct manipulation still tracks input.
+The Panel animations setting controls Sidebar and panel motion, including the
+Sidebar spring's settle speed when enabled. It does not disable or retime Tab
+and Pane motion; its default 0ms value must not remove their transitions.
+ADR-0019's fixed-duration, two-card,
 and trackpad rules are amended; its flat live-card presentation and glass
 constraints remain relevant.
 

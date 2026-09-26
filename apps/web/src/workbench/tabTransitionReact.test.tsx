@@ -77,6 +77,20 @@ it("lands instantly under reduced motion", async () => {
   expect(getTabTransition()).toBeNull();
 });
 
+it("keeps click Tab motion when panel animations are set to zero", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal("window", { matchMedia: () => ({ matches: false }) });
+  vi.stubGlobal("document", {
+    querySelector: () => ({ getAttribute: () => "false" }),
+  });
+  const tabs = seedTwoTabs();
+  await act(() => {
+    renderer = create(<TabTransitionController />);
+  });
+  await act(() => useWorkbenchStore.getState().activateTab(tabs[0]!.id));
+  expect(getTabTransitionFrame()?.toTabId).toBe(tabs[0]!.id);
+});
+
 it("keeps visible cards in place when a third Tab becomes the latest target", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   let n = 0;

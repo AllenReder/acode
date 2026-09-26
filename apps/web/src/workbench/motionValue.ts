@@ -2,6 +2,7 @@ export interface MotionValue {
   readonly value: number;
   readonly velocity: number;
   readonly target: number;
+  setFrequency(frequency: number): void;
   setTarget(target: number): void;
   setDirect(value: number, velocity?: number): void;
   stop(): void;
@@ -39,6 +40,7 @@ export function stepCriticallyDamped(
 
 /** A critically damped scalar spring. Retargeting preserves both position and velocity. */
 export function createMotionValue(initial: number, frequency = 24): MotionValue {
+  let currentFrequency = frequency;
   let value = initial;
   let velocity = 0;
   let target = initial;
@@ -57,7 +59,13 @@ export function createMotionValue(initial: number, frequency = 24): MotionValue 
     frame = null;
     const seconds = Math.max((time - previousTime) / 1000, 0);
     previousTime = time;
-    ({ value, velocity } = stepCriticallyDamped(value, velocity, target, seconds, frequency));
+    ({ value, velocity } = stepCriticallyDamped(
+      value,
+      velocity,
+      target,
+      seconds,
+      currentFrequency,
+    ));
     if (Math.abs(value - target) < 0.001 && Math.abs(velocity) < 0.03) {
       value = target;
       velocity = 0;
@@ -77,6 +85,9 @@ export function createMotionValue(initial: number, frequency = 24): MotionValue 
     },
     get target() {
       return target;
+    },
+    setFrequency(next) {
+      if (Number.isFinite(next) && next > 0) currentFrequency = next;
     },
     setTarget(next) {
       if (!Number.isFinite(next)) return;
