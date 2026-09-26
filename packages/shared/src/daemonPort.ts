@@ -78,6 +78,90 @@ export function resolvePortOffset(env: Environment): PortOffsetRequest {
   return { _tag: "set", offset };
 }
 
+/** Upper bound for a path-derived offset, so ports stay in a sane band. */
+export const MAX_HASH_OFFSET = 3000;
+
+/**
+ * Deterministic string hash for a path- or instance-derived offset.
+ *
+ * An exact, dependency-free copy of `effect/Hash.string` (djb2 over UTF-16 code
+ * units, then `optimize`). It is hand-written rather than imported because the
+ * standalone daemon launcher imports this module before the Effect runtime is
+ * loadable. Copying the algorithm exactly, not merely a hash, keeps a
+ * developer's existing checkout offset — and any URL already shared for it —
+ * unchanged when one half of dev moves onto this shared resolver.
+ */
+function hashDevSeed(value: string): number {
+  let hash = 5381;
+  for (let index = value.length; index > 0; index -= 1) {
+    hash = (hash * 33) ^ value.charCodeAt(index - 1);
+  }
+  return (hash & 0xbfffffff) | ((hash >>> 1) & 0x40000000);
+}
+
+const hashedOffsetFor = (seed: string): number =>
+  ((hashDevSeed(seed) >>> 0) % MAX_HASH_OFFSET) + 1;
+
+export type DevPortOffsetRequest =
+  | { readonly _tag: "invalid"; readonly raw: string }
+  | { readonly _tag: "set"; readonly offset: number; readonly source: string };
+
+export interface DevPortOffsetInput {
+  readonly env: Environment;
+  /**
+   * The checkout or linked worktree root. Each one gets a stable, distinct
+   * offset so concurrent dev sessions never collide and a shared URL keeps
+   * working across restarts.
+   */
+  readonly worktreePath?: string | undefined;
+}
+
+/**
+ * The single authority for the dev port offset. Both the dev-runner and the
+ * desktop wrapper call this, so the browser stack and the desktop stack either
+ * resolve the same ports or fail loudly — never silently disagree.
+ *
+ * Precedence: an explicit `AWEN_PORT_OFFSET` wins, then `AWEN_DEV_INSTANCE`
+ * (numeric or hashed), then a hash of the checkout path, then `0` (for callers
+ * with no checkout, such as a unit test).
+ */
+export function resolveDevPortOffset(input: DevPortOffsetInput): DevPortOffsetRequest {
+  const explicit = resolvePortOffset(input.env);
+  if (explicit._tag === "invalid") {
+    return { _tag: "invalid", raw: explicit.raw };
+  }
+  if (explicit._tag === "set") {
+    return {
+      _tag: "set",
+      offset: explicit.offset,
+      source: `AWEN_PORT_OFFSET=${String(explicit.offset)}`,
+    };
+  }
+
+  const seed = input.env.AWEN_DEV_INSTANCE?.trim();
+  if (seed !== undefined && seed.length > 0) {
+    if (/^\d+$/u.test(seed)) {
+      return { _tag: "set", offset: Number(seed), source: `numeric AWEN_DEV_INSTANCE=${seed}` };
+    }
+    return {
+      _tag: "set",
+      offset: hashedOffsetFor(seed),
+      source: `hashed AWEN_DEV_INSTANCE=${seed}`,
+    };
+  }
+
+  const worktreePath = input.worktreePath?.trim();
+  if (worktreePath !== undefined && worktreePath.length > 0) {
+    return {
+      _tag: "set",
+      offset: hashedOffsetFor(worktreePath),
+      source: `checkout ${worktreePath}`,
+    };
+  }
+
+  return { _tag: "set", offset: 0, source: "default ports" };
+}
+
 export function describeInvalidDaemonPort(request: {
   readonly key: string;
   readonly raw: string;
@@ -115,12 +199,15 @@ export type DesktopDevPortsResult =
  * derives the window URL from `webPort`, which is what keeps a session on a
  * non-zero offset from loading a URL that belongs to a different one.
  */
-export function resolveDesktopDevPorts(env: Environment): DesktopDevPortsResult {
-  const offsetRequest = resolvePortOffset(env);
+export function resolveDesktopDevPorts(
+  env: Environment,
+  worktreePath?: string | undefined,
+): DesktopDevPortsResult {
+  const offsetRequest = resolveDevPortOffset({ env, worktreePath });
   if (offsetRequest._tag === "invalid") {
     return { _tag: "invalid", message: describeInvalidPortOffset(offsetRequest.raw) };
   }
-  const offset = offsetRequest._tag === "set" ? offsetRequest.offset : 0;
+  const offset = offsetRequest.offset;
 
   const portRequest = resolveDaemonPortRequest(env);
   if (portRequest._tag === "invalid") {

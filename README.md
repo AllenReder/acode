@@ -89,11 +89,15 @@ Monocode React application is not copied into this checkout.
 
 The desktop shell asks the local daemon launcher to attach to or start the
 daemon for this checkout. The daemon is detached from the window lifecycle, so
-closing the desktop shell leaves work running. The wrapper uses port offset `0`
-and this checkout's `.awen` directory by default:
+closing the desktop shell leaves work running. The wrapper resolves its daemon,
+web, and window ports through the same offset rule as `pnpm dev` (an explicit
+`AWEN_PORT_OFFSET`, else `AWEN_DEV_INSTANCE`, else a hash of the checkout path)
+and uses this checkout's `.awen` directory by default. One checkout owns one
+`.awen` data root and one port set, so run only one dev stack per checkout; use a
+git worktree to run another desktop dev session at the same time:
 
 ```bash
-# Tauri window, Web development server on 5733, and the local daemon launcher
+# Tauri window, this checkout's Web dev server, and the local daemon launcher
 pnpm dev:desktop
 ```
 

@@ -5,8 +5,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::env;
 use std::fs;
+use std::net::{TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
 use tauri::plugin::{Builder as PluginBuilder, TauriPlugin};
 use tauri::{Runtime, Url};
 
@@ -120,12 +122,39 @@ fn is_process_alive(pid: i64) -> bool {
 
     #[cfg(not(unix))]
     {
-        // The endpoint and descriptor are still verified by the client. The
-        // cross-platform shell does not introduce a process-management API in
-        // this ticket; later daemon supervision owns that concern.
+        // Advisory only: a Windows pid check cannot be trusted here (a reused
+        // pid would look alive), so `endpoint_reachable` below is the authority
+        // that keeps a dead descriptor from sending the shell to a dead port.
         let _ = pid;
         true
     }
+}
+
+/// Whether something is actually listening at the daemon's recorded origin.
+///
+/// A descriptor is not proof the daemon is up: the process may have exited
+/// while its `server-runtime.json` survived, and a pid check alone is unreliable
+/// on Windows. A short TCP connect is enough to reject a dead endpoint before
+/// its origin is handed to the client; daemon ownership is still verified
+/// separately by `require_managed_runtime`.
+fn endpoint_reachable(origin: &str) -> bool {
+    const ENDPOINT_PROBE_TIMEOUT: Duration = Duration::from_millis(300);
+
+    let Ok(url) = Url::parse(origin) else {
+        return false;
+    };
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    let Some(port) = url.port_or_known_default() else {
+        return false;
+    };
+    let Ok(addresses) = (host, port).to_socket_addrs() else {
+        return false;
+    };
+    addresses
+        .into_iter()
+        .any(|address| TcpStream::connect_timeout(&address, ENDPOINT_PROBE_TIMEOUT).is_ok())
 }
 
 fn read_runtime_state() -> Result<Option<PersistedRuntime>, String> {
@@ -147,7 +176,7 @@ fn read_runtime_state() -> Result<Option<PersistedRuntime>, String> {
                 path.display()
             ));
         }
-        if is_process_alive(state.pid) {
+        if is_process_alive(state.pid) && endpoint_reachable(&state.origin) {
             return Ok(Some(PersistedRuntime { state, path }));
         }
     }

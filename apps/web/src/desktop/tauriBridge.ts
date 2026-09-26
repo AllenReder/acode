@@ -38,6 +38,7 @@ import * as Schema from "effect/Schema";
 import { readBrowserClientSettings, writeBrowserClientSettings } from "../clientPersistenceStorage";
 import { showContextMenuFallback } from "../contextMenuFallback";
 import { DesktopSshRequestError, SshPasswordPromptCancelledError } from "./sshErrors";
+import { recordDesktopRuntimeConfigError, markDesktopRuntimeConfigSettled } from "./runtimeConfigError";
 import { isTauri } from "../env";
 
 interface TauriRuntimeConfig {
@@ -49,7 +50,6 @@ interface TauriRuntimeConfig {
 let localEnvironmentBootstraps: ReadonlyArray<DesktopEnvironmentBootstrap> = [];
 let localEnvironmentBearerToken = "";
 let localEnvironmentBearerExchange: Promise<string> | null = null;
-let localEnvironmentConfigError: unknown = null;
 let nativeClientPlatform = "other";
 
 export function isSafeExternalUrl(rawUrl: string): boolean {
@@ -547,7 +547,7 @@ if (isTauri) {
     .catch((error) => {
       // Keep rendering so the client can show its normal disconnected/auth
       // state instead of turning a missing daemon descriptor into a blank app.
-      localEnvironmentConfigError = error;
+      recordDesktopRuntimeConfigError(error);
       // Say why, loudly: a missing bootstrap otherwise only shows up as the
       // primary target falling back to the window origin, where the proxy dials a
       // backend port nothing serves. The shell reports the launcher's own code.
@@ -555,9 +555,8 @@ if (isTauri) {
         `[awen] the local daemon runtime config failed: ${error instanceof Error ? error.message : String(error)}`,
         error,
       );
+    })
+    .finally(() => {
+      markDesktopRuntimeConfigSettled();
     });
-}
-
-export function readTauriDesktopConfigError(): unknown {
-  return localEnvironmentConfigError;
 }

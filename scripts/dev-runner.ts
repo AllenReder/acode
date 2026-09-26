@@ -3,7 +3,7 @@
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NetService from "@awen/shared/Net";
-import { BASE_DAEMON_PORT, BASE_WEB_DEV_PORT } from "@awen/shared/daemonPort";
+import { BASE_DAEMON_PORT, BASE_WEB_DEV_PORT, resolveDevPortOffset } from "@awen/shared/daemonPort";
 import { resolveGitWorktreePath } from "@awen/shared/devHome";
 import {
   HostProcessEnvironment,
@@ -14,7 +14,6 @@ import { resolveSpawnCommand } from "@awen/shared/shell";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Hash from "effect/Hash";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
@@ -34,7 +33,6 @@ Object.assign(process.env, loadRepoEnv());
 // changed here alone would desynchronize them.
 const BASE_SERVER_PORT = BASE_DAEMON_PORT;
 const BASE_WEB_PORT = BASE_WEB_DEV_PORT;
-const MAX_HASH_OFFSET = 3000;
 const MAX_PORT = 65535;
 const DEV_RUNNER_STOP_POLL_INTERVAL = "100 millis" as const;
 const DEV_RUNNER_STOP_ACK_TIMEOUT = "5 seconds" as const;
@@ -292,47 +290,27 @@ export function resolveOffset(config: {
   { readonly offset: number; readonly source: string },
   DevRunnerInvalidPortOffsetError
 > {
-  if (config.portOffset !== undefined) {
-    if (config.portOffset < 0) {
-      return Effect.fail(
-        new DevRunnerInvalidPortOffsetError({
-          configKey: "AWEN_PORT_OFFSET",
-          portOffset: config.portOffset,
-          minimum: 0,
-        }),
-      );
-    }
-    return Effect.succeed({
-      offset: config.portOffset,
-      source: `AWEN_PORT_OFFSET=${config.portOffset}`,
-    });
+  // The rule itself lives in `@awen/shared/daemonPort`, because the desktop
+  // wrapper must resolve the very same offset for its window URL and proxy
+  // target. Two copies silently disagreed; this module only maps the shared
+  // result onto its own error type. `AWEN_PORT_OFFSET` is validated by the CLI
+  // config, so the numeric path here is the only one that can fail.
+  const env: Record<string, string | undefined> = {};
+  if (config.portOffset !== undefined) env.AWEN_PORT_OFFSET = String(config.portOffset);
+  if (config.devInstance !== undefined) env.AWEN_DEV_INSTANCE = config.devInstance;
+
+  const resolved = resolveDevPortOffset({ env, worktreePath: config.worktreePath });
+  if (resolved._tag === "invalid") {
+    return Effect.fail(
+      new DevRunnerInvalidPortOffsetError({
+        configKey: "AWEN_PORT_OFFSET",
+        portOffset: Number(resolved.raw),
+        minimum: 0,
+      }),
+    );
   }
 
-  const seed = config.devInstance?.trim();
-  if (seed) {
-    if (/^\d+$/.test(seed)) {
-      return Effect.succeed({
-        offset: Number(seed),
-        source: `numeric AWEN_DEV_INSTANCE=${seed}`,
-      });
-    }
-
-    const offset = ((Hash.string(seed) >>> 0) % MAX_HASH_OFFSET) + 1;
-    return Effect.succeed({ offset, source: `hashed AWEN_DEV_INSTANCE=${seed}` });
-  }
-
-  // Each checkout gets ports derived from its path so every one is stable across
-  // restarts and distinct from its siblings. Without this every checkout starts
-  // at offset 0 and scan-collides onto whatever happens to be free that minute,
-  // so ports move under you between runs — which breaks any URL you already
-  // shared. This also keeps two ordinary clones from colliding by default.
-  const worktreePath = config.worktreePath?.trim();
-  if (worktreePath) {
-    const offset = ((Hash.string(worktreePath) >>> 0) % MAX_HASH_OFFSET) + 1;
-    return Effect.succeed({ offset, source: `checkout ${worktreePath}` });
-  }
-
-  return Effect.succeed({ offset: 0, source: "default ports" });
+  return Effect.succeed({ offset: resolved.offset, source: resolved.source });
 }
 
 function resolveBaseDir(baseDir: string | undefined): Effect.Effect<string, never, Path.Path> {

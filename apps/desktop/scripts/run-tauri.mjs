@@ -17,8 +17,10 @@ const inheritedHome = process.env.AWEN_HOME?.trim();
 const developmentHome = inheritedHome || NodePath.resolve(repositoryRoot, ".awen");
 
 // Daemon port, web dev proxy target, and the window URL all come from the one
-// resolution in `@awen/shared/daemonPort`, so they cannot disagree.
-const resolvedPorts = resolveDesktopDevPorts(process.env);
+// resolution in `@awen/shared/daemonPort`, so they cannot disagree. The checkout
+// root feeds the offset rule, so `dev:app` lands on the same ports the
+// dev-runner would use for this checkout and different worktrees stay isolated.
+const resolvedPorts = resolveDesktopDevPorts(process.env, repositoryRoot);
 if (resolvedPorts._tag === "invalid") {
   console.error(`[awen] ${resolvedPorts.message}`);
   process.exit(1);
