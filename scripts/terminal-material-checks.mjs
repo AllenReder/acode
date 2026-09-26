@@ -124,6 +124,55 @@ export async function verifyTerminalMaterial(page) {
       "Interrupted control strings and leading-zero OSC identifiers must preserve transparency",
     );
   }
+  // xtermjs/xterm.js#6116: the WebGL renderer hardcoded its background
+  // rectangle alpha to 1, so a cell carrying only a background attribute —
+  // italic, dim, or an extended attribute such as underline — painted an
+  // opaque box over the material. The explicit ANSI case below is the one that
+  // must stay opaque; an attribute alone must not. The cells are written as
+  // spaces because ED does not carry these attribute flags into the erased
+  // cells, and the sample sits on the first rows the spaces fill, clear of the
+  // 16px top-fade band.
+  NodeAssert.ok(
+    await page.evaluate(() =>
+      Boolean(
+        document
+          .querySelector("#terminal-material-probe canvas:not(.xterm-link-layer)")
+          ?.getContext("webgl2"),
+      ),
+    ),
+    "The attribute regression must run under the WebGL renderer",
+  );
+  // Row 1's centre: inside the rows the styled spaces fill, below the 16px
+  // top-fade band.
+  const attributeProbe = { x: 100, y: 27 };
+  for (const [attribute, sgr] of [
+    ["italic", "\x1b[3m"],
+    ["dim", "\x1b[2m"],
+    ["underline", "\x1b[4m"],
+  ]) {
+    await page.evaluate(
+      (sequence) =>
+        window.__terminalMaterialProbe.write("\x1b[0m\x1b[2J\x1b[H" + sequence + " ".repeat(200)),
+      sgr,
+    );
+    await page.waitForTimeout(100);
+    NodeAssert.deepEqual(
+      await paintedPixel(page, attributeProbe.x, attributeProbe.y),
+      [80, 120, 160],
+      `${attribute} cells must leave the default background transparent`,
+    );
+  }
+  // The `| 0xFF` half of the patch: a truecolor background must stay opaque,
+  // not inherit the default background's alpha.
+  await page.evaluate(() =>
+    window.__terminalMaterialProbe.write("\x1b[0m\x1b[48;2;12;34;56m\x1b[2J"),
+  );
+  await page.waitForTimeout(100);
+  NodeAssert.deepEqual(
+    await paintedPixel(page, attributeProbe.x, attributeProbe.y),
+    [12, 34, 56],
+    "Explicit truecolor backgrounds must stay opaque",
+  );
   await page.evaluate(() => window.__terminalMaterialProbe.write("\x1b[41m\x1b[2J"));
   await page.waitForTimeout(100);
   NodeAssert.notDeepEqual(

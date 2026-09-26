@@ -44,3 +44,5 @@ Adopt Option B:
 ## Consequences
 
 The Ghostty renderer under `apps/web/src/terminal/ghostty/` and the vendored `native/libghostty-vt` pin are retained but no longer loaded by the shipped client; removing them, and the now-unused `'wasm-unsafe-eval'` CSP grant, belongs to a follow-up because mobile entrypoints that reuse the same ABI are deferred to later tickets.
+
+The WebGL renderer's transparent-background path carries a local pnpm patch (`patches/@xterm__addon-webgl@0.19.0.patch`), and `@xterm/addon-webgl` is pinned to `0.19.0` so the patch cannot silently drift. `RectangleRenderer` hardcoded its background-rectangle alpha to 1, so a cell carrying only a background attribute — italic, dim, underline, or any other extended attribute — painted an opaque theme-colored box over the transparent default canvas. The patch takes the rectangle alpha from the resolved color and keeps truecolor backgrounds opaque; explicit ANSI backgrounds are unchanged. The patch targets both the ESM and CJS builds of the addon. Revisit it whenever the addon is upgraded. Upstream: https://github.com/xtermjs/xterm.js/issues/6116.
