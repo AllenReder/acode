@@ -1,10 +1,15 @@
+// @effect-diagnostics unsafeEffectTypeAssertion:off
 import {
+  AuthOrchestrationOperateScope,
+  AuthOrchestrationReadScope,
+  AuthSessionId,
+  AuthStandardClientScopes,
+  AuthTerminalOperateScope,
   EnvironmentAuthInvalidError,
   EnvironmentOperationForbiddenError,
   EnvironmentRequestInvalidError,
   EnvironmentResourceNotFoundError,
   EnvironmentScopeRequiredError,
-  AuthOrchestrationReadScope,
 } from "@awen/contracts";
 import {
   SshCommandError,
@@ -12,14 +17,27 @@ import {
   SshHttpBridgeError,
   SshPasswordPromptError,
 } from "@awen/ssh/errors";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import {
+  HttpClient,
+  HttpClientRequest,
+  HttpClientResponse,
+  HttpRouter,
+} from "effect/unstable/http";
 import { describe, expect, it } from "vite-plus/test";
 
+import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import {
+  desktopSshBootstrapBearerRouteLayer,
   DesktopSshEnvironmentRequestError,
   remoteRequestFailureCode,
   sshErrorStatus,
   sshRequestErrorStatus,
 } from "./sshRoutes.ts";
+
+const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 
 describe("remoteRequestFailureCode", () => {
   it("classifies declared daemon authentication failures", () => {
@@ -152,5 +170,94 @@ describe("sshErrorStatus", () => {
         }),
       ),
     ).toBe(422);
+  });
+});
+
+describe("desktopSshBootstrapBearerRouteLayer", () => {
+  it("requests bearer session with AuthStandardClientScopes including terminal:operate", async () => {
+    let capturedRequest: HttpClientRequest.HttpClientRequest | undefined;
+    let capturedPayload: unknown = null;
+
+    const mockHttpClient = HttpClient.make((request) =>
+      Effect.gen(function* () {
+        capturedRequest = request;
+        const webRequest = yield* Effect.orDie(HttpClientRequest.toWeb(request));
+        capturedPayload = yield* Effect.promise(() => webRequest.json());
+        const responseBody = encodeJson({
+          token: "mock-remote-bearer-token",
+          scopes:
+            capturedPayload && typeof capturedPayload === "object" && "scopes" in capturedPayload
+              ? (capturedPayload as { scopes: unknown }).scopes
+              : [],
+          expiresInSeconds: 3600,
+        });
+        return HttpClientResponse.fromWeb(
+          request,
+          new Response(responseBody, {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      }),
+    );
+
+    const authLayer = Layer.succeed(EnvironmentAuth.EnvironmentAuth, {
+      authenticateHttpRequest: () =>
+        Effect.succeed({
+          sessionId: AuthSessionId.make("test-session"),
+          subject: "test-user",
+          method: "bearer-access-token",
+          scopes: [AuthOrchestrationOperateScope],
+        }),
+    } as unknown as EnvironmentAuth.EnvironmentAuth["Service"]);
+
+    const routeLayer = desktopSshBootstrapBearerRouteLayer as Layer.Layer<
+      never,
+      never,
+      HttpRouter.HttpRouter | EnvironmentAuth.EnvironmentAuth | HttpClient.HttpClient
+    >;
+
+    const { handler, dispose } = HttpRouter.toWebHandler(
+      routeLayer.pipe(
+        Layer.provideMerge(authLayer),
+        Layer.provideMerge(Layer.succeed(HttpClient.HttpClient, mockHttpClient)),
+      ),
+      { disableLogger: true },
+    );
+
+    try {
+      const response = await handler(
+        new Request("http://127.0.0.1/api/desktop/ssh/bearer/bootstrap", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: "Bearer local-test-token",
+          },
+          body: encodeJson({
+            httpBaseUrl: "http://127.0.0.1:41773",
+            credential: "remote-pairing-token",
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body).toEqual({
+        token: "mock-remote-bearer-token",
+        scopes: [...AuthStandardClientScopes],
+        expiresInSeconds: 3600,
+      });
+
+      expect(capturedRequest?.url).toBe("http://127.0.0.1:41773/api/auth/bearer-session");
+      expect(capturedPayload).toEqual({
+        credential: "remote-pairing-token",
+        scopes: [...AuthStandardClientScopes],
+      });
+      expect((capturedPayload as { scopes: readonly string[] }).scopes).toContain(
+        AuthTerminalOperateScope,
+      );
+    } finally {
+      await dispose();
+    }
   });
 });
