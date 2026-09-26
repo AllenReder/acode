@@ -4,6 +4,7 @@ import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NetService from "@awen/shared/Net";
+import { resolveDesktopDevPorts } from "@awen/shared/daemonPort";
 import {
   HostProcessEnvironment,
   HostProcessPlatform,
@@ -147,6 +148,25 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         });
         assert.ok(result.offset >= 1);
         assert.ok(result.offset <= 3000);
+      }),
+    );
+
+    // The wrapper and the runner must resolve the same offset for one checkout,
+    // or the desktop window and the web proxy address a port nothing serves
+    // (issue #129).
+    it.effect("agrees with the desktop wrapper on a checkout-derived offset", () =>
+      Effect.gen(function* () {
+        const byRunner = yield* resolveOffset({
+          portOffset: undefined,
+          devInstance: undefined,
+          worktreePath: "/work/awen",
+        });
+        const desktop = resolveDesktopDevPorts({}, "/work/awen");
+        assert.strictEqual(desktop._tag, "set");
+        if (desktop._tag !== "set") return;
+        assert.strictEqual(desktop.ports.offset, byRunner.offset);
+        assert.ok(byRunner.offset >= 1);
+        assert.ok(byRunner.offset <= 3000);
       }),
     );
 

@@ -303,7 +303,14 @@ const processIsAlive = (pid: number): boolean => {
 };
 
 const listenOnLoopback = async (): Promise<{ port: number; close: () => Promise<void> }> => {
-  const server = NodeNet.createServer();
+  // A plain TCP listener that never answers HTTP, used to hold a port. Track its
+  // sockets so an aborted probe request cannot leave a keep-alive connection
+  // open and hang `close()`.
+  const sockets = new Set<NodeNet.Socket>();
+  const server = NodeNet.createServer((socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+  });
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => resolve());
@@ -315,7 +322,11 @@ const listenOnLoopback = async (): Promise<{ port: number; close: () => Promise<
   }
   return {
     port: address.port,
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        for (const socket of sockets) socket.destroy();
+      }),
   };
 };
 
@@ -570,6 +581,143 @@ describe("local daemon port contract", () => {
       else process.env.AWEN_PORT = previousPort;
       outdated.kill("SIGKILL");
       await server.close();
+    }
+  });
+});
+
+describe("local daemon descriptor reconciliation", () => {
+  // A web-mode dev server writes `server-runtime.json` without `daemonManaged`.
+  // Once its process is gone the port is bindable, which is the launcher's proof
+  // the record is replaceable: it must start a managed daemon rather than refuse
+  // on the unusable record (issue #129).
+  it("replaces a non-managed record whose process is gone and starts a managed daemon", async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "awen-daemon-nonmanaged-dead-"));
+    const fake = await writeFakeDaemon(root, 0);
+    const freePort = await reserveLoopbackPort();
+    const paths = await writeDiscovery(root, {
+      version: 1,
+      pid: 2_147_483_647,
+      origin: `http://127.0.0.1:${String(freePort)}`,
+      startedAt: "2026-09-18T00:00:00.000Z",
+    });
+    let pid: number | undefined;
+    try {
+      const descriptor = await startLocalDaemon({
+        baseDir: root,
+        timeoutMs: 5_000,
+        requestTimeoutMs: 250,
+        reservePort: () => Promise.resolve(freePort),
+        serverInvocation: { command: process.execPath, args: [fake.scriptPath] },
+      });
+      pid = descriptor.pid;
+
+      expect(descriptor.daemonId).toBeTruthy();
+      const contents = await NodeFSP.readFile(paths.runtimeStatePath, "utf8");
+      expect(contents).toContain('"daemonManaged":true');
+      expect(contents).toContain(descriptor.daemonId);
+      expect(contents).not.toContain("2147483647");
+    } finally {
+      if (pid !== undefined) process.kill(pid, "SIGKILL");
+    }
+  });
+
+  // The loud same-checkout conflict: `pnpm dev` still holds the port, so the
+  // record cannot be replaced and a second process would share one data root.
+  it("refuses a live non-managed process on the recorded port", async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "awen-daemon-nonmanaged-live-"));
+    const holder = await listenOnLoopback();
+    const previous = process.env.AWEN_DAEMON_PORT;
+    process.env.AWEN_DAEMON_PORT = String(holder.port);
+    try {
+      const paths = await writeDiscovery(root, {
+        version: 1,
+        pid: process.pid,
+        origin: `http://127.0.0.1:${String(holder.port)}`,
+        startedAt: "2026-09-18T00:00:00.000Z",
+      });
+
+      await expect(
+        startLocalDaemon({ baseDir: root, requestTimeoutMs: 100 }),
+      ).rejects.toMatchObject({ code: "daemon-port-occupied" });
+
+      // Refusing must leave the other process and its record untouched.
+      await expect(NodeFSP.readFile(paths.runtimeStatePath, "utf8")).resolves.toContain(
+        String(holder.port),
+      );
+    } finally {
+      if (previous === undefined) delete process.env.AWEN_DAEMON_PORT;
+      else process.env.AWEN_DAEMON_PORT = previous;
+      await holder.close();
+    }
+  });
+
+  // A managed daemon whose process is alive but no longer answers, with the port
+  // free: start the replacement (acceptance 5). The unreachable process is NOT
+  // signalled — pid liveness alone is not proof we started the current holder.
+  it("starts a replacement for an unreachable managed record when its port is free", async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "awen-daemon-unreachable-"));
+    const fake = await writeFakeDaemon(root, 0);
+    const hung = await spawnIdleProcess();
+    const hungPid = hung.pid;
+    if (hungPid === undefined) throw new Error("idle holder did not expose a pid");
+    const freePort = await reserveLoopbackPort();
+    const paths = await writeDiscovery(
+      root,
+      makeLocalDaemonDiscovery({
+        daemonId: "hung-daemon",
+        pid: hungPid,
+        origin: `http://127.0.0.1:${String(freePort)}`,
+        startedAt: "2026-09-18T00:00:00.000Z",
+        workingDirectory: "/hung",
+      }),
+    );
+    let pid: number | undefined;
+    try {
+      const descriptor = await startLocalDaemon({
+        baseDir: root,
+        timeoutMs: 5_000,
+        requestTimeoutMs: 100,
+        reservePort: () => Promise.resolve(freePort),
+        serverInvocation: { command: process.execPath, args: [fake.scriptPath] },
+      });
+      pid = descriptor.pid;
+
+      await expect(NodeFSP.readFile(paths.runtimeStatePath, "utf8")).resolves.toContain(
+        descriptor.daemonId,
+      );
+    } finally {
+      if (pid !== undefined) process.kill(pid, "SIGKILL");
+      if (processIsAlive(hungPid)) hung.kill("SIGKILL");
+    }
+  });
+
+  // A managed record pointing at a port a different process now holds: refuse
+  // with a conflict that names the port, and leave the other process alone.
+  it("refuses when a non-managed process holds a managed record's port", async () => {
+    const root = await NodeFSP.mkdtemp(NodePath.join("/tmp", "awen-daemon-unreachable-held-"));
+    const holder = await listenOnLoopback();
+    const hung = await spawnIdleProcess();
+    const hungPid = hung.pid;
+    if (hungPid === undefined) throw new Error("idle holder did not expose a pid");
+    try {
+      await writeDiscovery(
+        root,
+        makeLocalDaemonDiscovery({
+          daemonId: "unreachable-daemon",
+          pid: hungPid,
+          origin: `http://127.0.0.1:${String(holder.port)}`,
+          startedAt: "2026-09-18T00:00:00.000Z",
+          workingDirectory: "/unreachable",
+        }),
+      );
+
+      await expect(
+        startLocalDaemon({ baseDir: root, requestTimeoutMs: 100 }),
+      ).rejects.toMatchObject({ code: "daemon-port-occupied" });
+      expect(processIsAlive(hungPid)).toBe(true);
+    } finally {
+      if (processIsAlive(hungPid)) hung.kill("SIGKILL");
+      await holder.close();
     }
   });
 });

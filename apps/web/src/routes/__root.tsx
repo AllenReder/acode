@@ -55,6 +55,11 @@ import { useUiStateStore } from "../uiStateStore";
 import { syncBrowserChromeTheme } from "../hooks/useTheme";
 import { configureClientTracing } from "../observability/clientTracing";
 import { resolveInitialServerAuthGateState } from "../environments/primary";
+import {
+  desktopRuntimeConfigSettled,
+  readDesktopRuntimeConfigError,
+} from "../desktop/runtimeConfigError";
+import { isTauri } from "../env";
 import { hasHostedPairingRequest, isHostedStaticApp } from "../hostedPairing";
 import { isLocalEnvironmentDisabled } from "../localEnvironment";
 import { shellEnvironment } from "../state/shell";
@@ -92,6 +97,13 @@ export const Route = createRootRoute({
           status: "hosted-static",
         } as const,
       };
+    }
+
+    if (isTauri) {
+      // Wait for the desktop shell's config read so a launcher failure is
+      // recorded before we attempt (and fail) the primary environment
+      // bootstrap; the error view can then name the launcher's code.
+      await desktopRuntimeConfigSettled;
     }
 
     const authGateState = await resolveInitialServerAuthGateState();
@@ -398,7 +410,12 @@ function RootRouteErrorView({ error }: ErrorComponentProps) {
   const message = errorMessage(error);
   // Router pathname rather than window.location: desktop uses hash history, where the window path is always "/".
   const pathname = useLocation({ select: (location) => location.pathname });
-  const report = useMemo(() => errorReport(error, pathname), [error, pathname]);
+  const launcherError = readDesktopRuntimeConfigError();
+  const launcherMessage = launcherError === null ? null : errorMessage(launcherError);
+  const report = useMemo(
+    () => errorReport(error, pathname, launcherError),
+    [error, pathname, launcherError],
+  );
 
   return (
     <DesktopAuthWindowChrome>
@@ -416,6 +433,11 @@ function RootRouteErrorView({ error }: ErrorComponentProps) {
             Something went wrong.
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{message}</p>
+          {launcherMessage !== null && (
+            <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+              Local daemon: {launcherMessage}
+            </p>
+          )}
 
           <div className="mt-5 flex flex-wrap gap-2">
             <Button size="sm" onClick={() => void router.invalidate()}>
@@ -486,7 +508,7 @@ const MAX_ERROR_CAUSE_DEPTH = 5;
  * and any cause chain. Takes the pathname only so tokens in the query never
  * land on the clipboard.
  */
-function errorReport(error: unknown, pathname: string): string {
+function errorReport(error: unknown, pathname: string, launcherError?: unknown): string {
   const lines = [
     `${APP_DISPLAY_NAME} ${APP_VERSION}`,
     `Path: ${pathname}`,
@@ -498,6 +520,9 @@ function errorReport(error: unknown, pathname: string): string {
   for (let depth = 0; cause !== undefined && depth < MAX_ERROR_CAUSE_DEPTH; depth += 1) {
     lines.push("", "Caused by:", errorDetails(cause));
     cause = cause instanceof Error ? cause.cause : undefined;
+  }
+  if (launcherError !== undefined && launcherError !== null) {
+    lines.push("", "Local daemon launcher:", errorDetails(launcherError));
   }
   return lines.join("\n");
 }

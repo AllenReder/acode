@@ -4,11 +4,13 @@ import {
   BASE_DAEMON_PORT,
   BASE_WEB_DEV_PORT,
   DAEMON_PORT_KEYS,
+  MAX_HASH_OFFSET,
   daemonPortForOffset,
   describeInvalidDaemonPort,
   describeInvalidPortOffset,
   resolveDaemonPortRequest,
   resolveDesktopDevPorts,
+  resolveDevPortOffset,
   resolvePortOffset,
   webDevPortForOffset,
 } from "./daemonPort.ts";
@@ -100,7 +102,74 @@ describe("port offset", () => {
   });
 });
 
+describe("dev port offset (shared authority)", () => {
+  it("prefers an explicit offset, then a dev instance, then the checkout path", () => {
+    expect(resolveDevPortOffset({ env: {} })).toEqual({
+      _tag: "set",
+      offset: 0,
+      source: "default ports",
+    });
+    expect(resolveDevPortOffset({ env: { AWEN_DEV_INSTANCE: "12" } })).toMatchObject({
+      _tag: "set",
+      offset: 12,
+    });
+    expect(
+      resolveDevPortOffset({ env: { AWEN_PORT_OFFSET: "3", AWEN_DEV_INSTANCE: "12" } }),
+    ).toMatchObject({ _tag: "set", offset: 3 });
+    expect(
+      resolveDevPortOffset({ env: { AWEN_PORT_OFFSET: "3" }, worktreePath: "/work/tree" }),
+    ).toMatchObject({ _tag: "set", offset: 3 });
+  });
+
+  it("hashes a non-numeric dev instance and a checkout path into the same band", () => {
+    const byInstance = resolveDevPortOffset({ env: { AWEN_DEV_INSTANCE: "feature-branch" } });
+    expect(byInstance._tag).toBe("set");
+    if (byInstance._tag !== "set") throw new Error("expected a set offset");
+    expect(byInstance.offset).toBeGreaterThanOrEqual(1);
+    expect(byInstance.offset).toBeLessThanOrEqual(MAX_HASH_OFFSET);
+
+    const byPath = resolveDevPortOffset({ env: {}, worktreePath: "/work/awen" });
+    expect(byPath._tag).toBe("set");
+    if (byPath._tag !== "set") throw new Error("expected a set offset");
+    expect(byPath.offset).toBeGreaterThanOrEqual(1);
+    expect(byPath.offset).toBeLessThanOrEqual(MAX_HASH_OFFSET);
+  });
+
+  it("rejects an unusable offset instead of silently ignoring it", () => {
+    expect(resolveDevPortOffset({ env: { AWEN_PORT_OFFSET: "-1" } })).toEqual({
+      _tag: "invalid",
+      raw: "-1",
+    });
+    expect(resolveDevPortOffset({ env: { AWEN_PORT_OFFSET: "2.5" } })._tag).toBe("invalid");
+  });
+});
+
 describe("desktop dev ports", () => {
+  // The parity that fixes issue #129: the wrapper and the dev-runner resolve the
+  // very same offset for one checkout, so a second stack fails on a shared port
+  // instead of silently dialing a port nothing serves.
+  it("agrees with the shared offset resolver for one checkout", () => {
+    const shared = resolveDevPortOffset({ env: {}, worktreePath: "/work/awen" });
+    const desktop = resolveDesktopDevPorts({}, "/work/awen");
+    expect(shared._tag).toBe("set");
+    expect(desktop._tag).toBe("set");
+    if (shared._tag !== "set" || desktop._tag !== "set") throw new Error("expected set ports");
+    expect(desktop.ports.offset).toBe(shared.offset);
+    expect(desktop.ports.webPort).toBe(BASE_WEB_DEV_PORT + shared.offset);
+    expect(desktop.ports.daemonPort).toBe(BASE_DAEMON_PORT + shared.offset);
+  });
+
+  it("derives the offset from the checkout path so two worktrees never collide", () => {
+    const a = resolveDesktopDevPorts({}, "/work/awen-a");
+    const b = resolveDesktopDevPorts({}, "/work/awen-b");
+    expect(a._tag).toBe("set");
+    expect(b._tag).toBe("set");
+    if (a._tag !== "set" || b._tag !== "set") throw new Error("expected set ports");
+    expect(a.ports.offset).toBeGreaterThanOrEqual(1);
+    expect(b.ports.offset).toBeGreaterThanOrEqual(1);
+    expect(a.ports.daemonPort).not.toBe(b.ports.daemonPort);
+  });
+
   it("pairs the daemon and web ports of the same offset", () => {
     expect(resolveDesktopDevPorts({})).toEqual({
       _tag: "set",

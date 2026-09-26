@@ -768,6 +768,86 @@ async function terminateSpawnedChild(child: NodeChildProcess.ChildProcess): Prom
   });
 }
 
+const portOfOrigin = (origin: string | undefined): number | undefined => {
+  if (origin === undefined) return undefined;
+  try {
+    const port = new URL(origin).port;
+    return port.length > 0 ? Number(port) : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * The endpoint a leftover record points at, read without requiring daemon
+ * ownership. A web-mode dev server writes `server-runtime.json` without
+ * `daemonManaged`, so this is how the launcher finds the port it holds. The
+ * value never becomes a reported discovery state and never authorises signalling
+ * the recorded process — a pid can be reused.
+ */
+async function readRecordedOrigin(paths: LocalDaemonPaths): Promise<string | undefined> {
+  try {
+    const value: unknown = JSON.parse(await NodeFSP.readFile(paths.runtimeStatePath, "utf8"));
+    if (!isRecord(value) || value.version !== DISCOVERY_VERSION) return undefined;
+    const rawOrigin = value.origin;
+    return isLoopbackOrigin(rawOrigin) ? normalizeOrigin(rawOrigin) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Decide what to do with a discovery record the launcher cannot attach to.
+ *
+ * Reconciliation is keyed on the recorded endpoint, never on the record's own
+ * ownership claim: a killed daemon and a web-mode dev server both leave records
+ * that do not describe a live managed daemon. A bindable port is proof the
+ * writer is gone, so the record may be replaced. If something still answers on
+ * the recorded port and it is not this record's managed daemon, starting a
+ * second process would share one data root with a process we do not own — name
+ * the conflict and leave that process alone.
+ */
+async function reconcileUnattachedRecord(input: {
+  readonly paths: LocalDaemonPaths;
+  readonly existing: Exclude<LocalDaemonInspection, { status: "ready" | "absent" }>;
+}): Promise<void> {
+  const { paths, existing } = input;
+  const recordedOrigin =
+    "state" in existing ? existing.state.origin : await readRecordedOrigin(paths);
+  const recordedPort = portOfOrigin(recordedOrigin);
+
+  if (recordedPort === undefined) {
+    // A malformed or unlocatable record: refuse rather than guess whether some
+    // process still owns this data root.
+    throw inspectionError(existing);
+  }
+
+  if (!(await canListenOnLoopback(recordedPort))) {
+    if (
+      existing.status === "auth-missing" ||
+      existing.status === "auth-invalid" ||
+      existing.status === "auth-unavailable"
+    ) {
+      // Our daemon answers there; its credential problem has its own fix, and
+      // resetting it or binding a second daemon is not this launcher's call.
+      throw inspectionError(existing);
+    }
+    // Anything else on the recorded port is a process we did not start. A
+    // `pnpm dev` server sharing this checkout is the usual cause; name the
+    // conflict so the next step is obvious.
+    throw new LocalDaemonError(
+      "daemon-port-occupied",
+      `A process is already listening on the recorded daemon port ${String(recordedPort)}, and it is not an Awen-managed daemon this launcher can attach to. Stop it (a \`pnpm dev\` server sharing this checkout is the usual cause) before starting the desktop daemon.`,
+    );
+  }
+
+  // The port is free, so whoever wrote the record no longer serves it. Remove
+  // the stale record and let the caller start a fresh managed daemon. The old
+  // process is deliberately not signalled: pid liveness alone is not proof we
+  // started it.
+  await NodeFSP.rm(paths.runtimeStatePath, { force: true }).catch(() => undefined);
+}
+
 export async function startLocalDaemon(
   options: LocalDaemonLaunchOptions,
 ): Promise<LocalDaemonDescriptor> {
@@ -782,30 +862,27 @@ export async function startLocalDaemon(
     const requested = requestedDaemonPort();
 
     if (existing.status === "ready") {
-      if (requested._tag === "set") {
-        const existingPort = Number(new URL(existing.state.origin).port);
-        if (existingPort === requested.port) {
-          return descriptorFromState(existing.state);
-        }
-        await assertRequestedPortAvailable(requested);
-        // Already inside the launch lock: re-entering it from this process can
-        // never succeed, because the lock record names this very pid, so a
-        // nested `stopLocalDaemon` would spin until `launch-lock-timeout`.
-        await stopLocalDaemonLocked({ baseDir: options.baseDir, confirm: true });
-      } else {
+      if (requested._tag !== "set") {
         return descriptorFromState(existing.state);
       }
+      const existingPort = portOfOrigin(existing.state.origin);
+      if (existingPort === requested.port) {
+        return descriptorFromState(existing.state);
+      }
+      await assertRequestedPortAvailable(requested);
+      // Already inside the launch lock: re-entering it from this process can
+      // never succeed, because the lock record names this very pid, so a
+      // nested `stopLocalDaemon` would spin until `launch-lock-timeout`.
+      await stopLocalDaemonLocked({ baseDir: options.baseDir, confirm: true });
+    } else if (existing.status !== "absent") {
+      await reconcileUnattachedRecord({ paths, existing });
     }
-    if (
-      existing.status === "invalid" ||
-      existing.status === "unreachable" ||
-      existing.status === "foreign" ||
-      existing.status === "auth-missing" ||
-      existing.status === "auth-invalid" ||
-      existing.status === "auth-unavailable"
-    ) {
-      throw inspectionError(existing);
-    }
+
+    // A required daemon port that cannot be taken must fail before anything is
+    // stopped or spawned. `reconcileUnattachedRecord` refuses a recorded
+    // endpoint still held by a process we do not own; this covers the requested
+    // port even when no record points at it.
+    await assertRequestedPortAvailable(requested);
 
     const credential = await writeCredentialIfMissing(paths.credentialPath);
     const daemonId = NodeCrypto.randomUUID();
