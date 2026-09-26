@@ -49,10 +49,11 @@ manage their own vertical scrolling.
     cross-tab Pane transfer, and Sidebar Session opens.
   - Single-pane invariant (ADR 0010) is preserved: dragging within a Tab with
     only 1 Pane produces no valid drop target (`target: null`).
-- **Trailing canvas drop padding**:
-  - Scrolling canvas width appends a trailing buffer (~200px) beyond the last Column,
-    providing visual breathing room and a persistent drop landing target even when
-    Columns exceed Viewport width and the user scrolls to the end.
+- **Trailing canvas width**:
+  - Scrolling canvas does not append extra padding beyond the final Pane gap.
+    When Columns are narrower than the Viewport, the unused Viewport area remains
+    a valid drop target; when Columns overflow, the canvas ends at the last Column's
+    trailing gap.
 - **Bidirectional edge auto-scrolling during drag**:
   - A 56px trigger zone is established on both left and right edges of the Viewport.
   - When dragging enters an edge zone, an active `requestAnimationFrame` loop

@@ -99,9 +99,10 @@ describe("layoutGeometry", () => {
       const horizontalGap = p3.left - (p1.left + p1.width);
       expect(horizontalGap).toBe(gap);
 
-      // Right margin after col 2 includes gap and trailing drop padding (ADR 0015)
+      // Right margin after col 2 is only the configured outer Pane gap.
       const rightMargin = result.canvasWidth - (p3.left + p3.width);
-      expect(rightMargin).toBe(gap + SCROLLING_TRAILING_PADDING);
+      expect(SCROLLING_TRAILING_PADDING).toBe(0);
+      expect(rightMargin).toBe(gap);
     });
 
     it("strictly locks canvasHeight to viewportHeight even when many panes stack (ADR 0015)", () => {
