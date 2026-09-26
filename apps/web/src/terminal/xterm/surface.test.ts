@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { shouldXtermHandleKey } from "./surface";
+import { shouldLoadWebglRenderer, shouldXtermHandleKey } from "./surface";
 import { buildXtermTheme } from "./theme";
 
 describe("shouldXtermHandleKey", () => {
@@ -18,6 +18,35 @@ describe("shouldXtermHandleKey", () => {
 
   it("defaults to letting xterm handle keys when no host hook is installed", () => {
     expect(shouldXtermHandleKey(event)).toBe(true);
+  });
+});
+
+describe("shouldLoadWebglRenderer", () => {
+  it("does not load WebGL on Windows even when a context is available", () => {
+    expect(
+      shouldLoadWebglRenderer({ hasWebglContext: true, platform: { desktopPlatform: "win32" } }),
+    ).toBe(false);
+    expect(
+      shouldLoadWebglRenderer({
+        hasWebglContext: true,
+        platform: { navigatorPlatform: "Win32", userAgent: "Windows NT 10.0" },
+      }),
+    ).toBe(false);
+  });
+
+  it("loads WebGL off Windows when a context is available", () => {
+    expect(
+      shouldLoadWebglRenderer({ hasWebglContext: true, platform: { desktopPlatform: "darwin" } }),
+    ).toBe(true);
+    expect(
+      shouldLoadWebglRenderer({ hasWebglContext: true, platform: { desktopPlatform: "linux" } }),
+    ).toBe(true);
+  });
+
+  it("never loads WebGL without a context", () => {
+    expect(
+      shouldLoadWebglRenderer({ hasWebglContext: false, platform: { desktopPlatform: "darwin" } }),
+    ).toBe(false);
   });
 });
 

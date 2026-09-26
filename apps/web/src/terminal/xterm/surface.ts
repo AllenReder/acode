@@ -1,5 +1,6 @@
 import "@xterm/xterm/css/xterm.css";
 import "./surface.css";
+import { isWindowsPlatform, type ClientPlatformSignals } from "../../platformSignals";
 import { transparentXtermTheme } from "./theme";
 import { TransparentTerminalOutput } from "./transparentOutput";
 import { Terminal, type ITheme } from "@xterm/xterm";
@@ -41,6 +42,24 @@ export function shouldXtermHandleKey(
   beforeKey?: (event: KeyboardEvent) => boolean,
 ): boolean {
   return beforeKey ? beforeKey(event) : true;
+}
+
+/**
+ * Load the WebGL renderer only when a context exists and the platform is not
+ * Windows.
+ *
+ * Windows cannot match the WebGL glyph atlas's grayscale anti-aliasing to the
+ * ClearType subpixel text the rest of the shell uses, so against a transparent
+ * or light Workbench terminal glyphs look soft and fringed (issue #128). The
+ * DOM renderer is xterm's default and paints with the host's native text
+ * pipeline. macOS and Linux have no such mismatch and keep WebGL. Platform
+ * resolution is shared with the appearance layer in `platformSignals`.
+ */
+export function shouldLoadWebglRenderer(input: {
+  readonly hasWebglContext: boolean;
+  readonly platform: ClientPlatformSignals;
+}): boolean {
+  return input.hasWebglContext && !isWindowsPlatform(input.platform);
 }
 
 export class XtermTerminalSurface {
@@ -145,8 +164,20 @@ export class XtermTerminalSurface {
       update();
     }
 
-    // Attempt WebGL acceleration when available
-    if (typeof window !== "undefined" && typeof window.WebGLRenderingContext !== "undefined") {
+    // Attempt WebGL acceleration when available. Windows keeps xterm's DOM
+    // renderer so terminal glyphs use the host's ClearType text rendering
+    // instead of the WebGL grayscale atlas; see `shouldLoadWebglRenderer`.
+    const shouldUseWebgl = shouldLoadWebglRenderer({
+      hasWebglContext:
+        typeof window !== "undefined" && typeof window.WebGLRenderingContext !== "undefined",
+      platform: {
+        desktopPlatform:
+          typeof window !== "undefined" ? window.desktopBridge?.getClientPlatform?.() : undefined,
+        navigatorPlatform: typeof navigator !== "undefined" ? navigator.platform : undefined,
+        userAgent: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+      },
+    });
+    if (shouldUseWebgl) {
       try {
         const webgl = new WebglAddon();
         webgl.onContextLoss(() => {

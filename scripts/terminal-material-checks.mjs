@@ -124,6 +124,32 @@ export async function verifyTerminalMaterial(page) {
       "Interrupted control strings and leading-zero OSC identifiers must preserve transparency",
     );
   }
+  // #128: Windows uses xterm's DOM renderer so terminal glyphs share the host's
+  // ClearType text rendering; every other platform keeps WebGL. Assert the
+  // platform actually picks that renderer before checking transparency below.
+  const rendererKind = await page.evaluate(() =>
+    document
+      .querySelector("#terminal-material-probe canvas:not(.xterm-link-layer)")
+      ?.getContext("webgl2")
+      ? "webgl"
+      : "dom",
+  );
+  const expectedRenderer = await page.evaluate(async () => {
+    // Reuse the production predicate so this check cannot drift from it.
+    const { isWindowsPlatform } = await import("/src/platformSignals.ts");
+    return isWindowsPlatform({
+      desktopPlatform: window.desktopBridge?.getClientPlatform?.(),
+      navigatorPlatform: navigator.platform,
+      userAgent: navigator.userAgent,
+    })
+      ? "dom"
+      : "webgl";
+  });
+  NodeAssert.equal(
+    rendererKind,
+    expectedRenderer,
+    "Terminal renderer must follow the platform: Windows uses the DOM renderer, others WebGL",
+  );
   // xtermjs/xterm.js#6116: the WebGL renderer hardcoded its background
   // rectangle alpha to 1, so a cell carrying only a background attribute —
   // italic, dim, or an extended attribute such as underline — painted an
@@ -131,17 +157,8 @@ export async function verifyTerminalMaterial(page) {
   // must stay opaque; an attribute alone must not. The cells are written as
   // spaces because ED does not carry these attribute flags into the erased
   // cells, and the sample sits on the first rows the spaces fill, clear of the
-  // 16px top-fade band.
-  NodeAssert.ok(
-    await page.evaluate(() =>
-      Boolean(
-        document
-          .querySelector("#terminal-material-probe canvas:not(.xterm-link-layer)")
-          ?.getContext("webgl2"),
-      ),
-    ),
-    "The attribute regression must run under the WebGL renderer",
-  );
+  // 16px top-fade band. These assertions hold under both renderers: the WebGL
+  // half exercises the patch, the DOM half is the Windows path.
   // Row 1's centre: inside the rows the styled spaces fill, below the 16px
   // top-fade band.
   const attributeProbe = { x: 100, y: 27 };
@@ -236,20 +253,25 @@ export async function verifyTerminalMaterial(page) {
     "none",
     "A prompt in the top row must remain visible",
   );
-  // WebGL context loss exercises the production renderer fallback.
-  await page.evaluate(() => {
-    const canvas = document.querySelector("#terminal-material-probe canvas:not(.xterm-link-layer)");
-    window.__lostWebglCanvas = canvas;
-    canvas?.getContext("webgl2")?.getExtension("WEBGL_lose_context")?.loseContext();
-    window.__terminalMaterialProbe.write("\x1b[0m\x1b[2J");
-  });
-  await page.waitForFunction(() => !window.__lostWebglCanvas?.isConnected);
-  await page.waitForTimeout(100);
-  NodeAssert.deepEqual(
-    await paintedPixel(page, 300, 100),
-    [80, 120, 160],
-    "Renderer fallback must keep the material visible",
-  );
+  // WebGL context loss exercises the production renderer fallback. The DOM
+  // renderer has no WebGL context to lose, so this only runs off Windows.
+  if (rendererKind === "webgl") {
+    await page.evaluate(() => {
+      const canvas = document.querySelector(
+        "#terminal-material-probe canvas:not(.xterm-link-layer)",
+      );
+      window.__lostWebglCanvas = canvas;
+      canvas?.getContext("webgl2")?.getExtension("WEBGL_lose_context")?.loseContext();
+      window.__terminalMaterialProbe.write("\x1b[0m\x1b[2J");
+    });
+    await page.waitForFunction(() => !window.__lostWebglCanvas?.isConnected);
+    await page.waitForTimeout(100);
+    NodeAssert.deepEqual(
+      await paintedPixel(page, 300, 100),
+      [80, 120, 160],
+      "Renderer fallback must keep the material visible",
+    );
+  }
   await page.evaluate(() => {
     window.__terminalMaterialProbe.dispose();
     document.getElementById("terminal-material-probe").remove();
