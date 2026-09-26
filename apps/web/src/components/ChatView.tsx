@@ -1,3 +1,4 @@
+import { scaledMotionDuration, skipAutomaticWorkbenchMotion } from "../workbench/workbenchMotion";
 import { useLoadBalancedEnvironment } from "../hooks/useLoadBalancedEnvironment";
 import { visibleThreadPullRequests } from "@awen/shared/threadPullRequests";
 import type { UsageLimitSourceSnapshots } from "@awen/contracts";
@@ -557,6 +558,7 @@ function useDraftHeroLayoutTransition(isDraftHeroState: boolean) {
     if (
       stateChanged &&
       !prefersReducedMotion &&
+      !skipAutomaticWorkbenchMotion() &&
       !mobileComposerTransitionActive &&
       transitionGroup &&
       previousComposerRect &&
@@ -572,7 +574,7 @@ function useDraftHeroLayoutTransition(isDraftHeroState: boolean) {
             { transform: "translate3d(0, 0, 0)" },
           ],
           {
-            duration: DRAFT_HERO_TRANSITION_DURATION_MS,
+            duration: scaledMotionDuration(DRAFT_HERO_TRANSITION_DURATION_MS),
             easing: DRAFT_HERO_TRANSITION_EASING,
           },
         );

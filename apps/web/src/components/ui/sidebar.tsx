@@ -21,7 +21,10 @@ import { useResizeDrag } from "~/hooks/useResizeDrag";
 import { useIsMobile } from "~/hooks/useMediaQuery";
 import { getLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorage";
 import { resolveSidebarState, type ResponsiveSidebarState } from "./sidebarState";
-import { resolveSidebarMinimumWidth } from "../sidebar/sidebarGeometry";
+import {
+  EXPANDED_ACTION_RIGHT_OFFSET,
+  resolveSidebarMinimumWidth,
+} from "../sidebar/sidebarGeometry";
 import { isCurrentPlatformMac } from "~/lib/utils";
 import * as Schema from "effect/Schema";
 
@@ -308,6 +311,7 @@ function Sidebar({
             className,
           )}
           data-slot="sidebar-container"
+          inert={state === "collapsed" && collapsible === "offcanvas"}
           {...props}
         >
           <div
@@ -330,7 +334,7 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
   return (
     <Button
       className={cn(
-        "size-[var(--workspace-titlebar-control-size)]! rounded-[var(--control-radius)] text-muted-foreground hover:bg-sidebar-row-hover hover:text-foreground active:scale-[0.98] active:bg-sidebar-row-active transition-all duration-150 ease-out [-webkit-app-region:no-drag]",
+        "size-[var(--workspace-titlebar-control-size)]! rounded-[var(--control-radius)] text-muted-foreground hover:bg-sidebar-row-hover hover:text-foreground active:scale-[0.98] active:bg-sidebar-row-active transition-all [transition-duration:calc(150ms*var(--motion-duration-scale,1))] ease-out [-webkit-app-region:no-drag]",
         className,
       )}
       data-sidebar="trigger"
@@ -405,6 +409,7 @@ function SidebarRail({
       element.style.setProperty("transition-duration", "0ms");
     });
     wrapper.style.setProperty("--sidebar-width", `${width}px`);
+    wrapper.style.setProperty("--sidebar-exposed-width", `${width}px`);
 
     return {
       width,
@@ -424,6 +429,11 @@ function SidebarRail({
           }) ?? true;
         if (accepted) {
           wrapper.style.setProperty("--sidebar-width", `${nextWidth}px`);
+          wrapper.style.setProperty("--sidebar-exposed-width", `${nextWidth}px`);
+          wrapper.style.setProperty(
+            "--sidebar-motion-action-left",
+            `${nextWidth - EXPANDED_ACTION_RIGHT_OFFSET}px`,
+          );
           width = nextWidth;
         }
         return width;
@@ -651,7 +661,7 @@ function SidebarGroup({ className, ...props }: React.ComponentProps<"div">) {
 function SidebarGroupLabel({ className, render, ...props }: useRender.ComponentProps<"div">) {
   const defaultProps = {
     className: cn(
-      "flex h-8 shrink-0 items-center rounded-lg px-2 font-medium text-sidebar-foreground text-xs outline-hidden ring-ring transition-[margin,opacity] duration-200 ease-linear focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
+      "flex h-8 shrink-0 items-center rounded-lg px-2 font-medium text-sidebar-foreground text-xs outline-hidden ring-ring transition-[margin,opacity] [transition-duration:calc(200ms*var(--motion-duration-scale,1))] ease-linear focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
       "group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0",
       className,
     ),

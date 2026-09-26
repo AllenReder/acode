@@ -1,20 +1,23 @@
 //! macOS window background blur and glass backing.
 
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::ffi::{c_char, c_int, c_void};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use objc2::MainThreadOnly;
+use objc2::rc::Retained;
+use objc2::runtime::AnyObject;
+use objc2::{MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::NSUserInterfaceItemIdentification;
 use objc2_app_kit::{
-    NSAutoresizingMaskOptions, NSColor, NSTitlebarSeparatorStyle, NSVisualEffectBlendingMode,
-    NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView, NSWindow,
-    NSWindowOrderingMode,
+    NSAutoresizingMaskOptions, NSColor, NSEvent, NSEventMask, NSEventPhase,
+    NSTitlebarSeparatorStyle, NSVisualEffectBlendingMode, NSVisualEffectMaterial,
+    NSVisualEffectState, NSVisualEffectView, NSWindow, NSWindowOrderingMode,
 };
 use objc2_foundation::NSString;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use tauri::{WebviewWindow, WindowEvent};
+use tauri::{Emitter, WebviewWindow, WindowEvent};
 
 pub const BLUR_MIN: u8 = 1;
 pub const BLUR_MAX: u8 = 64;
@@ -25,6 +28,79 @@ const RTLD_DEFAULT: *mut c_void = -2isize as *mut c_void;
 
 static BLUR_RADIUS: AtomicU8 = AtomicU8::new(BLUR_DEFAULT);
 static GLASS_WINDOWS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+thread_local! {
+    static SCROLL_MONITOR: RefCell<Option<Retained<AnyObject>>> = const { RefCell::new(None) };
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScrollPhaseEvent {
+    phase: &'static str,
+    momentum_phase: &'static str,
+}
+
+fn phase_name(phase: NSEventPhase) -> &'static str {
+    if phase.contains(NSEventPhase::Began) {
+        "began"
+    } else if phase.contains(NSEventPhase::Changed) {
+        "changed"
+    } else if phase.contains(NSEventPhase::Ended) {
+        "ended"
+    } else if phase.contains(NSEventPhase::Cancelled) {
+        "cancelled"
+    } else {
+        "none"
+    }
+}
+
+fn install_scroll_monitor(window: &WebviewWindow) {
+    let Some(number) = ns_window(window).map(|native| native.windowNumber()) else {
+        return;
+    };
+    let event_window = window.clone();
+    SCROLL_MONITOR.with(|slot| {
+        if slot.borrow().is_some() {
+            return;
+        }
+        let handler = block2::RcBlock::new(move |pointer: std::ptr::NonNull<NSEvent>| {
+            let event = unsafe { pointer.as_ref() };
+            if MainThreadMarker::new().is_some_and(|mtm| {
+                event
+                    .window(mtm)
+                    .is_some_and(|native| native.windowNumber() == number)
+            }) && event.hasPreciseScrollingDeltas()
+            {
+                let phase = phase_name(event.phase());
+                let momentum_phase = phase_name(event.momentumPhase());
+                if phase != "none" || momentum_phase != "none" {
+                    let _ = event_window.emit(
+                        "awen:scroll-phase",
+                        ScrollPhaseEvent {
+                            phase,
+                            momentum_phase,
+                        },
+                    );
+                }
+            }
+            pointer.as_ptr()
+        });
+        let monitor = unsafe {
+            NSEvent::addLocalMonitorForEventsMatchingMask_handler(
+                NSEventMask::ScrollWheel,
+                &handler,
+            )
+        };
+        *slot.borrow_mut() = monitor;
+    });
+}
+
+fn remove_scroll_monitor() {
+    SCROLL_MONITOR.with(|slot| {
+        if let Some(monitor) = slot.borrow_mut().take() {
+            unsafe { NSEvent::removeMonitor(&monitor) };
+        }
+    });
+}
 
 type CgsConnection = usize;
 type SetBlurFn = unsafe extern "C" fn(CgsConnection, c_int, c_int) -> c_int;
@@ -36,10 +112,12 @@ unsafe extern "C" {
 
 pub fn install(window: &WebviewWindow) {
     enable_glass(window);
+    install_scroll_monitor(window);
     let event_window = window.clone();
     window.on_window_event(move |event| match event {
         WindowEvent::Destroyed => {
             set_glass_enabled(&event_window, false);
+            remove_scroll_monitor();
         }
         _ => {}
     });

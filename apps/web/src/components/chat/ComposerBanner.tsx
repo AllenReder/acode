@@ -95,7 +95,7 @@ function Peek({
         "bg-[color-mix(in_srgb,var(--chat-composer-attached-surface)_var(--glass-opacity),transparent)] backdrop-blur-(--glass-blur) backdrop-saturate-(--glass-saturation)",
         "not-supports-[((backdrop-filter:blur(1px))_or_(-webkit-backdrop-filter:blur(1px)))]:bg-(--chat-composer-attached-surface)",
         "in-data-[slot=composer-shell]:bg-transparent in-data-[slot=composer-shell]:backdrop-filter-none in-data-[slot=composer-shell]:shadow-none",
-        "transition-opacity duration-150 ease-out focus-visible:outline-2 focus-visible:outline-ring",
+        "transition-opacity [transition-duration:calc(150ms*var(--motion-duration-scale,1))] ease-out focus-visible:outline-2 focus-visible:outline-ring",
         peekBorder[variant],
         className,
       )}

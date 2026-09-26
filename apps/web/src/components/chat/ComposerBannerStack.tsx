@@ -2,11 +2,12 @@ import { InfoIcon } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "~/lib/utils";
+import { scaledMotionDuration } from "../../workbench/workbenchMotion";
 import { Button } from "../ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { ComposerBanner, type ComposerBannerVariant } from "./ComposerBanner";
 
-// Match the duration-220 exit transition before removing a dismissed notice.
+// Match the exit transition before removing a dismissed notice.
 const DISMISS_TRANSITION_MS = 220;
 
 export interface ComposerBannerStackItem {
@@ -109,7 +110,7 @@ export function ComposerBannerStack({ className, items }: ComposerBannerStackPro
     dismissTimeoutRef.current = setTimeout(() => {
       dismissTimeoutRef.current = null;
       item.onDismiss?.();
-    }, DISMISS_TRANSITION_MS);
+    }, scaledMotionDuration(DISMISS_TRANSITION_MS));
   };
 
   return (
@@ -122,7 +123,7 @@ export function ComposerBannerStack({ className, items }: ComposerBannerStackPro
         <div
           key={frontItem.id}
           className={cn(
-            "relative z-10 transition-[translate,opacity] duration-220 ease-in",
+            "relative z-10 transition-[translate,opacity] [transition-duration:calc(220ms*var(--motion-duration-scale,1))] ease-in",
             exitingItemId === frontItem.id
               ? "pointer-events-none translate-y-16 opacity-0"
               : "opacity-100",
@@ -200,14 +201,14 @@ export function ComposerBannerStack({ className, items }: ComposerBannerStackPro
               tabIndex={-1}
               data-composer-banner-stack-expanded-items="true"
               className={cn(
-                "grid transition-[grid-template-rows] duration-150 ease-out focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+                "grid transition-[grid-template-rows] [transition-duration:calc(150ms*var(--motion-duration-scale,1))] ease-out focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
                 stackExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
               )}
             >
               <div className="min-h-0 overflow-hidden">
                 <div
                   className={cn(
-                    "transform-gpu space-y-2 pb-2 transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform]",
+                    "transform-gpu space-y-2 pb-2 transition-[opacity,transform] [transition-duration:calc(150ms*var(--motion-duration-scale,1))] ease-out will-change-[opacity,transform]",
                     stackExpanded
                       ? "pointer-events-auto visible translate-y-0 opacity-100"
                       : "pointer-events-none invisible translate-y-1 opacity-0",
@@ -217,7 +218,7 @@ export function ComposerBannerStack({ className, items }: ComposerBannerStackPro
                     <div
                       key={item.id}
                       className={cn(
-                        "transition-[translate,opacity] duration-220 ease-in",
+                        "transition-[translate,opacity] [transition-duration:calc(220ms*var(--motion-duration-scale,1))] ease-in",
                         exitingItemId === item.id
                           ? "pointer-events-none translate-y-28 opacity-0"
                           : "opacity-100",

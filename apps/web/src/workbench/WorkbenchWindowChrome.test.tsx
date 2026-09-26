@@ -131,7 +131,7 @@ it("renders the selected compact Topbar Surface with real titles and a new-tab a
   expect(html).not.toContain("Awen");
 });
 
-it("does not render titlebar separator in WorkbenchWindowChrome when sidebar is expanded", () => {
+it("keeps the titlebar separator mounted for a continuous Sidebar fade", () => {
   const snapshot = createTestSnapshot();
 
   const html = renderToStaticMarkup(
@@ -140,7 +140,8 @@ it("does not render titlebar separator in WorkbenchWindowChrome when sidebar is 
     </SidebarProvider>,
   );
 
-  expect(html).not.toContain('data-slot="workbench-titlebar-separator"');
+  expect(html).toContain('data-slot="workbench-titlebar-separator"');
+  expect(html).toContain("opacity:calc(1 - var(--sidebar-motion-progress, 1))");
 });
 
 it("renders separator and offset for docked controls when sidebar is collapsed", () => {

@@ -363,7 +363,7 @@ function PullRequestCopyableCode({
       >
         <code
           className={cn(
-            "col-start-1 row-start-1 min-w-0 truncate transition-opacity duration-150 motion-reduce:transition-none",
+            "col-start-1 row-start-1 min-w-0 truncate transition-opacity [transition-duration:calc(150ms*var(--motion-duration-scale,1))] motion-reduce:transition-none",
             isCopied ? "opacity-0" : "opacity-100",
           )}
         >
@@ -372,7 +372,7 @@ function PullRequestCopyableCode({
         <span
           aria-hidden="true"
           className={cn(
-            "col-start-1 row-start-1 truncate text-center transition-opacity duration-150 motion-reduce:transition-none",
+            "col-start-1 row-start-1 truncate text-center transition-opacity [transition-duration:calc(150ms*var(--motion-duration-scale,1))] motion-reduce:transition-none",
             isCopied ? "opacity-100" : "opacity-0",
           )}
         >
@@ -1548,8 +1548,8 @@ export function PullRequestDetailPanel({
             className={cn(
               "col-start-1 row-start-1 flex min-w-0 items-center gap-1 text-sm text-muted-foreground transition-[opacity,transform] ease-out motion-reduce:transform-none motion-reduce:transition-none sm:text-xs",
               condensed
-                ? "pointer-events-none -translate-y-1 opacity-0 duration-100"
-                : "translate-y-0 opacity-100 delay-50 duration-150",
+                ? "pointer-events-none -translate-y-1 opacity-0 [transition-duration:calc(100ms*var(--motion-duration-scale,1))]"
+                : "translate-y-0 opacity-100 [transition-delay:calc(50ms*var(--motion-duration-scale,1))] [transition-duration:calc(150ms*var(--motion-duration-scale,1))]",
             )}
           >
             {detail && statePresentation ? (
@@ -1623,8 +1623,8 @@ export function PullRequestDetailPanel({
             className={cn(
               "col-start-1 row-start-1 flex min-w-0 items-center gap-1 text-sm text-muted-foreground transition-[opacity,transform] ease-out motion-reduce:transform-none motion-reduce:transition-none sm:text-xs",
               condensed
-                ? "translate-y-0 opacity-100 delay-50 duration-150"
-                : "pointer-events-none translate-y-1 opacity-0 duration-100",
+                ? "translate-y-0 opacity-100 [transition-delay:calc(50ms*var(--motion-duration-scale,1))] [transition-duration:calc(150ms*var(--motion-duration-scale,1))]"
+                : "pointer-events-none translate-y-1 opacity-0 [transition-duration:calc(100ms*var(--motion-duration-scale,1))]",
             )}
           >
             {detail && statePresentation ? (
@@ -2188,16 +2188,16 @@ export function PullRequestDetailPanel({
             "col-span-2 grid",
             condensed
               ? "grid-rows-[1fr]"
-              : "grid-rows-[0fr] transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+              : "grid-rows-[0fr] transition-[grid-template-rows] [transition-duration:calc(200ms*var(--motion-duration-scale,1))] ease-out motion-reduce:transition-none",
           )}
         >
           <div
             ref={condensedRowRef}
             className={cn(
-              "min-h-0 overflow-hidden transition-[opacity,transform] duration-150 ease-out motion-reduce:transform-none motion-reduce:transition-none",
+              "min-h-0 overflow-hidden transition-[opacity,transform] [transition-duration:calc(150ms*var(--motion-duration-scale,1))] ease-out motion-reduce:transform-none motion-reduce:transition-none",
               condensed
-                ? "translate-y-0 opacity-100 delay-50"
-                : "translate-y-1 opacity-0 duration-100",
+                ? "translate-y-0 opacity-100 [transition-delay:calc(50ms*var(--motion-duration-scale,1))]"
+                : "translate-y-1 opacity-0 [transition-duration:calc(100ms*var(--motion-duration-scale,1))]",
             )}
             inert={!condensed}
           >
@@ -2286,16 +2286,16 @@ export function PullRequestDetailPanel({
             // both directions makes the shrinking track fight the scrollTop correction.
             condensed
               ? "grid-rows-[0fr]"
-              : "grid-rows-[1fr] transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+              : "grid-rows-[1fr] transition-[grid-template-rows] [transition-duration:calc(200ms*var(--motion-duration-scale,1))] ease-out motion-reduce:transition-none",
           )}
         >
           <div
             ref={foldRef}
             className={cn(
-              "min-h-0 overflow-hidden transition-[opacity,transform] duration-150 ease-out motion-reduce:transform-none motion-reduce:transition-none",
+              "min-h-0 overflow-hidden transition-[opacity,transform] [transition-duration:calc(150ms*var(--motion-duration-scale,1))] ease-out motion-reduce:transform-none motion-reduce:transition-none",
               condensed
-                ? "-translate-y-1 opacity-0 duration-100"
-                : "translate-y-0 opacity-100 delay-50",
+                ? "-translate-y-1 opacity-0 [transition-duration:calc(100ms*var(--motion-duration-scale,1))]"
+                : "translate-y-0 opacity-100 [transition-delay:calc(50ms*var(--motion-duration-scale,1))]",
             )}
             inert={condensed}
           >

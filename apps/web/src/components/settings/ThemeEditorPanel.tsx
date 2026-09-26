@@ -1,3 +1,4 @@
+import { skipAutomaticWorkbenchMotion } from "../../workbench/workbenchMotion";
 import {
   ChevronDownIcon,
   ChevronUpIcon,
@@ -518,9 +519,10 @@ export function ThemeEditorPanel({
     if (!reveal) return;
 
     requestAnimationFrame(() => {
-      panelRef.current
-        ?.querySelector(`[data-theme-color-role="${visibleRole}"]`)
-        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      panelRef.current?.querySelector(`[data-theme-color-role="${visibleRole}"]`)?.scrollIntoView({
+        behavior: skipAutomaticWorkbenchMotion() ? "auto" : "smooth",
+        block: "nearest",
+      });
     });
   }, []);
 

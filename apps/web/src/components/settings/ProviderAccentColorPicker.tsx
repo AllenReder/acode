@@ -186,7 +186,7 @@ function ProviderCustomColorPicker(props: {
           <button
             type="button"
             className={cn(
-              "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border text-white shadow-xs transition-transform duration-200 active:scale-95",
+              "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border text-white shadow-xs transition-transform [transition-duration:calc(200ms*var(--motion-duration-scale,1))] active:scale-95",
               "hover:scale-105 hover:border-ring/60",
             )}
             style={{ backgroundColor: normalized }}

@@ -2,6 +2,8 @@ import { useAtomValue } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
 import {
   useEffect,
+  useLayoutEffect,
+  useRef,
   useState,
   useSyncExternalStore,
   type CSSProperties,
@@ -14,6 +16,10 @@ import { PanelLeftCloseIcon, PanelLeftIcon } from "lucide-react";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import { SidebarTitlebarButton } from "./sidebar/SidebarTitlebarControl";
 import { SidebarActionControl } from "./sidebar/SidebarChrome";
+import { createSidebarPresentation } from "./sidebar/sidebarPresentation";
+import { getPrefersReducedMotion } from "../workbench/workbenchMotion";
+import { useClientSettings } from "../hooks/useSettings";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { isMacPlatform } from "../lib/utils";
 import { resolveWorkbenchTitlebarStyle } from "../lib/windowControlsOverlay";
 import { primaryServerKeybindingsAtom } from "../state/server";
@@ -127,7 +133,41 @@ function ProjectProjectionRetention() {
   return null;
 }
 
+function SidebarMotionController({
+  enabled,
+  width,
+  durationMs,
+}: {
+  enabled: boolean;
+  width: number;
+  durationMs: number;
+}) {
+  const open = useSidebarVisibility();
+  const marker = useRef<HTMLSpanElement>(null);
+  const motion = useRef<ReturnType<typeof createSidebarPresentation> | null>(null);
+  useLayoutEffect(() => {
+    const wrapper = marker.current?.closest<HTMLElement>("[data-slot='sidebar-wrapper']");
+    if (!wrapper) return;
+    motion.current = createSidebarPresentation(wrapper, isMacPlatform(navigator.platform), open);
+    return () => {
+      motion.current?.dispose();
+      motion.current = null;
+    };
+  }, []);
+  useLayoutEffect(() => {
+    motion.current?.update({
+      open,
+      enabled: enabled && !getPrefersReducedMotion(),
+      width,
+      durationMs,
+    });
+  }, [durationMs, enabled, open, width]);
+  return <span ref={marker} hidden />;
+}
+
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
+  const animationDurationScale = useClientSettings((settings) => settings.animationDurationScale);
+  const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const navigate = useNavigate();
   const canGoBack = useCanGoBack();
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
@@ -159,17 +199,24 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       ? getWindowFullscreenState()
       : false;
   });
-  const effectiveAnimationDurationMs =
-    panelAnimationDurationMs > 0 ? panelAnimationDurationMs : 200;
   const sidebarProviderStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
-    "--panel-animation-duration": `${effectiveAnimationDurationMs}ms`,
+    "--panel-animation-duration": `${panelAnimationDurationMs}ms`,
     ...resolveWorkbenchTitlebarStyle({
       hasDesktopBridge: window.desktopBridge !== undefined,
       platform: navigator.platform,
       fullscreen: isWindowFullscreen,
     }),
   } as CSSProperties;
+
+  useLayoutEffect(() => {
+    document.documentElement.style.setProperty(
+      "--motion-duration-scale",
+      String(animationDurationScale),
+    );
+    document.documentElement.dataset.motionOff =
+      animationDurationScale === 0 || prefersReducedMotion ? "true" : "false";
+  }, [animationDurationScale, prefersReducedMotion]);
 
   useEffect(() => {
     if (!isMacosDesktop) return;
@@ -247,10 +294,15 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       <WorkbenchDragProvider>
         <SidebarProvider
           className="h-dvh! min-h-0!"
-          data-panel-animations={!panelAnimationsSuppressed ? "true" : "false"}
+          data-panel-animations={routePanelAnimationsActive ? "true" : "false"}
           defaultOpen
           style={sidebarProviderStyle}
         >
+          <SidebarMotionController
+            enabled={routePanelAnimationsActive}
+            width={sidebarWidth}
+            durationMs={panelAnimationDurationMs}
+          />
           <ProjectProjectionRetention />
           <Sidebar
             side="left"

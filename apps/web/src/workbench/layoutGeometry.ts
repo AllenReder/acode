@@ -1,8 +1,8 @@
 import type { SplitDir, LayoutNode } from "./layout";
 import type { WorkbenchTab } from "./workbenchState";
 
-/** Trailing empty buffer in scrolling layout to provide visual landing room and drop targets (ADR 0015). */
-export const SCROLLING_TRAILING_PADDING = 200;
+/** Additional trailing space beyond the final Pane gap in Scrolling layout (ADR 0015). */
+export const SCROLLING_TRAILING_PADDING = 0;
 
 export interface ComputedPaneRect {
   readonly left: number;

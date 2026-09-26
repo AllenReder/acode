@@ -14,6 +14,8 @@ import type { PaneShadow } from "@awen/contracts/settings";
 import { usePrimarySettings } from "../hooks/useSettings";
 import type { SplitDir } from "./layout";
 import { computePaneLayoutRects } from "./layoutGeometry";
+import { createPaneRectMotion } from "./paneRectMotion";
+import { skipAutomaticWorkbenchMotion } from "./workbenchMotion";
 import { MIN_PANE_HEIGHT } from "./scrollingLayout";
 import { resolveViewDefinition, type ViewTarget } from "./viewRegistry";
 import { useWorkbenchStore } from "./workbenchStore";
@@ -30,7 +32,7 @@ import { useTabTransition } from "./tabTransitionReact";
 import { useTabSwitchGesture } from "./useTabSwitchGesture";
 import { useTabSwitchWheel } from "./useTabSwitchWheel";
 import {
-  computeCardOffset,
+  getTabTransitionCards,
   getTabTransitionFrame,
   subscribeTabTransitionFrame,
   type TabTransitionFrame,
@@ -66,7 +68,7 @@ function resolvePaneBoxShadow(paneGap: number, paneShadow: PaneShadow): string {
 /** Write one card's slot transform for the current Sliding Tab switch frame. */
 function writeTransitionCardTransform(
   element: HTMLElement,
-  role: "to" | "from",
+  tabId: string,
   frame: TabTransitionFrame | null,
 ): void {
   const style = (element as { style?: CSSStyleDeclaration }).style;
@@ -75,16 +77,17 @@ function writeTransitionCardTransform(
     style.transform = "";
     return;
   }
-  const slot = role === "to" ? 0 : -frame.dir;
-  const offset = computeCardOffset(slot, frame.dir, frame.progress);
+  const slot = frame.cards.find((card) => card.tabId === tabId)?.slot;
+  if (slot === undefined) return;
+  const offset = slot - frame.position;
   // A 2D translate keeps the card off the 3D/backdrop-root path so descendant
   // `backdrop-filter` glass keeps its mask while the strip moves.
   style.transform = `translate(${(offset * 100).toFixed(4)}%, 0)`;
 }
 
-/** Whether a Tab is one of the two cards a Sliding Tab switch is driving. */
-function isSwitchParticipant(role: TabTransitionRole): role is "to" | "from" {
-  return role === "to" || role === "from";
+/** Whether a Tab card is moving in the current strip. */
+function isSwitchParticipant(role: TabTransitionRole): boolean {
+  return role === "to" || role === "from" || role === "participant";
 }
 
 /**
@@ -129,6 +132,7 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
     if (activeTransition === null) return tabId === snapshot.activeTabId ? "active" : "inactive";
     if (tabId === activeTransition.toTabId) return "to";
     if (tabId === activeTransition.fromTabId) return "from";
+    if (getTabTransitionCards().some((card) => card.tabId === tabId)) return "participant";
     return "hidden";
   };
 
@@ -153,7 +157,7 @@ export function PaneTree({ snapshot, projects = EMPTY_PROJECTS }: PaneTreeProps)
   );
 }
 
-type TabTransitionRole = "active" | "inactive" | "to" | "from" | "hidden";
+type TabTransitionRole = "active" | "inactive" | "to" | "from" | "participant" | "hidden";
 
 interface TabPaneTreeProps {
   readonly tab: WorkbenchTab;
@@ -174,54 +178,12 @@ const TabPaneTree = memo(
     const [size, setSize] = useState({ width: 0, height: 0 });
     const changeColumn = useWorkbenchStore((s) => s.changeColumn);
     const setFocused = useWorkbenchStore((s) => s.setFocused);
-    const previousRects = useRef(new Map<string, DOMRect>());
+    const paneMotions = useRef(new Map<string, ReturnType<typeof createPaneRectMotion>>());
+    const paneMotionSize = useRef({ width: 0, height: 0 });
 
     const paneGap = usePrimarySettings((s) => s.paneGap);
     const paneRadius = usePrimarySettings((s) => s.paneRadius);
     const paneShadow = usePrimarySettings((s) => s.paneShadow);
-
-    useLayoutEffect(() => {
-      if (!isActive || scrolling) return;
-      // A Sliding Tab switch keeps this card mounted but drives it with the
-      // strip's own transform, so a rect read here reports the transient strip
-      // position rather than a layout change. Measuring it would mistake the
-      // switch offset for a FLIP delta and snap the Pane content. Skip while
-      // this card is a switch participant; the effect re-runs with clean
-      // geometry once the switch settles and the transform is cleared.
-      if (isSwitchParticipant(transitionRole)) return;
-      const viewport = viewportRef.current;
-      if (!viewport?.querySelectorAll) return;
-      const frames = viewport.querySelectorAll<HTMLElement>(".workbench-pane-frame");
-      const next = new Map<string, DOMRect>();
-      for (const frame of frames) {
-        const id =
-          frame.querySelector<HTMLElement>("[data-view-instance-id]")?.dataset.viewInstanceId;
-        if (!id) continue;
-        const rect = frame.getBoundingClientRect();
-        next.set(id, rect);
-        const old = previousRects.current.get(id);
-        if (
-          !old ||
-          document.documentElement.dataset.workbenchResizing ||
-          document.documentElement.dataset.workbenchDragging ||
-          window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        )
-          continue;
-        const dx = old.left - rect.left;
-        const dy = old.top - rect.top;
-        if (Math.abs(dx) + Math.abs(dy) > 1) {
-          frame.getAnimations().forEach((animation) => animation.cancel());
-          frame.animate(
-            [
-              { transform: "translate(" + dx + "px," + dy + "px)" },
-              { transform: "translate(0,0)" },
-            ],
-            { duration: 220, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
-          );
-        }
-      }
-      previousRects.current = next;
-    }, [isActive, scrolling, tab.layout, transitionRole]);
 
     useEffect(() => {
       const element = viewportRef.current;
@@ -249,38 +211,51 @@ const TabPaneTree = memo(
     );
 
     useLayoutEffect(() => {
-      if (!isActive || !previewLayout) return;
+      if (!isActive) return;
       const viewport = viewportRef.current;
       if (!viewport?.querySelectorAll) return;
-      const frames = viewport.querySelectorAll<HTMLElement>(".workbench-pane-frame");
-      const capturedRects = new Map<string, DOMRect>();
-      for (const frame of frames) {
-        const id =
-          frame.querySelector<HTMLElement>("[data-view-instance-id]")?.dataset.viewInstanceId;
+      const targets = previewLayout?.rects ?? layout.rects;
+      const viewportSizeChanged =
+        paneMotionSize.current.width !== size.width ||
+        paneMotionSize.current.height !== size.height;
+      paneMotionSize.current = size;
+      const dataset =
+        typeof document === "undefined" ? undefined : document.documentElement?.dataset;
+      const direct = Boolean(
+        viewportSizeChanged ||
+        dataset?.workbenchResizing ||
+        dataset?.sidebarMotion ||
+        dataset?.workbenchDragging ||
+        skipAutomaticWorkbenchMotion(),
+      );
+      const seen = new Set<string>();
+      for (const frame of viewport.querySelectorAll<HTMLElement>(".workbench-pane-frame")) {
+        const id = frame.dataset.paneId;
         if (!id) continue;
-        capturedRects.set(id, frame.getBoundingClientRect());
-      }
-      for (const frame of frames) {
-        const id =
-          frame.querySelector<HTMLElement>("[data-view-instance-id]")?.dataset.viewInstanceId;
-        if (!id) continue;
-        const oldRect = capturedRects.get(id);
-        const newRect = frame.getBoundingClientRect();
-        if (!oldRect) continue;
-        const dx = oldRect.left - newRect.left;
-        const dy = oldRect.top - newRect.top;
-        if (Math.abs(dx) + Math.abs(dy) > 1) {
-          frame.getAnimations().forEach((animation) => animation.cancel());
-          frame.animate(
-            [
-              { transform: "translate(" + dx + "px," + dy + "px)" },
-              { transform: "translate(0,0)" },
-            ],
-            { duration: 220, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
-          );
+        const target = targets.get(id);
+        if (!target) continue;
+        seen.add(id);
+        let controller = paneMotions.current.get(id);
+        if (!controller) {
+          controller = createPaneRectMotion(frame, target);
+          paneMotions.current.set(id, controller);
         }
+        controller.retarget(target, direct);
       }
-    }, [isActive, previewLayout]);
+      for (const [id, controller] of paneMotions.current) {
+        if (seen.has(id)) continue;
+        controller.stop();
+        paneMotions.current.delete(id);
+      }
+    }, [isActive, layout, previewLayout, size]);
+
+    useEffect(
+      () => () => {
+        for (const controller of paneMotions.current.values()) controller.stop();
+        paneMotions.current.clear();
+      },
+      [],
+    );
 
     useLayoutEffect(() => {
       if (!isActive) return;
@@ -360,16 +335,15 @@ const TabPaneTree = memo(
       if (!isSwitchParticipant(transitionRole)) return;
       const viewport = viewportRef.current;
       if (viewport === null) return;
-      const role = transitionRole;
       const apply = (frame: TabTransitionFrame | null) =>
-        writeTransitionCardTransform(viewport, role, frame);
+        writeTransitionCardTransform(viewport, tab.id, frame);
       apply(getTabTransitionFrame());
       const unsubscribe = subscribeTabTransitionFrame(apply);
       return () => {
         unsubscribe();
-        writeTransitionCardTransform(viewport, role, null);
+        writeTransitionCardTransform(viewport, tab.id, null);
       };
-    }, [transitionRole]);
+    }, [transitionRole, tab.id]);
 
     const activeLayout = previewLayout ?? layout;
     const canvasStyle = {
@@ -406,6 +380,7 @@ const TabPaneTree = memo(
               <div
                 key={view.id}
                 className="workbench-pane-frame"
+                data-pane-id={paneId}
                 style={targetRect}
                 onMouseDownCapture={(event) => {
                   if (paneId !== tab.focusedPaneId) {

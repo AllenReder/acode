@@ -1,8 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { type PanelAnimationDurationMs } from "@awen/contracts/settings";
+import { useClientSettings } from "./hooks/useSettings";
 
 import { useMediaQuery } from "./hooks/useMediaQuery";
-import { useClientSettings } from "./hooks/useSettings";
 
 const PanelAnimationSuppressionContext = createContext(false);
 
@@ -35,7 +34,7 @@ export function observeResponsiveBreakpointFade(options: {
   target: HTMLElement;
   container: HTMLElement;
   active: boolean;
-  durationMs: PanelAnimationDurationMs;
+  durationMs: number;
   breakpoint: { value: number; unit: "px" | "rem" };
 }): () => void {
   const { target, container, active, durationMs, breakpoint } = options;
@@ -56,7 +55,7 @@ export function observeResponsiveBreakpointFade(options: {
     expanded = nextExpanded;
     animation?.cancel();
     animation = target.animate([{ opacity: 0 }, { opacity: 1 }], {
-      duration: Math.min(100, durationMs),
+      duration: durationMs / 2,
       easing: "ease-out",
     });
   });
@@ -70,9 +69,10 @@ export function observeResponsiveBreakpointFade(options: {
 
 export function usePanelAnimationSettings(): {
   active: boolean;
-  durationMs: PanelAnimationDurationMs;
+  durationMs: number;
 } {
-  const durationMs = useClientSettings((settings) => settings.panelAnimationDurationMs);
+  const durationScale = useClientSettings((settings) => settings.animationDurationScale);
+  const durationMs = 200 * durationScale;
   const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const suppressed = useContext(PanelAnimationSuppressionContext);
   return { active: durationMs > 0 && !prefersReducedMotion && !suppressed, durationMs };
@@ -84,7 +84,7 @@ export function usePanelPresence<T>(
   value: T | null,
   animated: boolean,
   scopeKey: string | null,
-  durationMs: PanelAnimationDurationMs,
+  durationMs: number,
 ): { present: boolean; value: T | null } {
   const [present, setPresent] = useState(open);
   const retainedRef = useRef<{ scopeKey: string | null; value: T | null } | null>(

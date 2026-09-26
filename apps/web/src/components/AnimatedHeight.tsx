@@ -80,7 +80,7 @@ export function AnimatedHeight({
   return (
     <div
       data-slot="animated-height"
-      className="transition-[height] duration-200 ease-out motion-reduce:transition-none"
+      className="transition-[height] [transition-duration:calc(200ms*var(--motion-duration-scale,1))] ease-out motion-reduce:transition-none"
       style={
         heightState.height === null
           ? undefined

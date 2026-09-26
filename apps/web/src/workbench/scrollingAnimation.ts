@@ -1,3 +1,5 @@
+import { scaledMotionDuration } from "./workbenchMotion";
+
 export interface ScrollRevealInput {
   readonly isSingleColumn: boolean;
   readonly rect: {
@@ -200,7 +202,15 @@ export function animateScrollTo(
   }
 
   const distance = Math.hypot(dx, dy);
-  const duration = options.duration ?? Math.min(320, Math.max(180, Math.round(distance * 0.35)));
+  const duration = scaledMotionDuration(
+    options.duration ?? Math.min(320, Math.max(180, Math.round(distance * 0.35))),
+  );
+  if (duration === 0) {
+    element.scrollLeft = targetLeft;
+    element.scrollTop = targetTop;
+    options.onComplete?.();
+    return () => {};
+  }
 
   let frameId: number | null = null;
   let startTime: number | null = null;

@@ -3,12 +3,12 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import {
   FLUID_MOTION_DURATION_MS,
   FLUID_MOTION_EASING,
-  getPrefersReducedMotion,
+  scaledMotionDuration,
+  skipAutomaticWorkbenchMotion,
 } from "./workbenchMotion";
 import {
   getTabTransition,
   getTabTransitionFrame,
-  interpolateIndicatorGeometry,
   subscribeTabTransitionFrame,
   type TabIndicatorGeometry,
 } from "./tabTransition";
@@ -115,7 +115,7 @@ export function useTabIndicator(
       if (
         dragging ||
         (previous?.left === geometry.left && previous.width === geometry.width) ||
-        getPrefersReducedMotion() ||
+        skipAutomaticWorkbenchMotion() ||
         previous === null ||
         typeof indicator.animate !== "function"
       ) {
@@ -127,7 +127,7 @@ export function useTabIndicator(
           { transform: `translateX(${previous.left}px)`, width: `${previous.width}px` },
           { transform: `translateX(${geometry.left}px)`, width: `${geometry.width}px` },
         ],
-        { duration: FLUID_MOTION_DURATION_MS, easing: FLUID_MOTION_EASING },
+        { duration: scaledMotionDuration(FLUID_MOTION_DURATION_MS), easing: FLUID_MOTION_EASING },
       );
     };
 
@@ -159,17 +159,24 @@ export function useTabIndicator(
     wasTransitioningRef.current = true;
     // Gesture progress drives the underbar directly; drop any in-flight ease.
     cancelIndicatorAnimation();
-    const from = geometryFor(transition.fromTabId);
-    const to = geometryFor(transition.toTabId);
-    if (from === null || to === null) return;
-    // Width is written once; only the transform changes per frame.
-    writeWidth(indicatorStyle, from.width);
     const applyFrame = () => {
       const frame = getTabTransitionFrame();
       if (frame === null) return;
-      const left = interpolateIndicatorGeometry(from, to, frame.progress).left;
-      writeTransform(indicatorStyle, left);
-      lastGeometryRef.current = { left, width: from.width };
+      const ordered = [...frame.cards].sort((a, b) => a.slot - b.slot);
+      const rightIndex = ordered.findIndex((card) => card.slot >= frame.position);
+      const right = ordered[Math.max(0, rightIndex < 0 ? ordered.length - 1 : rightIndex)];
+      const left = ordered[Math.max(0, (rightIndex < 0 ? ordered.length - 1 : rightIndex) - 1)];
+      if (!left || !right) return;
+      const first = geometryFor(left.tabId);
+      const second = geometryFor(right.tabId);
+      if (first === null || second === null) return;
+      const progress =
+        left.slot === right.slot ? 0 : (frame.position - left.slot) / (right.slot - left.slot);
+      const width = lastGeometryRef.current?.width ?? first.width;
+      if (lastGeometryRef.current === null) writeWidth(indicatorStyle, width);
+      const geometry = { left: first.left + (second.left - first.left) * progress, width };
+      writeTransform(indicatorStyle, geometry.left);
+      lastGeometryRef.current = geometry;
     };
     applyFrame();
     return subscribeTabTransitionFrame(applyFrame);

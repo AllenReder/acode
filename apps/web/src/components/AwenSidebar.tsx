@@ -1195,7 +1195,8 @@ function WorkspaceActiveSessions({
             }
             sessionStyle = {
               transform: shift !== 0 ? `translate3d(0, ${shift}px, 0)` : undefined,
-              transition: "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)",
+              transition:
+                "transform calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1)",
             };
           }
         } else if (settlingSession) {
@@ -1211,7 +1212,8 @@ function WorkspaceActiveSessions({
           }
         } else {
           sessionStyle = {
-            transition: "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)",
+            transition:
+              "transform calc(220ms * var(--motion-duration-scale, 1)) cubic-bezier(0.22, 1, 0.36, 1)",
           };
         }
 

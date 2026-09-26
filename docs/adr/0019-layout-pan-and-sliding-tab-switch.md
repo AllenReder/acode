@@ -2,6 +2,10 @@
 
 **Status: accepted**
 
+ADR-0024 amends this decision's fixed-duration settle, two-card presentation,
+and unmodified macOS trackpad rules. The glass-compatible flat translation and
+right-button Layout pan constraints still apply.
+
 The Workbench gains a unified horizontal navigation gesture built on the right mouse
 button: a right-drag inside the Workbench canvas pans a Scrolling layout, and — once
 the layout cannot pan any further (always, in a BSP layout) — continues into a Sliding

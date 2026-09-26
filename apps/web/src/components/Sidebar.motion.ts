@@ -1,4 +1,6 @@
-const motionTiming = { duration: 150, easing: "ease-out" };
+import { scaledMotionDuration, skipAutomaticWorkbenchMotion } from "../workbench/workbenchMotion";
+
+const motionTiming = () => ({ duration: scaledMotionDuration(150), easing: "ease-out" });
 // A project filter change or a bulk snooze swaps a large part of the list at
 // once. Fades are the expensive part: every removed row gets a deep clone and
 // every clone and entering row gets its own animation, and the layout reads
@@ -74,7 +76,7 @@ export function createSidebarListMotion(parent: HTMLUListElement) {
     const entry = entering.get(node);
     const animation = clone.animate(
       [{ opacity: entry ? progress(entry) : 1 }, { opacity: 0 }],
-      motionTiming,
+      motionTiming(),
     );
     exiting.set(clone, animation);
     animation.addEventListener(
@@ -102,7 +104,7 @@ export function createSidebarListMotion(parent: HTMLUListElement) {
     if (offset === 0) return;
     const animation = node.animate(
       [{ transform: `translateY(${offset}px)` }, { transform: "translateY(0px)" }],
-      motionTiming,
+      motionTiming(),
     );
     running.set(node, { animation, offset });
     animation.addEventListener(
@@ -143,6 +145,7 @@ export function createSidebarListMotion(parent: HTMLUListElement) {
         animate &&
         positions !== null &&
         !reducedMotion?.matches &&
+        !skipAutomaticWorkbenchMotion() &&
         fadeCount <= MAX_FADED_ROWS_PER_UPDATE;
       if (!shouldAnimate) clearFades();
       else {
@@ -164,7 +167,7 @@ export function createSidebarListMotion(parent: HTMLUListElement) {
           const previousTop = positions?.get(node)?.top;
           if (previousTop === undefined) {
             if (position.height > 0) {
-              const animation = node.animate([{ opacity: 0 }, { opacity: 1 }], motionTiming);
+              const animation = node.animate([{ opacity: 0 }, { opacity: 1 }], motionTiming());
               entering.set(node, animation);
               animation.addEventListener(
                 "finish",
@@ -183,7 +186,7 @@ export function createSidebarListMotion(parent: HTMLUListElement) {
         }
       }
       if (released !== null) {
-        if (!reducedMotion?.matches) {
+        if (!reducedMotion?.matches && !skipAutomaticWorkbenchMotion()) {
           for (const [node, position] of next) {
             const top = released.get(node);
             if (top !== undefined) move(node, top - position.top);

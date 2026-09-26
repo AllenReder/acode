@@ -37,7 +37,7 @@ import {
 import type { SplitDir } from "./layout";
 import type { ViewTarget } from "./viewRegistry";
 import { readWorkbenchSnapshot, writeWorkbenchSnapshot } from "./workbenchPersistence";
-import { FLUID_MOTION_DURATION_MS, getPrefersReducedMotion } from "./workbenchMotion";
+import { FLUID_MOTION_DURATION_MS, scaledMotionDuration } from "./workbenchMotion";
 
 export type ViewClosureListener = (targets: readonly ViewTarget[]) => void;
 
@@ -111,7 +111,7 @@ function cancelPendingCloseTasks(store: object): void {
 export function createWorkbenchStore(options: WorkbenchStoreOptions = {}) {
   const generateId = options.generateId ?? defaultGenerateId;
   const persist = options.persist ?? ((snapshot) => writeWorkbenchSnapshot(snapshot));
-  const tabCloseDelayMs = () => (getPrefersReducedMotion() ? 0 : FLUID_MOTION_DURATION_MS);
+  const tabCloseDelayMs = () => scaledMotionDuration(FLUID_MOTION_DURATION_MS);
   const initialSnapshot = applyDedupeSessionViews(
     applyRemoveWorkspaceViews(
       options.initialSnapshot ?? readWorkbenchSnapshot() ?? emptyWorkbenchSnapshot(generateId),

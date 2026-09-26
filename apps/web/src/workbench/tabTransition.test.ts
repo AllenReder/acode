@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { DEFAULT_CLIENT_SETTINGS } from "@awen/contracts/settings";
+import { __setClientSettingsForTests } from "../hooks/useSettings";
 
 import {
   animateTabTransitionTo,
@@ -8,10 +10,11 @@ import {
   endTabTransition,
   getTabTransition,
   getTabTransitionFrame,
-  interpolateIndicatorGeometry,
   nextTabIndex,
   resetTabTransitionForTest,
+  retargetTabTransition,
   resolveSwitchCommit,
+  setTabTransitionPosition,
   setTabTransitionProgress,
   subscribeTabTransition,
   subscribeTabTransitionFrame,
@@ -20,6 +23,7 @@ import {
 
 afterEach(() => {
   resetTabTransitionForTest();
+  __setClientSettingsForTests(DEFAULT_CLIENT_SETTINGS);
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -62,20 +66,6 @@ describe("tab order helpers", () => {
   });
 });
 
-describe("interpolateIndicatorGeometry", () => {
-  it("moves and resizes between two Tab geometries", () => {
-    expect(
-      interpolateIndicatorGeometry({ left: 0, width: 100 }, { left: 200, width: 80 }, 0.5),
-    ).toEqual({ left: 100, width: 90 });
-  });
-
-  it("clamps progress", () => {
-    expect(
-      interpolateIndicatorGeometry({ left: 0, width: 100 }, { left: 200, width: 80 }, 5),
-    ).toEqual({ left: 200, width: 80 });
-  });
-});
-
 describe("resolveSwitchCommit", () => {
   it("commits past halfway regardless of velocity", () => {
     expect(resolveSwitchCommit({ progress: 0.6, velocity: 0, dir: 1 })).toBe(true);
@@ -92,6 +82,18 @@ describe("resolveSwitchCommit", () => {
 });
 
 describe("tab transition store", () => {
+  it("keeps next navigation moving forward when the Tab order wraps", () => {
+    beginTabTransition({ fromTabId: "a", toTabId: "b", fromIndex: 0, toIndex: 1, dir: 1 });
+    setTabTransitionPosition(0.4);
+    retargetTabTransition({ fromTabId: "b", toTabId: "c", fromIndex: 1, toIndex: 2, dir: 1 });
+    retargetTabTransition({ fromTabId: "c", toTabId: "a", fromIndex: 2, toIndex: 0, dir: 1 });
+    expect(getTabTransitionFrame()?.destinationSlot).toBe(3);
+    expect(getTabTransitionFrame()?.cards.find((card) => card.tabId === "a")?.slot).toBe(0);
+    setTabTransitionPosition(1.5);
+    expect(getTabTransitionFrame()?.cards.find((card) => card.tabId === "a")?.slot).toBe(3);
+    expect(getTabTransitionFrame()?.position).toBe(1.5);
+  });
+
   it("tracks state, progress, and notifies subscribers", () => {
     const states: Array<unknown> = [];
     const frames: Array<unknown> = [];
@@ -140,6 +142,49 @@ describe("tab transition store", () => {
     beginTabTransition({ fromTabId: "a", toTabId: "b", fromIndex: 0, toIndex: 1, dir: 1 });
     animateTabTransitionTo(1);
     expect(getTabTransition()).toBeNull();
+  });
+
+  it("settles a released trackpad preview at the default animation speed", () => {
+    vi.stubGlobal("window", { matchMedia: () => ({ matches: false }) });
+    vi.stubGlobal("document", {
+      querySelector: () => ({ getAttribute: () => "false" }),
+    });
+    const requestFrame = vi.fn(() => 1);
+    vi.stubGlobal("requestAnimationFrame", requestFrame);
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    beginTabTransition({ fromTabId: "a", toTabId: "b", fromIndex: 0, toIndex: 1, dir: 1 });
+    setTabTransitionProgress(0.4);
+    animateTabTransitionTo(1);
+    expect(getTabTransitionFrame()?.position).toBeCloseTo(0.4);
+    expect(requestFrame).toHaveBeenCalled();
+  });
+
+  it("settles a Tab more slowly at 2× than at 1×", () => {
+    let now = 0;
+    let handle = 0;
+    const frames = new Map<number, FrameRequestCallback>();
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    vi.stubGlobal("window", { matchMedia: () => ({ matches: false }) });
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.set(++handle, callback);
+      return handle;
+    });
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => frames.delete(id));
+    const positionAfter100ms = (animationDurationScale: number) => {
+      now = 0;
+      frames.clear();
+      __setClientSettingsForTests({ ...DEFAULT_CLIENT_SETTINGS, animationDurationScale });
+      beginTabTransition({ fromTabId: "a", toTabId: "b", fromIndex: 0, toIndex: 1, dir: 1 });
+      animateTabTransitionTo(1);
+      now = 100;
+      const pending = [...frames.values()];
+      frames.clear();
+      pending.forEach((callback) => callback(now));
+      const position = getTabTransitionFrame()?.position ?? 1;
+      endTabTransition();
+      return position;
+    };
+    expect(positionAfter100ms(1)).toBeGreaterThan(positionAfter100ms(2));
   });
 });
 

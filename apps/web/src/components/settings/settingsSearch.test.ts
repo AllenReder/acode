@@ -74,7 +74,7 @@ describe("searchSettings", () => {
       "setting-pane-radius",
     ]);
     expect(searchSettings("pane shadow").map((item) => item.id)).toEqual(["setting-pane-shadow"]);
-    expect(searchSettings("panel animations").map((item) => item.id)).toEqual(["panel-animations"]);
+    expect(searchSettings("panel animations").map((item) => item.id)).toEqual(["animation-speed"]);
     expect(searchSettings("thè\u{1ab0}mes")[0]?.id).toBe("theme");
     const localeLowerCase = vi.spyOn(String.prototype, "toLocaleLowerCase").mockReturnValue("gıt");
     try {

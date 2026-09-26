@@ -4,6 +4,7 @@ import {
   type ScopedThreadRef,
 } from "@awen/contracts";
 import { useCallback, useEffect, useRef } from "react";
+import { skipAutomaticWorkbenchMotion } from "../../workbench/workbenchMotion";
 
 import {
   type DraftId,
@@ -349,7 +350,7 @@ export function SnapShotCoordinator() {
         }
         case "started": {
           playCaptureSound(event.id);
-          if (animateCaptures && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          if (animateCaptures && !skipAutomaticWorkbenchMotion()) {
             void beginSnapShotAnimationWhenReady(
               event.id,
               resolveSnapShotDeliveryTarget(

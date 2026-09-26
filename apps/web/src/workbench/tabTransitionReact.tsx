@@ -2,15 +2,15 @@ import { useLayoutEffect, useSyncExternalStore } from "react";
 
 import {
   animateTabTransitionTo,
-  beginTabTransition,
   deriveTabDirection,
   endTabTransition,
   getTabTransition,
   nextTabIndex,
+  retargetTabTransition,
   subscribeTabTransition,
   tabIdsKey,
 } from "./tabTransition";
-import { getPrefersReducedMotion } from "./workbenchMotion";
+import { skipAutomaticWorkbenchMotion } from "./workbenchMotion";
 import { useWorkbenchStore } from "./workbenchStore";
 
 export function useTabTransition() {
@@ -25,7 +25,13 @@ export function switchAdjacentTab(dir: -1 | 1): void {
   const toIndex = nextTabIndex(store.tabs.length, fromIndex, dir);
   const target = store.tabs[toIndex];
   if (fromIndex < 0 || target === undefined) return;
-  beginTabTransition({ fromTabId: store.activeTabId, toTabId: target.id, fromIndex, toIndex, dir });
+  retargetTabTransition({
+    fromTabId: store.activeTabId,
+    toTabId: target.id,
+    fromIndex,
+    toIndex,
+    dir,
+  });
   finishTabSwitch(true);
 }
 
@@ -51,7 +57,7 @@ export function TabTransitionController() {
       if (state.activeTabId === previous.activeTabId) return;
       const inFlight = getTabTransition();
       if (inFlight?.toTabId === state.activeTabId) return;
-      if (state.tabs.length <= 1 || getPrefersReducedMotion()) {
+      if (state.tabs.length <= 1 || skipAutomaticWorkbenchMotion()) {
         endTabTransition();
         return;
       }
@@ -62,7 +68,7 @@ export function TabTransitionController() {
         endTabTransition();
         return;
       }
-      beginTabTransition({
+      retargetTabTransition({
         fromTabId: previous.activeTabId,
         toTabId: state.activeTabId,
         fromIndex,

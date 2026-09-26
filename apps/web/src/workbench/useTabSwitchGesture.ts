@@ -9,8 +9,11 @@ import {
   endTabTransition,
   getTabTransition,
   getTabTransitionFrame,
+  interruptTabSettle,
   nextTabIndex,
+  retargetTabTransition,
   resolveSwitchCommit,
+  setTabTransitionPosition,
   setTabTransitionProgress,
 } from "./tabTransition";
 import { finishTabSwitch } from "./tabTransitionReact";
@@ -33,6 +36,7 @@ interface RightDragSession {
   readonly startScrollLeft: number;
   readonly maxScrollLeft: number;
   readonly viewportWidth: number;
+  readonly startTabPosition: number | null;
   readonly samples: Array<{ readonly x: number; readonly t: number }>;
   active: boolean;
 }
@@ -87,7 +91,7 @@ export function useTabSwitchGesture(options: TabSwitchGestureOptions): void {
       }
 
       if (overscroll <= 0 || tabs.length <= 1) {
-        if (getTabTransition() !== null) endTabTransition();
+        if (getTabTransition() !== null) finishTabSwitch(false);
         return;
       }
 
@@ -101,15 +105,23 @@ export function useTabSwitchGesture(options: TabSwitchGestureOptions): void {
           endTabTransition();
           return;
         }
-        beginTabTransition({
+        const next = {
           fromTabId: store.activeTabId,
           toTabId: target.id,
           fromIndex,
           toIndex,
           dir,
-        });
+        };
+        if (inFlight === null) beginTabTransition(next);
+        else retargetTabTransition(next);
       }
-      setTabTransitionProgress(clampProgress(overscroll / Math.max(1, current.viewportWidth)));
+      if (current.startTabPosition !== null) {
+        setTabTransitionPosition(
+          current.startTabPosition - dx / Math.max(1, current.viewportWidth),
+        );
+      } else {
+        setTabTransitionProgress(clampProgress(overscroll / Math.max(1, current.viewportWidth)));
+      }
     };
 
     const finishDrag = () => {
@@ -130,6 +142,7 @@ export function useTabSwitchGesture(options: TabSwitchGestureOptions): void {
       if (!current.active) {
         if (Math.abs(dx) < RIGHT_DRAG_THRESHOLD) return;
         current.active = true;
+        interruptTabSettle();
         dismissContextMenu();
       }
       updateDrag(current, dx);
@@ -149,9 +162,15 @@ export function useTabSwitchGesture(options: TabSwitchGestureOptions): void {
       }
       const inFlight = getTabTransition();
       if (inFlight === null) return;
+      const velocity = estimateVelocity(current, performance.now());
+      const visible = getTabTransitionFrame();
+      if (visible !== null) {
+        const releaseVelocity = (-velocity * 1000) / Math.max(1, current.viewportWidth);
+        setTabTransitionPosition(visible.position, Math.max(-2, Math.min(2, releaseVelocity)));
+      }
       const commit = resolveSwitchCommit({
         progress: getTabTransitionFrame()?.progress ?? 0,
-        velocity: estimateVelocity(current, performance.now()),
+        velocity,
         dir: inFlight.dir,
       });
       finishTabSwitch(commit);
@@ -176,7 +195,6 @@ export function useTabSwitchGesture(options: TabSwitchGestureOptions): void {
       );
       const header = target.closest<HTMLElement>("[data-workbench-pane-drag-handle]");
       if (session !== null) onCancel();
-      endTabTransition();
       session = {
         pointerId: event.pointerId,
         startX: event.clientX,
@@ -187,6 +205,7 @@ export function useTabSwitchGesture(options: TabSwitchGestureOptions): void {
         maxScrollLeft:
           viewport === null ? 0 : Math.max(0, viewport.scrollWidth - viewport.clientWidth),
         viewportWidth: viewport?.clientWidth ?? stage.clientWidth,
+        startTabPosition: getTabTransitionFrame()?.position ?? null,
         samples: [{ x: event.clientX, t: performance.now() }],
         active: false,
       };

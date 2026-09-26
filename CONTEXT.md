@@ -164,16 +164,15 @@ Viewport.
 _Avoid_: Canvas drag, map pan, scroll bar
 
 **Sliding Tab switch**:
-The animated presentation of a Tab change in which the outgoing and incoming Tab
-are tiled side by side, one Viewport apart, and slide as one rigid strip by a
-single Viewport width. It is a presentation of a Tab change, not a change to Tab
-or Session identity.
+The continuous horizontal presentation of a Tab change, with live Tab cards
+tiled side by side; retargeting may temporarily keep multiple cards visible.
+It changes presentation without changing Tab or Session identity.
 _Avoid_: Stacked switch, carousel, page flip, split slide
 
 **Tab switch progress**:
-The continuous 0–1 measure of a Sliding Tab switch, advanced by pointer travel
-past a layout's horizontal limit or in discrete steps by a wheel notch. It drives
-both the Tab cards and the Tab indicator.
+The continuous 0–1 measure of one source-to-destination Sliding Tab switch,
+shared by the Tab cards and Tab indicator. Gesture-driven progress is reversible
+until release and does not itself imply that the destination is active.
 _Avoid_: Scroll offset, swipe amount
 
 **Tab indicator**:

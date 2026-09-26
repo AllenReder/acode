@@ -126,7 +126,7 @@ export function SidebarProviderUpdatePill() {
 
   return (
     <div
-      className={`group/provider-update relative flex min-h-7 w-full shrink-0 items-center overflow-hidden rounded-lg text-[11px] leading-4 font-medium transform-gpu transition-all duration-180 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform ${
+      className={`group/provider-update relative flex min-h-7 w-full shrink-0 items-center overflow-hidden rounded-lg text-[11px] leading-4 font-medium transform-gpu transition-all [transition-duration:calc(180ms*var(--motion-duration-scale,1))] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform ${
         PROVIDER_UPDATE_PILL_STYLES[displayedView.tone]
       } ${
         exitingKey === displayedView.key

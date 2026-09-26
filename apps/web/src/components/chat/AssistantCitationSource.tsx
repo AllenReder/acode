@@ -6,6 +6,7 @@ import {
   type AssistantCitationSourceAnchor,
 } from "~/lib/assistantTextSelection";
 import { toastManager } from "../ui/toast";
+import { getAnimationDurationScale } from "../../workbench/workbenchMotion";
 
 const CITATION_PULSE_DURATION_MS = 650;
 // The second pulse settles into a held highlight so late glances still find the quote.
@@ -118,6 +119,8 @@ export function observeAssistantCitationSource({
   const scrollNode = list.getScrollableNode();
   if (!(scrollNode instanceof HTMLElement)) return;
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const durationScale = getAnimationDurationScale();
+  const highlightDurationMs = CITATION_HIGHLIGHT_TOTAL_MS * durationScale;
   let highlighted: Highlight | null = null;
   let ownedRange: Range | null = null;
   let selected: { range: Range; snapshot: Range } | null = null;
@@ -156,10 +159,7 @@ export function observeAssistantCitationSource({
       clear();
       return;
     }
-    if (
-      activation.pulse &&
-      performance.now() - activation.pulse.startedAt >= CITATION_HIGHLIGHT_TOTAL_MS
-    ) {
+    if (activation.pulse && performance.now() - activation.pulse.startedAt >= highlightDurationMs) {
       finishHighlight();
       return;
     }
@@ -185,7 +185,7 @@ export function observeAssistantCitationSource({
       );
       if (Math.abs(offset - state.scroll) > 1) {
         scrolling = true;
-        void list.scrollToOffset({ offset, animated: !reducedMotion }).then(
+        void list.scrollToOffset({ offset, animated: !reducedMotion && durationScale > 0 }).then(
           () => {
             scrolling = false;
             if (!stopped && !activation.dismissed) schedule();
@@ -242,6 +242,10 @@ export function observeAssistantCitationSource({
       }
     }
     if (!pulseAnimation) {
+      if (durationScale === 0) {
+        finishHighlight();
+        return;
+      }
       // Preserve the original deadline through virtual remounts and range repairs.
       const pulse = (activation.pulse ??= {
         startedAt: performance.now(),
@@ -270,7 +274,7 @@ export function observeAssistantCitationSource({
               { offset: holdEnd, [CITATION_HIGHLIGHT_OPACITY]: CITATION_HIGHLIGHT_PEAK },
               { offset: 1, [CITATION_HIGHLIGHT_OPACITY]: 0 },
             ],
-        { duration: CITATION_HIGHLIGHT_TOTAL_MS, easing: "ease-in-out" },
+        { duration: highlightDurationMs, easing: "ease-in-out" },
       );
       pulseAnimation.id = "awen-assistant-citation-pulse";
       pulseAnimation.currentTime = Math.max(0, performance.now() - pulse.startedAt);
