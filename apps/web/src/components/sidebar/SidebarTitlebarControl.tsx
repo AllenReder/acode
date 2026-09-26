@@ -7,6 +7,10 @@ export interface SidebarTitlebarButtonProps {
   readonly label: string;
   readonly shortcut?: string;
   readonly onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
+  /** Fires when the pointer first rests on the control; used to prefetch its destination. */
+  readonly onPointerEnter?: () => void;
+  /** Fires when the control takes focus; used to prefetch its destination. */
+  readonly onFocus?: () => void;
   readonly className?: string;
   readonly ariaLabel?: string;
   readonly ariaPressed?: boolean;
@@ -23,6 +27,8 @@ export function SidebarTitlebarButton({
   label,
   shortcut,
   onClick,
+  onPointerEnter,
+  onFocus,
   className,
   ariaLabel,
   ariaPressed,
@@ -39,6 +45,8 @@ export function SidebarTitlebarButton({
             aria-pressed={ariaPressed}
             data-testid={testId}
             onClick={onClick}
+            onPointerEnter={onPointerEnter}
+            onFocus={onFocus}
             className={cn(
               "flex size-7 shrink-0 items-center justify-center rounded-[var(--control-radius)] text-muted-foreground transition-all duration-150 ease-out hover:bg-sidebar-row-hover hover:text-foreground active:scale-[0.98] active:bg-sidebar-row-active [-webkit-app-region:no-drag]",
               className,

@@ -6,11 +6,13 @@ const routerState = {
   pathname: "/",
   navigate: vi.fn(),
   canGoBack: true,
+  router: { preloadRoute: vi.fn().mockResolvedValue(undefined) },
 };
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => routerState.navigate,
   useCanGoBack: () => routerState.canGoBack,
+  useRouter: () => routerState.router,
   useLocation: ({ select }: { select: (location: { pathname: string }) => unknown }) =>
     select({ pathname: routerState.pathname }),
 }));
@@ -81,6 +83,23 @@ describe("SidebarChromeHeader and SidebarActionControl", () => {
     });
 
     expect(routerState.navigate).toHaveBeenCalledWith({ to: "/settings" });
+  });
+
+  it("prefetches the settings route on pointer-enter and focus so the first click does not wait for the chunk", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+
+    await act(() => {
+      renderer = create(<SidebarActionControl mode="main" />);
+    });
+
+    const settingsButton = renderer.root.findByProps({ "data-testid": "sidebar-settings-button" });
+
+    await act(() => {
+      settingsButton.props.onPointerEnter();
+      settingsButton.props.onFocus();
+    });
+
+    expect(routerState.router.preloadRoute).toHaveBeenCalledWith({ to: "/settings/general" });
   });
 
   it("renders a Back button when on the settings route and handles back navigation", async () => {
