@@ -1,20 +1,19 @@
 //! macOS window background blur and glass backing.
 
-use std::collections::HashSet;
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::ffi::{c_char, c_int, c_void};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use objc2::{MainThreadMarker, MainThreadOnly};
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
+use objc2::{MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::NSUserInterfaceItemIdentification;
 use objc2_app_kit::{
     NSAutoresizingMaskOptions, NSColor, NSEvent, NSEventMask, NSEventPhase,
-    NSTitlebarSeparatorStyle, NSVisualEffectBlendingMode,
-    NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView, NSWindow,
-    NSWindowOrderingMode,
+    NSTitlebarSeparatorStyle, NSVisualEffectBlendingMode, NSVisualEffectMaterial,
+    NSVisualEffectState, NSVisualEffectView, NSWindow, NSWindowOrderingMode,
 };
 use objc2_foundation::NSString;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -41,33 +40,55 @@ struct ScrollPhaseEvent {
 }
 
 fn phase_name(phase: NSEventPhase) -> &'static str {
-    if phase.contains(NSEventPhase::Began) { "began" }
-    else if phase.contains(NSEventPhase::Changed) { "changed" }
-    else if phase.contains(NSEventPhase::Ended) { "ended" }
-    else if phase.contains(NSEventPhase::Cancelled) { "cancelled" }
-    else { "none" }
+    if phase.contains(NSEventPhase::Began) {
+        "began"
+    } else if phase.contains(NSEventPhase::Changed) {
+        "changed"
+    } else if phase.contains(NSEventPhase::Ended) {
+        "ended"
+    } else if phase.contains(NSEventPhase::Cancelled) {
+        "cancelled"
+    } else {
+        "none"
+    }
 }
 
 fn install_scroll_monitor(window: &WebviewWindow) {
-    let Some(number) = ns_window(window).map(|native| native.windowNumber()) else { return; };
+    let Some(number) = ns_window(window).map(|native| native.windowNumber()) else {
+        return;
+    };
     let event_window = window.clone();
     SCROLL_MONITOR.with(|slot| {
-        if slot.borrow().is_some() { return; }
+        if slot.borrow().is_some() {
+            return;
+        }
         let handler = block2::RcBlock::new(move |pointer: std::ptr::NonNull<NSEvent>| {
             let event = unsafe { pointer.as_ref() };
-            if MainThreadMarker::new().is_some_and(|mtm| event.window(mtm).is_some_and(|native| native.windowNumber() == number))
-                && event.hasPreciseScrollingDeltas()
+            if MainThreadMarker::new().is_some_and(|mtm| {
+                event
+                    .window(mtm)
+                    .is_some_and(|native| native.windowNumber() == number)
+            }) && event.hasPreciseScrollingDeltas()
             {
                 let phase = phase_name(event.phase());
                 let momentum_phase = phase_name(event.momentumPhase());
                 if phase != "none" || momentum_phase != "none" {
-                    let _ = event_window.emit("awen:scroll-phase", ScrollPhaseEvent { phase, momentum_phase });
+                    let _ = event_window.emit(
+                        "awen:scroll-phase",
+                        ScrollPhaseEvent {
+                            phase,
+                            momentum_phase,
+                        },
+                    );
                 }
             }
             pointer.as_ptr()
         });
         let monitor = unsafe {
-            NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::ScrollWheel, &handler)
+            NSEvent::addLocalMonitorForEventsMatchingMask_handler(
+                NSEventMask::ScrollWheel,
+                &handler,
+            )
         };
         *slot.borrow_mut() = monitor;
     });
