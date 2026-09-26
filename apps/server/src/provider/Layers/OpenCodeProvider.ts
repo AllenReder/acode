@@ -264,16 +264,26 @@ function openCodeCapabilitiesForModel(input: {
 }
 
 function flattenOpenCodeModels(input: OpenCodeInventory): ReadonlyArray<ServerProviderModel> {
-  const providerNames = new Map(input.providers.map((provider) => [provider.id, provider.name]));
+  // ProviderInfo exposes availability as `activation` (auto|enabled|disabled);
+  // disabled providers and disabled models must not surface as selectable or
+  // count toward the connected-provider probe.
+  const activeProviderNames = new Map(
+    input.providers
+      .filter((provider) => provider.activation !== "disabled")
+      .map((provider) => [provider.id, provider.name]),
+  );
   const models: Array<ServerProviderModel> = [];
 
   for (const model of input.models) {
+    if (model.enabled === false || !activeProviderNames.has(model.providerID)) {
+      continue;
+    }
     const name = nonEmptyTrimmed(model.name);
     if (!name) {
       continue;
     }
 
-    const subProvider = nonEmptyTrimmed(providerNames.get(model.providerID));
+    const subProvider = nonEmptyTrimmed(activeProviderNames.get(model.providerID));
     models.push({
       slug: `${model.providerID}/${model.id}`,
       name,
@@ -545,7 +555,9 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
     DEFAULT_OPENCODE_MODEL_CAPABILITIES,
   );
   const skills = openCodeSkillsToServerProviderSkills(inventoryExit.value.inventory.skills);
-  const connectedCount = inventoryExit.value.inventory.providers.length;
+  const connectedCount = inventoryExit.value.inventory.providers.filter(
+    (provider) => provider.activation !== "disabled",
+  ).length;
   return buildServerProvider({
     presentation: OPENCODE_PRESENTATION,
     enabled: true,

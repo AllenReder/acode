@@ -454,6 +454,82 @@ it.layer(testLayer)("checkOpenCodeProviderStatus", (it) => {
       );
     }),
   );
+
+  it.effect("excludes disabled providers and models from inventory and probe", () =>
+    Effect.gen(function* () {
+      runtimeMock.state.inventory = {
+        providers: [
+          { id: "openai", name: "OpenAI", activation: "enabled" },
+          { id: "legacy", name: "Legacy", activation: "disabled" },
+        ],
+        models: [
+          {
+            id: "gpt-5.4",
+            modelID: "gpt-5.4",
+            providerID: "openai",
+            name: "GPT-5.4",
+            enabled: true,
+            variants: [],
+          },
+          {
+            id: "retired",
+            modelID: "retired",
+            providerID: "openai",
+            name: "Retired",
+            enabled: false,
+            variants: [],
+          },
+          {
+            id: "legacy-model",
+            modelID: "legacy-model",
+            providerID: "legacy",
+            name: "Legacy Model",
+            enabled: true,
+            variants: [],
+          },
+        ],
+        agents: [],
+        skills: [],
+        commands: [],
+      };
+
+      const snapshot = yield* checkProvider(makeOpenCodeSettings());
+
+      NodeAssert.deepEqual(
+        snapshot.models.map((model) => model.slug),
+        ["openai/gpt-5.4"],
+      );
+      NodeAssert.equal(snapshot.status, "ready");
+      NodeAssert.match(snapshot.message ?? "", /1 upstream provider connected/);
+    }),
+  );
+
+  it.effect("reports a warning when every provider is disabled", () =>
+    Effect.gen(function* () {
+      runtimeMock.state.inventory = {
+        providers: [{ id: "legacy", name: "Legacy", activation: "disabled" }],
+        models: [
+          {
+            id: "legacy-model",
+            modelID: "legacy-model",
+            providerID: "legacy",
+            name: "Legacy Model",
+            enabled: true,
+            variants: [],
+          },
+        ],
+        agents: [],
+        skills: [],
+        commands: [],
+      };
+
+      const snapshot = yield* checkProvider(makeOpenCodeSettings());
+
+      NodeAssert.equal(snapshot.models.length, 0);
+      NodeAssert.equal(snapshot.status, "warning");
+      NodeAssert.match(snapshot.message ?? "", /did not report any connected upstream providers/);
+    }),
+  );
 });
 
 it.layer(testLayer)("checkOpenCodeProviderStatus with configured server URL", (it) => {

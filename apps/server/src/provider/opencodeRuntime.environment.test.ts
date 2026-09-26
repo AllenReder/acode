@@ -34,13 +34,13 @@ describe("resolveOpenCodeConfigContent", () => {
     ).toBe('{"source":"caller"}');
   });
 
-  it("falls back to the inherited environment and then an empty config", () => {
+  it("falls back to the inherited environment and then undefined", () => {
     expect(
       resolveOpenCodeConfigContent(undefined, {
         OPENCODE_CONFIG_CONTENT: '{"source":"process"}',
       }),
     ).toBe('{"source":"process"}');
-    expect(resolveOpenCodeConfigContent(undefined, {})).toBe("{}");
+    expect(resolveOpenCodeConfigContent(undefined, {})).toBeUndefined();
   });
 });
 

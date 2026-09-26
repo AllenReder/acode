@@ -10,6 +10,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -2601,6 +2602,248 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
     }),
   );
 
+  it.effect("routes a native form.created event through its nested form session id", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-native-form-created");
+      const sessionID = "http://127.0.0.1:9999/session";
+      // Native `form.created` carries the session id inside `data.form`, not
+      // `data.sessionID`; without the fallback the request is discarded and
+      // the turn stalls waiting on a question the UI never shows.
+      runtimeMock.state.subscribedEvents = [
+        {
+          id: "evt-native-form",
+          type: "form.created",
+          created: 0,
+          data: { form: formRequest("que_native", sessionID) },
+        },
+      ];
+
+      const questionFiber = yield* adapter.streamEvents.pipe(
+        Stream.filter(
+          (event) => event.threadId === threadId && event.type === "user-input.requested",
+        ),
+        Stream.runHead,
+        Effect.forkChild,
+      );
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId,
+        runtimeMode: "approval-required",
+      });
+
+      const question = Option.getOrThrow(
+        yield* Fiber.join(questionFiber).pipe(Effect.timeout("1 second")),
+      );
+      NodeAssert.equal(question.requestId, "que_native");
+      yield* adapter.stopSession(threadId);
+    }),
+  );
+
+  it.effect("omits external fields from user-input questions but keeps native option values", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-form-external-options");
+      runtimeMock.state.subscribedEvents = [
+        {
+          id: "evt-external-form",
+          type: "form.created",
+          created: 0,
+          data: {
+            form: {
+              id: "que_mixed",
+              sessionID: "http://127.0.0.1:9999/session",
+              title: "Configure run",
+              fields: [
+                {
+                  key: "mode",
+                  type: "string",
+                  title: "Mode",
+                  options: [
+                    { value: "fast", label: "Quick", description: "Run fast." },
+                    { value: "thorough", label: "Quick", description: "Run thoroughly." },
+                  ],
+                },
+                {
+                  key: "portal",
+                  type: "external",
+                  url: "https://example.test/portal",
+                  title: "Portal",
+                },
+              ],
+              state: { status: "pending" },
+            },
+          },
+        },
+      ];
+
+      const questionFiber = yield* adapter.streamEvents.pipe(
+        Stream.filter(
+          (event) => event.threadId === threadId && event.type === "user-input.requested",
+        ),
+        Stream.runHead,
+        Effect.forkChild,
+      );
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId,
+        runtimeMode: "approval-required",
+      });
+
+      const question = Option.getOrThrow(
+        yield* Fiber.join(questionFiber).pipe(Effect.timeout("1 second")),
+      );
+      NodeAssert.equal(question.requestId, "que_mixed");
+      const payload = question.payload as {
+        questions: Array<{
+          id: string;
+          options: Array<{ label: string; value?: string }>;
+        }>;
+      };
+      // The external field has no submittable value; prompting for it would
+      // block on an answer the reply path must drop.
+      NodeAssert.deepEqual(
+        payload.questions.map((entry) => entry.id),
+        ["mode"],
+      );
+      // Native values (not labels) identify options, so duplicate labels still
+      // resolve to the option the user picked.
+      NodeAssert.deepEqual(
+        payload.questions[0]?.options.map((option) => option.value),
+        ["fast", "thorough"],
+      );
+
+      yield* adapter.respondToUserInput(threadId, ApprovalRequestId.make("que_mixed"), {
+        mode: "thorough",
+      });
+      NodeAssert.deepEqual(runtimeMock.state.questionReplyCalls, [
+        { requestID: "que_mixed", answers: [["thorough"]] },
+      ]);
+      yield* adapter.stopSession(threadId);
+    }),
+  );
+
+  it.effect("emits one item.completed for duplicate tool terminal events", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-duplicate-tool-terminal");
+      const toolEvent = promiseWithResolvers<unknown>();
+      const terminalEvent = promiseWithResolvers<unknown>();
+      const duplicateEvent = promiseWithResolvers<unknown>();
+      runtimeMock.state.subscribedEvents = [
+        toolEvent.promise,
+        terminalEvent.promise,
+        duplicateEvent.promise,
+      ];
+      const completedCount = yield* Ref.make(0);
+      const counter = yield* adapter.streamEvents.pipe(
+        Stream.filter((event) => event.threadId === threadId && event.type === "item.completed"),
+        Stream.runForEach(() => Ref.update(completedCount, (count) => count + 1)),
+        Effect.forkChild,
+      );
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId,
+        input: "run it",
+        modelSelection: createModelSelection(ProviderInstanceId.make("opencode"), "openai/gpt-5"),
+      });
+      const sessionID = "http://127.0.0.1:9999/session";
+      toolEvent.resolve({
+        id: "evt-tool-started",
+        type: "session.tool.input.started",
+        created: 0,
+        durable: { aggregateID: sessionID, seq: 1, version: 1 },
+        data: { sessionID, assistantMessageID: "msg_1", id: "tool_shell_1", name: "shell" },
+      } satisfies OpenCodeEvent);
+      const terminal = {
+        id: "evt-tool-success",
+        type: "session.tool.success",
+        created: 1,
+        durable: { aggregateID: sessionID, seq: 2, version: 2 },
+        data: {
+          sessionID,
+          assistantMessageID: "msg_1",
+          id: "tool_shell_1",
+          executed: true,
+          content: [{ type: "text", text: "done" }],
+        },
+      } satisfies OpenCodeEvent;
+      terminalEvent.resolve(terminal);
+      // A replay/redelivery of the same terminal must not fork the timeline
+      // with a second `item.completed` for the same tool id.
+      duplicateEvent.resolve({ ...terminal, id: "evt-tool-success-replay" });
+      yield* Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
+      yield* advanceTestClock(500);
+
+      NodeAssert.equal(yield* Ref.get(completedCount), 1);
+      yield* Fiber.interrupt(counter);
+      yield* adapter.stopSession(threadId);
+    }),
+  );
+
+  it.effect("converges an out-of-order terminal into completion instead of a dangling start", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-out-of-order-tool-terminal");
+      const terminalEvent = promiseWithResolvers<unknown>();
+      const lateStartEvent = promiseWithResolvers<unknown>();
+      runtimeMock.state.subscribedEvents = [terminalEvent.promise, lateStartEvent.promise];
+      const toolTypes = yield* Ref.make<ReadonlyArray<string>>([]);
+      const counter = yield* adapter.streamEvents.pipe(
+        Stream.filter(
+          (event) =>
+            event.threadId === threadId &&
+            (event.type === "item.started" || event.type === "item.completed"),
+        ),
+        Stream.runForEach((event) => Ref.update(toolTypes, (types) => [...types, event.type])),
+        Effect.forkChild,
+      );
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId,
+        input: "run it",
+        modelSelection: createModelSelection(ProviderInstanceId.make("opencode"), "openai/gpt-5"),
+      });
+      const sessionID = "http://127.0.0.1:9999/session";
+      terminalEvent.resolve({
+        id: "evt-tool-success-first",
+        type: "session.tool.success",
+        created: 0,
+        durable: { aggregateID: sessionID, seq: 1, version: 2 },
+        data: {
+          sessionID,
+          assistantMessageID: "msg_1",
+          id: "tool_shell_2",
+          executed: true,
+          content: [{ type: "text", text: "done" }],
+        },
+      } satisfies OpenCodeEvent);
+      lateStartEvent.resolve({
+        id: "evt-tool-started-late",
+        type: "session.tool.input.started",
+        created: 1,
+        durable: { aggregateID: sessionID, seq: 2, version: 1 },
+        data: { sessionID, assistantMessageID: "msg_1", id: "tool_shell_2", name: "shell" },
+      } satisfies OpenCodeEvent);
+      yield* Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
+      yield* advanceTestClock(500);
+
+      // The late start must not reopen an in-progress row after the terminal
+      // already settled the tool; exactly one completion converges the pair.
+      NodeAssert.deepEqual(yield* Ref.get(toolTypes), ["item.completed"]);
+      yield* Fiber.interrupt(counter);
+      yield* adapter.stopSession(threadId);
+    }),
+  );
+
   it.effect.each(["failure", "timeout"] as const)(
     "retries ancestry for a child request after a transient %s",
     (lookupFailure) =>
@@ -4941,7 +5184,8 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
         Stream.filter(
           (event) =>
             event.threadId === threadId &&
-            (event.type === "item.started" ||
+            (event.type.startsWith("task.") ||
+              event.type === "item.started" ||
               event.type === "item.updated" ||
               event.type === "item.completed"),
         ),
@@ -4999,6 +5243,7 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
       } satisfies OpenCodeEvent);
       const events = yield* Fiber.join(started);
       const [startedItem, calledItem, completedItem] = events;
+      NodeAssert.equal(events.filter((event) => event.type.startsWith("task.")).length, 0);
       NodeAssert.ok(startedItem?.type === "item.started");
       NodeAssert.ok(calledItem?.type === "item.updated");
       NodeAssert.ok(completedItem?.type === "item.completed");
@@ -5009,6 +5254,482 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
         command: "pwd",
         result: "ok",
       });
+    }),
+  );
+  it.effect("emits task lifecycle for native task tools without changing tool items", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-native-task-tool");
+      const events = Array.from({ length: 4 }, () => promiseWithResolvers<unknown>());
+      runtimeMock.state.subscribedEvents = events.map((event) => event.promise);
+      const collected = yield* adapter.streamEvents.pipe(
+        Stream.filter(
+          (event) =>
+            event.threadId === threadId &&
+            (event.type.startsWith("task.") || event.type.startsWith("item.")),
+        ),
+        Stream.take(7),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId,
+        input: "Delegate",
+        modelSelection: createModelSelection(ProviderInstanceId.make("opencode"), "openai/gpt-5"),
+      });
+      const sessionID = "http://127.0.0.1:9999/session";
+      const durable = (seq: number) => ({ aggregateID: sessionID, seq, version: 1 as const });
+      events[0]!.resolve({
+        id: "task-input",
+        created: 1,
+        type: "session.tool.input.started",
+        durable: durable(1),
+        data: { sessionID, assistantMessageID: "msg", id: "task-call", name: "task" },
+      } satisfies OpenCodeEvent);
+      events[1]!.resolve({
+        id: "task-input-repeat",
+        created: 2,
+        type: "session.tool.input.started",
+        durable: durable(2),
+        data: { sessionID, assistantMessageID: "msg", id: "task-call", name: "task" },
+      } satisfies OpenCodeEvent);
+      events[2]!.resolve({
+        id: "task-called",
+        created: 3,
+        type: "session.tool.called",
+        durable: durable(3),
+        data: {
+          sessionID,
+          assistantMessageID: "msg",
+          id: "task-call",
+          input: { description: "Inspect tests", subagent_type: "explore" },
+          executed: true,
+        },
+      } satisfies OpenCodeEvent);
+      events[3]!.resolve({
+        id: "task-success",
+        created: 4,
+        type: "session.tool.success",
+        durable: { aggregateID: sessionID, seq: 4, version: 2 },
+        data: {
+          sessionID,
+          assistantMessageID: "msg",
+          id: "task-call",
+          executed: true,
+          content: [{ type: "text", text: "Tests inspected" }],
+        },
+      } satisfies OpenCodeEvent);
+      const received = yield* Fiber.join(collected);
+      const tasks = received.filter((event) => event.type.startsWith("task."));
+      NodeAssert.deepEqual(
+        tasks.map((event) => event.type),
+        ["task.started", "task.progress", "task.completed"],
+      );
+      NodeAssert.equal(received.filter((event) => event.type === "item.started").length, 2);
+      NodeAssert.equal(received.filter((event) => event.type === "item.updated").length, 1);
+      NodeAssert.equal(received.filter((event) => event.type === "item.completed").length, 1);
+      NodeAssert.ok(tasks[0]?.type === "task.started");
+      NodeAssert.deepEqual(tasks[0].payload, {
+        taskId: "task-call",
+        description: "task",
+        title: "task",
+        timelineBypass: true,
+        toolUseId: "task-call",
+      });
+      NodeAssert.ok(tasks[1]?.type === "task.progress");
+      NodeAssert.equal(tasks[1].payload.description, "Inspect tests");
+      NodeAssert.equal(tasks[1].payload.title, "Inspect tests");
+      NodeAssert.equal(tasks[1].payload.role, "explore");
+      NodeAssert.ok(tasks[2]?.type === "task.completed");
+      NodeAssert.equal(tasks[2].payload.status, "completed");
+      NodeAssert.equal(tasks[2].payload.summary, "Tests inspected");
+      NodeAssert.equal(tasks[0].payload.timelineBypass, true);
+      NodeAssert.equal(tasks[1].payload.timelineBypass, true);
+      NodeAssert.equal(tasks[2].payload.timelineBypass, true);
+    }),
+  );
+  it.effect("emits task lifecycle for the v2 subagent tool but not for task_status", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-subagent-tool-name");
+      const events = Array.from({ length: 5 }, () => promiseWithResolvers<unknown>());
+      runtimeMock.state.subscribedEvents = events.map((event) => event.promise);
+      const collected = yield* adapter.streamEvents.pipe(
+        Stream.filter(
+          (event) =>
+            event.threadId === threadId &&
+            (event.type.startsWith("task.") || event.type.startsWith("item.")),
+        ),
+        Stream.take(8),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId,
+        input: "Delegate",
+        modelSelection: createModelSelection(ProviderInstanceId.make("opencode"), "openai/gpt-5"),
+      });
+      const sessionID = "http://127.0.0.1:9999/session";
+      const durable = (seq: number) => ({ aggregateID: sessionID, seq, version: 1 as const });
+      events[0]!.resolve({
+        id: "subagent-input",
+        created: 1,
+        type: "session.tool.input.started",
+        durable: durable(1),
+        data: { sessionID, assistantMessageID: "msg", id: "subagent-call", name: "subagent" },
+      } satisfies OpenCodeEvent);
+      events[1]!.resolve({
+        id: "subagent-called",
+        created: 2,
+        type: "session.tool.called",
+        durable: durable(2),
+        data: {
+          sessionID,
+          assistantMessageID: "msg",
+          id: "subagent-call",
+          input: { description: "Scout deps", subagent: "scout" },
+          executed: true,
+        },
+      } satisfies OpenCodeEvent);
+      events[2]!.resolve({
+        id: "subagent-success",
+        created: 3,
+        type: "session.tool.success",
+        durable: { aggregateID: sessionID, seq: 3, version: 2 },
+        data: {
+          sessionID,
+          assistantMessageID: "msg",
+          id: "subagent-call",
+          executed: true,
+          content: [{ type: "text", text: "Deps scouted" }],
+        },
+      } satisfies OpenCodeEvent);
+      events[3]!.resolve({
+        id: "status-input",
+        created: 4,
+        type: "session.tool.input.started",
+        durable: durable(4),
+        data: { sessionID, assistantMessageID: "msg", id: "status-call", name: "task_status" },
+      } satisfies OpenCodeEvent);
+      events[4]!.resolve({
+        id: "status-success",
+        created: 5,
+        type: "session.tool.success",
+        durable: { aggregateID: sessionID, seq: 5, version: 2 },
+        data: {
+          sessionID,
+          assistantMessageID: "msg",
+          id: "status-call",
+          executed: true,
+          content: [{ type: "text", text: "ok" }],
+        },
+      } satisfies OpenCodeEvent);
+      const received = yield* Fiber.join(collected);
+      const tasks = received.filter((event) => event.type.startsWith("task."));
+      NodeAssert.deepEqual(
+        tasks.map((event) => event.type),
+        ["task.started", "task.progress", "task.completed"],
+      );
+      NodeAssert.ok(tasks[0]?.type === "task.started");
+      NodeAssert.equal(tasks[0].payload.taskId, "subagent-call");
+      NodeAssert.ok(tasks[1]?.type === "task.progress");
+      NodeAssert.equal(tasks[1].payload.description, "Scout deps");
+      NodeAssert.equal(tasks[1].payload.role, "scout");
+      NodeAssert.ok(tasks[2]?.type === "task.completed");
+      NodeAssert.equal(tasks[2].payload.status, "completed");
+    }),
+  );
+  it.effect("closes a task whose terminal arrives before its start", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-task-out-of-order");
+      const events = Array.from({ length: 2 }, () => promiseWithResolvers<unknown>());
+      runtimeMock.state.subscribedEvents = events.map((event) => event.promise);
+      const collected = yield* adapter.streamEvents.pipe(
+        Stream.filter(
+          (event) =>
+            event.threadId === threadId &&
+            (event.type.startsWith("task.") || event.type.startsWith("item.")),
+        ),
+        Stream.take(4),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId,
+        input: "Delegate",
+        modelSelection: createModelSelection(ProviderInstanceId.make("opencode"), "openai/gpt-5"),
+      });
+      const sessionID = "http://127.0.0.1:9999/session";
+      events[0]!.resolve({
+        id: "early-success",
+        created: 1,
+        type: "session.tool.success",
+        durable: { aggregateID: sessionID, seq: 1, version: 2 },
+        data: {
+          sessionID,
+          assistantMessageID: "msg",
+          id: "task-ooo",
+          executed: true,
+          content: [{ type: "text", text: "done" }],
+        },
+      } satisfies OpenCodeEvent);
+      events[1]!.resolve({
+        id: "late-start",
+        created: 2,
+        type: "session.tool.input.started",
+        durable: { aggregateID: sessionID, seq: 2, version: 1 },
+        data: { sessionID, assistantMessageID: "msg", id: "task-ooo", name: "task" },
+      } satisfies OpenCodeEvent);
+      const received = yield* Fiber.join(collected);
+      NodeAssert.deepEqual(
+        received.filter((event) => event.type.startsWith("task.")).map((event) => event.type),
+        ["task.started", "task.completed"],
+      );
+      NodeAssert.deepEqual(
+        received.filter((event) => event.type.startsWith("item.")).map((event) => event.type),
+        ["item.completed", "item.started"],
+      );
+    }),
+  );
+  it.effect("reports failed task tools without duplicating task completion", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-task-failure-duplicate");
+      const events = Array.from({ length: 4 }, () => promiseWithResolvers<unknown>());
+      runtimeMock.state.subscribedEvents = events.map((event) => event.promise);
+      const collected = yield* adapter.streamEvents.pipe(
+        Stream.filter(
+          (event) =>
+            event.threadId === threadId &&
+            (event.type.startsWith("task.") || event.type.startsWith("item.")),
+        ),
+        // The duplicate terminal must not fork the timeline: one completion
+        // per tool id, so 3 task events + 3 item events.
+        Stream.take(6),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId,
+        input: "Delegate",
+        modelSelection: createModelSelection(ProviderInstanceId.make("opencode"), "openai/gpt-5"),
+      });
+      const sessionID = "http://127.0.0.1:9999/session";
+      const base = { sessionID, assistantMessageID: "msg", id: "task-failed" };
+      events[0]!.resolve({
+        id: "failure-start",
+        created: 1,
+        type: "session.tool.input.started",
+        durable: { aggregateID: sessionID, seq: 1, version: 1 },
+        data: { ...base, name: "task" },
+      } satisfies OpenCodeEvent);
+      events[1]!.resolve({
+        id: "failure-called",
+        created: 2,
+        type: "session.tool.called",
+        durable: { aggregateID: sessionID, seq: 2, version: 1 },
+        data: { ...base, input: { description: "Inspect" }, executed: true },
+      } satisfies OpenCodeEvent);
+      events[2]!.resolve({
+        id: "failure-terminal",
+        created: 3,
+        type: "session.tool.failed",
+        durable: { aggregateID: sessionID, seq: 3, version: 2 },
+        data: { ...base, executed: true, error: { type: "error", message: "subagent crashed" } },
+      } satisfies OpenCodeEvent);
+      events[3]!.resolve({
+        id: "duplicate-terminal",
+        created: 4,
+        type: "session.tool.success",
+        durable: { aggregateID: sessionID, seq: 4, version: 2 },
+        data: { ...base, executed: true, content: [{ type: "text", text: "done" }] },
+      } satisfies OpenCodeEvent);
+      const received = yield* Fiber.join(collected);
+      const tasks = received.filter((event) => event.type.startsWith("task."));
+      NodeAssert.deepEqual(
+        tasks.map((event) => event.type),
+        ["task.started", "task.progress", "task.completed"],
+      );
+      NodeAssert.ok(tasks[2]?.type === "task.completed");
+      NodeAssert.equal(tasks[2].payload.status, "failed");
+      NodeAssert.equal(tasks[2].payload.summary, "subagent crashed");
+      NodeAssert.deepEqual(
+        received.filter((event) => event.type.startsWith("item.")).map((event) => event.type),
+        ["item.started", "item.updated", "item.completed"],
+      );
+    }),
+  );
+  it.effect("closes a late task start with the earlier failed outcome", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-task-late-failed-start");
+      const events = Array.from({ length: 2 }, () => promiseWithResolvers<unknown>());
+      runtimeMock.state.subscribedEvents = events.map((event) => event.promise);
+      const collected = yield* adapter.streamEvents.pipe(
+        Stream.filter(
+          (event) =>
+            event.threadId === threadId &&
+            (event.type.startsWith("task.") || event.type.startsWith("item.")),
+        ),
+        Stream.take(4),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId,
+        input: "Delegate",
+        modelSelection: createModelSelection(ProviderInstanceId.make("opencode"), "openai/gpt-5"),
+      });
+      const sessionID = "http://127.0.0.1:9999/session";
+      const base = { sessionID, assistantMessageID: "msg", id: "task-late-fail" };
+      events[0]!.resolve({
+        id: "late-fail-terminal",
+        created: 1,
+        type: "session.tool.failed",
+        durable: { aggregateID: sessionID, seq: 1, version: 2 },
+        data: { ...base, executed: true, error: { type: "error", message: "boom" } },
+      } satisfies OpenCodeEvent);
+      events[1]!.resolve({
+        id: "late-fail-start",
+        created: 2,
+        type: "session.tool.input.started",
+        durable: { aggregateID: sessionID, seq: 2, version: 1 },
+        data: { ...base, name: "task" },
+      } satisfies OpenCodeEvent);
+      const received = yield* Fiber.join(collected);
+      const tasks = received.filter((event) => event.type.startsWith("task."));
+      NodeAssert.deepEqual(
+        tasks.map((event) => event.type),
+        ["task.started", "task.completed"],
+      );
+      NodeAssert.ok(tasks[1]?.type === "task.completed");
+      NodeAssert.equal(tasks[1].payload.status, "failed");
+      NodeAssert.equal(tasks[1].payload.summary, "boom");
+    }),
+  );
+  it.effect("ignores task replays once a task has settled", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-task-settled-replay");
+      const events = Array.from({ length: 8 }, () => promiseWithResolvers<unknown>());
+      runtimeMock.state.subscribedEvents = events.map((event) => event.promise);
+      const collected = yield* adapter.streamEvents.pipe(
+        Stream.filter(
+          (event) =>
+            event.threadId === threadId &&
+            (event.type.startsWith("task.") || event.type.startsWith("item.")),
+        ),
+        // Settled-task replays emit nothing: the duplicate terminal and the
+        // repeat start are both ignored, so 3 task events + 6 item events
+        // (3 for the task tool, 3 for the shell tool).
+        Stream.take(9),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId,
+        input: "Delegate",
+        modelSelection: createModelSelection(ProviderInstanceId.make("opencode"), "openai/gpt-5"),
+      });
+      const sessionID = "http://127.0.0.1:9999/session";
+      const base = { sessionID, assistantMessageID: "msg", id: "task-settled" };
+      const durable = (seq: number) => ({ aggregateID: sessionID, seq, version: 1 as const });
+      events[0]!.resolve({
+        id: "settled-start",
+        created: 1,
+        type: "session.tool.input.started",
+        durable: durable(1),
+        data: { ...base, name: "task" },
+      } satisfies OpenCodeEvent);
+      events[1]!.resolve({
+        id: "settled-called",
+        created: 2,
+        type: "session.tool.called",
+        durable: durable(2),
+        data: { ...base, input: { description: "Inspect" }, executed: true },
+      } satisfies OpenCodeEvent);
+      events[2]!.resolve({
+        id: "settled-terminal",
+        created: 3,
+        type: "session.tool.success",
+        durable: { aggregateID: sessionID, seq: 3, version: 2 },
+        data: { ...base, executed: true, content: [{ type: "text", text: "done" }] },
+      } satisfies OpenCodeEvent);
+      events[3]!.resolve({
+        id: "settled-duplicate-terminal",
+        created: 4,
+        type: "session.tool.success",
+        durable: { aggregateID: sessionID, seq: 4, version: 2 },
+        data: { ...base, executed: true, content: [{ type: "text", text: "done" }] },
+      } satisfies OpenCodeEvent);
+      events[4]!.resolve({
+        id: "settled-repeat-start",
+        created: 5,
+        type: "session.tool.input.started",
+        durable: durable(5),
+        data: { ...base, name: "task" },
+      } satisfies OpenCodeEvent);
+      const shellBase = { sessionID, assistantMessageID: "msg", id: "shell-after" };
+      events[5]!.resolve({
+        id: "shell-start",
+        created: 6,
+        type: "session.tool.input.started",
+        durable: durable(6),
+        data: { ...shellBase, name: "shell" },
+      } satisfies OpenCodeEvent);
+      events[6]!.resolve({
+        id: "shell-called",
+        created: 7,
+        type: "session.tool.called",
+        durable: durable(7),
+        data: { ...shellBase, input: { command: "pwd" }, executed: true },
+      } satisfies OpenCodeEvent);
+      events[7]!.resolve({
+        id: "shell-success",
+        created: 8,
+        type: "session.tool.success",
+        durable: { aggregateID: sessionID, seq: 8, version: 2 },
+        data: { ...shellBase, executed: true, content: [{ type: "text", text: "ok" }] },
+      } satisfies OpenCodeEvent);
+      const received = yield* Fiber.join(collected);
+      const tasks = received.filter((event) => event.type.startsWith("task."));
+      NodeAssert.deepEqual(
+        tasks.map((event) => event.type),
+        ["task.started", "task.progress", "task.completed"],
+      );
+      NodeAssert.equal(tasks.filter((event) => event.type === "task.started").length, 1);
+      NodeAssert.equal(tasks.filter((event) => event.type === "task.completed").length, 1);
     }),
   );
   it.effect("totals only parent native step usage when a child session runs", () =>
