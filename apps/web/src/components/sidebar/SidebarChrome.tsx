@@ -1,6 +1,6 @@
 import { ArrowLeftIcon, SettingsIcon } from "lucide-react";
 import { memo, useCallback } from "react";
-import { useCanGoBack, useLocation, useNavigate } from "@tanstack/react-router";
+import { useCanGoBack, useLocation, useNavigate, useRouter } from "@tanstack/react-router";
 
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { isMacPlatform } from "../../lib/utils";
@@ -72,6 +72,7 @@ export function SidebarActionControl({
   readonly mode?: "main" | "settings";
 }) {
   const navigate = useNavigate();
+  const router = useRouter();
   const canGoBack = useCanGoBack();
   const { open } = useSidebar();
   const isMac = typeof navigator !== "undefined" && isMacPlatform(navigator.platform);
@@ -83,6 +84,16 @@ export function SidebarActionControl({
   const handleSettingsClick = useCallback(() => {
     void navigate({ to: "/settings" });
   }, [navigate]);
+
+  // The Settings subtree is a lazy route chunk (its panel module alone is
+  // ~280 kB). `defaultPreload: "intent"` only fires for a <Link>, and this
+  // control is a plain button, so the first click otherwise pays the whole
+  // fetch+execute and the settings UI paints late (issue #140). Prefetch the
+  // concrete page on pointer-enter/focus so the load lands before the click.
+  const preloadSettingsRoute = useCallback(() => {
+    const preload = router.preloadRoute({ to: "/settings/general" });
+    void preload?.catch(() => undefined);
+  }, [router]);
 
   const handleBackClick = useCallback(() => {
     if (canGoBack && typeof window !== "undefined") {
@@ -118,6 +129,8 @@ export function SidebarActionControl({
           label="Settings"
           shortcut={isMac ? "⌘," : "Ctrl+,"}
           onClick={handleSettingsClick}
+          onPointerEnter={preloadSettingsRoute}
+          onFocus={preloadSettingsRoute}
           className="pointer-events-auto"
           testId="sidebar-settings-button"
         />
