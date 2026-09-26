@@ -1,0 +1,49 @@
+name: Feature request
+description: Suggest an improvement or a new capability for Awen.
+title: "feat: "
+labels:
+  - enhancement
+  - needs-triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. Please [search existing
+        issues](https://github.com/AllenReder/awen/issues?q=is%3Aissue) first —
+        a confirmed duplicate with fresh context is more useful than a second thread.
+
+        Describe the problem you are trying to solve, not just the solution you
+        have in mind. That is what makes a request actionable.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that you cannot do today? What is frustrating about the status quo?
+      placeholder: I want to ... but Awen currently ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like Awen to do? Be as concrete as you can about the behavior you expect.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you tried or thought about, and why they fall short.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Mockups, screenshots, links to similar features elsewhere, or related issues.
+    validations:
+      required: false
